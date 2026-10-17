@@ -280,6 +280,8 @@ The saved configuration test cases of Simple Mode Object Matching Rules, under t
 | `attributes.isExternalId` | B | Changes the anchor used to correlate objects, so join outcomes. |
 | `attributes.isSecondaryExternalId` | B | As above. |
 | `attributes.writability` | B | Decides whether JIM may export the attribute. |
+| `attributes.caseExact` | B | Changes whether two values differing only in case are the same identifier, so join and confirmation outcomes. |
+| `attributes.dateTimeResolution` | B | Changes the step of time export sends a date at and compares it at, so what is exported and confirmed. |
 
 ### Partitions and Containers (`partitions`, `containers`)
 

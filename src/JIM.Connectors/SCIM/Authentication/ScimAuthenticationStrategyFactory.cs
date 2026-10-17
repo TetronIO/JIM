@@ -51,10 +51,11 @@ public static class ScimAuthenticationStrategyFactory
         ICredentialProtection? credentialProtection,
         HttpClient tokenClient)
     {
+        // Checked before the secret is read, so a refused endpoint fails without touching it. This also catches
+        // a Connected System saved before configuration validation refused cleartext token endpoints.
         var tokenEndpoint = RequireString(settingValues, ScimConnectorConstants.SettingTokenEndpointUrl);
-        if (!Uri.TryCreate(tokenEndpoint, UriKind.Absolute, out var tokenEndpointUri))
-            throw new ScimAuthenticationException(
-                $"The '{ScimConnectorConstants.SettingTokenEndpointUrl}' setting is not a valid absolute URL.");
+        if (!ScimTransportSecurity.TryValidate(tokenEndpoint, ScimConnectorConstants.SettingTokenEndpointUrl, ScimTransportSecurity.TokenEndpointPayload, out var tokenEndpointUri, out var error))
+            throw new ScimAuthenticationException(error);
 
         return new ScimOAuthClientCredentialsAuthentication(
             tokenClient,

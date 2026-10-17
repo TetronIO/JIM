@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
+using JIM.Models.Staging;
 
 namespace JIM.Utilities;
 
@@ -47,6 +48,61 @@ public static class DateTimeAttributeValue
     /// </summary>
     public static bool AreEqual(DateTime? a, DateTime? b) =>
         a.HasValue ? b.HasValue && Key(a.Value) == Key(b.Value) : !b.HasValue;
+
+    /// <summary>
+    /// The length of one step of <paramref name="resolution"/> in ticks; null means the microsecond JIM holds.
+    /// </summary>
+    public static long ResolutionTicks(DateTimeResolution? resolution) => resolution switch
+    {
+        null or DateTimeResolution.Microsecond => TimeSpan.TicksPerMicrosecond,
+        DateTimeResolution.TenMicroseconds => 10 * TimeSpan.TicksPerMicrosecond,
+        DateTimeResolution.HundredMicroseconds => 100 * TimeSpan.TicksPerMicrosecond,
+        DateTimeResolution.Millisecond => TimeSpan.TicksPerMillisecond,
+        DateTimeResolution.TenMilliseconds => 10 * TimeSpan.TicksPerMillisecond,
+        DateTimeResolution.HundredMilliseconds => 100 * TimeSpan.TicksPerMillisecond,
+        DateTimeResolution.Second => TimeSpan.TicksPerSecond,
+        DateTimeResolution.Minute => TimeSpan.TicksPerMinute,
+        DateTimeResolution.Day => TimeSpan.TicksPerDay,
+        _ => throw new ArgumentOutOfRangeException(nameof(resolution), resolution, "Unknown date and time resolution.")
+    };
+
+    /// <summary>
+    /// Whether flooring a canonical value to <paramref name="resolution"/> can change it: false for none (the
+    /// microsecond) and for the microsecond itself, so a caller can keep its canonical fast path.
+    /// </summary>
+    public static bool IsCoarserThanMicrosecond(DateTimeResolution? resolution) =>
+        resolution.HasValue && resolution.Value != DateTimeResolution.Microsecond;
+
+    /// <summary>
+    /// A date as a Connected System of <paramref name="resolution"/> holds it (#2153, decision D2): the canonical value
+    /// (<see cref="ToCanonical"/>) floored to a whole step of the resolution, in UTC. Flooring, never rounding, so a
+    /// value never moves into the next second, minute or day. Null means the microsecond, which is
+    /// <see cref="ToCanonical"/> itself. <see cref="DateTime.MinValue"/> and <see cref="DateTime.MaxValue"/> pass through.
+    /// </summary>
+    public static DateTime ToResolution(DateTime value, DateTimeResolution? resolution)
+    {
+        var canonical = ToCanonical(value);
+        if (!IsCoarserThanMicrosecond(resolution) || canonical == DateTime.MinValue || canonical == DateTime.MaxValue)
+            return canonical;
+
+        var step = ResolutionTicks(resolution);
+        return new DateTime(canonical.Ticks - canonical.Ticks % step, DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// The ticks of a date at <paramref name="resolution"/> (<see cref="ToResolution"/>), for comparing, keying and
+    /// diffing values a Connected System holds: two values are the same to the Connected System exactly when these are
+    /// equal.
+    /// </summary>
+    public static long Key(DateTime value, DateTimeResolution? resolution) =>
+        IsCoarserThanMicrosecond(resolution) ? ToResolution(value, resolution).Ticks : Key(value);
+
+    /// <summary>
+    /// Whether two dates are the same date to a Connected System of <paramref name="resolution"/>: both absent, or both
+    /// present with equal keys at that resolution.
+    /// </summary>
+    public static bool AreEqual(DateTime? a, DateTime? b, DateTimeResolution? resolution) =>
+        a.HasValue ? b.HasValue && Key(a.Value, resolution) == Key(b.Value, resolution) : !b.HasValue;
 
     /// <summary>
     /// The canonical value as invariant text, for merge keys, logs and diagnostic text:

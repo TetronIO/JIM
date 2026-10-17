@@ -1206,6 +1206,64 @@ docker() { if [ "`$3" = "-f" ]; then echo '$($script:LoadedId)'; return 0; fi; r
     }
 }
 
+Describe 'setup.sh keep_previous_database_image' -Skip:$script:NoBash {
+    BeforeAll {
+        $script:Pinned = 'docker.io/library/postgres:18.6@sha256:' + ('a' * 64)
+
+        # An installation whose compose file pins the PostgreSQL image and whose .env holds the given lines. Docker
+        # records each command it is given, and finds an image only when told it is present.
+        function New-KeepImageArrangement {
+            param([string]$EnvLines = '', [switch]$ImageMissing)
+            $root = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $root -Force | Out-Null
+            "services:`n  jim.database:`n    image: `${JIM_DB_IMAGE:-$($script:Pinned)}`n" | Set-Content -NoNewline (Join-Path $root 'docker-compose.yml')
+            "JIM_VERSION=1.0.0`n$EnvLines" | Set-Content -NoNewline (Join-Path $root '.env')
+            $inspectStatus = if ($ImageMissing) { 1 } else { 0 }
+            [pscustomobject]@{
+                Dir = $root
+                Calls = Join-Path $root 'docker-calls'
+                Arrange = @"
+CONFIG_FILE='$root/.env'
+docker() { echo "docker `$*" >> '$root/docker-calls'; if [ "`$1 `$2" = "image inspect" ]; then return $inspectStatus; fi; return 0; }
+"@
+            }
+        }
+    }
+
+    It 'tags the pinned image in its own repository, where a digest lookup still finds it once the tag moves' {
+        # Docker's containerd image store removes an image no name refers to. Loading a release whose PostgreSQL
+        # image has the same tag leaves the previous one unnamed, and the previous compose file's pin, which a
+        # rollback restores, then cannot be found without a download (#2299). A digest resolves only through a name
+        # in the same repository, so jim-previous/postgres would not do.
+        $arrangement = New-KeepImageArrangement
+
+        $result = Invoke-SetupFunction "keep_previous_database_image '$($arrangement.Dir)'" $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Calls | Should -Contain "docker tag $($script:Pinned) docker.io/library/postgres:jim-previous"
+    }
+
+    It 'tags the image JIM_DB_IMAGE names, where .env runs it by its ID' {
+        $id = 'sha256:' + ('b' * 64)
+        $arrangement = New-KeepImageArrangement -EnvLines "JIM_DB_IMAGE=$id`n"
+
+        $result = Invoke-SetupFunction "keep_previous_database_image '$($arrangement.Dir)'" $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Calls | Should -Contain "docker tag $id docker.io/library/postgres:jim-previous"
+    }
+
+    It 'warns and carries on when the image is not on the host' {
+        $arrangement = New-KeepImageArrangement -ImageMissing
+
+        $result = Invoke-SetupFunction "keep_previous_database_image '$($arrangement.Dir)'" $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Calls | Where-Object { $_ -like 'docker tag *' } | Should -BeNullOrEmpty
+        $result.Output | Should -BeLike '*rolling back*'
+    }
+}
+
 Describe 'setup.sh check_compose_edits' -Skip:$script:NoBash {
     BeforeAll {
         # An installation with the two compose files the release ships, and optionally the record of them.
@@ -1414,6 +1472,33 @@ wait_for_jim() { JIM_READY=true; }
 
         $result.ExitCode | Should -Be 0 -Because $result.Output
         Get-Content $arrangement.Env | Where-Object { $_ -like 'JIM_DB_SHARED_BUFFERS=*' } | Should -BeNullOrEmpty
+    }
+
+    It 'keeps the PostgreSQL image JIM runs before loading the release''s, for rolling back' {
+        $arrangement = New-SizingUpgradeArrangement -DatabaseHost 'jim.database'
+        $arrange = $arrangement.Arrange + @"
+
+keep_previous_database_image() { echo 'kept the previous PostgreSQL image'; }
+load_bundle_images() { echo 'loaded the release images'; }
+"@
+
+        $result = Invoke-SetupFunction 'upgrade_installation' $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*kept the previous PostgreSQL image*loaded the release images*'
+    }
+
+    It 'keeps no PostgreSQL image for your own PostgreSQL server' {
+        $arrangement = New-SizingUpgradeArrangement -DatabaseHost 'db.example.test'
+        $arrange = $arrangement.Arrange + @"
+
+keep_previous_database_image() { echo 'kept the previous PostgreSQL image'; }
+"@
+
+        $result = Invoke-SetupFunction 'upgrade_installation' $arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Not -BeLike '*kept the previous PostgreSQL image*'
     }
 }
 

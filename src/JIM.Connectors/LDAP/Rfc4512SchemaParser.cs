@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Staging;
 
 namespace JIM.Connectors.LDAP;
 
@@ -308,6 +309,17 @@ internal static class Rfc4512SchemaParser
 
         return null;
     }
+
+    /// <summary>
+    /// The finest step of time a date syntax holds (#2153, decision D2): Generalized Time carries any fraction of a
+    /// second, so the microsecond JIM holds; UTC Time carries whole seconds at most. Null for a syntax that is not a date.
+    /// </summary>
+    internal static DateTimeResolution? GetRfcDateTimeResolution(string? syntaxOid) => syntaxOid switch
+    {
+        "1.3.6.1.4.1.1466.115.121.1.24" => DateTimeResolution.Microsecond,
+        "1.3.6.1.4.1.1466.115.121.1.53" => DateTimeResolution.Second,
+        _ => null
+    };
 
     /// <summary>
     /// Maps an RFC 4517 SYNTAX OID to JIM's <see cref="AttributeDataType"/>.
