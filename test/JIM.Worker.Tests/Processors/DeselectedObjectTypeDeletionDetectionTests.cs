@@ -126,7 +126,7 @@ public class DeselectedObjectTypeDeletionDetectionTests
         // Profile's deletion limits exist to catch. The deselected type's objects are counted like any other.
         var fixture = BuildFixture(maxDetectedDeletions: 1);
 
-        var queuedForUpdate = await DetectDeletionsAsync(fixture.Processor, existingCsoCount: 2);
+        var queuedForUpdate = await DetectDeletionsAsync(fixture.Processor);
 
         using (Assert.EnterMultipleScope())
         {
@@ -141,7 +141,7 @@ public class DeselectedObjectTypeDeletionDetectionTests
     /// Invokes deletion detection exactly as a Full Import does at the end of its run, with an empty set of
     /// imported external ids: nothing came back, so every object in scope is a candidate for obsoletion.
     /// </summary>
-    private static async Task<List<ConnectedSystemObject>> DetectDeletionsAsync(SyncImportTaskProcessor processor, int existingCsoCount = 0)
+    private static async Task<List<ConnectedSystemObject>> DetectDeletionsAsync(SyncImportTaskProcessor processor)
     {
         const string methodName = "ProcessConnectedSystemObjectDeletionsAsync";
         var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
@@ -151,7 +151,7 @@ public class DeselectedObjectTypeDeletionDetectionTests
                 "object type filter here, because that filter is the behaviour under test.");
 
         var queuedForUpdate = new List<ConnectedSystemObject>();
-        await (Task)method.Invoke(processor, [new List<ExternalIdPair>(), new List<ConnectedSystemObject>(), queuedForUpdate, null, existingCsoCount])!;
+        await (Task)method.Invoke(processor, [new List<ExternalIdPair>(), new List<ConnectedSystemObject>(), queuedForUpdate, null])!;
         return queuedForUpdate;
     }
 

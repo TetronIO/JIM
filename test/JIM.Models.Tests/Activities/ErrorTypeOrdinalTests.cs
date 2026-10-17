@@ -74,8 +74,16 @@ public class ErrorTypeOrdinalTests
         // Dates an export sends to a multi-valued attribute are one date at the Connected System's resolution (#2153).
         [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = 33,
 
+        // An export the Connected System refused, or JIM refused to send, for a reason an administrator can act on (#2118).
+        [ActivityRunProfileExecutionItemErrorType.OutsideManagedScope] = 34,
+        [ActivityRunProfileExecutionItemErrorType.AccessDenied] = 35,
+        [ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem] = 36,
+        [ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation] = 37,
+        [ActivityRunProfileExecutionItemErrorType.MissingDependency] = 38,
+        [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = 39,
+
         // An export Attribute Flow targets a credential attribute such as password, which is never exported (#2091).
-        [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = 34
+        [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = 40
     };
 
     [Test]

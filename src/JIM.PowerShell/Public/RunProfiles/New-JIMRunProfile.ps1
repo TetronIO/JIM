@@ -58,14 +58,16 @@ function New-JIMRunProfile {
         rules as -MaxCreates. Recommended for an Export to a production directory.
 
     .PARAMETER MaxDetectedDeletions
-        A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted. If more would
-        be, it marks none of them; 0 refuses to mark any. Only valid when -RunType is FullImport; omit it for no
-        limit.
+        A Safeguard: the most Connected System Objects an import run may newly mark as deleted: those a Full Import
+        no longer finds, or those a Delta Import's Connector reports deleted. If more would be, it marks none of
+        them; 0 refuses to mark any. A Delta Import that withholds its deletions reports them again on every later
+        run until they are let through. Only valid when -RunType is FullImport or DeltaImport; omit it for no limit.
 
     .PARAMETER MaxDetectedDeletionsPercent
-        A Safeguard: the most Connected System Objects a Full Import run may newly mark as deleted, as a share (0 to
-        100) of those in the run's scope when it starts, under the same rules as -MaxDetectedDeletions. Either limit
-        tripping withholds the whole detection.
+        A Safeguard: the most Connected System Objects an import run may newly mark as deleted, as a share (0 to
+        100) of those in the run's scope not already marked as deleted, before it saves anything, under the same
+        rules as -MaxDetectedDeletions.
+        Either limit tripping withholds every deletion in the run.
 
     .PARAMETER PassThru
         Returns the created Run Profile.
@@ -106,6 +108,13 @@ function New-JIMRunProfile {
 
         Creates a Full Import Run Profile that marks nothing as deleted on a run where deletion
         detection would newly mark more than 10% of the Connected System's objects as deleted.
+
+    .EXAMPLE
+        New-JIMRunProfile -ConnectedSystemId 1 -Name "Delta Import" -RunType DeltaImport -MaxDetectedDeletions 50
+
+        Creates a Delta Import Run Profile that marks nothing as deleted on a run where the Connected
+        System reports more than 50 deletions. The withheld deletions are reported again by each
+        following Delta Import until the limit is raised or a Delta Import Run Profile without it runs.
 
     .EXAMPLE
         New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (apply Object Type changes)" -RunType FullImport -AllowObjectTypeChanges

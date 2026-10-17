@@ -14,6 +14,7 @@ on:
                  # stack is still evaluated against main's ruleset, so filtering to main here
                  # left the required Analyze checks permanently unreported on every layer but
                  # the bottom one, and the stack could never be merged.
+  merge_group:   # The Analyze checks are required on main, so a merge queue must run them too.
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
 
@@ -24,9 +25,10 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     # Split-trust runner model (see ci.yml): push and schedule runs are trusted and use
-    # the fast self-hosted runner; pull_request runs execute fork code and stay on
-    # GitHub-hosted VMs.
-    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
+    # the fast self-hosted runner; pull_request and merge_group runs execute unmerged,
+    # possibly fork, code and stay on GitHub-hosted VMs. The trusted events are listed
+    # rather than the untrusted ones, so any future trigger defaults to GitHub-hosted.
+    runs-on: ${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'self-hosted' || 'ubuntu-latest' }}
 
     permissions:
       security-events: write

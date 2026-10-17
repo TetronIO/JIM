@@ -27,9 +27,34 @@ public static class RunProfileSafeguardsValidator
         return ValidateField(nameof(runProfile.MaxCreates), runProfile.MaxCreates, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
             ?? ValidateField(nameof(runProfile.MaxUpdates), runProfile.MaxUpdates, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
             ?? ValidateField(nameof(runProfile.MaxDeletes), runProfile.MaxDeletes, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
-            ?? ValidateField(nameof(runProfile.MaxDetectedDeletions), runProfile.MaxDetectedDeletions, runProfile.RunType, ConnectedSystemRunType.FullImport, "a Full Import")
+            ?? ValidateDeletionCountField(runProfile.MaxDetectedDeletions, runProfile.RunType)
             ?? ValidatePercentField(runProfile.MaxDetectedDeletionsPercent, runProfile.RunType)
             ?? ValidateAllowObjectTypeChanges(runProfile.AllowObjectTypeChanges, runProfile.RunType);
+    }
+
+    /// <summary>
+    /// The deletion limits guard both kinds of import: a Full Import's deletion detection, and the deletes a Delta
+    /// Import's Connector reports (#2089).
+    /// </summary>
+    private static bool IsImport(ConnectedSystemRunType runType) =>
+        runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport;
+
+    private const string ImportRunProfileRequirement = "can only be set on a Full Import or Delta Import Run Profile.";
+
+    private static string? ValidateDeletionCountField(int? value, ConnectedSystemRunType runType)
+    {
+        const string fieldName = nameof(ConnectedSystemRunProfile.MaxDetectedDeletions);
+
+        if (value == null)
+            return null;
+
+        if (!IsImport(runType))
+            return $"{fieldName} {ImportRunProfileRequirement}";
+
+        if (value < 0)
+            return $"{fieldName} cannot be negative.";
+
+        return null;
     }
 
     /// <summary>
@@ -62,8 +87,8 @@ public static class RunProfileSafeguardsValidator
         if (value == null)
             return null;
 
-        if (runType != ConnectedSystemRunType.FullImport)
-            return $"{fieldName} can only be set on a Full Import Run Profile.";
+        if (!IsImport(runType))
+            return $"{fieldName} {ImportRunProfileRequirement}";
 
         if (value is < 0 or > 100)
             return $"{fieldName} must be between 0 and 100.";

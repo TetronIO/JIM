@@ -588,8 +588,9 @@ public class SqlConnectorExportTests
     }
 
     [Test]
-    public async Task ExportAsync_ARefusalThatIsNotADuplicate_StaysAGeneralFailure()
+    public async Task ExportAsync_ARefusalThatIsNotADuplicate_IsRejectedByTheConnectedSystem()
     {
+        // A foreign key violation is the database considering the change and saying no, not a fault in JIM (#2118).
         var provider = new FakeSqlProvider
         {
             GeneratedKey = 4711,
@@ -601,9 +602,47 @@ public class SqlConnectorExportTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
             Assert.That(results[0].RejectedAttributeName, Is.Null);
+            Assert.That(results[0].ErrorMessage, Does.Contain("violates foreign key constraint \"person_dept_fkey\""));
         }
+    }
+
+    [Test]
+    public async Task ExportAsync_APermissionRefusal_IsAccessDenied()
+    {
+        var provider = new FakeSqlProvider
+        {
+            GeneratedKey = 4711,
+            FailWhenCommandTextContains = "INSERT",
+            FailureDetail = ("42501: permission denied for table person", "42501")
+        };
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.AccessDenied));
+            Assert.That(results[0].ErrorMessage, Does.Contain("permission denied for table person"));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_AConnectionFailure_StaysAGeneralFailure()
+    {
+        // The database never considered the change, so nothing was refused.
+        var provider = new FakeSqlProvider
+        {
+            GeneratedKey = 4711,
+            FailWhenCommandTextContains = "INSERT",
+            FailureDetail = ("08006: connection failure", "08006")
+        };
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
     }
 
     #endregion

@@ -5,6 +5,7 @@ using System.Globalization;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
 using JIM.Scim.Discovery;
+using JIM.Scim.Filtering;
 using JIM.Scim.Schema;
 
 namespace JIM.Connectors.SCIM;
@@ -91,6 +92,9 @@ internal sealed record ScimImportPlan(
             warningMessage == null ? null : ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport);
     }
 
+    // The path is read from the attribute's name, so the filter and the attribute JIM imports cannot drift apart.
+    private static readonly ScimAttributePath LastModified = ScimFilterParser.ParsePath(ScimCommonAttributes.MetaLastModified).Attribute;
+
     /// <summary>
     /// Builds the RFC 7644 section 3.4.2.2 filter for everything changed since the watermark. The
     /// comparison value is a quoted UTC instant at second precision, which is the precision providers
@@ -99,6 +103,6 @@ internal sealed record ScimImportPlan(
     private static string BuildFilter(DateTimeOffset watermark)
     {
         var instant = watermark.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
-        return $"{ScimCommonAttributes.MetaLastModified} gt \"{instant}\"";
+        return ScimFilterWriter.Write(new ScimComparisonFilter(LastModified, ScimComparisonOperator.Gt, ScimFilterValue.String(instant)));
     }
 }

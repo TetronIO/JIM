@@ -7,6 +7,12 @@ on:
   push:
     branches: [ "main" ]
   pull_request:  # This will run on ALL pull requests regardless of source/target branch
+  # A merge queue on main tests each entry (the PR applied on top of main, or on the entries ahead of
+  # it) and holds the merge until the same required checks pass on it. Every job that reports a
+  # required check runs here exactly as on pull_request: none reads the PR payload, the runs-on
+  # expressions send only push to the self-hosted runners (a queued entry is unmerged, possibly fork,
+  # code), and the concurrency group keys on github.ref, which is unique per queue entry.
+  merge_group:
   # Nightly, main only (a scheduled run always uses the default branch), and only the image jobs:
   # discover-base-images, scan-images and their summary. Everything else in this file depends only
   # on the commit, which a push has already tested. The images also depend on what they pull from
@@ -32,6 +38,7 @@ permissions:
 # would corrupt each other's fixtures. A newer queued
 # main run supersedes an older queued one, which is fine: the newest commit contains
 # the older ones. PR runs get one group per PR so a new push cancels the stale run.
+# Merge queue runs get one group per queue entry (gh-readonly-queue/main/pr-<n>-<sha>).
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'push' && 'main-push' || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
@@ -40,8 +47,8 @@ jobs:
   build-and-test:
 
     # Split-trust runner model: push events only happen once code is on main (merged by
-    # an authorised person), so they may use the fast self-hosted runner. pull_request
-    # events execute code from anyone's fork and must stay on GitHub-hosted VMs; a
+    # an authorised person), so they may use the fast self-hosted runner. pull_request and
+    # merge_group events execute code from anyone's fork and must stay on GitHub-hosted VMs; a
     # self-hosted runner on a public repo would hand fork authors code execution on our
     # infrastructure. The org runner group must also allowlist this workflow at
     # refs/heads/main only, so that a fork PR editing this expression still cannot

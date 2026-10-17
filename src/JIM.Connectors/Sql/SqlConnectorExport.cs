@@ -168,12 +168,20 @@ internal sealed class SqlConnectorExport
                 // A duplicate key is reported as a value already in use, naming the column where the database
                 // named one (Unique Value Generation, decision 9); the database's own message is kept whole. It is a
                 // per-object data conflict the export run reports on the object (and may correct), so it is logged at
+                // Warning. Any other refusal (a permission, constraint, data or schema error) is the database saying
+                // no rather than a fault in JIM, so it is reported as Access Denied or Export Rejected (#2118), also at
                 // Warning; every other failure stays an Error.
                 if (SqlUniquenessRejectionClassifier.TryClassify(ex, out var rejectedAttributeName))
                 {
                     _logger.Warning(ex, "SqlConnectorExport: Pending Export {PendingExportId} ({ChangeType}) was rejected because a value it carries is already in use",
                         pendingExport.Id, pendingExport.ChangeType);
                     results[index] = ConnectedSystemExportResult.ValueAlreadyInUse(ex.Message, rejectedAttributeName);
+                }
+                else if (SqlExportRefusalClassifier.FailureFor(ex) is { } refusal)
+                {
+                    _logger.Warning(ex, "SqlConnectorExport: Pending Export {PendingExportId} ({ChangeType}) was refused by the database ({ErrorType})",
+                        pendingExport.Id, pendingExport.ChangeType, refusal.ErrorType);
+                    results[index] = refusal;
                 }
                 else
                 {
