@@ -21,7 +21,8 @@
     9. Deprovision  - The joiner leaves the export rule's scope and is deleted from the provider
     10. MultiValuedRemoval - A user is provisioned with two badges (a multi-valued string in the
                       provider's own User extension), then one badge is taken away and another added; the
-                      confirming import must find exactly the kept and the added badge (#2181)
+                      confirming import must find exactly the kept and the added badge (#2181), both
+                      in custom.badges and as entries of the core roles attribute (#2090)
 
     With the update flow in steps 4-6, steps 8 and 9 complete CRUD: every operation the connector can
     perform against a provider is driven end to end and confirmed by reading the provider back. Step 10
@@ -193,7 +194,7 @@ function Invoke-HrImportAndSync {
 # The badges the last SCIM import read back for one user, sorted and joined so a comparison is exact:
 # a value missing, a value left behind and a duplicate all show.
 function Get-ScimUserBadges {
-    param([string]$UserName)
+    param([string]$UserName, [string]$AttributeName = "custom.badges")
 
     $users = @(Get-JIMConnectedSystemObject -ConnectedSystemId $scimSystem.id -ObjectTypeId $userTypeId -All |
         Where-Object { $_.status -ne "Obsolete" })
@@ -201,7 +202,7 @@ function Get-ScimUserBadges {
         $userNameValues = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $scimSystem.id -CsoId $user.id -AttributeName "userName" -All)
         if (-not ($userNameValues | Where-Object { $_.stringValue -eq $UserName })) { continue }
 
-        $badges = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $scimSystem.id -CsoId $user.id -AttributeName "custom.badges" -All |
+        $badges = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $scimSystem.id -CsoId $user.id -AttributeName $AttributeName -All |
             ForEach-Object { $_.stringValue } | Sort-Object)
         # "(none)" rather than an empty string, which Assert-Equal's mandatory parameters would refuse to bind
         # instead of reporting the badges as missing.
@@ -534,6 +535,8 @@ try {
 
         Assert-Equal -Actual (Get-ScimUserBadges -UserName $badgeHolderUserName) -Expected "gold,silver" `
             -Message "The provider holds both badges the badge holder was created with"
+        Assert-Equal -Actual (Get-ScimUserBadges -UserName $badgeHolderUserName -AttributeName "roles.value") -Expected "gold,silver" `
+            -Message "The provider holds a roles entry for each badge, not only the first (#2090)"
 
         # gold leaves and platinum arrives in one HR change, so one Pending Export carries a removal of one
         # value and an addition of another. Removing the attribute by its bare path would take silver, and
@@ -550,6 +553,8 @@ try {
 
         Assert-Equal -Actual (Get-ScimUserBadges -UserName $badgeHolderUserName) -Expected "platinum,silver" `
             -Message "The provider holds exactly the kept badge and the added one (gold removed, silver kept, platinum added)"
+        Assert-Equal -Actual (Get-ScimUserBadges -UserName $badgeHolderUserName -AttributeName "roles.value") -Expected "platinum,silver" `
+            -Message "The provider holds exactly the kept roles entry and the added one (#2090)"
 
         Add-StepResult -Name "MultiValuedRemoval" -Passed $true -Detail "gold removed, silver kept and platinum added in the provider, confirmed by import"
         Write-Host "  OK Multi-valued removal confirmed" -ForegroundColor Green
