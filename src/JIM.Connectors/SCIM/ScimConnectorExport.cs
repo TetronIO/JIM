@@ -277,6 +277,8 @@ internal sealed class ScimConnectorExport
             .ToList();
 
         var built = ScimResourceWriter.BuildResource(writes, target.Attributes, target.SchemaUrn);
+        if (built.WriteOnlyAttributes.Count > 0)
+            return ScimPreparedExport.From(WriteOnlyAttributesFailure(built.WriteOnlyAttributes));
         if (built.UnknownAttributes.Count > 0)
             return ScimPreparedExport.From(UnknownAttributesFailure(built.UnknownAttributes));
 
@@ -313,6 +315,8 @@ internal sealed class ScimConnectorExport
         if (_discovery.Capabilities.SupportsPatch)
         {
             var built = ScimPatchBuilder.Build(changes, target.Attributes);
+            if (built.WriteOnlyAttributes.Count > 0)
+                return ScimPreparedExport.From(WriteOnlyAttributesFailure(built.WriteOnlyAttributes));
             if (built.UnknownAttributes.Count > 0)
                 return ScimPreparedExport.From(UnknownAttributesFailure(built.UnknownAttributes));
 
@@ -348,6 +352,8 @@ internal sealed class ScimConnectorExport
             return ScimPreparedExport.From(ConnectedSystemExportResult.Failed("The service provider did not return the resource to update, so JIM cannot apply the change without risking clearing attributes it does not manage."));
 
         var applied = ScimResourceWriter.ApplyChanges(resource, changes, target.Attributes);
+        if (applied.WriteOnlyAttributes.Count > 0)
+            return ScimPreparedExport.From(WriteOnlyAttributesFailure(applied.WriteOnlyAttributes));
         if (applied.UnknownAttributes.Count > 0)
             return ScimPreparedExport.From(UnknownAttributesFailure(applied.UnknownAttributes));
 
@@ -486,6 +492,18 @@ internal sealed class ScimConnectorExport
         return ConnectedSystemExportResult.Failed(
             $"The service provider's schema has no writable attribute named {string.Join(", ", unknownAttributes.Select(a => $"'{LogSanitiser.Sanitise(a)}'"))}. " +
             "The change was not sent, because exporting the rest would record it as applied when it was not. Re-import the schema and check the Attribute Flows targeting it.");
+    }
+
+    /// <summary>
+    /// The failure for a change to a write-only attribute, such as <c>password</c> (#2091). Names the attribute, never
+    /// the value, and points at what does work: a password is set through Password Synchronisation, not an Attribute
+    /// Flow, and re-importing the schema would not change that.
+    /// </summary>
+    private static ConnectedSystemExportResult WriteOnlyAttributesFailure(List<string> writeOnlyAttributes)
+    {
+        return ConnectedSystemExportResult.Failed(
+            $"{string.Join(", ", writeOnlyAttributes.Select(a => $"'{LogSanitiser.Sanitise(a)}'"))} is write-only on the service provider, so JIM never exports it through an Attribute Flow. " +
+            "Nothing was sent. Remove the Attribute Flow targeting it; to set passwords, use Password Synchronisation on the Connected System instead.");
     }
 
     private static ConnectedSystemExportResult MissingResourceIdFailure()

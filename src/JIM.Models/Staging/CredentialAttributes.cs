@@ -52,7 +52,12 @@ public static class CredentialAttributes
         // The password policy history of OpenLDAP (ppolicy) and 389 Directory Server: hashes of previous passwords.
         // Operational attributes, offered by schema discovery since #2153 (D8).
         "pwdHistory",
-        "passwordHistory"
+        "passwordHistory",
+
+        // SCIM's write-only User attribute (RFC 7643 section 4.1.1). Matched by name on every Connector, so a SQL or
+        // File column called password is blocked too: a password reaches a Connected System only through Password
+        // Synchronisation, never through Attribute Flow (#2091).
+        "password"
     ]);
 
     private static readonly HashSet<string> DeniedNameLookup = new(DeniedNames, StringComparer.OrdinalIgnoreCase);
