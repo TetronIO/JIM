@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261017090332_AddServiceSettingsSyncRuleLastDeletedAt")]
+    [Migration("20261017162059_AddServiceSettingsSyncRuleLastDeletedAt")]
     partial class AddServiceSettingsSyncRuleLastDeletedAt
     {
         /// <inheritdoc />
