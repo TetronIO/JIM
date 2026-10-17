@@ -144,6 +144,14 @@ public abstract class SyncTaskProcessorBase
     // write's own move of the row version cannot defeat the guard.
     private readonly HashSet<Guid> _pendingSynchronisationPendingClears = [];
 
+    // This system's Connected System Objects held back this page because a surviving contributor's scope could not be
+    // decided (#2336): an obsoletion, a scope exit or a value withdrawal left undone, keyed by object id, with the
+    // Metaverse Object the object stays joined to. What would let it finish is a Full Import of the OTHER system, which
+    // writes only that system's objects, so nothing would otherwise select it for this system's next Delta
+    // Synchronisation (#2343). It keeps the synchronisation-pending mark (#2092) instead: never cleared by this run, and
+    // set at page flush when it was not already carried. Addressed by join, which the unique join index makes exact.
+    private readonly Dictionary<Guid, MetaverseObject> _pendingHeldBackMarks = [];
+
     // The row version (xmin) of each marked Connected System Object on the current page (either mark), as the page
     // load read it. Captured by CaptureMarkedRowVersions straight after the load, before this run writes anything,
     // because an EF save of a tracked object refreshes its xmin to this run's own write, which would defeat the guard.
@@ -161,6 +169,7 @@ public abstract class SyncTaskProcessorBase
     private int _derivedInputMarksKept;
     private int _synchronisationPendingMarksCleared;
     private int _synchronisationPendingMarksKept;
+    private int _heldBackObjectsMarked;
 
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
@@ -1128,7 +1137,9 @@ public abstract class SyncTaskProcessorBase
         // the outcome below: obsolete (handled in Pass 1), skipped for want of rules, processed, or errored (an errored
         // object is reported on its own execution item, and the watermark has always passed it). Recorded before the
         // early returns for that reason; the clear itself applies only if the row is unchanged since the page load.
-        if (connectedSystemObject.SynchronisationPending && _markedSeenRowVersions.ContainsKey(connectedSystemObject.Id))
+        // The one exception is an object Pass 1 held back (#2343), which keeps its mark for the next run to retry.
+        if (connectedSystemObject.SynchronisationPending && _markedSeenRowVersions.ContainsKey(connectedSystemObject.Id) &&
+            !_pendingHeldBackMarks.ContainsKey(connectedSystemObject.Id))
             _pendingSynchronisationPendingClears.Add(connectedSystemObject.Id);
 
         // Skip obsolete CSOs - already fully handled in Pass 1
@@ -1721,7 +1732,24 @@ public abstract class SyncTaskProcessorBase
         if (result.ScopeReviewMetaverseObjectId is { } reviewMvoId)
             _pendingReProvisioningReviewMvoIds.Add(reviewMvoId);
 
+        // Held back (#2336): the object stays obsolete and joined, for this system's next Delta Synchronisation (#2343).
+        if (result.UndecidableSurvivorScope != null && connectedSystemObject.MetaverseObject is { } heldBackMvo)
+            HoldBackForRetry(connectedSystemObject, heldBackMvo);
+
         return result.ExecutionItems;
+    }
+
+    /// <summary>
+    /// Keeps a Connected System Object that a surviving contributor's undecidable scope held back (#2336) selected for
+    /// its Connected System's next synchronisation, Delta Synchronisation included (#2343): the run leaves its
+    /// synchronisation-pending mark (#2092) in place, and the page flush sets the mark where the object did not already
+    /// carry it. Until the survivor's scope can be decided, each run reports the same error for the object and changes
+    /// nothing; the run after the Full Import that decides it finishes what was held back.
+    /// </summary>
+    private void HoldBackForRetry(ConnectedSystemObject connectedSystemObject, MetaverseObject metaverseObject)
+    {
+        _pendingHeldBackMarks[connectedSystemObject.Id] = metaverseObject;
+        _pendingSynchronisationPendingClears.Remove(connectedSystemObject.Id);
     }
 
     /// <summary>
@@ -2234,7 +2262,20 @@ public abstract class SyncTaskProcessorBase
                     .ToList();
 
                 if (withdrawnValues.Count > 0)
-                    generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
+                {
+                    try
+                    {
+                        generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
+                    }
+                    catch (ScopingCriterionFailedException)
+                    {
+                        // A survivor's scope could not be decided (#2336): the caller's catch errors the object and leaves
+                        // the withdrawal undone. Re-election evaluates only survivors' scopes, so this is never this
+                        // object's own scope; keep it marked so this system's next Delta Synchronisation retries (#2343).
+                        HoldBackForRetry(connectedSystemObject, connectedSystemObject.MetaverseObject);
+                        throw;
+                    }
+                }
             }
 
             // Unique Value Generation (#242, Phase 2 work package G) and Metaverse-Derived Attribute Flows (#1750,
@@ -2635,6 +2676,31 @@ public abstract class SyncTaskProcessorBase
             _pendingSynchronisationPendingClears.Clear();
         }
 
+        // Held-back objects (#2343): marked after the guarded clears, which never name them, so this write cannot move a
+        // row version a clear compares against. Every held-back object is written, already-marked ones included, rather
+        // than trusting a loaded flag: one small statement, only on a page that held something back, which the usual page
+        // does not. An object still joined is what a hold-back leaves, so its Metaverse Object always has an id here.
+        if (_pendingHeldBackMarks.Count > 0)
+        {
+            var heldBackMarks = _pendingHeldBackMarks.Values
+                .Where(mvo => mvo.Id != Guid.Empty)
+                .Select(mvo => new SynchronisationPendingMark(mvo.Id, _connectedSystem.Id))
+                .Distinct()
+                .ToList();
+            if (heldBackMarks.Count < _pendingHeldBackMarks.Count)
+            {
+                // Cannot happen: a held-back object keeps its join to a persisted Metaverse Object. Report rather than drop silently.
+                Log.Warning("FlushMarksAsync: {Count} held-back Connected System Object(s) name a Metaverse Object with no id; they cannot be marked for retry.",
+                    _pendingHeldBackMarks.Count - heldBackMarks.Count);
+            }
+
+            var newlyMarked = await _syncRepo.MarkConnectedSystemObjectsSynchronisationPendingAsync(heldBackMarks);
+            _heldBackObjectsMarked += heldBackMarks.Count;
+            Log.Debug("FlushMarksAsync: kept {HeldBack} held-back Connected System Object(s) marked for the next synchronisation " +
+                "({NewlyMarked} newly marked).", heldBackMarks.Count, newlyMarked);
+            _pendingHeldBackMarks.Clear();
+        }
+
         _markedSeenRowVersions.Clear();
         _derivedFlowErroredCsoIds.Clear();
     }
@@ -2679,6 +2745,13 @@ public abstract class SyncTaskProcessorBase
         Log.Information("Synchronisation-pending marks for {ConnectedSystemName}: {Cleared} cleared on processed Connected System Object(s); " +
             "{Kept} kept because the object was written after this run loaded it, so the next synchronisation processes it.",
             _connectedSystem.Name, _synchronisationPendingMarksCleared, _synchronisationPendingMarksKept);
+
+        // Held back because a surviving contributor's scope could not be decided (#2336, #2343): each is also an error on
+        // this run's Activity; reported here so the retry the next synchronisation makes is visible in the log.
+        if (_heldBackObjectsMarked > 0)
+            Log.Information("Synchronisation-pending marks for {ConnectedSystemName}: {HeldBack} Connected System Object(s) held back because " +
+                "a surviving contributor's scope could not be decided are kept marked, so the next synchronisation retries them.",
+                _connectedSystem.Name, _heldBackObjectsMarked);
 
         if (_attributePriorityContext?.DerivedFlowGraph == null)
             return;
@@ -3931,7 +4004,8 @@ public abstract class SyncTaskProcessorBase
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
         if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0 && _pendingScopeReviewClears.Count == 0 &&
-            _pendingDerivedInputMarks.Count == 0 && _pendingDerivedInputClears.Count == 0 && _pendingSynchronisationPendingClears.Count == 0)
+            _pendingDerivedInputMarks.Count == 0 && _pendingDerivedInputClears.Count == 0 && _pendingSynchronisationPendingClears.Count == 0 &&
+            _pendingHeldBackMarks.Count == 0)
             return;
 
         // Unique Value Generation (#242, Phase 2 work package G) integrity guard: every pending generation
@@ -7158,7 +7232,8 @@ public abstract class SyncTaskProcessorBase
                 // Survivor-scope pre-flight (#2336), before the Deletion Rule or the recall changes anything: a surviving
                 // contributor whose scope cannot be decided stops this object, as an undecidable scope of its own does. The
                 // throw reaches ProcessActiveConnectedSystemObjectAsync's ScopingCriterionFailedException catch, which
-                // records the error and leaves the object, its join and its Metaverse Object as they were.
+                // records the error and leaves the object, its join and its Metaverse Object as they were. Marked first, so
+                // this system's next Delta Synchronisation retries the scope exit (#2343).
                 var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && _attributePriorityContext != null && mvo.Type != null &&
                     await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
@@ -7169,7 +7244,10 @@ public abstract class SyncTaskProcessorBase
                         _syncRepo,
                         _syncServer.IsCsoInScopeForImportRule,
                         survivorScopeAnswers) is { } undecidable)
+                {
+                    HoldBackForRetry(connectedSystemObject, mvo);
                     throw undecidable;
+                }
 
                 // Evaluate the MVO deletion rule BEFORE attribute recall (#390 optimisation).
                 // If the MVO will be deleted immediately, attribute recall is nugatory work —

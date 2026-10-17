@@ -141,13 +141,13 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 - A *matches pattern* or *does not match pattern* criterion ran past its time limit on one of this object's values.
 - The object holds an attribute a criterion reads (directly or as an expression's input) only under its old data type: a schema refresh changed the type and no import has read it since.
 
-When an object stops contributing to a Metaverse Object and a surviving contributor's scope cannot be decided, the leaving object gets this error and the Metaverse Object is left as it was. Deleting a Connected System or Synchronisation Rule then stops with it in place; remove the cause and delete it again to finish.
+When an object stops contributing to a Metaverse Object and a surviving contributor's scope cannot be decided, the leaving object gets this error and the Metaverse Object is left unchanged. Deleting a Connected System or Synchronisation Rule then stops, keeping it; remove the cause and delete it again.
 
 **How to fix.** For a pattern, simplify it in the rule's [scoping criteria](../configuration/scoping-criteria.md#operators). Nested repetition such as `(a+)+` is the usual cause; anchoring the pattern and matching the exact shape you expect (`^[a-z.]+@example\.org$` rather than `.*@.*example.*`) keeps each match fast.
 
 For a value held under its old data type, run a Full Import of the Connected System the rule imports from; see [Moving an attribute to its new type](../configuration/connected-system-schema.md#moving-an-attribute-to-its-new-type).
 
-**Check.** Run a Full Synchronisation. The object's execution item records it entering or leaving scope, with no Synchronisation Failed error.
+**Check.** After a changed pattern, run a Full Synchronisation; otherwise the next synchronisation, Delta included, retries the object. Its execution item no longer records Synchronisation Failed.
 
 ## **Dates Merged**: `'...' holds ... dates, but target attribute '...' on '...' holds dates to the second, where some of them become the same date, so it is sent ... distinct values`
 
