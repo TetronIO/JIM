@@ -584,12 +584,17 @@ public class ObjectMatchingServer
                 // An index that could not check every object cannot say that nothing matched: one it could not check may
                 // be this Metaverse Object's own account, and provisioning would duplicate it.
                 if (index is { IsComplete: false, FirstUncheckable: var (uncheckableId, reason) })
+                    throw CannotRuleOut(matchingRule, "The expression", index.UncheckableCount, connectedSystem, uncheckableId, reason, resolved);
+
+                // Nor can an attribute rule's lookup, while an object holds the attribute only under another data type
+                // (#2323): the lookup compares only the current type's column, so it cannot see that object, which may be
+                // this Metaverse Object's own account. Looked for only once a lookup finds nothing, so a run whose
+                // lookups find their accounts never reads the target for it.
+                if (resolved.Expression == null)
                 {
-                    var described = index.UncheckableCount == 1 ? "1 existing Connected System Object" : $"{index.UncheckableCount} existing Connected System Objects";
-                    throw new ObjectMatchingRuleFailedException(matchingRule, MatchValueResolution.Failed(
-                        $"The expression could not be worked out for {described} in '{connectedSystem.Name}', so it cannot be ruled out " +
-                        $"that one of them is this object's. For example, Connected System Object {uncheckableId}: {reason}",
-                        resolved.DataType, resolved.Expression), provisioning: true);
+                    var held = await GetHeldObjectsAsync(repository, matchingRule, connectedSystem, connectedSystemObjectType, heldObjects);
+                    if (held.First is var (heldId, heldReason))
+                        throw CannotRuleOut(matchingRule, "The rule", held.Count, connectedSystem, heldId, heldReason, resolved);
                 }
 
                 continue;
@@ -614,6 +619,88 @@ public class ObjectMatchingServer
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Why a lookup that found nothing cannot be trusted (#2052, #2323): the rule could not be worked out for
+    /// <paramref name="count"/> existing objects, any one of which may be the Metaverse Object's own account.
+    /// </summary>
+    private static ObjectMatchingRuleFailedException CannotRuleOut(
+        ObjectMatchingRule rule, string subject, int count, ConnectedSystem connectedSystem, Guid exampleId, string reason, ExportMatchingValue resolved)
+    {
+        var described = count == 1 ? "1 existing Connected System Object" : $"{count} existing Connected System Objects";
+        return new ObjectMatchingRuleFailedException(rule, MatchValueResolution.Failed(
+            $"{subject} could not be worked out for {described} in '{connectedSystem.Name}', so it cannot be ruled out " +
+            $"that one of them is this object's. For example, Connected System Object {exampleId}: {reason}",
+            resolved.DataType, resolved.Expression), provisioning: true);
+    }
+
+    /// <summary>
+    /// The unjoined objects of the type holding an attribute-sourced rule's attribute only under another data type
+    /// (#2323): the run's, looked up on first use and kept in <paramref name="runHeldObjects"/>, or, with no run to keep
+    /// them for (Sync Preview), looked up for this lookup alone.
+    /// </summary>
+    private async Task<ExportMatchHeldObjects> GetHeldObjectsAsync(
+        ISyncRepository repository,
+        ObjectMatchingRule rule,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType objectType,
+        IDictionary<(int ObjectMatchingRuleId, int ConnectedSystemObjectTypeId), ExportMatchHeldObjects>? runHeldObjects)
+    {
+        var key = (rule.Id, objectType.Id);
+        if (runHeldObjects != null && runHeldObjects.TryGetValue(key, out var existing))
+            return existing;
+
+        var held = await FindHeldObjectsAsync(repository, rule, connectedSystem, objectType);
+        if (runHeldObjects != null)
+            runHeldObjects[key] = held;
+        return held;
+    }
+
+    /// <summary>
+    /// Reads the rule's attribute for every unjoined, Normal object of the type in one query, and records each object
+    /// holding it only under another data type, by the rule every reader of an attribute applies
+    /// (<see cref="SyncEngine.HeldOnlyUnderAnotherDataType"/>), with the reason the import join gives for the same value.
+    /// The old value is never compared across types: the type changed because the old reading was wrong.
+    /// </summary>
+    private async Task<ExportMatchHeldObjects> FindHeldObjectsAsync(
+        ISyncRepository repository,
+        ObjectMatchingRule rule,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType objectType)
+    {
+        using var span = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("FindExportMatchHeldObjects");
+        var source = rule.Sources[0];
+        var attribute = source.ConnectedSystemAttribute!;
+        var attributeId = source.ConnectedSystemAttributeId ?? attribute.Id;
+
+        var held = new ExportMatchHeldObjects();
+        var objectCount = 0;
+        await foreach (var (id, values) in repository.StreamUnjoinedConnectedSystemObjectValues(connectedSystem.Id, objectType.Id, [attributeId]))
+        {
+            objectCount++;
+            if (SyncEngine.HeldOnlyUnderAnotherDataType(values, attributeId, attribute.Type) == null)
+                continue;
+
+            var resolution = _matchValueResolver.Resolve(rule, values, objectType);
+            held.Add(id, resolution.FailureMessage ?? $"The Connected System attribute '{attribute.Name}' is held under another data type.");
+        }
+
+        span.SetTag("objectCount", objectCount);
+        span.SetTag("heldCount", held.Count);
+        span.SetSuccess();
+        if (held.First is var (firstId, _))
+        {
+            Log.Warning("FindHeldObjectsAsync: {HeldCount} of {ObjectCount} unjoined object(s) of type {TypeId} in Connected System {ConnectedSystemId} hold attribute {AttributeId} only under another data type (for example CSO {CsoId}); Object Matching Rule {RuleId} cannot rule them out, so it neither joins nor provisions until an import reads the attribute as its new type",
+                held.Count, objectCount, objectType.Id, connectedSystem.Id, attributeId, firstId, rule.Id);
+        }
+        else
+        {
+            Log.Debug("FindHeldObjectsAsync: none of {ObjectCount} unjoined object(s) of type {TypeId} in Connected System {ConnectedSystemId} hold attribute {AttributeId} only under another data type",
+                objectCount, objectType.Id, connectedSystem.Id, attributeId);
+        }
+
+        return held;
     }
 
     /// <summary>

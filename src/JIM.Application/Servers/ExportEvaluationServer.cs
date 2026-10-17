@@ -3869,7 +3869,7 @@ public class ExportEvaluationServer
             : null;
         return await Application.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
             SyncRepo, mvo, exportRule.ConnectedSystem, exportRule.ConnectedSystemObjectType, matchingRules.ToList(), prefetched,
-            cache?.ExpressionMatchIndexes);
+            cache?.ExpressionMatchIndexes, cache?.ExportMatchHeldObjects);
     }
 
     /// <summary>
