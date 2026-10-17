@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers;
-using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -14,8 +13,9 @@ namespace JIM.Worker.Tests.SyncEngineTests;
 /// <summary>
 /// Inbound Attribute Flow treats every typed attribute as a set (#2153 slice S4): the typed writers diff the source's
 /// values against the Metaverse Object's as sets, keyed canonically for dates, so every value of a multi-valued source
-/// flows, order never matters and duplicates collapse. Rows that hold no value of the writer's type are ignored, and a
-/// Connected System Object holding none of that type is resolved through "Null is a value" and priority, as Text is.
+/// flows, order never matters and duplicates collapse. Rows that hold no value of the writer's type are ignored. A
+/// Connected System Object holding none of that type is covered by <see cref="SyncEngineHeldUnderAnotherDataTypeFlowTests"/>
+/// (#2184).
 /// </summary>
 [TestFixture]
 public class SyncEngineTypedSetFlowTests
@@ -185,50 +185,6 @@ public class SyncEngineTypedSetFlowTests
         {
             Assert.That(mvo.PendingAttributeValueRemovals, Is.EqualTo(new[] { duplicate }));
             Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
-        }
-    }
-
-    #endregion
-
-    #region Empty typed set
-
-    /// <summary>
-    /// A Connected System Object that holds rows for the attribute but none of the writer's type (a stale row under
-    /// another type, #2128) contributes no value: "Null is a value" asserts null, exactly as for Text.
-    /// </summary>
-    [TestCaseSource(nameof(TypedWriters))]
-    public void FlowInboundAttributes_OnlyAWrongTypedRowWithNullIsAValue_AssertsNull(AttributeDataType type)
-    {
-        var (mvo, cso, types, rule) = Arrange(type, AttributePlurality.SingleValued, nullIsValue: true);
-        AddCsoValue(cso, v => v.StringValue = "stale text");
-        var held = AddMvoValue(mvo, v => SetTypedValue(v, type));
-        var context = new AttributePriorityContext([rule]);
-
-        _engine.FlowInboundAttributes(cso, rule, types, priorityContext: context);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(mvo.PendingAttributeValueRemovals, Is.EqualTo(new[] { held }));
-            Assert.That(mvo.PendingAttributeValueAdditions.Single().NullValue, Is.True, "an asserted-null marker, not a value-less row");
-        }
-    }
-
-    [TestCaseSource(nameof(TypedWriters))]
-    public void FlowInboundAttributes_HigherPriorityRuleWithOnlyAWrongTypedRow_AbstainsLeavingTheIncumbent(AttributeDataType type)
-    {
-        var (mvo, cso, types, highRule) = Arrange(type, AttributePlurality.SingleValued, syncRuleId: 1, priority: 1);
-        var (_, _, _, lowRule) = Arrange(type, AttributePlurality.SingleValued, syncRuleId: 2, priority: 2);
-        AddCsoValue(cso, v => v.StringValue = "stale text");
-        var incumbent = AddMvoValue(mvo, v => SetTypedValue(v, type));
-        incumbent.ContributedBySyncRuleId = 2;
-        var context = new AttributePriorityContext([highRule, lowRule]);
-
-        _engine.FlowInboundAttributes(cso, highRule, types, priorityContext: context);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty, "an abstaining contribution never clears another rule's value");
-            Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "a value-less row is never staged");
         }
     }
 
