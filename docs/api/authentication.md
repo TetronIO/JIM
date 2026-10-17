@@ -17,7 +17,7 @@ JIM tells the two apart by the credential itself: a value beginning `jim_ak_` is
 
 ## JWT Bearer Tokens
 
-JWT Bearer authentication is suitable for user-driven integrations and applications that participate in your organisation's single sign-on (SSO) infrastructure.
+JWT Bearer authentication is for people: an administrator signed in through your organisation's single sign-on (SSO), whether through the PowerShell module or an application acting on their behalf. JIM gives a token the roles of the Metaverse Object it identifies, matched on the claim set by `JIM_SSO_CLAIM_TYPE`, so the token must represent a person with a JIM identity. A token issued to an identity provider service account (the client credentials grant) identifies no Metaverse Object and gets no roles, so JIM refuses it everywhere that needs a role. Scripts and services use an [API key](#api-keys) instead.
 
 ### Prerequisites
 
@@ -26,14 +26,14 @@ JWT Bearer authentication is suitable for user-driven integrations and applicati
 
 ### Usage
 
-Obtain a token via your identity provider's OIDC token endpoint, then include it in the `Authorization` header:
+Obtain a token for a signed-in person from your identity provider, then include it in the `Authorization` header:
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
   https://jim.example.com/api/v1/synchronisation/connected-systems
 ```
 
-Tokens are validated against the configured OIDC provider. Standard JWT claims (expiry, audience, issuer) are enforced.
+Tokens are validated against the configured OIDC provider. Standard JWT claims (expiry, audience, issuer) are enforced; the audience required is described under [Confidential vs public clients](../administration/sso-setup.md#confidential-vs-public-clients).
 
 ## API Keys
 
