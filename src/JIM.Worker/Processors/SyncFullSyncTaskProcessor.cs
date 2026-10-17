@@ -199,7 +199,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // would diverge from PostgreSQL's uuid ordering and skip rows.
         var csoPageCursor = Guid.Empty;
 
-        for (var i = 1; i <= totalCsoPages; i++)
+        // Page until a page comes back empty, not to the count taken at the start (#2092): objects created while the
+        // run is in flight would otherwise push the original tail past a page budget fixed before they arrived. The
+        // count is the progress estimate only, and ObjectsProcessed may exceed it.
+        for (var i = 1; ; i++)
         {
 
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
@@ -210,8 +213,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                     csoLoadWatermark, csoPageCursor);
             }
 
-            if (csoPagedResult.Results.Count > 0)
-                csoPageCursor = csoPagedResult.Results[^1].Id;
+            if (csoPagedResult.Results.Count == 0)
+                break;
+
+            csoPageCursor = csoPagedResult.Results[^1].Id;
 
             // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
             // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve
@@ -219,9 +224,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // same row.
             _mvoIdentityMap.Seed(csoPagedResult.Results);
 
-            // Metaverse-Derived Attribute Flows (#1750): the row version of every marked object as this load read it,
-            // before this run writes anything; it guards the mark's clear at page flush (see the method for why).
-            CaptureDerivedInputRowVersions(csoPagedResult.Results);
+            // The row version of every marked object (derived-input, #1750; synchronisation-pending, #2092) as this load
+            // read it, before this run writes anything; it guards the marks' clear at page flush (see the method for why).
+            CaptureMarkedRowVersions(csoPagedResult.Results);
 
             // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
             // run has no generated mappings.
@@ -273,6 +278,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                         _activity.ObjectsProcessed++;
                         processedInPage++;
                         OnCsoProcessedInPass2?.Invoke();
+                        OnConnectedSystemObjectProcessedInPass2?.Invoke(connectedSystemObject);
                     }
                 }
             }
@@ -461,7 +467,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 Worker.CalculateActivitySummaryStats(_activity);
         }
 
-        LogDerivedInputMarkSummary();
+        LogMarkSummary();
         syncSpan.SetSuccess();
     }
 }

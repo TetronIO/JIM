@@ -184,8 +184,9 @@ public partial class SyncRepository : ISyncRepository
         List<Guid>? pendingRemovalIds = null)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects, pendingAdditions, pendingRemovalIds);
 
-    public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _repo.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
+    public Task<int> UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects,
+        IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null)
+        => _repo.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects, synchronisationPendingSeenRowVersions);
 
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
         => _repo.ConnectedSystems.ClearConnectedSystemObjectScopeReviewPendingAsync(ids);

@@ -61,6 +61,8 @@ public partial class SyncPreviewFidelityTests
         var targetObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
         targetObject.Created = DateTime.UtcNow.AddHours(-2);
         targetObject.LastUpdated = DateTime.UtcNow.AddHours(-1);
+        // ...and processed by the target's last synchronisation, which cleared the mark its provisioning set (#2092).
+        targetObject.SynchronisationPending = false;
         var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
         target.LastSyncCompletedAt = DateTime.UtcNow;
         target.ConfigurationLastFullyAppliedAt = DateTime.UtcNow;

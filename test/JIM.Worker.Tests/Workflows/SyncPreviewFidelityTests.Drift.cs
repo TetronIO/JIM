@@ -58,9 +58,8 @@ public partial class SyncPreviewFidelityTests
     }
 
     /// <remarks>
-    /// Asserted against the run's rule rather than paired with a run: the in-memory repository loads every object
-    /// whatever the watermark, and only the PostgreSQL loader skips unchanged ones, through the same
-    /// <see cref="ConnectedSystemObject.IsUnchangedSince"/> and <see cref="ConnectedSystem.GetUnchangedObjectWatermark(DateTime?)"/>
+    /// Asserted against the run's rule rather than paired with a run: both loaders skip unchanged objects through the
+    /// same <see cref="ConnectedSystemObject.IsUnchangedSince"/> and <see cref="ConnectedSystem.GetUnchangedObjectWatermark(DateTime?)"/>
     /// the preview reads (both covered in <c>UnchangedObjectOptimisationTests</c>).
     /// </remarks>
     [TestCase(false, 0, 1)]
@@ -75,6 +74,8 @@ public partial class SyncPreviewFidelityTests
         var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
         targetCso.Created = DateTime.UtcNow.AddHours(-2);
         targetCso.LastUpdated = DateTime.UtcNow.AddHours(-1);
+        // ...and processed by that synchronisation, which cleared the mark its provisioning set (#2092).
+        targetCso.SynchronisationPending = false;
         var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
         target.LastSyncCompletedAt = DateTime.UtcNow;
         target.ConfigurationLastFullyAppliedAt = configurationChangedSince ? DateTime.UtcNow.AddDays(-1) : DateTime.UtcNow;
@@ -96,6 +97,8 @@ public partial class SyncPreviewFidelityTests
         var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
         targetCso.Created = DateTime.UtcNow.AddHours(-2);
         targetCso.LastUpdated = DateTime.UtcNow.AddHours(-1);
+        // ...and processed by that synchronisation, which cleared the mark its provisioning set (#2092).
+        targetCso.SynchronisationPending = false;
         var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
         target.LastSyncCompletedAt = DateTime.UtcNow;
         target.ConfigurationLastFullyAppliedAt = DateTime.UtcNow;
