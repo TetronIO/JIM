@@ -104,6 +104,7 @@
         'administration/troubleshooting-synchronisation.md'
         'administration/troubleshooting-podman.md'
         'administration/upgrading.md'
+        'administration/upgrading-podman.md'
         'administration/backup-recovery.md'
     )
 
@@ -124,6 +125,7 @@
         'administration/troubleshooting.md'
         'administration/troubleshooting-podman.md'
         'administration/upgrading.md'
+        'administration/upgrading-podman.md'
         'configuration/activities.md'
         'administration/deployment.md'
         'administration/tls-and-reverse-proxy.md'

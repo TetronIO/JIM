@@ -155,4 +155,5 @@ None of these checks starts until its service has finished starting, however lon
 - [Deployment Guide](deployment.md): installing, certificates, reverse proxies.
 - [Installing on Podman by Hand](podman-by-hand.md): what the installer does, step by step.
 - [Deploying with Ansible](deploying-with-ansible.md): the same files, deployed by Red Hat's podman system role.
-- [Upgrading](upgrading.md), [Backup & Disaster Recovery](backup-recovery.md) and [Troubleshooting](troubleshooting.md): each covers Podman alongside Docker.
+- [Upgrading on Podman](upgrading-podman.md): upgrading JIM to a newer release, and rolling it back.
+- [Backup & Disaster Recovery](backup-recovery.md) and [Troubleshooting](troubleshooting.md): each covers Podman alongside Docker.
