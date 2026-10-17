@@ -3,6 +3,7 @@
 
 using JIM.Connectors.Sql.Providers;
 using JIM.Models.Core;
+using JIM.Models.Staging;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Connectors;
@@ -503,6 +504,49 @@ public class SqlTypeMapperTests
         var result = provider.MapColumnType(new SqlColumnType("TIMESTAMP"), SqlTypeMappingOptions.Default);
 
         Assert.That(result, Is.EqualTo(AttributeDataType.DateTime), "The provider must map with its own dialect's meaning of a type name, not a shared one.");
+    }
+
+    #endregion
+
+    #region Date and time resolution (#2153, D2)
+
+    [TestCase("datetime2", 7, DateTimeResolution.Microsecond)]
+    [TestCase("datetime2", 6, DateTimeResolution.Microsecond)]
+    [TestCase("datetime2", 5, DateTimeResolution.TenMicroseconds)]
+    [TestCase("datetime2", 4, DateTimeResolution.HundredMicroseconds)]
+    [TestCase("datetime2", 3, DateTimeResolution.Millisecond)]
+    [TestCase("datetime2", 2, DateTimeResolution.TenMilliseconds)]
+    [TestCase("datetime2", 1, DateTimeResolution.HundredMilliseconds)]
+    [TestCase("datetime2", 0, DateTimeResolution.Second)]
+    [TestCase("datetimeoffset", 3, DateTimeResolution.Millisecond)]
+    [TestCase("datetime2", null, DateTimeResolution.Microsecond)]
+    [TestCase("datetime", 3, DateTimeResolution.TenMilliseconds)]
+    [TestCase("smalldatetime", 0, DateTimeResolution.Minute)]
+    [TestCase("date", 0, DateTimeResolution.Day)]
+    public void DateTimeResolutionOf_SqlServerDateType_FollowsItsDeclaredPrecision(string typeName, int? fractionalDigits, DateTimeResolution expected)
+    {
+        var result = SqlTypeMapper.DateTimeResolutionOf(SqlDatabaseType.SqlServer, new SqlColumnType(typeName, Scale: fractionalDigits));
+
+        Assert.That(result, Is.EqualTo(expected));
+    }
+
+    [TestCase("DATE", null, DateTimeResolution.Second)]
+    [TestCase("TIMESTAMP(6)", 6, DateTimeResolution.Microsecond)]
+    [TestCase("TIMESTAMP(9)", 9, DateTimeResolution.Microsecond)]
+    [TestCase("TIMESTAMP(3) WITH TIME ZONE", 3, DateTimeResolution.Millisecond)]
+    [TestCase("TIMESTAMP(0)", null, DateTimeResolution.Second)]
+    [TestCase("TIMESTAMP", null, DateTimeResolution.Microsecond)]
+    public void DateTimeResolutionOf_OracleDateType_FollowsItsDeclaredPrecision(string typeName, int? scale, DateTimeResolution expected)
+    {
+        var result = SqlTypeMapper.DateTimeResolutionOf(SqlDatabaseType.Oracle, new SqlColumnType(typeName, Scale: scale));
+
+        Assert.That(result, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void DateTimeResolutionOf_NonDateType_IsNull()
+    {
+        Assert.That(SqlTypeMapper.DateTimeResolutionOf(SqlDatabaseType.SqlServer, new SqlColumnType("nvarchar", MaxLength: 10)), Is.Null);
     }
 
     #endregion

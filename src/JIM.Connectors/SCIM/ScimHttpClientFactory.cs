@@ -105,8 +105,13 @@ public static class ScimHttpClientFactory
         ArgumentNullException.ThrowIfNull(settingValues);
 
         var baseUrl = settingValues.SingleOrDefault(s => s.Setting.Name == ScimConnectorConstants.SettingBaseUrl)?.StringValue;
-        if (string.IsNullOrWhiteSpace(baseUrl) || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
+        if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ScimAuthenticationException($"The '{ScimConnectorConstants.SettingBaseUrl}' setting is not a valid absolute URL.");
+
+        // The runtime backstop to configuration validation, for a Connected System saved before it refused
+        // cleartext addresses; nothing is sent until both the Base URL and any token endpoint pass.
+        if (!ScimTransportSecurity.TryValidate(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out var baseUri, out var error, ScimTransportSecurity.BaseUrlExample))
+            throw new ScimAuthenticationException(error);
 
         var handler = CreateHandler(settingValues, trustedCertificates, logger);
         var httpClient = CreateHttpClient(handler, settingValues);

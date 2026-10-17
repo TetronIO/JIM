@@ -1,10 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Text.Json.Nodes;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Scim.Messages;
+using JIM.Utilities;
 
 namespace JIM.Scim.Schema;
 
@@ -235,9 +237,23 @@ public static class ScimResourceWriter
         return entry is JsonObject entryObject && Matches(entryObject[attribute.SubAttributeName!], value);
     }
 
+    /// <summary>
+    /// Whether a value the provider holds is the value JIM names. A date compares as an instant at the microsecond JIM
+    /// holds (#2153), since a provider may spell one instant with a fraction of zeros or an offset; everything else by
+    /// its text.
+    /// </summary>
     private static bool Matches(JsonNode? node, object? value)
     {
-        return node != null && string.Equals(node.ToString(), ScimValueFormatter.ToText(value), StringComparison.Ordinal);
+        if (node == null)
+            return false;
+
+        if (value is DateTime date)
+        {
+            return DateTimeOffset.TryParse(node.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var held) &&
+                   DateTimeAttributeValue.Key(held.UtcDateTime) == DateTimeAttributeValue.Key(date);
+        }
+
+        return string.Equals(node.ToString(), ScimValueFormatter.ToText(value), StringComparison.Ordinal);
     }
 
     private static void Write(JsonObject container, ScimFlattenedAttribute attribute, List<object?> values)

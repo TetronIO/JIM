@@ -251,5 +251,14 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// message names the attribute and the pattern; the object is retried on the next synchronisation. Configuration
     /// to act on, not a JIM defect, so it does not count as an unhandled error.
     /// </summary>
-    ScopingCriterionFailed
+    ScopingCriterionFailed,
+
+    /// <summary>
+    /// Two or more of the dates exported to a multi-valued attribute are the same date at the step of time the
+    /// Connected System holds that attribute to (#2153): for example two times within one second, for a directory that
+    /// holds whole seconds. The Connected System can only hold them as one value, so the export sends them as one; the
+    /// rest of the attribute, and the object's other attributes, still export. Reported so the merging is never silent.
+    /// The message names the attribute, the resolution and how many values the Connected System will hold.
+    /// </summary>
+    DatesCollapseAtTargetResolution
 }

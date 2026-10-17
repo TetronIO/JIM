@@ -132,7 +132,11 @@ public class ScimFlattenedAttribute
             Description = Description,
 
             // caseExact describes how text compares, so only Text attributes carry the declaration (#2051).
-            CaseExact = CaseExact && Type == AttributeDataType.Text
+            CaseExact = CaseExact && Type == AttributeDataType.Text,
+
+            // RFC 7643 dateTime may carry a fraction, but a service provider need not keep one and most hold whole
+            // seconds, so export sends and compares at the second unless an administrator knows better (#2153, D2).
+            DateTimeResolution = Type == AttributeDataType.DateTime ? DateTimeResolution.Second : null
         };
     }
 }

@@ -14,8 +14,12 @@ namespace JIM.Scim.Schema;
 /// </summary>
 public static class ScimValueFormatter
 {
-    /// <summary>The xsd:dateTime form RFC 7643 section 2.3.5 requires, at the precision providers publish.</summary>
-    private const string InstantFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+    /// <summary>
+    /// The xsd:dateTime form RFC 7643 section 2.3.5 requires: whole seconds as providers publish them, then a fraction of
+    /// up to six digits (trailing zeros trimmed) only where the value has one (#2153). The <c>F</c> specifiers drop the
+    /// decimal point with an all-zero fraction, so a whole second is written exactly as it always was.
+    /// </summary>
+    private const string InstantFormat = "yyyy-MM-dd'T'HH:mm:ss.FFFFFF'Z'";
 
     /// <summary>
     /// Converts one value to the JSON node SCIM expects for the given attribute type.
@@ -52,8 +56,8 @@ public static class ScimValueFormatter
             null => null,
             string text => text,
             // JIM holds every instant in UTC, and SCIM wants it said so explicitly.
-            DateTime dateTime => dateTime.ToUniversalTime().ToString(InstantFormat, CultureInfo.InvariantCulture),
-            DateTimeOffset dateTimeOffset => dateTimeOffset.ToUniversalTime().ToString(InstantFormat, CultureInfo.InvariantCulture),
+            DateTime dateTime => DateTimeAttributeValue.ToCanonical(dateTime).ToString(InstantFormat, CultureInfo.InvariantCulture),
+            DateTimeOffset dateTimeOffset => DateTimeAttributeValue.ToCanonical(dateTimeOffset.UtcDateTime).ToString(InstantFormat, CultureInfo.InvariantCulture),
             decimal decimalValue => DecimalAttributeValue.ToCanonicalString(decimalValue),
             byte[] bytes => Convert.ToBase64String(bytes),
             bool boolean => boolean ? "true" : "false",

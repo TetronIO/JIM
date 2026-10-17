@@ -1313,6 +1313,9 @@ public class SyncPreviewServer
             AttributeFlowErrorKind.ExpressionResultMultiValued when flowError.SourceAttributeName != null => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
                 $"'{flowError.SourceAttributeName}' has {flowError.ValueCount} values but '{flowError.TargetAttributeName}' is single-valued, so the attribute would not flow and would keep its current value. Use Where, Join, Count, Min or Max in the Expression to say which value it should have: '{flowError.Expression}'."),
+            AttributeFlowErrorKind.DatesCollapseAtTargetResolution => (
+                SyncPreviewMessageCode.DatesCollapseAtTargetResolution,
+                $"{flowError.ValueCount} dates for '{flowError.TargetAttributeName}' become {flowError.TargetValueCount} distinct values at the Connected System's {flowError.TargetDateTimeResolution} resolution, so {flowError.TargetValueCount} would be sent; the attribute would still export."),
             AttributeFlowErrorKind.ExpressionResultMultiValued => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
                 $"The Expression targeting '{flowError.TargetAttributeName}' returned {flowError.ValueCount} values but the attribute is single-valued, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),

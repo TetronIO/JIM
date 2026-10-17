@@ -325,6 +325,41 @@ public class ScimResourceWriterTests
         Assert.That(resource[urn]!["badges"]!.ToJsonString(), Is.EqualTo("""["silver","platinum"]"""));
     }
 
+    [TestCase("2026-03-15T10:30:45Z")]
+    [TestCase("2026-03-15T10:30:45.000Z")]
+    [TestCase("2026-03-15T11:30:45+01:00")]
+    public void ApplyChanges_RemovingADateTheProviderSpellsDifferently_TakesThatDate(string providerSpelling)
+    {
+        // A provider may write an instant with a fraction of zeros or an offset; the date JIM removes is the instant, not
+        // the text, so it must still be found (#2153, S6).
+        const string urn = "urn:example:params:scim:schemas:extension:custom:2.0:User";
+        var schema = ScimAttributeMapper.FlattenSchema(new ScimSchema
+        {
+            Id = urn,
+            Name = "Custom",
+            Attributes = [new ScimSchemaAttribute { Name = "reviewDates", Type = ScimAttributeTypes.DateTime, MultiValued = true }]
+        }, "custom");
+        var resource = Resource($$"""{ "id": "alice", "{{urn}}": { "reviewDates": [ "{{providerSpelling}}", "2026-04-01T09:00:00Z" ] } }""");
+
+        ScimResourceWriter.ApplyChanges(resource,
+            [new ScimAttributeChange("custom.reviewDates", ScimPatchOperations.Remove, new DateTime(2026, 3, 15, 10, 30, 45, DateTimeKind.Utc))], schema);
+
+        Assert.That(resource[urn]!["reviewDates"]!.ToJsonString(), Is.EqualTo("""["2026-04-01T09:00:00Z"]"""));
+    }
+
+    [Test]
+    public void ToText_DateWithAFraction_KeepsTheFractionTrimmed()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ScimValueFormatter.ToText(new DateTime(2026, 3, 15, 10, 30, 45, DateTimeKind.Utc)), Is.EqualTo("2026-03-15T10:30:45Z"),
+                "A whole second is written exactly as before.");
+            Assert.That(ScimValueFormatter.ToText(new DateTime(2026, 3, 15, 10, 30, 45, DateTimeKind.Utc).AddMilliseconds(500)), Is.EqualTo("2026-03-15T10:30:45.5Z"));
+            Assert.That(ScimValueFormatter.ToText(new DateTime(2026, 3, 15, 10, 30, 45, DateTimeKind.Utc).AddTicks(1_234_567)), Is.EqualTo("2026-03-15T10:30:45.123456Z"),
+                "To the microsecond JIM holds.");
+        }
+    }
+
     [Test]
     public void ApplyChanges_RemovingAMultiValuedAttributeNamingNoValue_TakesEveryValue()
     {
