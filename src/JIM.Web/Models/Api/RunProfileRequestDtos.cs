@@ -36,7 +36,8 @@ public class CreateRunProfileRequest
     public int? PartitionId { get; set; }
 
     /// <summary>
-    /// Optional file path for file-based connectors.
+    /// The file a Full Import or Delta Import reads, for a file-based Connector. Omit it to read the file the
+    /// Connected System's File Path setting names. Refused on any other Run Type.
     /// </summary>
     [StringLength(500)]
     public string? FilePath { get; set; }
@@ -103,7 +104,7 @@ public class UpdateRunProfileRequest
     public int? PartitionId { get; set; }
 
     /// <summary>
-    /// Updated file path for file-based connectors.
+    /// The file a Full Import or Delta Import reads, for a file-based Connector. Refused on any other Run Type.
     /// </summary>
     [StringLength(500)]
     public string? FilePath { get; set; }
