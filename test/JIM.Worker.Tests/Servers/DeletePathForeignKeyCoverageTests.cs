@@ -157,7 +157,11 @@ public class DeletePathForeignKeyCoverageTests
             "ConnectedSystemSettingValues",
             "ConnectedSystemPasswordPolicies",
             // Removed by cascade from the Object Matching Rules deleted above.
-            "ObjectMatchingRuleSources"
+            "ObjectMatchingRuleSources",
+            // Removed by cascade from the Connected System, in the same statement as the resource types they refer to
+            // by a NO ACTION key, which is checked when the statement ends. The key is NO ACTION so that removing a
+            // resource type on its own is refused while it has resources (ScimStoreDatabaseTests).
+            "ScimStoreResources"
         ],
         SeveredForeignKeys: new Dictionary<string, string>
         {

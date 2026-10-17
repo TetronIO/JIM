@@ -205,7 +205,7 @@ try
     var apiScope = Environment.GetEnvironmentVariable(Constants.Config.SsoApiScope);
 
     // Extract the API identifier from the scope for JWT validation
-    var apiAudience = ExtractApiAudience(apiScope, clientId);
+    var apiAudience = ApiAudienceResolver.Resolve(apiScope, clientId);
     var validIssuers = GetValidIssuers(authority);
 
     // Skip authentication setup in OpenAPI generation mode (no IdP needed for schema generation)
@@ -1149,24 +1149,6 @@ static async Task<OidcDiscoveryDocument> FetchOidcDiscoveryDocumentAsync(string 
 
 static bool IsTransientHttpError(Exception ex) =>
     ex is HttpRequestException or TaskCanceledException;
-
-/// <summary>
-/// Extracts the API audience from an OAuth scope.
-/// For Entra ID scopes like "api://client-id/access_as_user", extracts "api://client-id".
-/// For other IDPs, falls back to the client ID.
-/// </summary>
-static string? ExtractApiAudience(string? apiScope, string? clientId)
-{
-    if (string.IsNullOrEmpty(apiScope))
-        return clientId;
-
-    // For scopes like "api://client-id/access_as_user", extract "api://client-id"
-    var lastSlashIndex = apiScope.LastIndexOf('/');
-    if (lastSlashIndex > 0 && apiScope.StartsWith("api://", StringComparison.Ordinal))
-        return apiScope[..lastSlashIndex];
-
-    return clientId;
-}
 
 /// <summary>
 /// Gets the valid token issuers for JWT validation.
