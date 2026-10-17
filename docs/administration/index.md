@@ -83,6 +83,12 @@ These pages take JIM into production and keep it there: installing it on Docker 
 
     Procedures for upgrading JIM in connected and air-gapped environments, including pre-upgrade backups, pausing Schedules, verification, and rolling back.
 
+-   **[Upgrading on Podman](upgrading-podman.md)**
+
+    ---
+
+    Upgrading JIM on Podman, rootful or rootless, connected or air-gapped, and rolling it back to the previous pod files.
+
 -   **[Backup & Disaster Recovery](backup-recovery.md)**
 
     ---

@@ -189,7 +189,7 @@ $stop = if ($cell.Runtime -eq 'docker') {
     Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading a connected deployment' -Step 'Stop the services'
 }
 else {
-    Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading on Podman' -Step 'Stop JIM'
+    Get-DocumentedCommand -Page 'upgrading-podman.md' -Heading 'Upgrading on Podman' -Step 'Stop JIM'
 }
 Add-Check 'JIM stopped, as the upgrading guide says' ((Invoke-Documented -Command $stop -WorkingDirectory $installPath -Title 'stopping JIM') -eq 0)
 Invoke-LabVm -Name $vm -Command @('mkdir', '-p', '/root/backup') | Out-Null
@@ -217,7 +217,7 @@ if ($cell.Runtime -eq 'docker') {
         "kept '$kept', ran '$previousDatabaseImage'"
 }
 else {
-    $page = 'upgrading.md'
+    $page = 'upgrading-podman.md'
     $heading = 'Upgrading on Podman'
     Add-Check '2. the current pod files kept, for rolling back' ((Invoke-Documented -Title 'keeping the pod files' -WorkingDirectory $installPath `
                 -Command (Get-DocumentedCommand -Page $page -Heading $heading -Step 'Keep the current pod files')) -eq 0)
@@ -308,7 +308,7 @@ else {
     # On Podman the guide gives the rollback in words: stop JIM, restore the backup, put the .previous pod files back,
     # and start JIM.
     Add-Check 'rollback: JIM stopped' ((Invoke-Documented -Title 'stopping JIM' -WorkingDirectory $installPath `
-                -Command (Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading on Podman' -Step 'Stop JIM')) -eq 0)
+                -Command (Get-DocumentedCommand -Page 'upgrading-podman.md' -Heading 'Upgrading on Podman' -Step 'Stop JIM')) -eq 0)
     Add-Check 'rollback: encryption keys restored, as documented' ((Invoke-Documented -Title 'the key restore' -WorkingDirectory /root/backup -Command $restoreKeys) -eq 0)
     Add-Check 'rollback: database restored into an empty one, as documented' ((Invoke-Documented -Title 'the database restore' -WorkingDirectory /root/backup -Command $restoreDatabase) -eq 0)
     Add-Check 'rollback: the .previous pod files put back' ((Invoke-Documented -Title 'the .previous pod files' -WorkingDirectory $installPath `
