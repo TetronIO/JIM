@@ -239,7 +239,7 @@
                 </MudSelect>
 
                 @if (ConnectedSystem.ConnectorDefinition.SupportsFilePaths &&
-                     IsImportOrExportRunType(_newRunProfile.RunType))
+                     IsImportRunType(_newRunProfile.RunType))
                 {
                     <MudTextField T="string" @bind-Value="_newRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined"
                                   Class="mt-3"
@@ -365,7 +365,7 @@
                               HelperText="The run type cannot be changed. Delete and recreate the profile to use a different type." />
 
                 @if (ConnectedSystem.ConnectorDefinition.SupportsFilePaths &&
-                     IsImportOrExportRunType(_editRunProfile.RunType))
+                     IsImportRunType(_editRunProfile.RunType))
                 {
                     <MudTextField T="string" @bind-Value="_editRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined"
                                   Class="mt-3"
@@ -596,9 +596,6 @@
         ? "If the Connected System reports more deletions than this, the Delta Import marks none as deleted and completes with a warning."
         : "If a Full Import would mark more than this many objects as deleted, it marks none and completes with a warning.";
 
-    private static bool IsImportOrExportRunType(ConnectedSystemRunType runType) =>
-        runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport or ConnectedSystemRunType.Export;
-
     private string? ValidateRunType(ConnectedSystemRunType runType)
     {
         if (runType == ConnectedSystemRunType.NotSet)
@@ -630,7 +627,7 @@
             RunType = _newRunProfile.RunType,
             Partition = selectedPartition,
             PageSize = _newRunProfile.PageSize,
-            FilePath = _newRunProfile.FilePath,
+            FilePath = IsImportRunType(_newRunProfile.RunType) ? _newRunProfile.FilePath : null,
             VerifyImportContentHashes = _newRunProfile.RunType == ConnectedSystemRunType.FullImport && _newRunProfile.VerifyImportContentHashes,
             AllowObjectTypeChanges = _newRunProfile.RunType == ConnectedSystemRunType.FullImport && _newRunProfile.AllowObjectTypeChanges,
             MaxCreates = _newRunProfile.RunType == ConnectedSystemRunType.Export ? _newRunProfile.MaxCreates : null,
@@ -694,7 +691,7 @@
 
         _editRunProfileOriginal.Name = _editRunProfile.Name;
         _editRunProfileOriginal.PageSize = _editRunProfile.PageSize;
-        _editRunProfileOriginal.FilePath = _editRunProfile.FilePath;
+        _editRunProfileOriginal.FilePath = IsImportRunType(_editRunProfileOriginal.RunType) ? _editRunProfile.FilePath : null;
         _editRunProfileOriginal.Partition = selectedPartition;
         _editRunProfileOriginal.VerifyImportContentHashes = _editRunProfileOriginal.RunType == ConnectedSystemRunType.FullImport && _editRunProfile.VerifyImportContentHashes;
         _editRunProfileOriginal.AllowObjectTypeChanges = _editRunProfileOriginal.RunType == ConnectedSystemRunType.FullImport && _editRunProfile.AllowObjectTypeChanges;

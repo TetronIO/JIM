@@ -7,7 +7,7 @@ namespace JIM.Application.Services;
 
 /// <summary>
 /// Run Profile Safeguards (#1618): validates a Run Profile's Max creates/updates/deletes and detected-deletion
-/// limits, and Allow Object Type Changes (#2049).
+/// limits, Allow Object Type Changes (#2049), and File Path.
 /// Mirrors the existing Verification Mode rule (<c>VerifyImportContentHashes</c>): a value that only
 /// makes sense on one Run Type is rejected on every surface with a message naming the field.
 /// </summary>
@@ -29,7 +29,8 @@ public static class RunProfileSafeguardsValidator
             ?? ValidateField(nameof(runProfile.MaxDeletes), runProfile.MaxDeletes, runProfile.RunType, ConnectedSystemRunType.Export, "an Export")
             ?? ValidateDeletionCountField(runProfile.MaxDetectedDeletions, runProfile.RunType)
             ?? ValidatePercentField(runProfile.MaxDetectedDeletionsPercent, runProfile.RunType)
-            ?? ValidateAllowObjectTypeChanges(runProfile.AllowObjectTypeChanges, runProfile.RunType);
+            ?? ValidateAllowObjectTypeChanges(runProfile.AllowObjectTypeChanges, runProfile.RunType)
+            ?? ValidateFilePath(runProfile.FilePath, runProfile.RunType);
     }
 
     /// <summary>
@@ -64,6 +65,15 @@ public static class RunProfileSafeguardsValidator
     private static string? ValidateAllowObjectTypeChanges(bool allowObjectTypeChanges, ConnectedSystemRunType runType) =>
         allowObjectTypeChanges && runType != ConnectedSystemRunType.FullImport
             ? $"{nameof(ConnectedSystemRunProfile.AllowObjectTypeChanges)} can only be enabled on a Full Import Run Profile."
+            : null;
+
+    /// <summary>
+    /// A Run Profile's File Path chooses the file an import reads. An export always writes to the file the Connected
+    /// System's File Path names, so a path on any other Run Profile would be silently ignored.
+    /// </summary>
+    private static string? ValidateFilePath(string? filePath, ConnectedSystemRunType runType) =>
+        !string.IsNullOrEmpty(filePath) && !IsImport(runType)
+            ? $"{nameof(ConnectedSystemRunProfile.FilePath)} {ImportRunProfileRequirement}"
             : null;
 
     private static string? ValidateField(string fieldName, int? value, ConnectedSystemRunType runType, ConnectedSystemRunType requiredRunType, string requiredRunTypeArticleAndName)

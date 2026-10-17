@@ -120,6 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ Export, Full Synchronisation and Delta Synchronisation Run Profiles no longer take a **File Path**: an export always writes to the file the Connected System's **File Path** names, so the field did nothing. It is gone from the portal, the REST API and `-FilePath` refuse it, and any already stored is cleared on upgrade.
 - 🗑️ Example Data Template attributes can no longer name a Connected System attribute: templates generate Metaverse Attribute values only, so it produced nothing. `-ConnectedSystemObjectTypeAttributeId` and the `ConnectedSystemObjectTypeAttributeId` hashtable key are gone from the cmdlets, and `connectedSystemObjectTypeAttributeId` from the REST API.
 - 🗑️ The `CollectionContains` expression function is removed: `Eq()` is now true when any value of a Multi-Valued attribute is equal, which is what it did. (#2053)
 - 🗑️ Four Service Settings that did nothing are gone, on upgrade too: **Maintenance mode**, **Credential encryption** (always on), **Verbose no-change recording** and **SSO unique identifier claim type** (**SSO claim type** is the one JIM uses). (#2101)
