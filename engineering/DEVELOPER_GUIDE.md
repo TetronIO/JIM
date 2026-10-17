@@ -731,7 +731,8 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 |------|---------|
 | **Require pull request** | All changes to `main` must land via a PR; direct pushes are blocked. Even emergency fixes go through a PR. |
 | **Require status checks to pass** | Every required CI check must pass before merge. See the check list below. |
-| **Branches must be up to date** | PRs must be rebased onto the latest `main` before merge, so CI results reflect the actual merge state. |
+| **Branches must be up to date** | What merges must have passed every required check against the latest `main`, so CI results reflect the actual merge state (`strict_required_status_checks_policy`). The merge queue is how this is met: see the next row. |
+| **Merge queue** | A PR whose checks pass joins the queue, which builds it on a temporary branch on top of the latest `main` and the entries ahead of it, runs every required check again there, and merges it (squash) only if they pass. A queue entry that fails is removed. GitHub treats this run as satisfying the up-to-date rule, so authors need not bring a branch up to date by hand; they merge `main` in only to resolve a conflict. |
 | **Require conversation resolution** | All review comment threads must be resolved before merge. |
 | **Require signed commits** | Every commit must carry a verified signature (`required_signatures`); unsigned commits are rejected at push/merge time. See section 6 for how each environment signs. |
 | **No deletion** | `main` cannot be deleted. |
@@ -759,9 +760,9 @@ The ruleset itself is the authority; `gh api repos/TetronIO/JIM/rulesets/1206244
 
 **Human review:** the required approving review count is currently set to zero. The machine-enforced quality gates (CodeQL static analysis with review comments via the github-code-quality bot, build and test, base image scanning, changelog lint) provide the consistent baseline across all PRs; an AI-assisted review can be requested on demand by commenting `@claude review this PR` (the `.github/workflows/claude.yml` workflow). As the team grows, human reviewer requirements will be layered onto the ruleset without restructuring.
 
-**Signed commits (planned):** server-side enforcement of signed commits via `required_signatures` is deferred until all contributor environments are reliably producing signed commits. See section 6 above for the current local enforcement via pre-commit hook.
-
 **Bypass actors:** none. No user or automation can bypass the ruleset.
+
+**The up-to-date rule stays on deliberately.** It is one of the controls `engineering/COMPLIANCE_MAPPING.md` claims against the NCSC principle "Protect your code repository". The merge queue makes it cost nothing to keep, so a slow merge is never a reason to propose turning it off; doing so would weaken a stated control and needs the same deliberate decision as any other change to that mapping.
 
 ## Testing Expectations
 
