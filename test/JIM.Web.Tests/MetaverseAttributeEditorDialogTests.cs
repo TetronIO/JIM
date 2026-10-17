@@ -38,9 +38,6 @@ public class MetaverseAttributeEditorDialogTests : JimComponentTestContext
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
     }
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private IRenderedComponent<MudDialogProvider> OpenEditor(AttributeDataType type, AttributePlurality plurality, int objectsWithValues, bool readOnly = false)
     {
         var attribute = new MetaverseAttribute { Id = 42, Name = "costCentre", Type = type, AttributePlurality = plurality };

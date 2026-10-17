@@ -187,7 +187,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // exactly as the repository returned it.
         var csoPageCursor = Guid.Empty;
 
-        for (var page = 1; page <= totalCsoPages; page++)
+        // Page until a page comes back empty, not to the count taken at the start (#2092): objects that enter the
+        // selection while the run is in flight (an import committing alongside it, or this run provisioning into its
+        // own system) would otherwise push the original tail past a page budget fixed before they arrived. The count
+        // is the progress estimate only, and ObjectsProcessed may exceed it. A mark set below the cursor mid-run is
+        // picked up by the next run.
+        for (var page = 1; ; page++)
         {
 
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
@@ -204,8 +209,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     csoPageCursor);
             }
 
-            if (csoPagedResult.Results.Count > 0)
-                csoPageCursor = csoPagedResult.Results[^1].Id;
+            if (csoPagedResult.Results.Count == 0)
+                break;
+
+            csoPageCursor = csoPagedResult.Results[^1].Id;
 
             // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
             // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve
@@ -213,9 +220,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // same row.
             _mvoIdentityMap.Seed(csoPagedResult.Results);
 
-            // Metaverse-Derived Attribute Flows (#1750): the row version of every marked object as this load read it,
-            // before this run writes anything; it guards the mark's clear at page flush (see the method for why).
-            CaptureDerivedInputRowVersions(csoPagedResult.Results);
+            // The row version of every marked object (derived-input, #1750; synchronisation-pending, #2092) as this load
+            // read it, before this run writes anything; it guards the marks' clear at page flush (see the method for why).
+            CaptureMarkedRowVersions(csoPagedResult.Results);
 
             // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
             // run has no generated mappings.
@@ -259,6 +266,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                         _activity.ObjectsProcessed++;
                         processedInPage++;
                         OnCsoProcessedInPass2?.Invoke();
+                        OnConnectedSystemObjectProcessedInPass2?.Invoke(connectedSystemObject);
                     }
                 }
             }
@@ -396,7 +404,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 Worker.CalculateActivitySummaryStats(_activity);
         }
 
-        LogDerivedInputMarkSummary();
+        LogMarkSummary();
         syncSpan.SetSuccess();
     }
 }

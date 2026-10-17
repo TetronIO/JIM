@@ -756,6 +756,18 @@ public class JimDbContext : DbContext
         csoXmin.Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
         csoXmin.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
 
+        // The two Connected System Object marks are written only by their dedicated statements: set by the writers
+        // that announce a change (#2092) or by another system's synchronisation (#1750), cleared by the synchronisation
+        // that processed the object under an xmin guard. A whole-entity save (UpdateDetachedSafe marks every column
+        // Modified) must never write either: an instance loaded before a concurrent mark would write the stale false
+        // back over it. Ignored on update only; an EF insert still writes the value the creating code chose.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .Property(e => e.SynchronisationPending)
+            .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .Property(e => e.DerivedInputChangePending)
+            .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+
         // PendingExport: the runs that staged it (#2100). Defaults to an empty list so the column can be added beside
         // exports already queued, which name only their latest stager and fall back to it.
         modelBuilder.Entity<PendingExport>()
@@ -1058,6 +1070,14 @@ public class JimDbContext : DbContext
             .HasIndex(cso => cso.ConnectedSystemId)
             .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending")
             .HasFilter("\"DerivedInputChangePending\"");
+
+        // Partial index on the synchronisation-pending mark (#2092). Delta synchronisation selects a Connected System's
+        // objects that are marked OR new OR changed since the watermark; the mark is cleared once processed, so at rest
+        // it is set only on what the next synchronisation still has to process, and keying the partial index on
+        // ConnectedSystemId keeps that arm of the OR an O(marked) index scan.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => cso.ConnectedSystemId, "IX_ConnectedSystemObjects_ConnectedSystemId_SynchronisationPending")
+            .HasFilter("\"SynchronisationPending\"");
 
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created

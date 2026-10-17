@@ -225,6 +225,18 @@ public class ConnectedSystemObject
     public bool DerivedInputChangePending { get; set; }
 
     /// <summary>
+    /// Set by every write that changes what synchronisation must see about this object (an import creating, updating
+    /// or deleting it, a Schema Refresh Removal obsoleting it, export evaluation provisioning it), in the same
+    /// statement or transaction as the change; cleared only by the synchronisation that processed it, and only while
+    /// the row is unchanged since that synchronisation loaded it (#2092). It is what makes Delta Synchronisation
+    /// commit-order safe: a change committed while a run is in flight keeps its mark however the run's watermark
+    /// moves, so the next run selects it. Never written by a whole-entity save (ignored on update in EF, and absent
+    /// from the bulk update column list), so a stale in-memory value cannot overwrite a concurrent mark.
+    /// Deliberately separate from <see cref="DerivedInputChangePending"/>, which records a different reason.
+    /// </summary>
+    public bool SynchronisationPending { get; set; }
+
+    /// <summary>
     /// PostgreSQL's <c>xmin</c> system column: the row version, as read by the statement that loaded this instance.
     /// Store-generated and never written by JIM, and deliberately NOT a concurrency token (Connected System Objects
     /// are written in bulk by raw SQL, not through xmin-guarded EF updates). It exists so the derived-input mark
@@ -263,13 +275,16 @@ public class ConnectedSystemObject
     /// <remarks>
     /// An object flagged by the Temporal Scope Reconciler (<see cref="ScopeReviewPending"/>, #892) has moved in or out
     /// of scope with the clock, and one marked <see cref="DerivedInputChangePending"/> (#1750) has a derived flow whose
-    /// input changed in another system: neither is unchanged, though its own data is.
+    /// input changed in another system: neither is unchanged, though its own data is. One marked
+    /// <see cref="SynchronisationPending"/> (#2092) carries a change no synchronisation has processed yet, whatever its
+    /// timestamps say: a change committed while a run was in flight is stamped below the watermark that run wrote.
     /// </remarks>
     public bool IsUnchangedSince(DateTime watermark) =>
         Status == ConnectedSystemObjectStatus.Normal &&
         MetaverseObjectId.HasValue &&
         !ScopeReviewPending &&
         !DerivedInputChangePending &&
+        !SynchronisationPending &&
         (LastUpdated == null ? Created <= watermark : LastUpdated.Value <= watermark);
 
     /// <summary>

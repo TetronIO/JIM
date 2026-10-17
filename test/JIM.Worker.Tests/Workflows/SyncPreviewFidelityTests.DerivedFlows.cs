@@ -249,7 +249,7 @@ public partial class SyncPreviewFidelityTests
             Assert.That(hrPreview.Errors, Is.Empty);
             Assert.That(SyncRepo.DerivedInputMarkCalls, Has.Count.EqualTo(markCallsBefore), "the preview marked nothing");
             Assert.That(counts.GetValueOrDefault(nameof(ISyncRepository.MarkConnectedSystemObjectsDerivedInputChangePendingAsync)), Is.Zero);
-            Assert.That(counts.GetValueOrDefault(nameof(ISyncRepository.ClearConnectedSystemObjectDerivedInputChangePendingAsync)), Is.Zero);
+            Assert.That(counts.GetValueOrDefault(nameof(ISyncRepository.ClearConnectedSystemObjectMarksAsync)), Is.Zero);
             Assert.That(hrCso.DerivedInputChangePending, Is.True, "the preview cleared nothing");
             Assert.That(adCso.DerivedInputChangePending, Is.False);
         }
@@ -258,7 +258,7 @@ public partial class SyncPreviewFidelityTests
         var guard = new ReadOnlySyncRepositoryGuard(SyncRepo);
         Assert.That(() => guard.MarkConnectedSystemObjectsDerivedInputChangePendingAsync([new DerivedInputChangeMark(Guid.NewGuid(), ctx.Hr.Id)]),
             Throws.InstanceOf<PreviewWriteAttemptedException>());
-        Assert.That(() => guard.ClearConnectedSystemObjectDerivedInputChangePendingAsync([new DerivedInputChangeClear(hrCso.Id, 0)]),
+        Assert.That(() => guard.ClearConnectedSystemObjectMarksAsync([new ConnectedSystemObjectMarkClear(hrCso.Id, 0, SynchronisationPending: true, DerivedInputChangePending: true)]),
             Throws.InstanceOf<PreviewWriteAttemptedException>());
     }
 
@@ -471,8 +471,13 @@ public partial class SyncPreviewFidelityTests
         return cso;
     }
 
+    /// <summary>
+    /// An import's change to the object, as the import's update writer records it: the value, and the object marked
+    /// pending synchronisation (#2092).
+    /// </summary>
     private static void SetDerivedText(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string value)
     {
+        cso.SynchronisationPending = true;
         cso.AttributeValues.RemoveAll(av => av.AttributeId == attribute.Id);
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = attribute.Id, Attribute = attribute, StringValue = value });
     }

@@ -105,7 +105,7 @@ public partial class SyncRepository
             async (connection, partition) =>
             {
                 await using var transaction = await connection!.BeginTransactionAsync();
-                await BulkInsertCsosOnConnectionAsync(connection, transaction, partition);
+                await BulkInsertCsosOnConnectionAsync(connection, transaction, partition, synchronisationPending: false);
                 await transaction.CommitAsync();
             });
 
@@ -126,13 +126,17 @@ public partial class SyncRepository
                     .SelectMany(cso => cso.AttributeValues.Select(av => (CsoId: cso.Id, Value: av)))
                     .ToList();
 
+                // The partition's values and its rows' synchronisation-pending mark (#2092) commit together.
+                await using var transaction = await connection!.BeginTransactionAsync();
                 if (attributeValues.Count > 0)
-                {
-                    await using var transaction = await connection!.BeginTransactionAsync();
                     await BulkInsertCsoAttributeValuesOnConnectionAsync(connection, transaction, attributeValues, allBatchCsoIds);
-                    await transaction.CommitAsync();
-                }
+                await MarkConnectedSystemObjectsSynchronisationPendingOnConnectionAsync(connection, transaction,
+                    partition.Select(cso => cso.Id).ToList());
+                await transaction.CommitAsync();
             });
+
+        foreach (var cso in connectedSystemObjects)
+            cso.SynchronisationPending = true;
     }
 
     /// <summary>
@@ -166,7 +170,8 @@ public partial class SyncRepository
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
         var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
 
-        await BulkInsertCsosOnConnectionAsync(npgsqlConn, npgsqlTx, connectedSystemObjects);
+        // One transaction for the rows and their values, so the rows carry the synchronisation-pending mark (#2092).
+        await BulkInsertCsosOnConnectionAsync(npgsqlConn, npgsqlTx, connectedSystemObjects, synchronisationPending: true);
 
         var allAttributeValues = connectedSystemObjects
             .SelectMany(cso => cso.AttributeValues.Select(av => (CsoId: cso.Id, Value: av)))
@@ -177,6 +182,9 @@ public partial class SyncRepository
 
         await transaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
+
+        foreach (var cso in connectedSystemObjects)
+            cso.SynchronisationPending = true;
     }
 
     /// <summary>
@@ -184,10 +192,16 @@ public partial class SyncRepository
     /// COPY binary streams data directly without SQL parsing or parameter limits,
     /// providing significantly higher throughput than parameterised INSERT.
     /// </summary>
+    /// <param name="synchronisationPending">The synchronisation-pending mark (#2092) to write. True where the rows commit
+    /// in the same transaction as their attribute values; false on the parallel path, whose rows commit before their
+    /// values, so that no synchronisation can load a marked object without its values, process it and clear the mark
+    /// (attribute value writes do not move the object's row version). That path marks the rows with the values, in
+    /// <see cref="MarkConnectedSystemObjectsSynchronisationPendingOnConnectionAsync"/>.</param>
     private static async Task BulkInsertCsosOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        IReadOnlyList<ConnectedSystemObject> objects)
+        IReadOnlyList<ConnectedSystemObject> objects,
+        bool synchronisationPending)
     {
         // Writer order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
         await using var writer = await connection.BeginBinaryImportAsync(
@@ -260,9 +274,29 @@ public partial class SyncRepository
                 await writer.WriteAsync(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            // #2092: whether this row is written already announcing itself to synchronisation; see the parameter.
+            await writer.WriteAsync(synchronisationPending, NpgsqlTypes.NpgsqlDbType.Boolean);
         }
 
         await writer.CompleteAsync();
+    }
+
+    /// <summary>
+    /// Sets the synchronisation-pending mark (#2092) on Connected System Objects the parallel create path wrote with it
+    /// unset, in the transaction that commits their attribute values, so the mark becomes visible with the values it
+    /// announces and never before them. A narrow single-column statement, exempt from the bulk column list rule.
+    /// </summary>
+    private static async Task MarkConnectedSystemObjectsSynchronisationPendingOnConnectionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        await using var command = new NpgsqlCommand(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""SynchronisationPending"" = true WHERE ""Id"" = ANY(@ids)",
+            connection, transaction);
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = connectedSystemObjectIds.ToArray() });
+        await command.ExecuteNonQueryAsync();
     }
 
     /// <summary>
