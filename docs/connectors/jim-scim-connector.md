@@ -94,6 +94,8 @@ The watermark is recorded only when a run finishes, and is deliberately set a mi
 
 Where the provider maintains entity tags, updates carry `If-Match`, so an export cannot silently overwrite a change made in the provider since JIM last read it. A rejected update is reported as a concurrency conflict and reconciled by the next import.
 
+A `dateTime` value is written in UTC, with a fraction of a second only where it has one. A provider's schema cannot say how finely it keeps dates, so schema discovery gives every `dateTime` attribute a [Date resolution](../configuration/connected-system-attributes.md#date-resolution) of one second, and JIM exports and compares dates to the second. Where a provider keeps milliseconds, change the resolution on the Schema tab or with `Set-JIMConnectedSystemAttribute -DateTimeResolution`. Removing one date of a multi-valued attribute finds it as an instant, however the provider writes it.
+
 An attribute the provider's schema does not have, or will not accept a write to, fails that object rather than exporting the rest of it: a partial change recorded as applied is worse than one that failed.
 
 !!! note "Referenced objects are exported first"

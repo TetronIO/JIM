@@ -154,6 +154,9 @@ internal static class AuxiliaryClassAttributeMerger
                     // So does its case-exact declaration: the values compare the same way on any class (#2051).
                     CaseExact = attribute.CaseExact,
 
+                    // And its dates' resolution: the directory holds them to the same step on any class (#2153, D2).
+                    DateTimeResolution = attribute.DateTimeResolution,
+
                     // And whether the Connector reported it as operational.
                     IsOperational = attribute.IsOperational,
 

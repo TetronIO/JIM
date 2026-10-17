@@ -1354,6 +1354,13 @@ public partial class SyncEngine
         value.HasValue ? DateTimeAttributeValue.ToCanonical(value.Value) : null;
 
     /// <summary>
+    /// A date as a Connected System of <paramref name="resolution"/> holds it (#2153, D2): canonical, then floored to the
+    /// resolution; or null for none. Every date export staging sends is written this way.
+    /// </summary>
+    internal static DateTime? DateAtResolution(DateTime? value, DateTimeResolution? resolution) =>
+        value.HasValue ? DateTimeAttributeValue.ToResolution(value.Value, resolution) : null;
+
+    /// <summary>
     /// A date's canonical key (#2153), or null for none: what a set or tuple of values compares a date by.
     /// </summary>
     internal static long? DateKey(DateTime? value) =>

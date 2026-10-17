@@ -3,6 +3,7 @@
 
 using JIM.Models.Connectors;
 using JIM.Models.Core;
+using JIM.Models.Staging;
 using System.Data.Common;
 
 namespace JIM.Connectors.Sql.Providers;
@@ -343,6 +344,12 @@ internal interface ISqlProvider
     /// </para>
     /// </summary>
     bool ColumnCarriesAnOffset(SqlColumnType columnType);
+
+    /// <summary>
+    /// The finest step of time a date and time column holds, in this dialect's vocabulary (#2153, D2); null for a column
+    /// that is not a date. Export floors what it sends to it, and compares at it.
+    /// </summary>
+    DateTimeResolution? ColumnDateTimeResolution(SqlColumnType columnType);
 
     #endregion
 }

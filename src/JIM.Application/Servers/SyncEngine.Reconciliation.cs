@@ -438,9 +438,10 @@ public partial class SyncEngine
                 attrChange.DecimalValue.HasValue &&
                 csoValues.Any(v => v.DecimalValue == attrChange.DecimalValue),
 
+            // At the target's resolution (#2153, D2): the value sent was floored to it, and the target reports what it holds.
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
-                csoValues.Any(v => DateTimeAttributeValue.AreEqual(v.DateTimeValue, attrChange.DateTimeValue)),
+                csoValues.Any(v => DateTimeAttributeValue.AreEqual(v.DateTimeValue, attrChange.DateTimeValue, attrChange.Attribute?.DateTimeResolution)),
 
             AttributeDataType.Binary =>
                 attrChange.ByteValue != null &&
@@ -519,6 +520,12 @@ public partial class SyncEngine
         public HashSet<Guid>? GuidValues { get; init; }
         public HashSet<bool>? BooleanValues { get; init; }
         public HashSet<long>? DateTimeTicksValues { get; init; }
+
+        /// <summary>
+        /// The resolution <see cref="DateTimeTicksValues"/> is keyed at (#2153, D2): the attribute's, from the Connected System
+        /// Object's values. A probe whose attribute states a different one falls back to the linear comparison.
+        /// </summary>
+        public DateTimeResolution? DateTimeResolution { get; init; }
         public List<ConnectedSystemObjectAttributeValue>? BinaryValues { get; init; }
     }
 
@@ -594,7 +601,9 @@ public partial class SyncEngine
             {
                 Count = values.Count,
                 RawValues = values,
-                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value)).ToHashSet()
+                DateTimeResolution = attribute?.DateTimeResolution,
+                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue)
+                    .Select(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value, attribute?.DateTimeResolution)).ToHashSet()
             },
 
             // Binary: keep the existing linear SequenceEqual scan - byte arrays do not hash usefully,
@@ -652,7 +661,8 @@ public partial class SyncEngine
         // reverse, so a probe whose attribute compares differently from the values' attribute takes the linear path.
         if (!typedSetAvailableForProbe ||
             (attrType is AttributeDataType.Text or AttributeDataType.Reference &&
-             !ReferenceEquals(index.StringComparer, AttributeValueComparison.ComparerFor(attrChange.Attribute))))
+             !ReferenceEquals(index.StringComparer, AttributeValueComparison.ComparerFor(attrChange.Attribute))) ||
+            (attrType == AttributeDataType.DateTime && index.DateTimeResolution != attrChange.Attribute?.DateTimeResolution))
             return ValueExistsOnCso(index.RawValues, attrChange);
 
         return attrType switch
@@ -675,7 +685,7 @@ public partial class SyncEngine
 
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
-                (index.DateTimeTicksValues?.Contains(DateTimeAttributeValue.Key(attrChange.DateTimeValue.Value)) ?? false),
+                (index.DateTimeTicksValues?.Contains(DateTimeAttributeValue.Key(attrChange.DateTimeValue.Value, index.DateTimeResolution)) ?? false),
 
             AttributeDataType.Binary =>
                 attrChange.ByteValue != null &&

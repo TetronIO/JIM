@@ -2445,10 +2445,19 @@ internal class LdapConnectorExport
         return null;
     }
 
-    private static string ConvertDateTimeToLdapFormat(DateTime dateTime)
+    /// <summary>
+    /// A date as GeneralizedTime (#2153, S6): the canonical value, in UTC, with the invariant culture. A whole second
+    /// keeps the <c>.0Z</c> form every directory has always been sent, which is all Active Directory holds; a fraction is
+    /// written with up to six digits, trailing zeros trimmed, so a microsecond reaches an RFC directory exactly. Export
+    /// staging has already floored the value to the attribute's resolution, so a directory that holds whole seconds is
+    /// never sent a fraction.
+    /// </summary>
+    internal static string ConvertDateTimeToLdapFormat(DateTime dateTime)
     {
-        // LDAP uses generalizedTime format: YYYYMMDDHHMMSS.0Z
-        return dateTime.ToUniversalTime().ToString("yyyyMMddHHmmss.0Z");
+        var canonical = DateTimeAttributeValue.ToCanonical(dateTime);
+        return canonical.Ticks % TimeSpan.TicksPerSecond == 0
+            ? canonical.ToString("yyyyMMddHHmmss'.0Z'", CultureInfo.InvariantCulture)
+            : canonical.ToString("yyyyMMddHHmmss.FFFFFF'Z'", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
