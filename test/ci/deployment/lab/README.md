@@ -85,7 +85,11 @@ JIM, rewritten with `jim-systemctl` and `jim-podman` as Running on Podman says.
    compose file still in use, and PostgreSQL's memory sized to the host.
 5. **Rolled back by the guide**: the backup restored into an empty database, the previous files put back, and JIM
    started; then the previous version reported, its data and credential, a sign-in, and nothing written after the
-   upgrade left behind.
+   upgrade left behind. On Docker, the installer must have kept the previous release's PostgreSQL image as
+   `postgres:jim-previous`; before starting, every other name is taken off it, as Docker's containerd image store
+   leaves it when the new release's image takes over its tag (#2299), and the rolled-back database must run that very
+   image. An air-gapped host cannot download it, so this fails the cell whether or not the two releases' images
+   differ.
 
 On Docker, before upgrading, the installer must also refuse an upgrade when the administrator says there is no
 backup; put everything back after an upgrade from a damaged bundle (an image cut short) fails partway, leaving the
