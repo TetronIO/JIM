@@ -500,6 +500,34 @@ Describe 'Invoke-LDAPSearch' {
         Invoke-LDAPSearch -ContainerName 'c' -Server 'localhost' -BaseDN 'DC=x' -BindDN 'cn=a' -BindPassword 'p' -Filter '(cn=x)' |
             Should -BeNullOrEmpty
     }
+
+    It 'returns nothing when a paged search finds no entry' {
+        # A paged search prints the paging control's cookie even with -LLL and no match, so an absent entry read as present.
+        Mock Invoke-LdapTool { @{ ExitCode = 0; Output = @('# pagedresults: cookie=') } }
+
+        Invoke-LDAPSearch -ContainerName 'c' -Server 'localhost' -BaseDN 'DC=x' -BindDN 'cn=a' -BindPassword 'p' -Filter '(cn=x)' |
+            Should -BeNullOrEmpty
+    }
+
+    It 'returns the entry without the paging comments when a paged search finds one' {
+        Mock Invoke-LdapTool { @{ ExitCode = 0; Output = @('dn: CN=x,DC=y', 'cn: x', '', '# pagedresults: cookie=') } }
+
+        $result = Invoke-LDAPSearch -ContainerName 'c' -Server 'localhost' -BaseDN 'DC=x' -BindDN 'cn=a' -BindPassword 'p' -Filter '(cn=x)'
+
+        ($result | Where-Object { $_ }) | Should -Be @('dn: CN=x,DC=y', 'cn: x')
+    }
+}
+
+Describe 'Test-LDAPGroupExists' {
+    It 'reports a group a paged search did not find as absent' {
+        Mock Invoke-LdapTool { @{ ExitCode = 0; Output = @('# pagedresults: cookie=') } }
+
+        Test-LDAPGroupExists -GroupName 'Gone' -DirectoryConfig @{
+            ContainerName = 'c'; GroupContainer = 'OU=Groups,DC=x'; LdapSearchPort = 389; LdapSearchScheme = 'ldap'
+            BindDN = 'cn=a'; BindPassword = 'p'
+        } |
+            Should -BeFalse
+    }
 }
 
 Describe 'callers of Invoke-LDAPSearch with a container-less config' {
