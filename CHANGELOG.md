@@ -277,6 +277,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 - 🔒 A password delivered to Active Directory or Samba AD at the same moment an export disables the account no longer re-enables it: JIM writes the account's flags only if they are still the ones it read, and otherwise leaves them as the export set them and tries the delivery again. (#2161)
 - 🔒 API requests refused for an expired, mis-signed or malformed SSO access token are now recorded in the security audit log, as failed API keys and sign-ins already are. (#2108)
+- 🔒 The unauthenticated readiness check (`/api/v1/health/ready`) no longer returns the error behind a failure, which could reveal database connection details such as the host and user name; the response drops its `error` field and JIM logs the cause instead. (#2188)
 - 🔒 The SCIM 2.0 Client Connector now refuses a plain-HTTP OAuth Token Endpoint URL except for loopback addresses, so a Client Secret is never sent unencrypted, including by the connection test when you save the settings. A Connected System already saved with one fails its next Run Profile before anything is sent; change it to the authorisation server's HTTPS address. (#2093)
 
 ### Performance
