@@ -126,7 +126,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             initiatedBySchedule: scheduledOnly,
             scheduleFilter: scheduleId);
 
-        var headers = result.Results.Select(a => ActivityHeader.FromEntity(a));
+        var headers = await ToHeadersAsync(result.Results);
 
         var response = new PaginatedResponse<ActivityHeader>
         {
@@ -474,12 +474,25 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
         var result = await _application.Activities.GetChildActivitiesAsync(id, pagination.Page, pagination.PageSize);
 
         var response = PaginatedResponse<ActivityHeader>.Create(
-            result.Results.Select(a => ActivityHeader.FromEntity(a)),
+            await ToHeadersAsync(result.Results),
             result.TotalResults,
             result.CurrentPage,
             result.PageSize);
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// The page's Activities as headers, each carrying how many direct child Activities it has (#2346), read for the
+    /// whole page in one query so a client can tell which Activities have children to expand.
+    /// </summary>
+    private async Task<List<ActivityHeader>> ToHeadersAsync(IReadOnlyCollection<Activity> activities)
+    {
+        var childCounts = activities.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await _application.Activities.GetChildActivityCountsAsync(activities.Select(a => a.Id));
+
+        return activities.Select(a => ActivityHeader.FromEntity(a, childCounts.GetValueOrDefault(a.Id))).ToList();
     }
 
     /// <summary>

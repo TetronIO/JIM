@@ -56,4 +56,11 @@ public class SyncRuleDeletionRecallResult
     /// How many attribute values were preserved rather than recalled under the #1570 gate above.
     /// </summary>
     public int ValuesPreserved { get; set; }
+
+    /// <summary>
+    /// How many Metaverse Objects were left exactly as they were, each recorded with a ScopingCriterionFailed error,
+    /// because a surviving contributor's scope could not be decided (#2336). Their values keep the recalled rule's
+    /// provenance, so a caller must not sever it (by deleting the rule) while any is held back.
+    /// </summary>
+    public int MetaverseObjectsHeldBack { get; set; }
 }

@@ -265,4 +265,33 @@ public class RunProfileSafeguardsValidatorTests
 
         Assert.That(RunProfileSafeguardsValidator.Validate(runProfile), Is.Null);
     }
+
+    [TestCase(ConnectedSystemRunType.FullImport)]
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    public void Validate_FilePathOnImportRunProfile_ReturnsNull(ConnectedSystemRunType runType)
+    {
+        var runProfile = new ConnectedSystemRunProfile { RunType = runType, FilePath = "/connector-files/Users.csv" };
+
+        Assert.That(RunProfileSafeguardsValidator.Validate(runProfile), Is.Null);
+    }
+
+    [TestCase(ConnectedSystemRunType.Export)]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    public void Validate_FilePathOnNonImportRunProfile_NamesTheField(ConnectedSystemRunType runType)
+    {
+        // an export writes to the Connected System's File Path, so a Run Profile path there would be silently ignored
+        var runProfile = new ConnectedSystemRunProfile { RunType = runType, FilePath = "/connector-files/Users.csv" };
+
+        Assert.That(RunProfileSafeguardsValidator.Validate(runProfile),
+            Is.EqualTo("FilePath can only be set on a Full Import or Delta Import Run Profile."));
+    }
+
+    [Test]
+    public void Validate_EmptyFilePathOnExportRunProfile_ReturnsNull()
+    {
+        var runProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.Export, FilePath = string.Empty };
+
+        Assert.That(RunProfileSafeguardsValidator.Validate(runProfile), Is.Null);
+    }
 }

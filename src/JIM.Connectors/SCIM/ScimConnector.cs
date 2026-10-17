@@ -336,7 +336,9 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (firstPage)
         {
             var watermark = ScimImportState.Read(persistedConnectorData, logger)?.Watermark;
-            _importPlan = ScimImportPlan.Create(runProfile.RunType, ReadDeltaStrategy(connectedSystem), _importDiscovery.Capabilities, watermark);
+            var baseUrl = connectedSystem.SettingValues?.SingleOrDefault(s => s.Setting.Name == ScimConnectorConstants.SettingBaseUrl)?.StringValue;
+            var provider = ScimProviderRecognition.Recognise(baseUrl, _importDiscovery.ServiceProviderConfigLocation);
+            _importPlan = ScimImportPlan.Create(runProfile.RunType, ReadDeltaStrategy(connectedSystem), _importDiscovery.Capabilities, watermark, provider);
             _importWatermark = new ScimWatermarkTracker();
 
             if (_importPlan.WarningMessage != null)

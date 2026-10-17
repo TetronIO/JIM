@@ -92,7 +92,7 @@ public class BuiltInMetaverseSchemaSyncDatabaseTests
                 .SingleAsync(a => a.Name == Constants.BuiltInAttributes.Emails);
             Assert.That(emails.BuiltIn, Is.True);
             Assert.That(emails.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
-            Assert.That(emails.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim && m.CounterpartName == "emails"), Is.True);
+            Assert.That(emails.StandardMappings.Any(m => m.Standard == AttributeStandard.Ldap && m.CounterpartName == "mail"), Is.True);
             Assert.That(emails.MetaverseObjectTypes.Select(t => t.Name),
                 Is.EquivalentTo(new[] { Constants.BuiltInObjectTypes.User, Constants.BuiltInObjectTypes.Group }));
         }
@@ -158,6 +158,66 @@ public class BuiltInMetaverseSchemaSyncDatabaseTests
                 .Include(a => a.StandardMappings)
                 .SingleAsync(a => a.Name == Constants.BuiltInAttributes.FirstName);
             Assert.That(firstName.StandardMappings.Any(m => m.Standard == AttributeStandard.Ldap && m.CounterpartName == "givenName"), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task SyncBuiltInMetaverseSchemaAsync_DeploymentSeededWithRfcPathCounterparts_ConvergesToTheFlattenedNamesAsync()
+    {
+        // #2095: deployments seeded before the fix hold SCIM counterparts as RFC 7643 paths. Simulate one by seeding
+        // the current catalogue and then rewriting rows back to the shipped shape: Mobile Number named "phoneNumbers"
+        // and Emails carried a SCIM "emails" mapping. Startup must replace the first and remove the second.
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.Seeding.SeedAsync();
+            await jim.Seeding.SyncBuiltInMetaverseSchemaAsync();
+            await jim.Seeding.CompleteSeedingActivityAsync();
+        }
+
+        await using (var legacy = NewContext())
+        {
+            var mobileId = await legacy.MetaverseAttributes.Where(a => a.Name == Constants.BuiltInAttributes.MobileNumber).Select(a => a.Id).SingleAsync();
+            var emailsId = await legacy.MetaverseAttributes.Where(a => a.Name == Constants.BuiltInAttributes.Emails).Select(a => a.Id).SingleAsync();
+
+            var renamed = await legacy.MetaverseAttributeStandardMappings
+                .Where(m => m.MetaverseAttributeId == mobileId && m.Standard == AttributeStandard.Scim)
+                .ExecuteUpdateAsync(set => set.SetProperty(m => m.CounterpartName, "phoneNumbers"));
+            Assert.That(renamed, Is.EqualTo(1), "precondition: Mobile Number carries one SCIM mapping");
+
+            legacy.MetaverseAttributeStandardMappings.Add(new MetaverseAttributeStandardMapping
+            {
+                MetaverseAttributeId = emailsId,
+                Standard = AttributeStandard.Scim,
+                CounterpartName = "emails",
+                Notes = "Values only; SCIM sub-attributes such as type and primary are not modelled."
+            });
+            await legacy.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.Seeding.SeedAsync();
+            await jim.Seeding.SyncBuiltInMetaverseSchemaAsync();
+            await jim.Seeding.CompleteSeedingActivityAsync();
+        }
+
+        await using (var check = NewContext())
+        {
+            var scimCounterparts = await check.MetaverseAttributeStandardMappings
+                .Where(m => m.Standard == AttributeStandard.Scim)
+                .Select(m => new { m.MetaverseAttribute!.Name, m.CounterpartName })
+                .ToListAsync();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(scimCounterparts.Where(m => m.Name == Constants.BuiltInAttributes.MobileNumber).Select(m => m.CounterpartName),
+                    Is.EqualTo(new[] { "phoneNumbers.mobile" }));
+                Assert.That(scimCounterparts.Where(m => m.Name == Constants.BuiltInAttributes.Emails), Is.Empty,
+                    "the stale SCIM emails mapping must be removed");
+                Assert.That(scimCounterparts, Has.Count.EqualTo(BuiltInMetaverseSchema.Attributes.Sum(a => a.StandardMappings.Count(m => m.Standard == AttributeStandard.Scim))));
+            }
         }
     }
 }

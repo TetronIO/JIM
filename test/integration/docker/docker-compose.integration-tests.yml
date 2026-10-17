@@ -356,6 +356,39 @@ services:
       retries: 6
       start_period: 15s
 
+  # Keycloak with its built-in SCIM 2.0 API, for Scenario 028 (#2349): the SCIM Connector against a real Keycloak,
+  # so a Keycloak release that changes the behaviours #2094 worked around fails a run rather than a customer.
+  #
+  # A separate container from the JIM stack's jim.keycloak, which serves plain HTTP under a hostname JIM does not
+  # call it by: the connector refuses cleartext to anything but a loopback address, and Keycloak refuses a token
+  # whose audience names another address. This one serves HTTPS as keycloak-scim, from a certificate it mints at
+  # every start (start-keycloak-scim.sh); the scenario copies it out and trusts it. Same image as jim.keycloak, so
+  # it adds no dependency; when Dependabot moves that tag, move this one with it.
+  keycloak-scim:
+    image: quay.io/keycloak/keycloak:26.8
+    container_name: keycloak-scim
+    entrypoint: ["/bin/bash", "/opt/keycloak-scim/start-keycloak-scim.sh"]
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+      # Must match the container name: the certificate is issued for it, and Keycloak checks a token's audience
+      # against the SCIM address under this hostname.
+      - KEYCLOAK_SCIM_HOSTNAME=keycloak-scim
+    # No ports published: JIM reaches it on the Docker network, and the scenario configures it with kcadm.sh inside
+    # the container.
+    volumes:
+      - ./keycloak-scim/start-keycloak-scim.sh:/opt/keycloak-scim/start-keycloak-scim.sh:ro
+    networks:
+      - jim-network
+    profiles:
+      - keycloak-scim
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; timeout 1 cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
   openldap-primary:
     image: ${OPENLDAP_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-openldap:primary}
     build:

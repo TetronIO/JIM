@@ -1408,7 +1408,8 @@ $templateIrrelevantScenarioNumbers = @(
     22,  # OpenLDAP Password Policy - asserts against one Micro export
     24,  # Active Directory Password Policy - asserts against one Micro export (Active Directory lab only)
     25,  # Active Directory Delta Import Integrity - creates and deletes its own users (Active Directory lab only)
-    27   # First Synchronisation (the tested tutorial) - the tutorial's sample data is fixed at 25 people
+    27,  # First Synchronisation (the tested tutorial) - the tutorial's sample data is fixed at 25 people
+    28   # SCIM Connector against Keycloak - its own HR CSV, sized to put one group over Keycloak's 100-operation PATCH cap
 )
 
 function Test-TemplateRelevant {
@@ -2738,7 +2739,7 @@ if (-not $SkipReset) {
     # New-Scenario-016-TestDatabase.ps1 rather than by their being new: it drops and recreates its whole
     # schema, and a content hash of the generated script decides whether it needs to. A stale Scenario 016
     # database is therefore not reachable. Everything else here stays ephemeral.
-    docker compose @script:IntegrationComposeArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim down -v --remove-orphans 2>&1 | Out-Null
+    docker compose @script:IntegrationComposeArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim --profile keycloak-scim down -v --remove-orphans 2>&1 | Out-Null
     if ($isActiveDirectoryRun) {
         # The ad-lab profile (the LDAP toolbox) is named only for an Active Directory run: taking it down for
         # every run would also release its image to the end-of-run prune, and rebuild it next time.
@@ -3048,7 +3049,7 @@ if ($DirectoryType -eq "OpenLDAP") {
     # Attribute Flows) composes the same substrate and asserts on every account it provisions.
     # S010-S013 and S015-S018 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -3148,7 +3149,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
     # verified: a snapshot baked from a stale base is stale. S026 is excluded for S023's reasons.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3250,6 +3251,34 @@ if ($scenarioNumber -eq 15) {
     Write-Success "SCIM test service provider started"
 }
 
+# Start Keycloak for Scenario 028 (#2349), the SCIM Connector against Keycloak's own SCIM API. Readiness is Keycloak's
+# own health endpoint: the scenario configures the realm with kcadm.sh as soon as it starts, and the certificate it
+# copies out is written before Keycloak begins listening.
+if ($scenarioNumber -eq 28) {
+    Write-Step "Starting Keycloak with its SCIM API..."
+    $keycloakScimServices = @(if ($script:Lane.Active) { "keycloak-scim" })
+    $keycloakScimResult = docker compose @script:IntegrationComposeArgs --profile keycloak-scim up -d @keycloakScimServices 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start Keycloak for the SCIM scenario"
+        Write-Host "${GRAY}$keycloakScimResult${NC}"
+        exit 1
+    }
+
+    Write-Step "Waiting for Keycloak to report ready..."
+    $keycloakScimReady = $false
+    for ($keycloakScimWait = 0; $keycloakScimWait -lt 36; $keycloakScimWait++) {
+        $health = docker inspect --format '{{.State.Health.Status}}' keycloak-scim 2>$null
+        if ($health -eq 'healthy') { $keycloakScimReady = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    if (-not $keycloakScimReady) {
+        Write-Failure "Keycloak did not report ready within 180s"
+        docker logs keycloak-scim --tail 30 2>&1 | ForEach-Object { Write-Host "${GRAY}$_${NC}" }
+        exit 1
+    }
+    Write-Success "Keycloak started"
+}
+
 # Start Scenario 002 containers if running Scenario 002 with Samba AD
 # For OpenLDAP and 389 Directory Server, S002 uses the two suffixes of the single container (already started above)
 if ($scenarioNumber -eq 2 -and $usesSambaContainers) {
@@ -3326,6 +3355,11 @@ if ($scenarioNumber -eq 16) {
     })
 
     Write-Step "Starting database containers for Scenario 016 ($($phase2Services -join ', '))..."
+    # Kept between runs, but jim-network is not: a kept container still naming a network since removed would never
+    # start, so it is recreated over its volumes. Each service's container_name is the service name.
+    foreach ($recreated in (Remove-ContainerWithMissingNetwork -ContainerName $phase2Services)) {
+        Write-Host "  ${GRAY}$recreated named a network that no longer exists; recreating it over its volumes${NC}"
+    }
     $phase2Result = docker compose @script:IntegrationComposeArgs --profile phase2 up -d @phase2Services 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start the Scenario 016 database containers"
@@ -3690,7 +3724,7 @@ if ($adPopulateEntries.Count -gt 0) {
 # -GenerateAccountName, and every value it asserts on is generated, not sourced, so the target
 # directory must start empty exactly as it must for S001. S026 (Metaverse-Derived Attribute Flows) composes
 # the same substrate and asserts on every account it provisions, so it too needs an empty directory.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26 -and -not $script:UsingRfcDirectorySnapshots) {
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"

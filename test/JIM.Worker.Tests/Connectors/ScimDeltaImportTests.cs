@@ -113,6 +113,53 @@ public class ScimDeltaImportTests
         }
     }
 
+    /// <summary>
+    /// #2094: Keycloak advertises filtering but moves <c>meta.lastModified</c> only for some changes (a create, a SCIM
+    /// PUT, a User SCIM PATCH). A Delta Import filtering on it would succeed having missed group membership changes and
+    /// every edit made outside SCIM.
+    /// </summary>
+    [TestCase(ScimDeltaStrategy.Auto)]
+    [TestCase(ScimDeltaStrategy.LastModifiedFilter)]
+    public void Create_DeltaRunAgainstKeycloak_ScansEverythingAndSaysWhy(ScimDeltaStrategy configured)
+    {
+        var plan = ScimImportPlan.Create(ConnectedSystemRunType.DeltaImport, configured, Capabilities(true), Watermark, ScimKnownProvider.Keycloak);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.FullScan));
+            Assert.That(plan.Filter, Is.Null);
+            Assert.That(plan.WarningMessage, Does.Contain("Keycloak"));
+            Assert.That(plan.WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
+        }
+    }
+
+    [Test]
+    public void Create_FullScanChosenAgainstKeycloak_ScansWithoutWarning()
+    {
+        var plan = ScimImportPlan.Create(ConnectedSystemRunType.DeltaImport, ScimDeltaStrategy.FullScan, Capabilities(true), Watermark, ScimKnownProvider.Keycloak);
+
+        Assert.That(plan.WarningMessage, Is.Null);
+    }
+
+    [TestCase("https://idp.example.com/realms/acme/scim/v2", null)]
+    [TestCase("https://idp.example.com/auth/realms/acme/scim/v2/", null)]
+    [TestCase("HTTPS://IDP.EXAMPLE.COM/REALMS/ACME/SCIM/V2", null)]
+    [TestCase("https://gateway.example.com/identity", "https://idp.example.com/realms/acme/scim/v2/ServiceProviderConfig")]
+    public void Recognise_KeycloaksSCIMPath_IsKeycloak(string baseUrl, string? serviceProviderConfigLocation)
+    {
+        Assert.That(ScimProviderRecognition.Recognise(baseUrl, serviceProviderConfigLocation), Is.EqualTo(ScimKnownProvider.Keycloak));
+    }
+
+    [TestCase("https://provider.example.com/scim/v2", "https://provider.example.com/scim/v2/ServiceProviderConfig")]
+    [TestCase("https://provider.example.com/realms/scim/v2", null)]
+    [TestCase("https://provider.example.com/realms/acme/scim/v2/extra", null)]
+    [TestCase(null, null)]
+    [TestCase("not a url", "also not a url")]
+    public void Recognise_AnyOtherPath_IsUnrecognised(string? baseUrl, string? serviceProviderConfigLocation)
+    {
+        Assert.That(ScimProviderRecognition.Recognise(baseUrl, serviceProviderConfigLocation), Is.EqualTo(ScimKnownProvider.Unrecognised));
+    }
+
     [Test]
     public void Create_FullScanForced_ScansWithoutWarningBecauseThatIsWhatWasAskedFor()
     {
@@ -234,7 +281,8 @@ public class ScimDeltaImportTests
         };
     }
 
-    private static ConnectedSystem ConnectedSystem(string changeDetection = ScimConnectorConstants.ChangeDetectionAuto)
+    private static ConnectedSystem ConnectedSystem(string changeDetection = ScimConnectorConstants.ChangeDetectionAuto,
+        string baseUrl = "https://provider.example.com/scim/v2")
     {
         return new ConnectedSystem
         {
@@ -242,7 +290,7 @@ public class ScimDeltaImportTests
             ObjectTypes = [new ConnectedSystemObjectType { Name = "User", Selected = true }],
             SettingValues =
             [
-                Setting(ScimConnectorConstants.SettingBaseUrl, "https://provider.example.com/scim/v2"),
+                Setting(ScimConnectorConstants.SettingBaseUrl, baseUrl),
                 Setting(ScimConnectorConstants.SettingPaginationMode, ScimConnectorConstants.PaginationModeAuto),
                 Setting(ScimConnectorConstants.SettingChangeDetection, changeDetection)
             ]
@@ -276,14 +324,19 @@ public class ScimDeltaImportTests
     /// A provider publishing only the User resource type, whose /Users pages come from the supplied
     /// responder keyed by the page's query string.
     /// </summary>
-    private static StubHttpMessageHandler UserProvider(Func<string, HttpResponseMessage> usersResponder, bool supportsFilter = true)
+    /// <param name="serviceProviderConfigLocation">The <c>meta.location</c> the provider gives its own configuration, if any.</param>
+    private static StubHttpMessageHandler UserProvider(Func<string, HttpResponseMessage> usersResponder, bool supportsFilter = true,
+        string? serviceProviderConfigLocation = null)
     {
         return new StubHttpMessageHandler(request =>
         {
             var path = request.RequestUri!.AbsolutePath;
 
             if (path.EndsWith("/ServiceProviderConfig", StringComparison.Ordinal))
-                return Json($$"""{ "filter": { "supported": {{(supportsFilter ? "true" : "false")}} } }""");
+            {
+                var meta = serviceProviderConfigLocation == null ? string.Empty : $$""", "meta": { "location": "{{serviceProviderConfigLocation}}" }""";
+                return Json($$"""{ "filter": { "supported": {{(supportsFilter ? "true" : "false")}} }{{meta}} }""");
+            }
 
             if (path.EndsWith("/ResourceTypes", StringComparison.Ordinal))
             {
@@ -331,6 +384,41 @@ public class ScimDeltaImportTests
 
         var userQuery = handler.Requests.Single(r => r.RequestUri!.AbsolutePath.EndsWith("/Users", StringComparison.Ordinal)).RequestUri!.Query;
         Assert.That(Uri.UnescapeDataString(userQuery), Does.Contain("filter=meta.lastModified gt \"2026-07-30T10:00:00Z\""));
+    }
+
+    [Test]
+    public async Task ImportAsync_DeltaRunAgainstKeycloak_ScansEverythingAndWarnsAsync()
+    {
+        // #2094: recognised from the Base URL, which for Keycloak always ends /realms/<realm>/scim/v2.
+        using var handler = UserProvider(_ => Json(UserPage(1, "alice")));
+        var persisted = new ScimImportState { Watermark = Watermark }.Serialise();
+
+        var results = await RunImportAsync(handler, ConnectedSystem(baseUrl: "https://idp.example.com/realms/acme/scim/v2"), RunProfile(), persisted);
+
+        var userQuery = handler.Requests.Single(r => r.RequestUri!.AbsolutePath.EndsWith("/Users", StringComparison.Ordinal)).RequestUri!.Query;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(userQuery, Does.Not.Contain("filter="));
+            Assert.That(results[0].WarningMessage, Does.Contain("Keycloak"));
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_DeltaRunAgainstKeycloakBehindAProxy_IsRecognisedFromItsConfigurationsLocationAsync()
+    {
+        // A reverse proxy can give Keycloak any Base URL, but Keycloak still reports where it serves its configuration.
+        using var handler = UserProvider(_ => Json(UserPage(1, "alice")),
+            serviceProviderConfigLocation: "https://idp.internal/realms/acme/scim/v2/ServiceProviderConfig");
+        var persisted = new ScimImportState { Watermark = Watermark }.Serialise();
+
+        var results = await RunImportAsync(handler, ConnectedSystem(baseUrl: "https://gateway.example.com/identity"), RunProfile(), persisted);
+
+        var userQuery = handler.Requests.Single(r => r.RequestUri!.AbsolutePath.EndsWith("/Users", StringComparison.Ordinal)).RequestUri!.Query;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(userQuery, Does.Not.Contain("filter="));
+            Assert.That(results[0].WarningMessage, Does.Contain("Keycloak"));
+        }
     }
 
     [Test]

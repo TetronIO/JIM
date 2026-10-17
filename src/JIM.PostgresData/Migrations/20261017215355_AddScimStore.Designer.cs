@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261017212010_AddScimStore")]
+    [Migration("20261017215355_AddScimStore")]
     partial class AddScimStore
     {
         /// <inheritdoc />

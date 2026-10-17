@@ -6710,7 +6710,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         const string sql = """
             SELECT cso."Id", av."Id", av."AttributeId", av."StringValue", av."IntValue", av."LongValue", av."DecimalValue",
-                   av."DateTimeValue", av."BoolValue", av."GuidValue", av."ByteValue", av."ReferenceValueId"
+                   av."DateTimeValue", av."BoolValue", av."GuidValue", av."ByteValue", av."ReferenceValueId",
+                   av."UnresolvedReferenceValue"
             FROM "ConnectedSystemObjects" cso
             LEFT JOIN "ConnectedSystemObjectAttributeValues" av
                 ON av."ConnectedSystemObjectId" = cso."Id" AND av."AttributeId" = ANY(@attributeIds)
@@ -6761,7 +6762,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 GuidValue = reader.IsDBNull(9) ? null : reader.GetGuid(9),
                 ByteValue = reader.IsDBNull(10) ? null : reader.GetFieldValue<byte[]>(10),
                 ReferenceValueId = reader.IsDBNull(11) ? null : reader.GetGuid(11),
-                ReferenceValue = reader.IsDBNull(11) ? null : new ConnectedSystemObject { Id = reader.GetGuid(11) }
+                ReferenceValue = reader.IsDBNull(11) ? null : new ConnectedSystemObject { Id = reader.GetGuid(11) },
+                UnresolvedReferenceValue = reader.IsDBNull(12) ? null : reader.GetString(12)
             });
         }
 

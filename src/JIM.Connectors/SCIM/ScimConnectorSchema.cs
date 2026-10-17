@@ -82,6 +82,7 @@ public class ScimConnectorSchema
         {
             Schema = schema,
             Capabilities = capabilities,
+            ServiceProviderConfigLocation = config?.Meta?.Location,
             ResourceTypes = resourceTypes,
             FlattenedAttributes = composition.FlattenedAttributes,
             Warnings = warnings

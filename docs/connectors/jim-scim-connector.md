@@ -24,11 +24,13 @@ Any service provider conforming to RFC 7643 and RFC 7644. The connector adapts t
 
 The connector requires no internet access of its own and adds no cloud-service dependency: it talks only to the service provider you point it at, which may be entirely on-premises.
 
+Keycloak's built-in SCIM API needs a particular setup, which [Connect the SCIM Connector to Keycloak](jim-scim-connector-keycloak.md) walks through.
+
 ## Features
 
 | Capability | Supported | Notes |
 |---|---|---|
-| Full Import | ✅ | Walks every resource type you have selected, page by page. |
+| Full Import | ✅ | Walks every resource type you have selected, page by page. A provider that returns an empty page while its `totalResults` says more remain fails the run, rather than having the resources it did not return treated as deleted. |
 | Delta Import | ✅ | Asks the provider for what changed since the last completed import. See [Change Detection](#change-detection). |
 | Export | ✅ | Creates, updates and deletes resources, including group membership. |
 | Paging | ✅ | The Run Profile's Page Size becomes the requested page size. |
@@ -52,17 +54,20 @@ SCIM's nested and multi-valued attributes are flattened into the flat attributes
 | `addresses` (type `work`) | `addresses.work.streetAddress`, ... | An address has no single value, so the slot is cut per sub-attribute. |
 | `roles`, `entitlements`, `x509Certificates` (no canonical types) | `roles.value`, `roles.type`, `roles.display` | Each sub-attribute becomes a multi-valued attribute. Only `roles.value` can be exported: each value is one entry, so exporting a value adds an entry and taking one away removes that entry alone, leaving the provider's other entries untouched. `roles.type` and `roles.display` are read-only, because once separated from their entries JIM cannot tell which entry each belongs to. The Boolean `primary` sub-attribute is left out: separated from its entry, it would say only that some entry is primary and some is not, and a Boolean attribute holds one value. |
 | A multi-valued `dateTime` attribute | unchanged | Every element of the array is imported, to the microsecond. |
-| `members`, `groups`, `manager` | unchanged | An attribute carrying a reference stays whole, keeping its plurality, so group membership survives as a reference. |
+| `members`, `groups`, `urn:...:enterprise:2.0:User:manager` | `members`, `groups`, `enterpriseUser.manager` | An attribute carrying a reference stays whole, keeping its plurality, so group membership survives as a reference. |
+| `profileUrl`, `photos` (type `photo`) | `profileUrl`, `photos.photo` | A URL to something outside SCIM is text. Only a reference to a SCIM resource type, such as a User or a Group, becomes a reference JIM resolves to another object. |
 | `urn:...:enterprise:2.0:User:department` | `enterpriseUser.department` | An extension attribute is prefixed with its schema's name. |
 
 Every resource also carries `id`, `externalId` and the `meta` attributes, which the SCIM specification defines rather than any schema document. `id` is the External ID JIM anchors Connected System Objects on, and is always read-only.
 
 A Connected System whose schema was imported before JIM left these `primary` sub-attributes out reports them as no longer reported at its next [schema refresh](../configuration/connected-system-schema.md#refreshing-the-schema), which names any Attribute Flow mapping that reads one.
 
+Likewise, a Connected System whose schema was imported before JIM typed URLs as text reports `profileUrl` and the `photos` attributes as changed from Reference to Text at its next schema refresh. Run a Full Import afterwards: it replaces the values those attributes held as unresolved references with the URLs as text.
+
 !!! warning "Two entries sharing a canonical type"
     A provider is free to hold two `work` email addresses. `emails.work` holds one, so the first is imported and the run reports a warning naming the attribute. Nothing is silently dropped, but the second value does not reach JIM.
 
-Where discovery had to work around a gap in what the provider publishes (no `/Schemas` document, an attribute definition that could not be fully interpreted), the schema import says so rather than presenting an unqualified success: the warnings appear on the schema screen's refresh summary, and the import's Activity completes with a warning carrying the same detail, so they are visible from the REST API and PowerShell too. Use them to tell a provider gap from a JIM one when an expected attribute is missing.
+Where discovery had to work around a gap in what the provider publishes (no `/Schemas` document, an attribute definition that could not be fully interpreted, a core attribute such as `members` published with nothing inside it, which JIM fills in from RFC 7643), the schema import says so rather than presenting an unqualified success: the warnings appear on the schema screen's refresh summary, and the import's Activity completes with a warning carrying the same detail, so they are visible from the REST API and PowerShell too. Use them to tell a provider gap from a JIM one when an expected attribute is missing.
 
 ### Change Detection
 
@@ -76,6 +81,8 @@ The **Change Detection** setting controls the choice:
 | Last Modified Filter | Filter regardless of what the provider advertises. Some providers support filtering without saying so. |
 | Full Scan | Never filter. Use this where a provider's filtering is unreliable. |
 
+Against Keycloak, which advertises filtering but does not update the last-modified date for most changes, a Delta Import reads every resource whichever of the first two is chosen, and says why on the Activity: a filter would succeed having missed those changes. JIM recognises Keycloak from the `/realms/<realm>/scim/v2` path, in the Base URL or in where Keycloak says its configuration lives.
+
 Where a Delta Import cannot filter, it reads every resource instead and reports a warning on the Activity rather than failing. This is deliberate: only a completed import can record a watermark, so failing the first Delta Import after a Connected System is configured would leave it permanently unable to import.
 
 !!! important "Deletions are only detected by a Full Import"
@@ -87,8 +94,8 @@ The watermark is recorded only when a run finishes, and is deliberately set a mi
 
 | Change | Request |
 |---|---|
-| Create | `POST` to the resource type's endpoint. The provider assigns the `id`, which JIM records as the External ID. |
-| Update | `PATCH`, naming only what changed. |
+| Create | `POST` to the resource type's endpoint. The provider assigns the `id`, which JIM records as the External ID. Where the provider supports PATCH, a group's members (and any other multi-valued reference) are left out of the `POST` and added with a `PATCH` once the group exists; some providers refuse a group created with members. If adding them fails, the create still succeeds with its `id`, the failure is logged, and the members are sent again as an update after the next import finds the group without them. |
+| Update | `PATCH`, naming only what changed. Values added to one multi-valued attribute travel as one operation, and no request carries more than 100 operations; a provider that refuses a request as carrying too many is sent half as many at a time. A change needing several requests that fails partway is reported as failed, and the next import shows what the provider holds. |
 | Update (provider without PATCH) | The resource is read, the changes are applied to it, and the whole resource is written back with `PUT`. |
 | Delete | `DELETE`. A resource that has already gone counts as success. |
 
@@ -209,7 +216,7 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 | Setting | Default | Description |
 |---|---|---|
 | Pagination Mode | Auto-detect | Auto-detect starts with index-based paging and switches to cursors if the provider offers one. Choose Cursor-based for large or frequently-changing providers: index-based paging can miss or repeat objects when the data changes during an import. |
-| Excluded Attributes | (none) | A comma-separated list of SCIM attributes to ask the provider not to return, for example `photos, x509Certificates`. Useful for large attributes JIM does not need. `id` and `meta` are always requested, because importing cannot work without them. |
+| Excluded Attributes | (none) | A comma-separated list of SCIM attributes to ask the provider not to return, for example `photos, x509Certificates`. Useful for large attributes JIM does not need. `id` and `meta` are always requested, because importing cannot work without them. Where a selected attribute is one the provider returns only when asked for it by name (`returned: request` in its schema, as Keycloak's Group `members` is), JIM instead names every selected attribute it wants, leaving out the ones listed here. |
 | Change Detection | Auto-detect | See [Change Detection](#change-detection). |
 
 ### Retry Settings
@@ -238,7 +245,13 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 The Base URL is probably pointing at a resource endpoint rather than the root of the service. It should be the path that `/ServiceProviderConfig` hangs off.
 
 **Delta Imports read everything every time**<br />
-Check the Activity for a warning. Either the provider does not advertise filtering (set Change Detection to Last Modified Filter if you know it supports it anyway), or the provider rejected the filter, or no watermark had been recorded yet, in which case the next Delta Import will be incremental.
+Check the Activity for a warning. Either the provider does not advertise filtering (set Change Detection to Last Modified Filter if you know it supports it anyway), or the provider rejected the filter, or the provider is Keycloak (whose last-modified dates cannot be filtered on safely; set Change Detection to Full Scan), or no watermark had been recorded yet, in which case the next Delta Import will be incremental.
+
+**An import fails with "returned an empty page ... while its totalResults says"**<br />
+The provider counted resources it then did not return. JIM stops rather than finish a Full Import that would treat the missing resources as deleted. Check that the credential can read every resource of the type, and whether the provider counts resources it hides.
+
+**Exports to some objects fail with 403 while others succeed**<br />
+The provider protects those objects; Keycloak, for one, refuses any change to an account or group holding an administrative role. Scope them out of the Synchronisation Rule. Where every export fails with 403, the credential lacks the permission instead.
 
 **Objects go missing from JIM after a Delta Import**<br />
 They should not: deletion detection runs only on a Full Import. If objects are being marked obsolete, the run in question was a Full Import that could not see them.
@@ -257,5 +270,6 @@ Re-import the schema. A provider that has changed what it publishes, or one whos
 
 ## Related
 
+- [Connect the SCIM Connector to Keycloak](jim-scim-connector-keycloak.md)
 - [Connectors](index.md)
 - [Connected Systems](../configuration/connected-systems.md)

@@ -136,7 +136,7 @@ public class BuiltInMetaverseSchemaSyncTests
             "Account Enabled must not be bound to the Group Metaverse Object Type");
 
         // advisory Standard Mappings must be seeded with the new attributes
-        Assert.That(emails.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim && m.CounterpartName == "emails"), Is.True);
+        Assert.That(emails.StandardMappings.Any(m => m.Standard == AttributeStandard.Ldap && m.CounterpartName == "mail"), Is.True);
         Assert.That(accountEnabled.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim && m.CounterpartName == "active"), Is.True);
 
         // each created attribute must be baselined: a System-attributed Create Activity grouped under a single

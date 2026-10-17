@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Scim.Messages;
+
 namespace JIM.Connectors.SCIM;
 
 /// <summary>
@@ -18,9 +20,24 @@ namespace JIM.Connectors.SCIM;
 /// <param name="Body">The payload, or null for a delete.</param>
 /// <param name="EntityTag">The tag guarding the write, where the provider maintains entity tags and JIM holds one.</param>
 /// <param name="ResourceId">The provider's id for the resource, or null for a create, where the provider assigns it.</param>
+/// <param name="FollowUpOperations">
+/// For a create, the PATCH operations to apply to the new resource once the provider has assigned its id: the values a
+/// provider will not take on a create, such as Keycloak's group members (#2094). Null for anything else.
+/// </param>
 internal sealed record ScimExportOperation(
     HttpMethod Method,
     string Path,
     object? Body,
     string? EntityTag,
-    string? ResourceId);
+    string? ResourceId,
+    IReadOnlyList<ScimPatchOperation>? FollowUpOperations = null)
+{
+    /// <summary>
+    /// Whether the change takes more than one request: a create with values to add afterwards, or a PATCH with more
+    /// operations than one request may carry. Such a change cannot travel inside a bulk request, which holds exactly one
+    /// request per change, so it is always sent on its own.
+    /// </summary>
+    public bool RequiresSeveralRequests =>
+        FollowUpOperations is { Count: > 0 }
+        || Body is ScimPatchRequest { Operations.Count: > ScimConnectorConstants.MaximumPatchOperationsPerRequest };
+}
