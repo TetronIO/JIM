@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261016223340_AddConnectedSystemObjectSynchronisationPending")]
+    [Migration("20261017150917_AddConnectedSystemObjectSynchronisationPending")]
     partial class AddConnectedSystemObjectSynchronisationPending
     {
         /// <inheritdoc />
