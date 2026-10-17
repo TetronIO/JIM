@@ -471,6 +471,27 @@ Describe 'Export-JIMCertificate' {
             }
         }
 
+        It 'Should report the API error message, not its JSON body, when the certificate cannot be found' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{
+                    Url        = 'https://jim.example.com'
+                    AuthMethod = 'ApiKey'
+                    ApiKey     = 'jim_ak_certificate_export_key'
+                    Connected  = $true
+                }
+                Mock Invoke-WebRequest {
+                    $record = [System.Management.Automation.ErrorRecord]::new(
+                        [System.Exception]::new('Response status code does not indicate success: 404 (Not Found).'),
+                        'WebCmdletWebResponseException', 'InvalidOperation', $null)
+                    $record.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('{"code":"NOT_FOUND","message":"Certificate with ID 42 not found."}')
+                    throw $record
+                }
+
+                { Export-JIMCertificate -Id ([Guid]::NewGuid()) -PassThru -ErrorAction Stop } |
+                    Should -Throw 'Failed to export certificate: Certificate with ID 42 not found.'
+            }
+        }
+
         It 'Should send an SSO connection access token as a Bearer token' {
             InModuleScope JIM {
                 $script:JIMConnection = @{

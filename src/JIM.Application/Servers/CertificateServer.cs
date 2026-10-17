@@ -12,6 +12,7 @@ using JIM.Models.Staging;
 using JIM.Application.Utilities;
 using JIM.Utilities;
 using Serilog;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace JIM.Application.Servers;
@@ -719,6 +720,33 @@ public class CertificateServer : ICertificateProvider
         }
 
         return x509Certs;
+    }
+
+    /// <summary>
+    /// Gets a Trusted Certificate's DER encoding, for export. A certificate registered by file path is read from that
+    /// file, exactly as connections read it; an uploaded one comes from its stored data, whether that was PEM or DER.
+    /// </summary>
+    /// <returns>The DER-encoded certificate, or null when it cannot be read: no stored data, a missing or unreadable
+    /// file, or a file that no longer holds a certificate.</returns>
+    /// <remarks>The bytes are always re-encoded from a parsed certificate, so an export can only ever return a
+    /// certificate, never whatever else may have been written to a registered path since.</remarks>
+    public async Task<byte[]?> GetDerEncodedDataAsync(TrustedCertificate certificate)
+    {
+        try
+        {
+            using var x509 = await LoadX509CertificateAsync(certificate);
+            return x509?.RawData;
+        }
+        catch (CryptographicException ex)
+        {
+            Log.Warning(ex, "Trusted certificate '{Name}' (ID: {Id}) could not be parsed for export", LogSanitiser.Sanitise(certificate.Name), certificate.Id);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Trusted certificate '{Name}' (ID: {Id}) could not be read for export", LogSanitiser.Sanitise(certificate.Name), certificate.Id);
+            return null;
+        }
     }
 
     /// <summary>
