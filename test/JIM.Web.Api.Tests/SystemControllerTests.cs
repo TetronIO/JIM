@@ -8,9 +8,11 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Operations;
 using JIM.Models.Scheduling;
+using JIM.Models.Security;
 using JIM.Models.Utility;
 using JIM.Utilities;
 using JIM.Web.Controllers.Api;
+using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -37,7 +39,8 @@ public class SystemControllerTests
         BuildController(
             int inProgressActivityCount,
             SystemResetResult? resetResult = null,
-            ServiceSettings? serviceSettings = null)
+            ServiceSettings? serviceSettings = null,
+            ClaimsPrincipal? caller = null)
     {
         var mockRepository = new Mock<IRepository>();
         var mockActivityRepo = new Mock<IActivityRepository>();
@@ -141,11 +144,11 @@ public class SystemControllerTests
             {
                 HttpContext = new DefaultHttpContext
                 {
-                    // Include the Metaverse Object id claim the authentication pipeline attaches, so the initiator
-                    // triad has a principal id (required for activity attribution); without it the reset activity
-                    // would fail validation.
-                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    // By default, a signed-in administrator carrying the Metaverse Object id claim the
+                    // authentication pipeline attaches, which is what the reset Activity is attributed to.
+                    User = caller ?? new ClaimsPrincipal(new ClaimsIdentity(new[]
                     {
+                        new Claim("sub", Guid.NewGuid().ToString()),
                         new Claim(Constants.BuiltInClaims.MetaverseObjectId, Guid.NewGuid().ToString()),
                         new Claim(ClaimTypes.Name, "test-admin")
                     }, "test"))
@@ -229,6 +232,43 @@ public class SystemControllerTests
         activityRepo.Verify(a => a.UpdateActivityAsync(It.Is<Activity>(act =>
             act.TargetOperationType == ActivityTargetOperationType.Reset &&
             act.Status == ActivityStatus.Complete)), Times.Once);
+    }
+
+    [Test]
+    public async Task ResetAsync_CalledWithAnApiKey_RecordsTheKeyAsTheInitiatorAsync()
+    {
+        // The claims the API key handler really issues; nothing else marks a request as made with a key.
+        var apiKey = new ApiKey { Id = Guid.NewGuid(), Name = "Infrastructure Key", KeyPrefix = "jim_ak_test" };
+        var caller = new ClaimsPrincipal(new ClaimsIdentity(
+            ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey), ApiKeyAuthenticationHandler.SchemeName));
+        var (controller, _, activityRepo, _) = BuildController(inProgressActivityCount: 0, caller: caller);
+
+        await controller.ResetAsync(new SystemResetRequest());
+
+        activityRepo.Verify(a => a.CreateActivityAsync(It.Is<Activity>(act =>
+            act.TargetOperationType == ActivityTargetOperationType.Reset &&
+            act.InitiatedByType == ActivityInitiatorType.ApiKey &&
+            act.InitiatedById == apiKey.Id &&
+            act.InitiatedByName == "Infrastructure Key")), Times.Once);
+    }
+
+    [Test]
+    public async Task ResetAsync_CallerHasNoJimIdentity_ReturnsUnauthorisedAndWipesNothingAsync()
+    {
+        // A caller who cannot be attributed must be refused before the wipe. Refusing only when the reset
+        // Activity is recorded, after the wipe, loses the data, tells the caller the reset was refused, and leaves
+        // no record of it.
+        var caller = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim("sub", "AAAAAAAAAAAAAAAAAAAAAIkzqFVrSaSaFHy782bbtaQ"),
+            new Claim(ClaimTypes.Name, "test-admin")
+        }, "test"));
+        var (controller, systemRepo, _, _) = BuildController(inProgressActivityCount: 0, caller: caller);
+
+        var result = await controller.ResetAsync(new SystemResetRequest());
+
+        Assert.That(result, Is.InstanceOf<UnauthorizedObjectResult>());
+        systemRepo.Verify(s => s.ResetSystemAsync(It.IsAny<bool>()), Times.Never);
     }
 
     [Test]

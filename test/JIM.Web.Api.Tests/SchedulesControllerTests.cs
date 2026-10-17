@@ -467,6 +467,61 @@ public class SchedulesControllerTests
         }
     }
 
+    [Test]
+    public async Task CreateAsync_CalledBySignedInUserWithAnOpaqueSubject_RecordsTheirMetaverseObjectAsync()
+    {
+        // Some identity providers issue opaque, pairwise subjects that are not GUIDs. The subject plays no part in
+        // attribution, so the write still succeeds and is recorded against the Metaverse Object.
+        var metaverseObjectId = Guid.NewGuid();
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(new List<Claim>
+                {
+                    new("sub", "AAAAAAAAAAAAAAAAAAAAAIkzqFVrSaSaFHy782bbtaQ"),
+                    new(Constants.BuiltInClaims.MetaverseObjectId, metaverseObjectId.ToString()),
+                    new("name", "Jay Example")
+                }, "Test"))
+            }
+        };
+        var created = await CreateCapturingScheduleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created.CreatedByType, Is.EqualTo(ActivityInitiatorType.User));
+            Assert.That(created.CreatedById, Is.EqualTo(metaverseObjectId));
+        }
+    }
+
+    [Test]
+    public async Task CreateAsync_CallerHasNoJimIdentity_ReturnsUnauthorisedAndCreatesNothingAsync()
+    {
+        // A principal the pipeline could not resolve to a Metaverse Object cannot be attributed, so the write is
+        // refused rather than recorded against a person with no id.
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(new List<Claim>
+                {
+                    new("sub", Guid.NewGuid().ToString()),
+                    new("name", "Jay Example")
+                }, "Test"))
+            }
+        };
+
+        var result = await _controller.CreateAsync(new CreateScheduleRequest
+        {
+            Name = "New Schedule",
+            TriggerType = ScheduleTriggerType.Manual,
+            Steps = new List<ScheduleStepRequest>()
+        });
+
+        Assert.That(result, Is.InstanceOf<UnauthorizedObjectResult>());
+        _mockSchedulingRepository.Verify(r => r.CreateScheduleAsync(It.IsAny<Schedule>()), Times.Never);
+    }
+
     private async Task<Schedule> CreateCapturingScheduleAsync()
     {
         Schedule? created = null;
