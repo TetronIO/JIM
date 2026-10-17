@@ -712,7 +712,10 @@ function Invoke-LDAPSearch {
             return $null
         }
 
-        return $result
+        # The paged search prints its control's cookie ("# pagedresults: cookie=") even with -LLL and no match, so
+        # without this a search that found nothing returned a line, and every caller read it as an entry. -LLL
+        # output carries no other comment lines.
+        return @($result | Where-Object { "$_" -notmatch '^#' })
     }
     catch {
         Write-Verbose "LDAP search exception: $_"
