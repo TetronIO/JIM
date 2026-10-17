@@ -7,9 +7,12 @@ using JIM.Application.Utilities;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
+using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -34,6 +37,11 @@ public partial class ConnectedSystemServer
     /// Failure mode is fast and hard: an exception propagates to the worker's dispatch boundary (which fails
     /// the Activity), the rule survives, still disabled with its deletion-in-progress reason, completed
     /// objects are consistent, and the deletion can be retried.
+    /// </para>
+    /// <para>
+    /// An object whose surviving contributor's scope cannot be decided is left as it was, with an error, and the
+    /// others are recalled (#2336); the rule is then not deleted, and the run fails with
+    /// <see cref="SyncRuleDeletionIncompleteException"/> so the deletion can be retried once the cause is corrected.
     /// </para>
     /// </summary>
     /// <param name="task">The queued task, carrying the Synchronisation Rule id and the Activity to report to.</param>
@@ -89,6 +97,17 @@ public partial class ConnectedSystemServer
                 clearedDetailMessage: $"Synchronisation Rule '{syncRule.Name}' is being deleted; the recalled attribute value(s) had no remaining contributor and were cleared.",
                 trackActivityProgress: true);
             derivedInputMarks.LogSummary();
+
+            // An object held back still carries values with this rule's provenance, which deleting the rule would sever
+            // (stranding them with nothing to recall them by). The rule stays, disabled, and the run fails with the
+            // reason; every other object's recall is persisted. Deleting the rule again finishes the held-back objects.
+            if (result.MetaverseObjectsHeldBack > 0)
+            {
+                Log.Warning("ExecuteSyncRuleDeletionRecallAsync: Synchronisation Rule {SyncRuleId}: {HeldBack} Metaverse Object(s) held back, " +
+                            "{Processed} processed; the rule is not deleted.",
+                    task.SyncRuleId, result.MetaverseObjectsHeldBack, result.MetaverseObjectsProcessed);
+                throw new SyncRuleDeletionIncompleteException(syncRule.Name, result.MetaverseObjectsHeldBack);
+            }
         }
 
         // FINAL step: delete the rule via the existing delete path (configuration snapshot, priority
@@ -184,6 +203,8 @@ public partial class ConnectedSystemServer
         var affectedMvoIds = affectedMetaverseObjectIds
             ?? await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(syncRuleId);
         var csoChangeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+        bool IsSurvivorInScope(JIM.Models.Staging.ConnectedSystemObject survivor, SyncRule rule) =>
+            Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule);
 
         foreach (var batch in affectedMvoIds.Chunk(batchSize))
         {
@@ -231,6 +252,22 @@ public partial class ConnectedSystemServer
                     }
                 }
 
+                // Survivor-scope pre-flight (#2336), before the object is touched: a surviving contributor whose scope
+                // cannot be decided might or might not take a value over, so the object is left exactly as it was, with
+                // an error naming the criterion, rather than recalled on a guess. Its values keep the rule's provenance,
+                // so the caller can finish the recall once the scope can be decided.
+                var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
+                if (await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
+                        mvo, recalledValues, recallScope, priorityContext, Application.SyncRepo, IsSurvivorInScope,
+                        survivorScopeAnswers) is { } undecidable)
+                {
+                    executionItems.Add(BuildHeldBackExecutionItem(mvo, undecidable.Message));
+                    result.MetaverseObjectsHeldBack++;
+                    Log.Warning("RecallSyncRuleContributedValuesAsync: MVO {MvoId} held back; a surviving contributor's scope could not be decided: {Message}",
+                        mvo.Id, LogSanitiser.Sanitise(undecidable.Message));
+                    continue;
+                }
+
                 mvo.PendingAttributeValueRemovals.AddRange(recalledValues);
 
                 // Re-elect any surviving contributor for the recalled attributes: with the recalled rule's
@@ -239,7 +276,7 @@ public partial class ConnectedSystemServer
                 // nothing and are genuinely cleared.
                 await ContributorReElectionService.ReElectSurvivingContributorsAsync(
                     mvo, recalledValues, recallScope, priorityContext, syncEngine, Application.SyncRepo,
-                    (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+                    ContributorReElectionService.AnsweringFrom(survivorScopeAnswers, IsSurvivorInScope),
                     survivorObjectTypes, expressionEvaluator);
 
                 // Capture pending changes BEFORE applying (which clears the pending lists), additions
@@ -390,6 +427,19 @@ public partial class ConnectedSystemServer
             .Select(g => $"{g.Key}:{g.Count()}"));
         return item;
     }
+
+    /// <summary>
+    /// Builds the per-object Run Profile Execution Item for an object the recall left as it was because a surviving
+    /// contributor's scope could not be decided (#2336): a ScopingCriterionFailed error naming the criterion.
+    /// </summary>
+    private static ActivityRunProfileExecutionItem BuildHeldBackExecutionItem(MetaverseObject mvo, string undecidable) => new()
+    {
+        Id = Guid.NewGuid(),
+        ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
+        ErrorMessage = $"{undecidable} Metaverse Object {mvo.Id} was left as it was, with the values the Synchronisation Rule contributed.",
+        DisplayNameSnapshot = mvo.NameOrId,
+        ObjectTypeSnapshot = mvo.Type?.Name
+    };
 
     /// <summary>
     /// Builds the per-object Run Profile Execution Item for the #1570 preservation gate: a single

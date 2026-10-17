@@ -243,7 +243,11 @@ public sealed class MockScimProvider
     /// </summary>
     private HttpResponseMessage Schemas()
     {
-        var schemas = new List<ScimSchema> { ScimCoreSchemas.User(), ScimCoreSchemas.Group(), ScimCoreSchemas.EnterpriseUser() };
+        var group = ScimCoreSchemas.Group();
+        if (Options.ReturnsGroupMembersOnlyOnRequest)
+            group.Attributes.Single(a => a.Name == "members").Returned = "request";
+
+        var schemas = new List<ScimSchema> { ScimCoreSchemas.User(), group, ScimCoreSchemas.EnterpriseUser() };
         if (Options.PublishesCustomUserExtension)
             schemas.Add(CustomUserExtension());
 
@@ -311,7 +315,9 @@ public sealed class MockScimProvider
         if (Options.RepeatsTheLastResourceOnEachPage && offset > 0)
             offset--;
 
-        var page = matching.Skip(offset).Take(PageSize(parameters)).ToList();
+        var page = Options.ReturnsEmptyPagesAfterTheFirst && offset > 0
+            ? []
+            : matching.Skip(offset).Take(PageSize(parameters)).ToList();
 
         return Json(ListResponse(matching.Count, startIndex, page, parameters, nextCursor: null));
     }
@@ -355,7 +361,8 @@ public sealed class MockScimProvider
         string? nextCursor)
     {
         var excluded = ReadExcludedAttributes(parameters);
-        var resources = page.Select(resource => Render(resource, excluded)).ToArray();
+        var requested = ReadRequestedAttributes(parameters);
+        var resources = page.Select(resource => Render(resource, excluded, requested)).ToArray();
 
         // Not an envelope at all: the client must fail rather than read this as an empty page.
         if (Options.ReturnsBareArray)
@@ -379,14 +386,18 @@ public sealed class MockScimProvider
         return JsonSerializer.Serialize(body);
     }
 
-    private static Dictionary<string, object?> Render(MockScimResource resource, HashSet<string> excluded)
+    /// <param name="requested">
+    /// The attributes a request named in <c>attributes</c>, or null where it named none. Named, only those (and
+    /// <c>id</c>) come back; an attribute returned only on request comes back only when named.
+    /// </param>
+    private Dictionary<string, object?> Render(MockScimResource resource, HashSet<string> excluded, HashSet<string>? requested = null)
     {
         var rendered = new Dictionary<string, object?>(StringComparer.Ordinal) { ["id"] = resource.Id };
 
-        foreach (var attribute in resource.Attributes.Where(a => !excluded.Contains(a.Key)))
+        foreach (var attribute in resource.Attributes.Where(a => !excluded.Contains(a.Key) && IsReturned(resource, a.Key, requested)))
             rendered[attribute.Key] = attribute.Value;
 
-        if (!excluded.Contains("meta"))
+        if (!excluded.Contains("meta") && (requested == null || requested.Contains("meta")))
         {
             rendered["meta"] = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
@@ -397,6 +408,16 @@ public sealed class MockScimProvider
         }
 
         return rendered;
+    }
+
+    private bool IsReturned(MockScimResource resource, string attribute, HashSet<string>? requested)
+    {
+        if (requested != null)
+            return requested.Contains(attribute);
+
+        return !(Options.ReturnsGroupMembersOnlyOnRequest
+                 && resource.ResourceType == "Group"
+                 && string.Equals(attribute, "members", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -511,6 +532,9 @@ public sealed class MockScimProvider
         if (Options.RejectsDuplicateUserName && HoldsUserName(resourceType, body["userName"]?.ToString()))
             return Error(HttpStatusCode.Conflict, ScimErrorTypes.Uniqueness, Options.UniquenessDetail);
 
+        if (RefusesMembers(resourceType, body))
+            return Error(HttpStatusCode.BadRequest, ScimErrorTypes.InvalidSyntax, "Managing members on updates are not supported");
+
         var resource = new MockScimResource
         {
             Id = $"generated-{++_resourcesCreated}",
@@ -527,6 +551,15 @@ public sealed class MockScimProvider
         response.StatusCode = HttpStatusCode.Created;
         return response;
     }
+
+    private bool RefusesMembers(string resourceType, Dictionary<string, JsonNode?> body) =>
+        Options.RejectsMembersOnGroupWrite
+        && resourceType == "Group"
+        && body.TryGetValue("members", out var members)
+        && members is JsonArray { Count: > 0 };
+
+    private static int CountPatchOperations(HttpRequestMessage request) =>
+        ReadBody(request)?.GetValueOrDefault("Operations") is JsonArray operations ? operations.Count : 0;
 
     private bool HoldsUserName(string resourceType, string? userName) =>
         userName != null && Resources.Any(resource =>
@@ -568,6 +601,9 @@ public sealed class MockScimProvider
             if (body == null)
                 return Error(HttpStatusCode.BadRequest, ScimErrorTypes.InvalidSyntax, "The request body was not valid JSON.");
 
+            if (RefusesMembers(resourceType, body))
+                return Error(HttpStatusCode.BadRequest, ScimErrorTypes.InvalidSyntax, "Managing members on updates are not supported");
+
             resource.Attributes.Clear();
             foreach (var member in body.Where(m => !string.Equals(m.Key, "schemas", StringComparison.OrdinalIgnoreCase)
                                                    && !string.Equals(m.Key, "id", StringComparison.OrdinalIgnoreCase)
@@ -576,6 +612,9 @@ public sealed class MockScimProvider
                 resource.Attributes[member.Key] = member.Value?.DeepClone();
             }
         }
+
+        if (request.Method == HttpMethod.Patch && Options.MaximumPatchOperations is { } maximum && CountPatchOperations(request) > maximum)
+            return Error(HttpStatusCode.BadRequest, ScimErrorTypes.TooMany, $"PATCH request exceeds maximum allowed number of {maximum} operations");
 
         if (request.Method == HttpMethod.Patch)
             ApplyPatchOperations(resource, request);
@@ -889,6 +928,21 @@ public sealed class MockScimProvider
                && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : null;
+    }
+
+    private static HashSet<string>? ReadRequestedAttributes(Dictionary<string, string> parameters)
+    {
+        if (!parameters.TryGetValue("attributes", out var value) || string.IsNullOrWhiteSpace(value))
+            return null;
+
+        // Only the top-level member is honoured: a sub-attribute asks for the attribute it belongs to, and an extension
+        // attribute's URN-qualified name for the extension's own member, which is all this mock needs to decide what to
+        // leave out.
+        return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .SelectMany(name => name.StartsWith("urn:", StringComparison.OrdinalIgnoreCase)
+                ? [name, name[..name.LastIndexOf(':')]]
+                : new[] { name.Split('.')[0] })
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static HashSet<string> ReadExcludedAttributes(Dictionary<string, string> parameters)

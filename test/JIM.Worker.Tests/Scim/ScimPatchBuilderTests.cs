@@ -246,4 +246,56 @@ public class ScimPatchBuilderTests
         Assert.That(operation.Path, Is.EqualTo("members[value eq \"a\\\"b\\\\\"]"));
     }
     #endregion
+    #region merging adds
+    [Test]
+    public void Build_SeveralMembersAdded_AreOneOperationCarryingEveryMember()
+    {
+        // #2094: providers cap the operations in a request, not the values in one.
+        var changes = new List<ScimAttributeChange>
+        {
+            new("members", ScimPatchOperations.Add, "a"),
+            new("members", ScimPatchOperations.Add, "b"),
+            new("members", ScimPatchOperations.Add, "c")
+        };
+
+        var operations = ScimPatchBuilder.Build(changes, GroupSchema()).Operations;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(operations, Has.Count.EqualTo(1));
+            Assert.That(operations[0].Value!.AsArray().Select(m => m!["value"]!.GetValue<string>()), Is.EqualTo(new[] { "a", "b", "c" }));
+        }
+    }
+
+    [Test]
+    public void Build_AddsSeparatedByARemovalOfTheSameAttribute_AreNotMergedAcrossIt()
+    {
+        // Merging the last add into the first would apply it before the removal, changing the outcome.
+        var changes = new List<ScimAttributeChange>
+        {
+            new("members", ScimPatchOperations.Add, "a"),
+            new("members", ScimPatchOperations.Remove, "a"),
+            new("members", ScimPatchOperations.Add, "a")
+        };
+
+        var operations = ScimPatchBuilder.Build(changes, GroupSchema()).Operations;
+
+        Assert.That(operations.Select(o => o.Op), Is.EqualTo(new[] { "add", "remove", "add" }));
+    }
+
+    [Test]
+    public void Build_AddsSeparatedByAChangeToAnotherAttribute_AreStillMerged()
+    {
+        var changes = new List<ScimAttributeChange>
+        {
+            new("members", ScimPatchOperations.Add, "a"),
+            new("displayName", ScimPatchOperations.Replace, "Engineers"),
+            new("members", ScimPatchOperations.Add, "b")
+        };
+
+        var operations = ScimPatchBuilder.Build(changes, GroupSchema()).Operations;
+
+        Assert.That(operations.Select(o => o.Path), Is.EqualTo(new[] { "members", "displayName" }));
+    }
+    #endregion
 }

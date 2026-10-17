@@ -1459,7 +1459,7 @@ public abstract class SyncTaskProcessorBase
             // values alongside its own when it calls ApplyPendingMetaverseObjectAttributeChanges. Clearing
             // here, not just discarding the reference, keeps "the MVO is left untouched" true for every CSO
             // that shares it for the rest of the page.
-            ClearStalePendingAttributeChanges(connectedSystemObject.MetaverseObject);
+            ClearStalePendingAttributeChanges(connectedSystemObject);
 
             Log.Error(expressionEx, "ProcessActiveConnectedSystemObjectAsync: Expression evaluation error during pass 2 for {CsoId}. Target attribute '{Attribute}', expression '{Expression}'.",
                 connectedSystemObject.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
@@ -1480,7 +1480,7 @@ public abstract class SyncTaskProcessorBase
 
             // See the identical guard in the ExpressionEvaluationError catch above: the MVO is the page's
             // shared canonical instance, so a later same-page joiner must not inherit this CSO's leftovers.
-            ClearStalePendingAttributeChanges(connectedSystemObject.MetaverseObject);
+            ClearStalePendingAttributeChanges(connectedSystemObject);
 
             Log.Warning("ProcessActiveConnectedSystemObjectAsync: Expression not evaluated for {CsoId}; no value for {MissingInputs}. Target attribute '{Attribute}', expression '{Expression}'.",
                 connectedSystemObject.Id, LogSanitiser.Sanitise(string.Join(", ", missingInputEx.MissingInputs)),
@@ -1499,7 +1499,7 @@ public abstract class SyncTaskProcessorBase
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
             // As for the expression errors above: anything staged on a shared Metaverse Object is never applied.
-            ClearStalePendingAttributeChanges(connectedSystemObject.MetaverseObject);
+            ClearStalePendingAttributeChanges(connectedSystemObject);
 
             Log.Warning("ProcessActiveConnectedSystemObjectAsync: Scope of {CsoId} could not be decided: {Message}",
                 connectedSystemObject.Id, LogSanitiser.Sanitise(scopingEx.Message));
@@ -1528,10 +1528,19 @@ public abstract class SyncTaskProcessorBase
     /// the instance was simply discarded. With the page identity map (#1612), the MVO is the one shared
     /// canonical instance for its Id, so a LATER Connected System Object in the same page that joins the
     /// same MVO and calls <c>ApplyPendingMetaverseObjectAttributeChanges</c> would otherwise silently apply
-    /// this failed CSO's stale pending values alongside its own. A no-op when the CSO was not joined.
+    /// this failed CSO's stale pending values alongside its own.
+    /// <para>
+    /// It also withdraws the CSO from the page's deferred reference pass, which an error raised after the
+    /// ordinary Attribute Flow (a withdrawal's re-election, a derived flow) would otherwise leave it queued for:
+    /// that pass re-flows the object's mappings and applies what they stage, so the object the error says was
+    /// left as it was would have its Metaverse Object changed anyway (#2336).
+    /// </para>
     /// </summary>
-    private static void ClearStalePendingAttributeChanges(MetaverseObject? mvo)
+    private void ClearStalePendingAttributeChanges(ConnectedSystemObject connectedSystemObject)
     {
+        _pendingReferenceAttributeProcessing.RemoveAll(pending => pending.Cso == connectedSystemObject);
+
+        var mvo = connectedSystemObject.MetaverseObject;
         if (mvo == null)
             return;
 
@@ -6976,7 +6985,8 @@ public abstract class SyncTaskProcessorBase
     /// Flow).
     /// </returns>
     protected async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ReElectSurvivingContributorsAsync(
-        MetaverseObject mvo, List<MetaverseObjectAttributeValue> recalledValues, ConnectedSystemObject leaver)
+        MetaverseObject mvo, List<MetaverseObjectAttributeValue> recalledValues, ConnectedSystemObject leaver,
+        IReadOnlyDictionary<(Guid CsoId, int SyncRuleId), bool>? survivorScopeAnswers = null)
     {
         var priorityContext = _attributePriorityContext;
         if (priorityContext == null || mvo.Type == null)
@@ -6999,7 +7009,9 @@ public abstract class SyncTaskProcessorBase
             priorityContext,
             _syncEngine,
             _syncRepo,
-            _syncServer.IsCsoInScopeForImportRule,
+            survivorScopeAnswers == null
+                ? _syncServer.IsCsoInScopeForImportRule
+                : ContributorReElectionService.AnsweringFrom(survivorScopeAnswers, _syncServer.IsCsoInScopeForImportRule),
             _objectTypes,
             _expressionEvaluator,
             resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesAsync(leaver, resolvedMvo));
@@ -7143,6 +7155,22 @@ public abstract class SyncTaskProcessorBase
                 var remainingConnectedSystemIds = await _syncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvoId);
                 remainingConnectedSystemIds.Remove(_connectedSystem.Id);
 
+                // Survivor-scope pre-flight (#2336), before the Deletion Rule or the recall changes anything: a surviving
+                // contributor whose scope cannot be decided stops this object, as an undecidable scope of its own does. The
+                // throw reaches ProcessActiveConnectedSystemObjectAsync's ScopingCriterionFailedException catch, which
+                // records the error and leaves the object, its join and its Metaverse Object as they were.
+                var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
+                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && _attributePriorityContext != null && mvo.Type != null &&
+                    await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
+                        mvo,
+                        mvo.AttributeValues.Where(av => av.ContributedBySystemId == _connectedSystem.Id).ToList(),
+                        ContributorRecallScope.ForObsoletingConnectedSystemObject(connectedSystemObject),
+                        _attributePriorityContext,
+                        _syncRepo,
+                        _syncServer.IsCsoInScopeForImportRule,
+                        survivorScopeAnswers) is { } undecidable)
+                    throw undecidable;
+
                 // Evaluate the MVO deletion rule BEFORE attribute recall (#390 optimisation).
                 // If the MVO will be deleted immediately, attribute recall is nugatory work —
                 // the attributes, MVO update, and export evaluations would all be discarded
@@ -7187,7 +7215,7 @@ public abstract class SyncTaskProcessorBase
                     // (Unique Value Generation, #242, Phase 2 work package J) is carried back on the result so
                     // the caller can record it as a GeneratedValueAssigned child outcome,
                     // exactly as the ordinary Attribute Flow path does.
-                    generatedValueOutcomes = await ReElectSurvivingContributorsAsync(mvo, contributedAttributes, connectedSystemObject);
+                    generatedValueOutcomes = await ReElectSurvivingContributorsAsync(mvo, contributedAttributes, connectedSystemObject, survivorScopeAnswers);
 
                     _remainingImportSourceEvaluator ??= new RemainingImportSourceEvaluator(_syncRepo);
                     var noImportSourceRemains = mvo.Type != null

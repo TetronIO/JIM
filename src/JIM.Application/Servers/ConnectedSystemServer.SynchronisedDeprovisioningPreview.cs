@@ -109,7 +109,9 @@ public partial class ConnectedSystemServer
         var outcome = new DeprovisioningPreviewProgress();
 
         var pass = new DeprovisioningPreviewPass(connectedSystemId, connectedSystem.Name, guard, systemSyncRules, priorityContext,
-            syncEngine, expressionEvaluator, recallScope, remainingImportSourceEvaluator, survivorObjectTypes, exportEvaluationCache);
+            syncEngine, expressionEvaluator, recallScope, remainingImportSourceEvaluator, survivorObjectTypes, exportEvaluationCache,
+            FallibleSurvivingRules(allSyncRules, connectedSystemId, SyncRuleDirection.Import),
+            FallibleSurvivingRules(allSyncRules, connectedSystemId, SyncRuleDirection.Export));
 
         // Pass A: per-object obsoletion, keyset-paged in ascending id order as the real run pages.
         var knownTotal = await guard.GetConnectedSystemObjectCountAsync(connectedSystemId);
@@ -128,8 +130,11 @@ public partial class ConnectedSystemServer
         }
 
         // Pass B: the residue pass, per import rule in ascending id order, skipping a rule whose Object Type keeps its
-        // values by policy exactly as the real residue pass does.
-        foreach (var importRule in systemSyncRules.Where(rule => rule.Direction == SyncRuleDirection.Import).OrderBy(rule => rule.Id))
+        // values by policy exactly as the real residue pass does. The run never reaches it while it holds an object back
+        // (#2336), so neither does the preview.
+        foreach (var importRule in systemSyncRules
+                     .Where(rule => rule.Direction == SyncRuleDirection.Import && outcome.HeldBack.Count == 0)
+                     .OrderBy(rule => rule.Id))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -176,6 +181,9 @@ public partial class ConnectedSystemServer
         // the same working copy, as they act on the same instance in the real run.
         var mvoClones = new Dictionary<Guid, MetaverseObject>();
 
+        // The run's pre-flight answers for this page, which re-election then reads, as the run's do.
+        var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
+
         foreach (var original in page)
         {
             var cso = ObsoletionPreviewClone.Of(original, metaverseObject: null, mvoClones);
@@ -187,6 +195,17 @@ public partial class ConnectedSystemServer
             // on exactly the rows that matter most.
             var objectName = original.MetaverseObject?.NameOrId ?? mvo?.NameOrId;
 
+            // The run's own pre-flight (#2336), on the untouched original and through the guard: an object it holds back is
+            // errored and left as it was, so nothing else is proposed for it.
+            if (await DescribeUndecidableScopeAsync(original, pass.FallibleImportRules, pass.FallibleExportRules, survivorScopeAnswers,
+                    pass.Guard) is { } undecidableBeforehand)
+            {
+                progress.HeldBack.Add(original.Id);
+                if (mvo != null && objectName != null)
+                    deltas.Add(WouldFailForUndecidableScope(mvo, objectName, undecidableBeforehand, original.Id, pass.ConnectedSystemId));
+                continue;
+            }
+
             var result = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
                 cso,
                 pass.SystemSyncRules,
@@ -195,7 +214,8 @@ public partial class ConnectedSystemServer
                 pass.RemainingImportSourceEvaluator,
                 pass.SyncEngine,
                 pass.Guard,
-                (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+                ContributorReElectionService.AnsweringFrom(survivorScopeAnswers,
+                    (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule)),
                 pass.SurvivorObjectTypes,
                 pass.ExpressionEvaluator,
                 () => new ActivityRunProfileExecutionItem(),
@@ -204,8 +224,19 @@ public partial class ConnectedSystemServer
                 recordPreRecallAttributeSnapshot: _ => { },
                 leaveSurvivorsAsFound: true);
 
+            // Held back by the core's own survivor-scope pre-flight, as the run would be.
+            var undecidable = result.UndecidableSurvivorScope;
+            if (undecidable != null)
+                progress.HeldBack.Add(original.Id);
+
             if (mvo == null || objectName == null)
                 continue;
+
+            if (undecidable != null)
+            {
+                deltas.Add(WouldFailForUndecidableScope(mvo, objectName, undecidable.Message, original.Id, pass.ConnectedSystemId));
+                continue;
+            }
 
             if (result.MvoDeletionDecision is { Fate: not MvoDeletionFate.NotDeleted } decision && progress.EligibilityReported.Add(mvo.Id))
             {
@@ -289,10 +320,20 @@ public partial class ConnectedSystemServer
             if (recalledValues.Count == 0)
                 continue;
 
+            // The recall's survivor-scope pre-flight (#2336), as RecallSyncRuleContributedValuesAsync runs it.
+            var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
+            bool IsSurvivorInScope(ConnectedSystemObject survivor, SyncRule rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule);
+            if (await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
+                    mvo, recalledValues, pass.RecallScope, pass.PriorityContext, pass.Guard, IsSurvivorInScope, survivorScopeAnswers) is { } undecidable)
+            {
+                deltas.Add(WouldFailForUndecidableScope(mvo, objectName, undecidable.Message, connectedSystemObjectId: null, connectedSystemId: null));
+                continue;
+            }
+
             mvo.PendingAttributeValueRemovals.AddRange(recalledValues);
             await ContributorReElectionService.ReElectSurvivingContributorsAsync(
                 mvo, recalledValues, pass.RecallScope, pass.PriorityContext, pass.SyncEngine, pass.Guard,
-                (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+                ContributorReElectionService.AnsweringFrom(survivorScopeAnswers, IsSurvivorInScope),
                 pass.SurvivorObjectTypes, pass.ExpressionEvaluator, leaveSurvivorsAsFound: true);
 
             var additions = mvo.PendingAttributeValueAdditions.ToList();
@@ -561,7 +602,26 @@ public partial class ConnectedSystemServer
         ContributorRecallScope RecallScope,
         RemainingImportSourceEvaluator RemainingImportSourceEvaluator,
         List<ConnectedSystemObjectType> SurvivorObjectTypes,
-        ExportEvaluationCache ExportEvaluationCache);
+        ExportEvaluationCache ExportEvaluationCache,
+        List<SyncRule> FallibleImportRules,
+        List<SyncRule> FallibleExportRules);
+
+    /// <summary>
+    /// The delta for an object the run would hold back because a scope it depends on cannot be decided (#2250, #2336): the
+    /// run records a ScopingCriterionFailed error for it and changes nothing, so the preview reports it as one that would
+    /// fail, with the reason.
+    /// </summary>
+    private static PreviewDelta WouldFailForUndecidableScope(MetaverseObject mvo, string objectName, string undecidable,
+        Guid? connectedSystemObjectId, int? connectedSystemId) =>
+        new(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail,
+            ObjectDisplayName: objectName,
+            ObjectTypeName: mvo.Type?.Name,
+            MetaverseObjectTypeId: mvo.Type?.Id,
+            MetaverseObjectId: mvo.Id,
+            ConnectedSystemObjectId: connectedSystemObjectId,
+            ConnectedSystemId: connectedSystemId,
+            AttributeName: PreviewScopeAnswer.AttributeName,
+            NewValue: new PreviewScopeAnswer(false, undecidable).Describe());
 
     /// <summary>
     /// What the per-object pass decided per Metaverse Object, kept as ids only so a preview of a large system holds no
@@ -580,5 +640,11 @@ public partial class ConnectedSystemServer
 
         /// <summary>Objects already reported as becoming eligible for deletion, so none is reported twice.</summary>
         public HashSet<Guid> EligibilityReported { get; } = [];
+
+        /// <summary>
+        /// Connected System Objects the run would hold back, because a surviving contributor's scope cannot be decided
+        /// (#2336). The run stops before its residue pass when any is held back, so the preview does too.
+        /// </summary>
+        public HashSet<Guid> HeldBack { get; } = [];
     }
 }

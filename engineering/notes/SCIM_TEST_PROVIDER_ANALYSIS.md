@@ -96,3 +96,21 @@ Given that synchronisation integrity is paramount and re-importing an unchanged 
 
 - [`python-scim/scim2-tester`](https://github.com/python-scim/scim2-tester) (Apache-2.0, pip): drives discovery, CRUD and PATCH conformance checks; designed for CI. Useful for asserting our mock is itself spec-conformant, so it does not drift into testing a fiction.
 - Apache SCIMple ships a `scim-compliance-tests` Maven module usable against any server.
+
+## Addendum (2026-10-17): Keycloak 26.8.0
+
+The "preview quality, disabled by default" description above no longer holds. Keycloak 26.8.0 (1 October 2026) made the built-in SCIM API supported and enabled by default, switched on per realm (Realm settings > General > SCIM API), at `https://<host>/realms/<realm>/scim/v2`. That made it a provisioning target worth supporting, and [#2094](https://github.com/TetronIO/JIM/issues/2094) fixed the connector against it. A probe of `quay.io/keycloak/keycloak:26.8` on 2026-10-17 confirmed the behaviours that drove the fixes:
+
+| Behaviour | What JIM does |
+|---|---|
+| `/Schemas` publishes Group `members`, User `groups` and User `emails` as `complex` with no `subAttributes` (User `name` has them). Not in the #2094 review; found by running the connector against it. A complex attribute with nothing inside flattened to nothing, so the Connected System had no membership attribute at all. | Composition fills an empty core complex attribute's sub-attributes from the RFC 7643 definition, keeping the provider's own characteristics, and warns at schema import. |
+| A Group's `members` (and a User's `groups`) is `returned: request`; it comes back only when named in `attributes`. | Import names every selected attribute, plus `id`, `externalId` and `meta`, whenever one is `returned: request`. |
+| A Group POST or PUT carrying members is refused, 400 `invalidSyntax` "Managing members on updates are not supported"; an empty `members` is accepted. | Where PATCH is advertised, a create posts without multi-valued references and adds them by PATCH; a failed follow-up PATCH still records the create's `id`. |
+| PATCH is capped at 100 operations, 400 `tooMany`, not advertised. One operation carrying many member values is accepted. | Adds to one attribute merge into one operation; at most 100 operations per request, halving on `tooMany`. |
+| `meta.lastModified` does not move on a Group SCIM PATCH (confirmed: a member add left it unchanged), nor on non-SCIM edits. | Recognised from the `/realms/<realm>/scim/v2` path (Base URL or `ServiceProviderConfig` `meta.location`; there is no product marker in any discovery document or response header), and Delta Import reads everything. |
+| `totalResults` is accurate: the client's own service account is hidden and not counted (4 users listed, `totalResults` 4). | An empty index-paged page below `totalResults` now fails the run; this does not trip on Keycloak. |
+| `userName` and email are stored in lower case. | Documented: lowercase them in Attribute Flows. |
+| A write to a user holding a `realm-management` role is 403 with no detail; listing returns it with only `userName`. | 403 message tells the administrator to scope protected objects out. |
+| A path-only `remove` of `members`, and a `replace` of `members` with `[]`, both answer 200 and change nothing. Only a filtered `remove` (`members[value eq "..."]`) removes a member. | JIM removes members one at a time already; `RemoveAll` is now sent as the RFC's path-only remove, which still does nothing on Keycloak. Documented as a Keycloak limitation. |
+
+`filter.maxResults` is advertised as 100. Setup notes (confidential client, `manage-users` in both scope and service account roles, audience mapper on the exact Base URL as the frontend hostname gives it) are in `docs/connectors/jim-scim-connector-keycloak.md`.

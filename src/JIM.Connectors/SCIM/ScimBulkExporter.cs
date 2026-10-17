@@ -68,7 +68,7 @@ internal sealed class ScimBulkExporter
         var batches = Batch(operations, out var oversized);
 
         // An operation too large for any bulk request is not too large for a request of its own: the
-        // limit is the bulk endpoint's, not the provider's.
+        // limit is the bulk endpoint's, not the provider's. The same goes for one taking several requests.
         // A cancelled run sends nothing more, and reports what it did not send as not attempted; a request already under
         // way is not handed the run's token, so it finishes and its outcome is recorded (#2083).
         foreach (var operation in oversized)
@@ -84,7 +84,7 @@ internal sealed class ScimBulkExporter
                 results[index] = result;
         }
 
-        _logger.Debug("SCIM export: sent {OperationCount} operation(s) as {BatchCount} bulk request(s), plus {OversizedCount} sent individually for exceeding the bulk payload limit.",
+        _logger.Debug("SCIM export: sent {OperationCount} operation(s) as {BatchCount} bulk request(s), plus {OversizedCount} sent individually for exceeding the bulk payload limit or taking several requests.",
             operations.Count, batches.Count, oversized.Count);
 
         return results;
@@ -97,7 +97,7 @@ internal sealed class ScimBulkExporter
     /// exceeding one fails every change in it rather than merely being impolite.
     /// </summary>
     /// <param name="oversized">
-    /// Operations no batch can hold, because one alone exceeds the payload limit.
+    /// Operations no batch can hold, because one alone exceeds the payload limit or takes several requests.
     /// </param>
     private List<List<ScimBulkExportOperation>> Batch(IReadOnlyList<ScimBulkExportOperation> operations, out List<ScimBulkExportOperation> oversized)
     {
@@ -121,7 +121,10 @@ internal sealed class ScimBulkExporter
             // The separator between this operation and the one before it inside the Operations array.
             var operationSize = MeasureBytes(ToBulkOperation(operation)) + 1;
 
-            if (payloadBudget.HasValue && envelopeSize + operationSize > payloadBudget.Value)
+            // A change taking several requests (a create with members to add afterwards, a PATCH over the per-request
+            // operation limit) cannot be one operation of a bulk request, so it travels on its own like an oversized one.
+            if (operation.Operation.RequiresSeveralRequests
+                || (payloadBudget.HasValue && envelopeSize + operationSize > payloadBudget.Value))
             {
                 oversized.Add(operation);
                 continue;
