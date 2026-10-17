@@ -1662,6 +1662,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             Results = results
         };
 
+        // A keyset caller pages until a page comes back empty (#2092): the count it passed was taken when the run
+        // started, and rows can enter the set after it, so a page beyond it is not "a page that doesn't exist".
+        if (afterId.HasValue)
+            return pagedResultSet;
+
         if (page == 1 && pagedResultSet.TotalPages == 0)
             return pagedResultSet;
 
@@ -1755,12 +1760,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
         // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         //
-        // We check Created, LastUpdated AND the derived-input mark because:
-        // - Created > watermark: Captures newly created CSOs that haven't been modified yet
-        // - LastUpdated > watermark: Captures existing CSOs that have been modified
+        // We check the two marks AND Created/LastUpdated because:
+        // - SynchronisationPending (#2092): set by every writer with the change it announces and cleared only by the
+        //   synchronisation that processed the object, under the row version its load read. This is what makes the
+        //   selection commit-order safe: a change committed while a run was in flight carries a timestamp below the
+        //   watermark that run then wrote, but keeps its mark. Served by the partial index
+        //   IX_ConnectedSystemObjects_ConnectedSystemId_SynchronisationPending.
         // - DerivedInputChangePending (#1750): an unchanged CSO whose Metaverse-Derived Attribute Flow input was
         //   changed by another system's synchronisation; without it a delta would never re-derive the value.
         //   Served by the partial index IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending.
+        // - Created/LastUpdated > watermark: belt and braces for any writer that misses the mark, and for objects
+        //   written before the mark existed.
         // Order by Id for consistent pagination.
         // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
         // must identity-fix with already-tracked instances from the Connected System/Synchronisation Rule queries.
@@ -1770,9 +1780,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
-                         (cso.Created > modifiedSince ||
-                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
-                          cso.DerivedInputChangePending))
+                         (cso.SynchronisationPending ||
+                          cso.DerivedInputChangePending ||
+                          cso.Created > modifiedSince ||
+                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
             .OrderBy(cso => cso.Id);
 
         // Get count with lightweight query (no includes)
@@ -1780,9 +1791,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var grossCount = knownTotalCount
             ?? await Repository.Database.ConnectedSystemObjects
                 .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId &&
-                                  (cso.Created > modifiedSince ||
-                                   (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
-                                   cso.DerivedInputChangePending));
+                                  (cso.SynchronisationPending ||
+                                   cso.DerivedInputChangePending ||
+                                   cso.Created > modifiedSince ||
+                                   (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
 
         // Keyset cursor (see ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync): delta sync deletes each
         // page's obsolete CSOs at the page boundary, so an OFFSET into the shrinking modified set skips rows. The
@@ -1806,6 +1818,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             CurrentPage = page,
             Results = results
         };
+
+        // A keyset caller pages until a page comes back empty (#2092): the count it passed was taken when the run
+        // started, and rows can enter the set after it, so a page beyond it is not "a page that doesn't exist".
+        if (afterId.HasValue)
+            return pagedResultSet;
 
         if (page == 1 && pagedResultSet.TotalPages == 0)
             return pagedResultSet;
@@ -2060,13 +2077,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="modifiedSince">Only count CSOs where Created or LastUpdated is greater than this timestamp.</param>
     public async Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
     {
-        // Count CSOs that are newly created, modified since the watermark, or marked for re-evaluation because a
-        // Metaverse-Derived Attribute Flow input changed elsewhere (#1750). Must match the page query exactly.
+        // Count CSOs that are marked pending synchronisation (#2092), marked for re-evaluation because a
+        // Metaverse-Derived Attribute Flow input changed elsewhere (#1750), or created or modified since the watermark.
+        // Must match the page query exactly. The count is the run's progress estimate only: the run pages until a page
+        // comes back empty, so objects entering the selection mid-run are not cut off by it.
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso =>
             cso.ConnectedSystemId == connectedSystemId &&
-            (cso.Created > modifiedSince ||
-             (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
-             cso.DerivedInputChangePending));
+            (cso.SynchronisationPending ||
+             cso.DerivedInputChangePending ||
+             cso.Created > modifiedSince ||
+             (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
     }
 
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
@@ -3322,18 +3342,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var ids = connectedSystemObjectIds.ToArray();
 
         // A narrow status-mark update (exempt from the bulk column-list rule): only Normal-status rows flip, so
-        // re-running an interrupted removal never touches objects the sync pipeline is already draining.
+        // re-running an interrupted removal never touches objects the sync pipeline is already draining. The obsoletion
+        // is a change synchronisation must process, so it sets the synchronisation-pending mark in the same statement
+        // (#2092).
         var updated = await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""ConnectedSystemObjects""
-              SET ""Status"" = {0}, ""LastUpdated"" = {1}
+              SET ""Status"" = {0}, ""LastUpdated"" = {1}, ""SynchronisationPending"" = true
               WHERE ""Id"" = ANY({2}) AND ""Status"" = {3}",
             (int)ConnectedSystemObjectStatus.Obsolete,
             DateTime.UtcNow,
             ids,
             (int)ConnectedSystemObjectStatus.Normal);
 
-        // Fix up any tracked instances so a later SaveChangesAsync cannot write the stale status back.
+        // Fix up any tracked instances so a later SaveChangesAsync cannot write the stale status back. The mark first,
+        // while the instances still show which rows the statement's status filter let through.
         var idSet = ids.ToHashSet();
+        ConnectedSystemObjectMarkFixUp.Apply(Repository.Database,
+            cso => idSet.Contains(cso.Id) && cso.Status == ConnectedSystemObjectStatus.Normal, cso => cso.SynchronisationPending, value: true);
         var previousAutoDetect = Repository.Database.ChangeTracker.AutoDetectChangesEnabled;
         Repository.Database.ChangeTracker.AutoDetectChangesEnabled = false;
         try
@@ -3821,6 +3846,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        // A created object is pending synchronisation (#2092), written with the row in the same INSERT.
+        connectedSystemObject.SynchronisationPending = true;
         Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);
         await Repository.Database.SaveChangesAsync();
     }
@@ -3934,6 +3961,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemObjects.Count == 0)
             return;
 
+        // #2092: the row update sets the synchronisation-pending mark, and the attribute value changes below are what it
+        // announces. They commit together: were the mark visible before the values, a synchronisation could load the
+        // object, process its old values and clear the mark, and the attribute value writes, which do not touch the
+        // object's row (so do not move its xmin), would leave the change unmarked and never processed. A caller that
+        // already holds a transaction commits them together anyway.
+        var relational = Repository.Database.Database.IsRelational();
+        await using var transaction = relational && Repository.Database.Database.CurrentTransaction == null
+            ? await Repository.Database.Database.BeginTransactionAsync()
+            : null;
+
         // Use raw SQL for parent CSO row updates (bypasses change tracker entirely).
         await BulkUpdateConnectedSystemObjectsRawAsync(connectedSystemObjects);
 
@@ -3976,15 +4013,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 await Repository.Database.SaveChangesAsync();
             }
         }
+
+        if (transaction != null)
+            await transaction.CommitAsync();
+
+        foreach (var cso in connectedSystemObjects)
+            cso.SynchronisationPending = true;
+        var updatedIds = connectedSystemObjects.Select(cso => cso.Id).ToHashSet();
+        ConnectedSystemObjectMarkFixUp.Apply(Repository.Database, cso => updatedIds.Contains(cso.Id), cso => cso.SynchronisationPending, value: true);
     }
 
     /// <inheritdoc />
-    public async Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    public async Task<int> UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects,
+        IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null)
     {
         if (connectedSystemObjects.Count == 0)
-            return;
+            return 0;
 
-        await BulkUpdateConnectedSystemObjectJoinStatesRawAsync(connectedSystemObjects);
+        return await BulkUpdateConnectedSystemObjectJoinStatesRawAsync(connectedSystemObjects, synchronisationPendingSeenRowVersions);
     }
 
     /// <summary>
@@ -8858,6 +8904,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
+                // #2092: a created object is pending synchronisation. Always true, whatever the entity holds; the
+                // caller's transaction commits the row, its attribute values and the mark together.
+                parameters.Add(true);
+                cso.SynchronisationPending = true;
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -8970,13 +9020,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Id plus the mutable columns; cast/parameter order below MUST match
         // CsoBulkColumns.ConnectedSystemObjectsUpdate exactly.
         var columnsPerRow = 1 + CsoBulkColumns.ConnectedSystemObjectsUpdate.Length;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = (BulkSqlHelpers.MaxParametersPerStatement - 1) / columnsPerRow;
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
+        // Rows are locked in the database's uuid order, across the chunks and within each (the locked CTE), as the
+        // synchronisation's join-state write locks them: this update runs in one transaction with the attribute value
+        // changes it announces (#2092), so a different order could deadlock with a synchronisation writing the same rows.
+        foreach (var chunk in BulkSqlHelpers.ChunkList(BulkSqlHelpers.OrderByDatabaseUuid(objects, cso => cso.Id), chunkSize))
         {
             var sql = new System.Text.StringBuilder();
+            var lockParameterIndex = chunk.Count * columnsPerRow;
+            sql.Append($@"WITH locked AS (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY({{{lockParameterIndex}}}) ORDER BY ""Id"" FOR NO KEY UPDATE) ");
             sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ");
             sql.Append(string.Join(", ", CsoBulkColumns.ConnectedSystemObjectsUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            // #2092: an update is a change synchronisation must process. A constant, never the entity's value, so an
+            // import holding an object loaded before a synchronisation cleared it still announces what it commits.
+            sql.Append(@", ""SynchronisationPending"" = true");
             sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
@@ -9005,7 +9063,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             sql.Append(@") AS v(""Id"", ");
             sql.Append(BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectsUpdate));
-            sql.Append(@") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") WHERE t.""Id"" = v.""Id"" AND t.""Id"" IN (SELECT ""Id"" FROM locked)");
+            parameters.Add(chunk.Select(cso => cso.Id).ToArray());
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -9016,45 +9075,74 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// ConnectedSystemObject rows using UPDATE ... FROM (VALUES ...) pattern.
     /// Used during sync page flush where only join state has changed and a full column update is unnecessary.
     /// </summary>
-    private async Task BulkUpdateConnectedSystemObjectJoinStatesRawAsync(List<ConnectedSystemObject> objects)
+    private async Task<int> BulkUpdateConnectedSystemObjectJoinStatesRawAsync(List<ConnectedSystemObject> objects,
+        IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions)
     {
-        // Id plus the join state; cast/parameter order below MUST match
-        // CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate exactly.
-        var columnsPerRow = 1 + CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate.Length;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        // Id plus the join state plus the row version the synchronisation's page load read; cast/parameter order below
+        // MUST match CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate exactly.
+        var columnsPerRow = 2 + CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate.Length;
+        var chunkSize = (BulkSqlHelpers.MaxParametersPerStatement - 1) / columnsPerRow;
+        var clearedIds = new HashSet<Guid>();
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        // Rows are locked in the database's uuid order (the locked CTE), as the import's update locks them, so the two
+        // cannot deadlock over the same rows (#2092).
+        foreach (var chunk in BulkSqlHelpers.ChunkList(BulkSqlHelpers.OrderByDatabaseUuid(objects, cso => cso.Id), chunkSize))
         {
+            // The synchronisation-pending mark (#2092) is cleared in the same statement as the join it led to, and only
+            // where the row is unchanged since the page load (the SET expressions read the row as it was before this
+            // write): this write moves the row's xmin, so a guarded clear issued after it could never apply, and every
+            // newly joined object would be processed again by the next run. A row written after the load (an import's
+            // further change) keeps its mark. Positional parameters ($n), since the statement returns the cleared rows.
             var sql = new System.Text.StringBuilder();
+            sql.Append($@"WITH locked AS (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY(${chunk.Count * columnsPerRow + 1}::uuid[]) ORDER BY ""Id"" FOR NO KEY UPDATE) ");
             sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ");
             sql.Append(string.Join(", ", CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(@", ""SynchronisationPending"" = CASE WHEN v.""SeenRowVersion"" IS NOT NULL AND t.xmin = v.""SeenRowVersion"" THEN false ELSE t.""SynchronisationPending"" END");
             sql.Append(" FROM (VALUES ");
 
-            var parameters = new List<object>();
+            await using var command = new NpgsqlCommand { Connection = connection, Transaction = transaction };
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::integer, {{{offset + 5}}}::integer, {{{offset + 6}}}::text, {{{offset + 7}}}::integer, {{{offset + 8}}}::text)");
+                var p = i * columnsPerRow;
+                sql.Append($"(${p + 1}::uuid, ${p + 2}::uuid, ${p + 3}::integer, ${p + 4}::timestamp with time zone, ${p + 5}::integer, ${p + 6}::integer, ${p + 7}::text, ${p + 8}::integer, ${p + 9}::text, ${p + 10}::xid)");
 
                 var cso = chunk[i];
-                parameters.Add(cso.Id);
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add((int)cso.JoinType);
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam((int?)cso.JoinMethod, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
+                uint? seenRowVersion = synchronisationPendingSeenRowVersions != null &&
+                                       synchronisationPendingSeenRowVersions.TryGetValue(cso.Id, out var seen) ? seen : null;
+                command.Parameters.Add(new NpgsqlParameter { Value = cso.Id, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Uuid });
+                command.Parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                command.Parameters.Add(new NpgsqlParameter { Value = (int)cso.JoinType, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Integer });
+                command.Parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                command.Parameters.Add(BulkSqlHelpers.NullableParam((int?)cso.JoinMethod, NpgsqlTypes.NpgsqlDbType.Integer));
+                command.Parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                command.Parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinSyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                command.Parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinObjectMatchingRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                command.Parameters.Add(BulkSqlHelpers.NullableParam(cso.JoinMatchValue, NpgsqlTypes.NpgsqlDbType.Text));
+                command.Parameters.Add(BulkSqlHelpers.NullableParam(seenRowVersion, NpgsqlTypes.NpgsqlDbType.Xid));
             }
 
             sql.Append(@") AS v(""Id"", ");
             sql.Append(BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate));
-            sql.Append(@") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@", ""SeenRowVersion"") WHERE t.""Id"" = v.""Id"" AND t.""Id"" IN (SELECT ""Id"" FROM locked)");
+            command.Parameters.Add(new NpgsqlParameter { Value = chunk.Select(cso => cso.Id).ToArray(), NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid });
+            sql.Append(@" RETURNING t.""Id"", v.""SeenRowVersion"" IS NOT NULL AND NOT t.""SynchronisationPending""");
+            command.CommandText = sql.ToString();
 
-            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                if (reader.GetBoolean(1))
+                    clearedIds.Add(reader.GetGuid(0));
+            }
         }
+
+        ConnectedSystemObjectMarkFixUp.Apply(Repository.Database, cso => clearedIds.Contains(cso.Id), cso => cso.SynchronisationPending, value: false);
+        return clearedIds.Count;
     }
 
     /// <summary>

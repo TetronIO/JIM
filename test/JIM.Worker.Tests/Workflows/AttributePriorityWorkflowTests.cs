@@ -176,6 +176,8 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
         Assert.That(orphaned?.ContributedBySyncRuleId, Is.Not.Null, "precondition: the value starts with provenance");
         orphaned!.ContributedBySyncRuleId = null;
         orphaned!.ContributedBySystemId = null;
+        // The rule deletion this models is a configuration change, which the Full Synchronisation applies to every object.
+        RecordSyncRuleConfigurationChange();
 
         await RunFullSyncAsync(ctx.Directory);
 

@@ -267,7 +267,7 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
                 "one bulk mark per page flush, never one per object");
             Assert.That(SyncRepo.DerivedInputMarkCalls.Sum(call => call.Count), Is.EqualTo(5));
             Assert.That(SyncRepo.ConnectedSystemObjects.Values.Where(c => c.ConnectedSystemId == ctx.Hr.Id).All(c => c.DerivedInputChangePending), Is.True);
-            Assert.That(counts.GetValueOrDefault(nameof(ISyncRepository.ClearConnectedSystemObjectDerivedInputChangePendingAsync)), Is.Zero,
+            Assert.That(counts.GetValueOrDefault(nameof(ISyncRepository.ClearConnectedSystemObjectMarksAsync)), Is.Zero,
                 "AD's own objects were never marked, so there is nothing to clear");
         }
     }
@@ -590,7 +590,7 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
 
         var raced = false;
         var racingRepository = InterceptingSyncRepositoryProxy.Create(SyncRepo,
-            nameof(ISyncRepository.ClearConnectedSystemObjectDerivedInputChangePendingAsync), () =>
+            nameof(ISyncRepository.ClearConnectedSystemObjectMarksAsync), () =>
             {
                 if (raced)
                     return;
@@ -618,30 +618,28 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task DeltaSync_MarkedObjectAlsoWrittenByItsOwnRun_ConvergesOnTheNextRunAsync()
+    public async Task DeltaSync_MarkedObjectWithTheScopeFlagAlsoSet_ClearsBothInOneRunAsync()
     {
-        // The run's own write to the row (here the Temporal Scope Reconciler flag's clear, at the same page flush and
-        // before the derived clear) also moves the row version, so the first run leaves the mark in place. That write
-        // does not recur, so the next run clears it: one extra evaluation, never a loop.
+        // The run's own unguarded write to the row (the Temporal Scope Reconciler flag's clear, at the same page flush)
+        // moves the row version. It runs after the guarded mark clear (#2092), so it no longer defeats it: the object
+        // converges in one run rather than costing an extra evaluation.
         var ctx = await SetUpScenario2Async();
         var hrCso = SeedHr(ctx, "E1", "jbloggs");
         SeedAd(ctx, "E1", "EMEA");
         await RunFullSyncAsync(ctx.Hr);
         await RunFullSyncAsync(ctx.Ad!);
         hrCso.ScopeReviewPending = true;
+        Assert.That(hrCso.DerivedInputChangePending, Is.True, "precondition: AD's run marked HR's object");
 
         await RunDeltaSyncAsync(ctx.Hr);
         var afterFirst = (Marked: hrCso.DerivedInputChangePending, ScopeFlag: hrCso.ScopeReviewPending);
-        await RunDeltaSyncAsync(ctx.Hr);
-        var afterSecond = hrCso.DerivedInputChangePending;
-        var third = await RunDeltaSyncAsync(ctx.Hr);
+        var second = await RunDeltaSyncAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(afterFirst.ScopeFlag, Is.False, "precondition: the first run cleared the scope flag, writing the row");
-            Assert.That(afterFirst.Marked, Is.True, "that write moved the row version, so the derived clear was skipped (fail-safe)");
-            Assert.That(afterSecond, Is.False, "the next run writes nothing else to the row, so the clear applies");
-            Assert.That(third.RunProfileExecutionItems, Is.Empty, "and the object is not selected again: it has converged");
+            Assert.That(afterFirst.ScopeFlag, Is.False, "the run cleared the scope flag");
+            Assert.That(afterFirst.Marked, Is.False, "and the derived-input mark, whose guarded clear ran before the flag's write");
+            Assert.That(second.RunProfileExecutionItems, Is.Empty, "the object is not selected again: it has converged");
             Assert.That(Text(SyncRepo.MetaverseObjects.Values.Single(), ctx.Email), Is.EqualTo("jbloggs@emea.corp.local"));
         }
     }

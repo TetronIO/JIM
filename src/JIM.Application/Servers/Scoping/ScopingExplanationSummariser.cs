@@ -661,14 +661,27 @@ internal static class ScopingExplanationSummariser
 
     private static string InvalidCriteriaHint(ScopingExplanation explanation)
     {
-        var attributes = DistinctTerms(InvalidCriteria(explanation).Select(HintTerm));
+        var invalid = InvalidCriteria(explanation).ToList();
+
+        // A value held under an earlier data type (#2329) is not a fault in the rule: nothing in it needs correcting, and
+        // calling the criterion invalid would send the administrator looking for one.
+        if (invalid.Count > 0 && invalid.All(criterion => criterion.HeldAsDataType.HasValue))
+        {
+            var held = DistinctTerms(invalid.Select(HintTerm));
+            return $"Undecided until a Full Import reads {JoinTerms(held)}";
+        }
+
+        var attributes = DistinctTerms(invalid.Select(HintTerm));
         return attributes.Count switch
         {
             0 => "Scoping cannot be evaluated",
             1 => $"Invalid criterion on {attributes[0]}",
-            _ => $"Invalid criteria on {string.Join(", ", attributes.Take(attributes.Count - 1))} and {attributes[^1]}"
+            _ => $"Invalid criteria on {JoinTerms(attributes)}"
         };
     }
+
+    private static string JoinTerms(List<string> terms) =>
+        terms.Count == 1 ? terms[0] : $"{string.Join(", ", terms.Take(terms.Count - 1))} and {terms[^1]}";
 
     private static List<ExplanationBullet> InvalidCriteriaBullets(ScopingExplanation explanation) =>
         InvalidCriteria(explanation).Select(criterion =>
@@ -676,6 +689,12 @@ internal static class ScopingExplanationSummariser
             var line = new LineBuilder();
             line.Text($"Criterion {criterion.Path} compares ");
             line.Attribute(criterion.AttributeName ?? "an attribute");
+            if (criterion.HeldAsDataType.HasValue && criterion.FailureReason != null)
+            {
+                // Held under an earlier data type (#2329): the reason names the value's type and what resolves it.
+                line.Text($", which cannot be evaluated yet. {criterion.FailureReason}");
+                return line.ToBullet();
+            }
             if (SearchComparisonOperators.IsPattern(criterion.ComparisonType) && criterion.AttributeType == AttributeDataType.Text)
             {
                 // The operator suits the type, so it is the pattern itself: invalid, or too slow on this object's value.

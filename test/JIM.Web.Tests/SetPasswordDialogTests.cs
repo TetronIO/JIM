@@ -99,9 +99,6 @@ public class SetPasswordDialogTests : JimComponentTestContext
         JSInterop.Setup<bool>("jimInterop.clearClipboard").SetResult(true);
     }
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private static MetaverseObjectAccount Account(
         string name,
         bool canSetPasswords,

@@ -1743,7 +1743,9 @@ public interface IConnectedSystemRepository
     /// Connected System Objects. Used during sync page flush where AutoDetectChangesEnabled is
     /// disabled and EF cannot detect CSO scalar property changes automatically.
     /// </summary>
-    public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    /// <remarks>See <see cref="ISyncRepository.UpdateConnectedSystemObjectJoinStatesAsync"/> for the guarded clear.</remarks>
+    public Task<int> UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects,
+        IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null);
 
     /// <summary>
     /// Updates a Connected System Object and explicitly adds new attribute values to the DbContext.

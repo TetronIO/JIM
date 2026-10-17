@@ -47,11 +47,12 @@ For example, to bring in only directory accounts that have an employee type and 
 
 ## How criteria are evaluated
 
-Three rules decide outcomes that are easy to misread from the editor:
+Four rules decide outcomes that are easy to misread from the editor:
 
 - **Top-level groups are alternatives**<br /> An object is in scope when any one of the rule's top-level groups is met. Within a group, **All** requires every condition and child group to be met, and **Any** requires at least one. A group with nothing in it counts as met, and a rule with no criteria at all includes every object of its type.
 - **A missing value fails the comparison**<br /> An attribute with no value fails every comparison, including negative ones such as *does not equal* and *does not match pattern*, except *has no value*. "Department does not equal Test" therefore excludes an object with no Department.
 - **Every value of a multi-valued attribute is tested**<br /> A positive comparison is met by any one matching value, and a negated one only when no value matches what it negates; see [Multi-valued attributes in scope](#multi-valued-attributes-in-scope). The Connections tab shows the value that decided the outcome.
+- **A value held under an earlier data type is not a missing value**<br /> After a schema refresh changes an attribute's data type, a Connected System Object keeps its value under the old type until a Full Import reads it again; see [Moving an attribute to its new type](connected-system-schema.md#moving-an-attribute-to-its-new-type). An import rule's criterion that reaches such a value, directly or through an expression, cannot decide whether the object is in scope. Synchronisation records an error against that object and leaves it, and its connections, as they are, rather than bringing it into scope or taking it out on a guess, and the Connections tab names the value and its old type. Run the Full Import, and the next synchronisation decides the object's scope. An object that also holds a value of the attribute's current type is scoped on that value.
 
 To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse-objects.md#why-it-is-connected-and-why-it-is-not).
 

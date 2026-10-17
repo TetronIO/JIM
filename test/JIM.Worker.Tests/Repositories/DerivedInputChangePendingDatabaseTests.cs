@@ -209,7 +209,7 @@ public class DerivedInputChangePendingDatabaseTests
     }
 
     [Test]
-    public async Task ClearConnectedSystemObjectDerivedInputChangePendingAsync_ClearsOnlyTheNamedObjectsAndFixesUpTrackedInstancesAsync()
+    public async Task ClearConnectedSystemObjectMarksAsync_DerivedInputClearsOnlyTheNamedObjectsAndFixesUpTrackedInstancesAsync()
     {
         var s = await SeedAsync();
         await using (var mark = NewContext())
@@ -224,8 +224,8 @@ public class DerivedInputChangePendingDatabaseTests
             var tracked = await ctx.ConnectedSystemObjects.AsTracking().SingleAsync(c => c.Id == s.AdFirstCsoId);
             Assert.That(tracked.DerivedInputChangePending, Is.True, "precondition: loaded marked");
 
-            cleared = await new PostgresDataRepository(ctx).Sync.ClearConnectedSystemObjectDerivedInputChangePendingAsync(
-                [new DerivedInputChangeClear(s.AdFirstCsoId, tracked.xmin)]);
+            cleared = (await new PostgresDataRepository(ctx).Sync.ClearConnectedSystemObjectMarksAsync(
+                [new ConnectedSystemObjectMarkClear(s.AdFirstCsoId, tracked.xmin, SynchronisationPending: false, DerivedInputChangePending: true)])).DerivedInputChangePendingCleared;
 
             Assert.That(tracked.DerivedInputChangePending, Is.False, "the tracked instance must reflect the cleared row");
             ctx.Entry(tracked).State = EntityState.Modified;
@@ -303,7 +303,7 @@ public class DerivedInputChangePendingDatabaseTests
     /// must survive the clear and the next run re-evaluate the object.
     /// </summary>
     [Test]
-    public async Task ClearConnectedSystemObjectDerivedInputChangePendingAsync_RowReMarkedAfterThePageLoad_StaysMarkedAsync()
+    public async Task ClearConnectedSystemObjectMarksAsync_DerivedInputRowReMarkedAfterThePageLoad_StaysMarkedAsync()
     {
         var s = await SeedAsync();
         var watermark = DateTime.UtcNow.AddHours(-1);
@@ -328,8 +328,8 @@ public class DerivedInputChangePendingDatabaseTests
                 [new DerivedInputChangeMark(s.FirstMvoId, s.AdSystemId)]);
         }
 
-        var cleared = await hostingRepository.Sync.ClearConnectedSystemObjectDerivedInputChangePendingAsync(
-            [new DerivedInputChangeClear(s.AdFirstCsoId, seenRowVersion)]);
+        var cleared = (await hostingRepository.Sync.ClearConnectedSystemObjectMarksAsync(
+            [new ConnectedSystemObjectMarkClear(s.AdFirstCsoId, seenRowVersion, SynchronisationPending: false, DerivedInputChangePending: true)])).DerivedInputChangePendingCleared;
 
         var flags = await ReadFlagsAsync();
         using (Assert.EnterMultipleScope())
@@ -341,7 +341,7 @@ public class DerivedInputChangePendingDatabaseTests
     }
 
     [Test]
-    public async Task ClearConnectedSystemObjectDerivedInputChangePendingAsync_RowUnchangedSinceTheFullSyncPageLoad_IsClearedAsync()
+    public async Task ClearConnectedSystemObjectMarksAsync_DerivedInputRowUnchangedSinceTheFullSyncPageLoad_IsClearedAsync()
     {
         var s = await SeedAsync();
         var watermark = DateTime.UtcNow.AddHours(-1);
@@ -357,8 +357,8 @@ public class DerivedInputChangePendingDatabaseTests
             s.AdSystemId, 1, 100, knownTotalCount: 3, lastSyncTimestamp: watermark, afterId: Guid.Empty);
         var loaded = page.Results.Single(c => c.Id == s.AdFirstCsoId);
 
-        var cleared = await hostingRepository.Sync.ClearConnectedSystemObjectDerivedInputChangePendingAsync(
-            [new DerivedInputChangeClear(s.AdFirstCsoId, loaded.xmin)]);
+        var cleared = (await hostingRepository.Sync.ClearConnectedSystemObjectMarksAsync(
+            [new ConnectedSystemObjectMarkClear(s.AdFirstCsoId, loaded.xmin, SynchronisationPending: false, DerivedInputChangePending: true)])).DerivedInputChangePendingCleared;
 
         var flags = await ReadFlagsAsync();
         using (Assert.EnterMultipleScope())

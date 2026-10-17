@@ -1314,6 +1314,71 @@ public class MetaverseRepository : IMetaverseRepository
         return newlyFlagged;
     }
 
+    public async Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids)
+    {
+        if (ids.Count == 0)
+            return 0;
+
+        // One narrow statement per synchronisation page (#2318), over the objects the page disconnected from a system
+        // an export rule provisions to. Rows already flagged are left untouched, as for the type-wide flag above. The
+        // rows written report their new row version: unlike the type-wide flag, this runs on the worker's context,
+        // which may hold these objects tracked, and the xmin concurrency token must move with the row (below).
+        const string sql = """
+            UPDATE "MetaverseObjects" SET "ScopeReviewPending" = true
+            WHERE "Id" = ANY(@ids) AND NOT "ScopeReviewPending"
+            RETURNING "Id", xmin
+            """;
+
+        var idArray = ids.Distinct().ToArray();
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        var newRowVersions = new Dictionary<Guid, uint>();
+        await using (var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection))
+        {
+            await using var command = new NpgsqlCommand(sql, connection,
+                (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
+            command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = idArray });
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                newRowVersions[reader.GetGuid(0)] = reader.GetFieldValue<uint>(1);
+        }
+
+        // Bring tracked instances into line, as persisted rather than as a pending change: the flag, so a later
+        // whole-entity save cannot write the old value back, and the row version, so that save's xmin check still
+        // matches the row this statement just wrote. Change detection is suppressed while enumerating: it would attach
+        // any untracked graph hanging off a tracked navigation (see src/CLAUDE.md, "Tracker surgery").
+        var idSet = idArray.ToHashSet();
+        var context = Repository.Database;
+        var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entries = context.ChangeTracker.Entries<MetaverseObject>()
+                .Where(e => e.State is EntityState.Unchanged or EntityState.Modified && idSet.Contains(e.Entity.Id))
+                .ToList();
+            foreach (var entry in entries)
+            {
+                var flag = entry.Property(mvo => mvo.ScopeReviewPending);
+                flag.CurrentValue = true;
+                flag.OriginalValue = true;
+                flag.IsModified = false;
+
+                if (newRowVersions.TryGetValue(entry.Entity.Id, out var rowVersion))
+                {
+                    var xmin = entry.Property(mvo => mvo.xmin);
+                    xmin.CurrentValue = rowVersion;
+                    xmin.OriginalValue = rowVersion;
+                    xmin.IsModified = false;
+                }
+            }
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
+
+        return newRowVersions.Count;
+    }
+
     public async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
     {
         if (ids.Count == 0)

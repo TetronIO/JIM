@@ -115,6 +115,12 @@ public interface IMetaverseRepository
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId);
 
     /// <summary>
+    /// Flags the given Metaverse Objects <c>ScopeReviewPending</c> (issue #2318); see
+    /// <c>ISyncRepository.FlagMetaverseObjectsForScopeReviewAsync</c>.
+    /// </summary>
+    public Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Returns the reference attribute values held by OTHER Metaverse Objects that point at any of the given
     /// Metaverse Objects, excluding references held by objects that are themselves in the given set. Called
     /// before deletion so reference recall can stage membership-removal Pending Exports (issue #908).

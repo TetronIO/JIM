@@ -6,6 +6,7 @@ using JIM.Web.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using MudBlazor.Services;
+using NUnit.Framework;
 
 namespace JIM.Web.Tests;
 
@@ -62,4 +63,24 @@ public abstract class JimComponentTestContext : BunitContext
     protected virtual void ConfigureAdditionalServices()
     {
     }
+
+    /// <summary>
+    /// Disposes every rendered component after each test. NUnit reuses a fixture instance across its tests, so a
+    /// component left rendered (a polling loop, a delivery follow, a reveal timer) would otherwise run on into the next.
+    /// </summary>
+    [TearDown]
+    public Task DisposeRenderedComponentsAfterTestAsync() => DisposeRenderedComponentsAsync();
+
+    /// <summary>
+    /// Disposes every rendered component. Use this, never bUnit's <c>DisposeComponentsAsync</c> on its own.
+    /// <para>
+    /// bUnit 2.11.3 queues the disposal on the renderer's dispatcher and then clears its list of root components on the
+    /// calling thread. When a component's own continuation holds the dispatcher at that moment (a delay finishing just as
+    /// the test ends), the queued disposal finds the list cleared, or is part-way through enumerating it, so components
+    /// are never disposed or the teardown fails with "Collection was modified". Running the call on the dispatcher makes
+    /// bUnit's inner dispatch run inline, so the enumeration finishes before the list is cleared. bUnit's main branch
+    /// has fixed this by snapshotting the list on the dispatcher; once a release carries it, this can call bUnit directly.
+    /// </para>
+    /// </summary>
+    protected Task DisposeRenderedComponentsAsync() => Renderer.Dispatcher.InvokeAsync(DisposeComponentsAsync);
 }

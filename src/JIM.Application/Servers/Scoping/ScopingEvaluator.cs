@@ -29,6 +29,7 @@ namespace JIM.Application.Servers.Scoping;
 /// <item><description>Every comparison means what <see cref="CriterionComparer"/> says it means (#2053): a positive operator is met by any value, a negated one only when the attribute holds a value and none matches what it negates (#1923), and a missing value fails every comparison except "has no value".</description></item>
 /// <item><description>Relative dates resolve against one instant per evaluation.</description></item>
 /// <item><description>An operator invalid for the attribute's type, or a pattern that is invalid or runs past its time limit, makes synchronisation fail loudly when it is reached.</description></item>
+/// <item><description>A Connected System Object attribute, or an expression input, held only under another data type than its current one (#2329) makes the object's scope undecidable when it is reached; a value of the current type is what is read.</description></item>
 /// </list>
 /// The trace is optional and is the only difference between the two modes: when it is null (every synchronisation
 /// call) nothing is allocated, invalid criteria throw, and the top-level loop returns at the first met group. When a
@@ -38,11 +39,15 @@ namespace JIM.Application.Servers.Scoping;
 /// </remarks>
 internal static class ScopingEvaluator
 {
+    /// <summary>What happens once a Full Import has read a value held under another data type (#2329).</summary>
+    private const string DecidedAfterImport = "the object's scope is decided at the next synchronisation";
+
     /// <summary>
     /// Whether the object is in scope of the rule, exactly as synchronisation decides it. Throws
     /// <see cref="InvalidOperationException"/> on reaching an invalid criterion, and
     /// <see cref="ScopingCriterionFailedException"/> when a pattern runs past its time limit on one of the object's
-    /// values (#2053), so the caller can stop that object rather than decide its scope on a guess.
+    /// values (#2053), an expression criterion cannot be evaluated (#2054), or a criterion reads a value held only under
+    /// another data type (#2329), so the caller can stop that object rather than decide its scope on a guess.
     /// </summary>
     internal static bool IsInScope<TSource>(SyncRule rule, TSource source, DateTime nowUtc, Lazy<IExpressionEvaluator> expressions)
         where TSource : struct, IScopingValueSource
@@ -155,11 +160,27 @@ internal static class ScopingEvaluator
             return ScopingCriterionOutcome.Invalid;
         }
 
+        // A value held only under another data type (#2329): a schema refresh changed the attribute's type and no import
+        // has read it since. That is not the absence of a value, and comparing it as one would bring the object into
+        // scope or take it out on a guess, so its scope is undecidable, as every other reader of such a value treats it.
+        if (source.HeldOnlyUnderAnotherDataType(attributeId, type) is { } heldType)
+        {
+            var heldReason = HeldUnderAnotherDataTypeText.Describe($"The Connected System attribute '{attributeName}'", heldType, type,
+                DecidedAfterImport);
+            if (node == null)
+                throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", attributeName, heldReason);
+
+            ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary: null, value: null, valueCount: 0);
+            node.FailureReason = heldReason;
+            node.HeldAsDataType = heldType;
+            return ScopingCriterionOutcome.Invalid;
+        }
+
         var boundary = type == AttributeDataType.DateTime ? ResolveCriterionDate(criterion, nowUtc) : null;
         var expected = new ScopingValue(criterion.StringValue, criterion.IntValue, criterion.LongValue, criterion.DecimalValue,
             boundary, criterion.BoolValue, criterion.GuidValue);
 
-        var values = new SourceValueCursor<TSource>(source, attributeId);
+        var values = new SourceValueCursor<TSource>(source, attributeId, type);
         CriterionVerdict verdict;
         try
         {
@@ -191,7 +212,7 @@ internal static class ScopingEvaluator
         {
             // The value the outcome turned on: the one that decided it, or a lone value either way. Where several values
             // all went the same way, no single one did, and none is named.
-            var valueCount = source.CountValues(attributeId);
+            var valueCount = source.CountValues(attributeId, type);
             ScopingValue? shown = verdict.Decided || valueCount == 1 ? verdict.LastHeld : null;
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary, shown, valueCount);
         }
@@ -234,8 +255,21 @@ internal static class ScopingEvaluator
         // An input naming no attribute of the scoped type (renamed or removed since the rule was saved) would read as
         // no value and could take the object out of scope on a name that no longer means anything; stop it instead.
         List<ScopingValue> computed = [];
-        var context = source.ExpressionContext(nowUtc);
+        var context = source.ExpressionContext(nowUtc, out var heldUnderAnotherDataType);
         var failure = DescribeUnknownInput(expression, source);
+
+        // An input held only under another data type (#2329) reads as no value, and the expression would compute nothing,
+        // or a wrong value, from it; only an input the expression reads counts. The reason names the input and its type,
+        // never its value, so it needs no withholding.
+        AttributeDataType? heldAs = null;
+        if (failure == null && heldUnderAnotherDataType != null &&
+            ExpressionInputResolver.FindHeldInputs(expression, heldUnderAnotherDataType) is { Count: > 0 } heldInputs)
+        {
+            heldAs = heldInputs[0].HeldDataType;
+            failure = HeldUnderAnotherDataTypeText.Describe(HeldUnderAnotherDataTypeText.InputsSubject(heldInputs), heldAs.Value,
+                currentType: null, DecidedAfterImport);
+        }
+
         if (failure == null)
         {
             try
@@ -282,6 +316,7 @@ internal static class ScopingEvaluator
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary, value: null, valueCount: 0);
             RecordExpression(node, expression, context, source);
             node.FailureReason = failure;
+            node.HeldAsDataType = heldAs;
             return ScopingCriterionOutcome.Invalid;
         }
 
@@ -310,7 +345,7 @@ internal static class ScopingEvaluator
 
         try
         {
-            var result = expressions.Evaluate(criterion.Expression!, source.ExpressionContext(nowUtc));
+            var result = expressions.Evaluate(criterion.Expression!, source.ExpressionContext(nowUtc, out _));
             return TryReadComputedValues(result, AttributeDataType.DateTime, out var values) == null
                 ? values.Where(value => value.DateTimeValue.HasValue).Select(value => value.DateTimeValue!.Value).ToList()
                 : [];
@@ -499,15 +534,17 @@ internal static class ScopingEvaluator
     {
         private readonly TSource _source;
         private readonly int _attributeId;
+        private readonly AttributeDataType _type;
         private int _position;
 
-        public SourceValueCursor(TSource source, int attributeId)
+        public SourceValueCursor(TSource source, int attributeId, AttributeDataType type)
         {
             _source = source;
             _attributeId = attributeId;
+            _type = type;
             _position = 0;
         }
 
-        public bool TryGetNext(out ScopingValue value) => _source.TryGetNextValue(_attributeId, ref _position, out value);
+        public bool TryGetNext(out ScopingValue value) => _source.TryGetNextValue(_attributeId, _type, ref _position, out value);
     }
 }

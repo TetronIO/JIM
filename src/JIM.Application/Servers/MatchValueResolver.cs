@@ -113,12 +113,8 @@ public sealed class MatchValueResolver
     /// <summary>
     /// Why a rule reading a value held only under another data type cannot be worked out (#2319), and what resolves it.
     /// </summary>
-    private static string DescribeHeldUnderAnotherDataType(string subject, AttributeDataType heldType, AttributeDataType? currentType)
-    {
-        var current = currentType.HasValue ? $", not as its {currentType.Value} type" : string.Empty;
-        return $"{subject} is held as {heldType}{current}: a schema refresh changed its data type and no import has read it since. " +
-               "Run a Full Import to read it as its new type; the object is matched on the next synchronisation.";
-    }
+    private static string DescribeHeldUnderAnotherDataType(string subject, AttributeDataType heldType, AttributeDataType? currentType) =>
+        HeldUnderAnotherDataTypeText.Describe(subject, heldType, currentType, "the object is matched on the next synchronisation");
 
     private MatchValueResolution ResolveExpression(
         string expression,
@@ -135,9 +131,9 @@ public sealed class MatchValueResolver
             var heldInputs = ExpressionInputResolver.FindHeldInputs(expression, heldUnderAnotherDataType);
             if (heldInputs.Count > 0)
             {
-                var subject = heldInputs.Count == 1 ? $"The input {heldInputs[0].Accessor}" : $"The inputs {string.Join(", ", heldInputs)}";
                 return MatchValueResolution.Failed(
-                    DescribeHeldUnderAnotherDataType(subject, heldInputs[0].HeldDataType, currentType: null), target.Type, expression);
+                    DescribeHeldUnderAnotherDataType(HeldUnderAnotherDataTypeText.InputsSubject(heldInputs), heldInputs[0].HeldDataType, currentType: null),
+                    target.Type, expression);
             }
         }
 
