@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
@@ -308,5 +309,35 @@ public class PendingExportHeaderRangeDatabaseTests
             Assert.That(result.TotalResults, Is.EqualTo(1));
             Assert.That(result.Results.Select(r => r.LastErrorMessage), Is.EqualTo(new[] { "Export 004" }));
         }
+    }
+
+    [Test]
+    public async Task Range_SourceMetaverseObject_CarriesItsTypesPluralNameAsync()
+    {
+        // The list links the source Metaverse Object to /t/{plural}/v/{id}, so the read has to load the object's
+        // type; the in-memory provider would fix up the navigation whether or not the query includes it (#2151).
+        int systemId;
+        await using (var ctx = NewContext())
+        {
+            var connectedSystem = BuildSystem(ctx);
+            var type = new MetaverseObjectType { Name = "Person", PluralName = "People" };
+            var source = new MetaverseObject { Id = Guid.NewGuid(), Type = type };
+            ctx.AddRange(type, source, new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystem = connectedSystem,
+                ChangeType = PendingExportChangeType.Update,
+                Status = PendingExportStatus.Pending,
+                CreatedAt = DateTime.UtcNow,
+                SourceMetaverseObject = source
+            });
+            await ctx.SaveChangesAsync();
+            systemId = connectedSystem.Id;
+        }
+
+        var result = await NewJim().ConnectedSystems.GetPendingExportHeadersRangeAsync(
+            systemId, offset: 0, count: 10, sortBy: CreatedSortKey, sortDescending: false);
+
+        Assert.That(result.Results.Single().SourceMetaverseObjectTypePluralName, Is.EqualTo("People"));
     }
 }

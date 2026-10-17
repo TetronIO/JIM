@@ -1652,14 +1652,14 @@ else
 
     private string GetInitiatorHref(ChangeGroup changeGroup)
     {
-        if (changeGroup.ChangeInitiatorId == null)
+        if (changeGroup.ChangeInitiatorId is not { } initiatorId)
             return "#";
 
         return changeGroup.ChangeInitiatorType switch
         {
-            "User" => $"/t/users/v/{changeGroup.ChangeInitiatorId}",
-            "ApiKey" => $"/admin/apikeys/{changeGroup.ChangeInitiatorId}",
-            "SynchronisationRule" => $"/admin/sync-rules/{changeGroup.ChangeInitiatorId}",
+            "User" => Utilities.GetMetaverseObjectHref(initiatorId, Constants.BuiltInObjectTypes.UserPluralName),
+            "ApiKey" => $"/admin/apikeys/{initiatorId}",
+            "SynchronisationRule" => $"/admin/sync-rules/{initiatorId}",
             _ => "#"
         };
     }

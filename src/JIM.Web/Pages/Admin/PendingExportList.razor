@@ -78,13 +78,19 @@
                     @if (context.Item.SourceMetaverseObjectId.HasValue)
                     {
                         var sourceMetaverseObjectId = context.Item.SourceMetaverseObjectId.Value;
-                        @* The row navigates on click and so does this link; stopping the click here keeps a link
-                           click to one navigation while preserving middle-click and open-in-new-tab. *@
-                        <span @onclick:stopPropagation="true">
-                            <MudLink Href="@($"/admin/metaverse/objects/{sourceMetaverseObjectId}")">
-                                @(context.Item.SourceMetaverseObjectDisplayName ?? sourceMetaverseObjectId.ToString())
-                            </MudLink>
-                        </span>
+                        var sourceName = context.Item.SourceMetaverseObjectDisplayName ?? sourceMetaverseObjectId.ToString();
+                        @if (context.Item.SourceMetaverseObjectTypePluralName is { } sourceTypePluralName)
+                        {
+                            @* The row navigates on click and so does this link; stopping the click here keeps a link
+                               click to one navigation while preserving middle-click and open-in-new-tab. *@
+                            <span @onclick:stopPropagation="true">
+                                <MudLink Href="@Utilities.GetMetaverseObjectHref(sourceMetaverseObjectId, sourceTypePluralName)">@sourceName</MudLink>
+                            </span>
+                        }
+                        else
+                        {
+                            @sourceName
+                        }
                     }
                     else
                     {

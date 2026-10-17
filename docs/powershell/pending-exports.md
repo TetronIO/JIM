@@ -81,6 +81,7 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 | `TargetObjectIdentifier` | `string` | The target Connected System Object's external identifier, when it has one. |
 | `SourceMetaverseObjectId` | `guid` | The ID of the source Metaverse Object that triggered this export. |
 | `SourceMetaverseObjectDisplayName` | `string` | The display name of the source Metaverse Object, if available. |
+| `SourceMetaverseObjectTypePluralName` | `string` | The plural name of the source Metaverse Object's Metaverse Object Type, which its page's address is built from; empty when there is no source Metaverse Object. |
 | `AttributeChangeCount` | `int` | The number of attribute value changes in this Pending Export. |
 | `ConnectedSystemObjectId` | `guid` | The ID of the target Connected System Object, if available (for updates/deletes). |
 

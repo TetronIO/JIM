@@ -95,6 +95,7 @@
                                                InitiatedById="@_activity.InitiatedById"
                                                InitiatedByName="@_activity.InitiatedByName"
                                                UserHref="@(_initiatorMetaverseObjectHeader != null ? Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader) : null)"
+                                               UserLookedUp="@(_activity.InitiatedByType == ActivityInitiatorType.User)"
                                                ScheduleName="@_activity.ScheduledByScheduleName"
                                                ScheduleExecutionId="@_activity.ScheduleExecutionId" />
                         </MudText>

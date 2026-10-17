@@ -2094,6 +2094,7 @@ public class MetaverseRepository : IMetaverseRepository
                 av.NullValue,
                 av.ReferenceValueId,
                 ReferenceTypeName = av.ReferenceValue != null ? av.ReferenceValue.Type.Name : null,
+                ReferenceTypePluralName = av.ReferenceValue != null ? av.ReferenceValue.Type.PluralName : null,
                 ReferenceDisplayName = av.ReferenceValue != null ? av.ReferenceValue.CachedDisplayName : null
             })
             .ToListAsync();
@@ -2105,6 +2106,7 @@ public class MetaverseRepository : IMetaverseRepository
                 r.ByteLength, r.ReferenceDisplayName, r.ReferenceValueId),
             ReferenceMetaverseObjectId = r.ReferenceValueId,
             ReferenceTypeName = r.ReferenceTypeName,
+            ReferenceTypePluralName = r.ReferenceTypePluralName,
             Origin = ProvenanceLogic.ResolveOrigin(r.ContributedBySystemId, r.ContributedBySyncRuleId, r.NullValue, r.ContributedBySystemName, r.ContributedBySyncRuleName)
         }).ToList();
 
