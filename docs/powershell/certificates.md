@@ -346,6 +346,8 @@ Get-JIMCertificate | ForEach-Object {
 
 Downloads certificate data in DER format, either to a file or as a byte array.
 
+A certificate added by file path is read from that file on the JIM server, just as connections read it, so the export matches what JIM trusts. If the file has gone or no longer holds a certificate, the export fails and says so.
+
 <!-- BEGIN GENERATED: Export-JIMCertificate -->
 ### Syntax
 

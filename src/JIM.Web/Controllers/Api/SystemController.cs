@@ -63,7 +63,8 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
     public async Task<IActionResult> ResetAsync([FromBody] SystemResetRequest? request = null)
     {
         request ??= new SystemResetRequest();
-        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
+        if (!TryGetInitiatorInfo(out var initiatorType, out var initiatorId, out var initiatorName))
+            return UnidentifiedInitiator();
         _logger.LogWarning(
             "Factory reset initiated by {User} (includeAdministrators={IncludeAdministrators})",
             LogSanitiser.Sanitise(initiatorName),

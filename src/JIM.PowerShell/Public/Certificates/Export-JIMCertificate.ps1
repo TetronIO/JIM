@@ -9,6 +9,9 @@ function Export-JIMCertificate {
     .DESCRIPTION
         Downloads the raw certificate data in DER format. The certificate can
         be converted to PEM format using standard tools like OpenSSL if needed.
+        A certificate added by file path is read from that file on the JIM
+        server; if the file is missing or no longer holds a certificate, the
+        export fails and says so.
 
     .PARAMETER Id
         The unique identifier (GUID) of the certificate to export.
@@ -100,7 +103,18 @@ function Export-JIMCertificate {
             Write-Verbose "Certificate exported to: $fullPath"
         }
         catch {
-            Write-Error "Failed to export certificate: $_"
+            # The API answers an error with a JSON body; report its message rather than the body itself.
+            $errorMessage = "$_"
+            if ($_.ErrorDetails.Message) {
+                try {
+                    $errorObj = $_.ErrorDetails.Message | ConvertFrom-Json
+                    $errorMessage = $errorObj.message ?? $errorObj.Message ?? $errorMessage
+                }
+                catch {
+                    # Not JSON; keep the error as it stands
+                }
+            }
+            Write-Error "Failed to export certificate: $errorMessage"
         }
     }
 }

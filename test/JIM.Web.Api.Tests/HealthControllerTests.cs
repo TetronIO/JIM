@@ -7,6 +7,8 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
 using System;
@@ -26,7 +28,7 @@ public class HealthControllerTests
     {
         var mockRepository = new Mock<IRepository>();
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = controller.Get();
 
@@ -38,7 +40,7 @@ public class HealthControllerTests
     {
         var mockRepository = new Mock<IRepository>();
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = controller.Get() as OkObjectResult;
         var value = result?.Value as HealthStatusResponse;
@@ -62,7 +64,7 @@ public class HealthControllerTests
         mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
 
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = await controller.ReadyAsync();
 
@@ -80,7 +82,7 @@ public class HealthControllerTests
         mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
 
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = await controller.ReadyAsync() as OkObjectResult;
         var value = result?.Value as HealthStatusResponse;
@@ -100,7 +102,7 @@ public class HealthControllerTests
         mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
 
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = await controller.ReadyAsync() as ObjectResult;
 
@@ -114,7 +116,7 @@ public class HealthControllerTests
         mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(true);
 
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = await controller.ReadyAsync() as ObjectResult;
 
@@ -130,7 +132,7 @@ public class HealthControllerTests
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
 
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         await controller.ReadyAsync();
 
@@ -148,7 +150,7 @@ public class HealthControllerTests
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
 
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = await controller.ReadyAsync() as ObjectResult;
 
@@ -156,24 +158,48 @@ public class HealthControllerTests
     }
 
     [Test]
-    public async Task ReadyAsync_WhenDatabaseThrowsException_ReturnsErrorMessage()
+    public async Task ReadyAsync_WhenDatabaseThrowsException_DoesNotExposeExceptionMessage()
     {
+        const string sensitiveMessage = "Failed to connect to 10.0.0.5:5432 as jim_admin on database jim";
         var mockRepository = new Mock<IRepository>();
         mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
         var mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
         mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync())
-            .ThrowsAsync(new Exception("Connection failed"));
+            .ThrowsAsync(new Exception(sensitiveMessage));
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
 
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = await controller.ReadyAsync() as ObjectResult;
-        var value = result?.Value;
 
-        Assert.That(value, Is.Not.Null);
-        var errorProperty = value!.GetType().GetProperty("error");
-        Assert.That(errorProperty?.GetValue(value), Is.EqualTo("Connection failed"));
+        Assert.That(result?.Value, Is.Not.Null);
+        var json = JsonSerializer.Serialize(result!.Value);
+        using var document = JsonDocument.Parse(json);
+        Assert.That(document.RootElement.GetProperty("status").GetString(), Is.EqualTo("not_ready"));
+        Assert.That(document.RootElement.GetProperty("reason").GetString(), Is.EqualTo("error"));
+        Assert.That(document.RootElement.TryGetProperty("error", out _), Is.False);
+        Assert.That(json, Does.Not.Contain(sensitiveMessage));
+    }
+
+    [Test]
+    public async Task ReadyAsync_WhenDatabaseThrowsException_LogsExceptionAtErrorLevel()
+    {
+        var exception = new Exception("Connection failed");
+        var mockRepository = new Mock<IRepository>();
+        mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
+        var mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
+        mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync()).ThrowsAsync(exception);
+        mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
+        var mockLogger = new Mock<ILogger<HealthController>>();
+
+        var application = new JimApplication(mockRepository.Object);
+        var controller = new HealthController(mockLogger.Object, application);
+
+        await controller.ReadyAsync();
+
+        mockLogger.Verify(l => l.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), exception,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 
     #endregion
@@ -185,7 +211,7 @@ public class HealthControllerTests
     {
         var mockRepository = new Mock<IRepository>();
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = controller.Live();
 
@@ -197,7 +223,7 @@ public class HealthControllerTests
     {
         var mockRepository = new Mock<IRepository>();
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = controller.Live() as OkObjectResult;
         var value = result?.Value as HealthStatusResponse;
@@ -215,7 +241,7 @@ public class HealthControllerTests
     {
         var mockRepository = new Mock<IRepository>();
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = controller.Version();
 
@@ -227,7 +253,7 @@ public class HealthControllerTests
     {
         var mockRepository = new Mock<IRepository>();
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = controller.Version() as OkObjectResult;
         var value = result?.Value as VersionResponse;
@@ -242,7 +268,7 @@ public class HealthControllerTests
     {
         var mockRepository = new Mock<IRepository>();
         var application = new JimApplication(mockRepository.Object);
-        var controller = new HealthController(application);
+        var controller = new HealthController(NullLogger<HealthController>.Instance, application);
 
         var result = controller.Version() as OkObjectResult;
         var value = result?.Value as VersionResponse;
@@ -261,7 +287,7 @@ public class HealthControllerTests
     [Test]
     public void Get_SerialisesAsStatusAndTimestamp()
     {
-        var controller = new HealthController(new JimApplication(new Mock<IRepository>().Object));
+        var controller = new HealthController(NullLogger<HealthController>.Instance, new JimApplication(new Mock<IRepository>().Object));
 
         var value = (controller.Get() as OkObjectResult)?.Value;
 
@@ -271,7 +297,7 @@ public class HealthControllerTests
     [Test]
     public void Live_SerialisesAsStatusAndTimestamp()
     {
-        var controller = new HealthController(new JimApplication(new Mock<IRepository>().Object));
+        var controller = new HealthController(NullLogger<HealthController>.Instance, new JimApplication(new Mock<IRepository>().Object));
 
         var value = (controller.Live() as OkObjectResult)?.Value;
 
@@ -281,7 +307,7 @@ public class HealthControllerTests
     [Test]
     public void Version_SerialisesAsProductAndVersion()
     {
-        var controller = new HealthController(new JimApplication(new Mock<IRepository>().Object));
+        var controller = new HealthController(NullLogger<HealthController>.Instance, new JimApplication(new Mock<IRepository>().Object));
 
         var value = (controller.Version() as OkObjectResult)?.Value;
 

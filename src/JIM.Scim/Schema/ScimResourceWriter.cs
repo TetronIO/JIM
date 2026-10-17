@@ -140,7 +140,7 @@ public static class ScimResourceWriter
     {
         var appending = string.Equals(change.Operation, ScimPatchOperations.Add, StringComparison.Ordinal)
                         && attribute.AttributePlurality == AttributePlurality.MultiValued
-                        && attribute.Access is ScimValueAccess.Simple or ScimValueAccess.ComplexReference;
+                        && attribute.Access is ScimValueAccess.Simple or ScimValueAccess.ComplexReference or ScimValueAccess.ComplexSubAttribute;
 
         if (!appending)
         {
@@ -149,6 +149,16 @@ public static class ScimResourceWriter
         }
 
         var entries = GetOrCreateArray(container, attribute.SourceAttributeName);
+
+        if (attribute.IsEntryValue)
+        {
+            // The entry is appended alongside the others, which keep their type, display and primary. An entry already
+            // holding the value is left alone: an export not yet confirmed by import is sent again on the next run.
+            if (!entries.Any(entry => IsEntryHolding(entry, attribute, change.Value)))
+                entries.Add(Entry(change.Value, attribute));
+            return;
+        }
+
         entries.Add(attribute.Access == ScimValueAccess.ComplexReference
             ? Reference(change.Value, attribute)
             : ToNode(change.Value, attribute));
@@ -174,7 +184,15 @@ public static class ScimResourceWriter
                     entry => entry is JsonObject reference && Matches(reference[ValueSubAttribute], value));
                 break;
 
-            case ScimValueAccess.ComplexSubAttribute:
+            case ScimValueAccess.ComplexSubAttribute when attribute.IsEntryValue && naming:
+                // The value identifies the entry, so the entry goes whole; a provider may also have sent a bare object.
+                if (container[attribute.SourceAttributeName] is JsonArray entries)
+                    RemoveMatching(entries, entry => IsEntryHolding(entry, attribute, value));
+                else if (IsEntryHolding(container[attribute.SourceAttributeName], attribute, value))
+                    container.Remove(attribute.SourceAttributeName);
+                break;
+
+            case ScimValueAccess.ComplexSubAttribute when !attribute.IsEntryValue:
                 (container[attribute.SourceAttributeName] as JsonObject)?.Remove(attribute.SubAttributeName!);
                 break;
 
@@ -214,6 +232,11 @@ public static class ScimResourceWriter
             entries.Remove(entry);
     }
 
+    private static bool IsEntryHolding(JsonNode? entry, ScimFlattenedAttribute attribute, object? value)
+    {
+        return entry is JsonObject entryObject && Matches(entryObject[attribute.SubAttributeName!], value);
+    }
+
     /// <summary>
     /// Whether a value the provider holds is the value JIM names. A date compares as an instant at the microsecond JIM
     /// holds (#2153), since a provider may spell one instant with a fraction of zeros or an offset; everything else by
@@ -243,6 +266,11 @@ public static class ScimResourceWriter
                 container[attribute.SourceAttributeName] = multiValued
                     ? Array(values, attribute)
                     : ToNode(values[0], attribute);
+                break;
+
+            case ScimValueAccess.ComplexSubAttribute when attribute.IsEntryValue:
+                // Each value is an entry of its own (#2090). Writing the first into one bare object lost the rest.
+                container[attribute.SourceAttributeName] = new JsonArray(values.Select(v => (JsonNode?)Entry(v, attribute)).ToArray());
                 break;
 
             case ScimValueAccess.ComplexSubAttribute:
@@ -308,27 +336,58 @@ public static class ScimResourceWriter
         return new JsonObject { [ValueSubAttribute] = ToNode(value, attribute) };
     }
 
+    /// <summary>
+    /// One entry of a multi-valued complex attribute, carrying only the sub-attribute that identifies it.
+    /// </summary>
+    private static JsonObject Entry(object? value, ScimFlattenedAttribute attribute)
+    {
+        return new JsonObject { [attribute.SubAttributeName!] = ToNode(value, attribute) };
+    }
+
     private static JsonArray Array(List<object?> values, ScimFlattenedAttribute attribute)
     {
         return new JsonArray(values.Select(v => ToNode(v, attribute)).ToArray());
     }
 
+    /// <summary>
+    /// The complex value to write a sub-attribute into. A provider that sent an array where the schema says one value
+    /// keeps it: its first entry is written into, and the rest are left alone rather than discarded.
+    /// </summary>
     private static JsonObject GetOrCreateObject(JsonObject container, string name)
     {
-        if (container[name] is JsonObject existing)
-            return existing;
+        switch (container[name])
+        {
+            case JsonObject existing:
+                return existing;
+
+            case JsonArray entries:
+                var first = entries.OfType<JsonObject>().FirstOrDefault();
+                if (first != null)
+                    return first;
+
+                var entry = new JsonObject();
+                entries.Add(entry);
+                return entry;
+        }
 
         var created = new JsonObject();
         container[name] = created;
         return created;
     }
 
+    /// <summary>
+    /// The array of a multi-valued attribute. A provider that sent a single bare value where the schema says
+    /// multi-valued (the reader accepts one) has it kept as the first entry, never replaced by the value being added.
+    /// </summary>
     private static JsonArray GetOrCreateArray(JsonObject container, string name)
     {
         if (container[name] is JsonArray existing)
             return existing;
 
-        var created = new JsonArray();
+        var bare = container[name];
+        container.Remove(name);
+
+        var created = bare == null ? new JsonArray() : new JsonArray(bare);
         container[name] = created;
         return created;
     }
