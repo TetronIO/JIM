@@ -3018,5 +3018,113 @@ public class DriftDetectionTests
         Assert.That(result.HasDrift, Is.False);
     }
 
+    /// <summary>
+    /// #2319: a generated value the target holds only under another data type is not compared; the next import reads it.
+    /// </summary>
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_TargetHeldOnlyUnderAnotherType_StagesNoCorrectionAsync()
+    {
+        var target = UserAccountControlCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target, tokenKind: GeneratedValueTokenKind.Sequence);
+        var mvo = CreateTestMvo();
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso, Attribute = target, AttributeId = target.Id, StringValue = "1042"
+        });
+        SeedExportAssignment(cso, target, "1042");
+        var options = await PrefetchedAssignmentsAsync(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
+    #endregion
+
+    #region Target held under another data type (#2319)
+
+    /// <summary>
+    /// #2319: a schema refresh changed the target attribute's data type and no import has read it since, so the
+    /// Connected System Object holds its value only under the old type. Drift does not read that as no value and stage a
+    /// correction: the next import reads the attribute as its new type, and drift is checked against that.
+    /// </summary>
+    [TestCase(AttributeDataType.Text)]
+    [TestCase(AttributeDataType.Number)]
+    [TestCase(AttributeDataType.LongNumber)]
+    [TestCase(AttributeDataType.Decimal)]
+    [TestCase(AttributeDataType.DateTime)]
+    [TestCase(AttributeDataType.Boolean)]
+    [TestCase(AttributeDataType.Guid)]
+    public void EvaluateDrift_DirectFlowTargetHeldOnlyUnderAnotherType_StagesNoCorrection(AttributeDataType type)
+    {
+        var mvAttribute = new MetaverseAttribute { Id = 9001, Name = "Typed Attribute", Type = type, AttributePlurality = AttributePlurality.SingleValued };
+        var target = AddTargetAttribute(9002, "typedAttribute", type, AttributePlurality.SingleValued);
+        var exportRule = CreateExportRule();
+        var mapping = exportRule.AttributeFlowRules.Single();
+        mapping.TargetConnectedSystemAttribute = target;
+        mapping.TargetConnectedSystemAttributeId = target.Id;
+        var source = mapping.Sources.Single();
+        source.MetaverseAttribute = mvAttribute;
+        source.MetaverseAttributeId = mvAttribute.Id;
+
+        var mvo = CreateTestMvo();
+        var mvValue = new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), MetaverseObject = mvo, Attribute = mvAttribute, AttributeId = mvAttribute.Id };
+        switch (type)
+        {
+            case AttributeDataType.Text: mvValue.StringValue = "alpha"; break;
+            case AttributeDataType.Number: mvValue.IntValue = 1; break;
+            case AttributeDataType.LongNumber: mvValue.LongValue = 10_000_000_000L; break;
+            case AttributeDataType.Decimal: mvValue.DecimalValue = 1.25m; break;
+            case AttributeDataType.DateTime: mvValue.DateTimeValue = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc); break;
+            case AttributeDataType.Boolean: mvValue.BoolValue = true; break;
+            case AttributeDataType.Guid: mvValue.GuidValue = Guid.NewGuid(); break;
+        }
+        mvo.AttributeValues.Add(mvValue);
+
+        var cso = CreateTestCso(mvo);
+        var held = new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, Attribute = target, AttributeId = target.Id };
+        if (type == AttributeDataType.Text)
+            held.IntValue = 42;
+        else
+            held.StringValue = "stale text";
+        cso.AttributeValues.Add(held);
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var result = Evaluate(cso, mvo, exportRule);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
+    /// <summary>#2319: an expression flow's target held only under another data type stages no correction either.</summary>
+    [Test]
+    public void EvaluateDrift_ExpressionFlowTargetHeldOnlyUnderAnotherType_StagesNoCorrection()
+    {
+        var exportRule = CreateExpressionExportRule(DisplayNameCsoAttr, MvRead(Constants.BuiltInAttributes.DisplayName));
+        var mvo = CreateMvoWithText((DisplayNameMvAttr, "John Doe"));
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso, Attribute = DisplayNameCsoAttr, AttributeId = DisplayNameCsoAttr.Id, IntValue = 42
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var result = Evaluate(cso, mvo, exportRule);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
     #endregion
 }

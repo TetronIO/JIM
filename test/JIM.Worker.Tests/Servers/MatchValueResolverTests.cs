@@ -215,6 +215,81 @@ public class MatchValueResolverTests
         Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.Failed));
     }
 
+    /// <summary>
+    /// #2319: a direct rule whose source holds its value only under another data type (a schema refresh changed the
+    /// attribute's type and no import has read it since) cannot be worked out. It is not no value: no value would let
+    /// the object match nothing and project a duplicate of an identity it already has.
+    /// </summary>
+    [TestCaseSource(nameof(MatchableTypes))]
+    public void Resolve_AttributeSourceHeldOnlyUnderAnotherType_FailsNamingTheAttributeAndHeldType(AttributeDataType type)
+    {
+        var source = new ConnectedSystemObjectTypeAttribute { Id = 20, Name = "staffId", Type = type };
+        var target = new MetaverseAttribute { Id = 120, Name = "Staff ID", Type = type };
+
+        var resolution = _resolver.Resolve(AttributeRule(source, target), [HeldUnderAnotherType(source)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.Failed));
+            Assert.That(resolution.FailureMessage, Does.Contain("staffId").And.Contain(AnotherType(type).ToString()));
+        }
+    }
+
+    /// <summary>#2319: an Expression rule reading an input held only under another data type cannot be worked out either.</summary>
+    [TestCaseSource(nameof(MatchableTypes))]
+    public void Resolve_ExpressionReadingAnInputHeldOnlyUnderAnotherType_FailsNamingTheInputAndHeldType(AttributeDataType type)
+    {
+        var source = new ConnectedSystemObjectTypeAttribute { Id = 20, Name = "staffId", Type = type };
+        var target = new MetaverseAttribute { Id = 120, Name = "Staff ID", Type = type };
+
+        var resolution = _resolver.Resolve(ExpressionRule("cs[\"staffId\"]", target), [HeldUnderAnotherType(source)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolution.Kind, Is.EqualTo(MatchValueResolutionKind.Failed));
+            Assert.That(resolution.FailureMessage, Does.Contain("staffId").And.Contain(AnotherType(type).ToString()));
+            Assert.That(resolution.Expression, Is.EqualTo("cs[\"staffId\"]"));
+        }
+    }
+
+    /// <summary>Only an input the Expression reads stops it; one held under another type that it does not read is ignored.</summary>
+    [Test]
+    public void Resolve_ExpressionNotReadingAnInputHeldUnderAnotherType_ReturnsItsValue()
+    {
+        var resolution = _resolver.Resolve(ExpressionRule("cs[\"employeeNumber\"]", EmployeeId),
+            [Text(EmployeeNumber, "E100"), new ConnectedSystemObjectAttributeValue { AttributeId = StaffNumber.Id, Attribute = StaffNumber, StringValue = "42" }]);
+
+        Assert.That(resolution.Values, Is.EqualTo(new object[] { "E100" }));
+    }
+
+    /// <summary>A value of the attribute's type beside one held under another is what the rule looks up.</summary>
+    [Test]
+    public void Resolve_AttributeSourceWithATypedValueBesideOneHeldUnderAnotherType_ReturnsTheTypedValue()
+    {
+        var resolution = _resolver.Resolve(AttributeRule(StaffNumber, EmployeeNumberMv),
+        [
+            new ConnectedSystemObjectAttributeValue { AttributeId = StaffNumber.Id, Attribute = StaffNumber, IntValue = 7 },
+            new ConnectedSystemObjectAttributeValue { AttributeId = StaffNumber.Id, Attribute = StaffNumber, StringValue = "42" }
+        ]);
+
+        Assert.That(resolution.Values, Is.EqualTo(new object[] { 7 }));
+    }
+
+    private static IEnumerable<AttributeDataType> MatchableTypes() => ObjectMatchingRule.MatchableTypes.OrderBy(t => t);
+
+    private static AttributeDataType AnotherType(AttributeDataType type) =>
+        type == AttributeDataType.Text ? AttributeDataType.Number : AttributeDataType.Text;
+
+    private static ConnectedSystemObjectAttributeValue HeldUnderAnotherType(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        var value = new ConnectedSystemObjectAttributeValue { AttributeId = attribute.Id, Attribute = attribute };
+        if (AnotherType(attribute.Type) == AttributeDataType.Number)
+            value.IntValue = 42;
+        else
+            value.StringValue = "42";
+        return value;
+    }
+
     private static ObjectMatchingRule AttributeRule(ConnectedSystemObjectTypeAttribute source, MetaverseAttribute target) => new()
     {
         Id = 1,
