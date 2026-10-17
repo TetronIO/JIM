@@ -27,6 +27,8 @@ public static class ScimPatchApplier
     private const string TypeSubAttribute = "type";
     private const string PrimarySubAttribute = "primary";
     private const string SchemasMember = "schemas";
+    private const string ValueSubAttribute = "value";
+    private const string ReferenceSubAttribute = "$ref";
 
     private static readonly string[] Operations = [ScimPatchOperations.Add, ScimPatchOperations.Replace, ScimPatchOperations.Remove];
 
@@ -480,10 +482,22 @@ public static class ScimPatchApplier
         }
 
         /// <summary>
-        /// Whether a listed value names a held entry: for a complex entry, every member it gives is the entry's.
+        /// Whether a listed value names a held entry: for a complex entry, every member it gives is the entry's. An entry
+        /// of a reference attribute (one with a <c>$ref</c>, such as <c>members</c>) is named by its <c>value</c> alone:
+        /// identity providers echo <c>display</c> and <c>$ref</c> back in a remove, and the held entry need not carry
+        /// them (the server keeps only the id), so matching every member would leave the member in place.
         /// </summary>
         private static bool Describes(JsonNode? item, JsonNode? entry, ScimSchemaAttribute attribute)
         {
+            if (item is JsonObject listed && entry is JsonObject heldReference &&
+                ScimResourceSchema.FindSubAttribute(attribute, ReferenceSubAttribute) != null &&
+                ScimEntryFilter.Member(listed, ValueSubAttribute) is { } listedValue)
+            {
+                var heldValue = ScimEntryFilter.Member(heldReference, ValueSubAttribute);
+                var valueSub = ScimResourceSchema.FindSubAttribute(attribute, ValueSubAttribute);
+                return heldValue != null && SameValue(heldValue, listedValue, valueSub?.CaseExact ?? false);
+            }
+
             if (item is JsonObject wanted && entry is JsonObject held)
             {
                 return wanted.Count > 0 && wanted.All(member =>
