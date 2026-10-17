@@ -9,11 +9,13 @@ using JIM.Models.Logic;
 using JIM.Models.Operations;
 using JIM.Models.Preview;
 using JIM.Models.Scheduling;
+using JIM.Models.Scim;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 namespace JIM.PostgresData;
@@ -90,6 +92,10 @@ public class JimDbContext : DbContext
     public virtual DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
     public virtual DbSet<ServiceSetting> ServiceSettingItems { get; set; } = null!;
     public virtual DbSet<ServiceHeartbeat> ServiceHeartbeats { get; set; } = null!;
+    public virtual DbSet<ScimStoreResource> ScimStoreResources { get; set; } = null!;
+    public virtual DbSet<ScimStoreGroupMember> ScimStoreGroupMembers { get; set; } = null!;
+    public virtual DbSet<ScimStoreState> ScimStoreStates { get; set; } = null!;
+    public virtual DbSet<ScimStoreJournalEntry> ScimStoreJournalEntries { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRule> ObjectMatchingRules { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRuleSource> ObjectMatchingRuleSources { get; set; } = null!;
     public virtual DbSet<SyncRule> SyncRules { get; set; } = null!;
@@ -549,6 +555,8 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ServiceHeartbeat>()
             .HasIndex(h => new { h.Service, h.InstanceId })
             .IsUnique();
+
+        ConfigureScimStore(modelBuilder);
 
         // ApiKey to Role many-to-many relationship
         modelBuilder.Entity<ApiKey>()
@@ -1771,5 +1779,73 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<GeneratedValueRevisionPending>()
             .HasIndex(r => r.Created)
             .HasDatabaseName("IX_GeneratedValueRevisionsPending_Created");
+    }
+
+    /// <summary>
+    /// The SCIM store (#124): resources, Group memberships, each Connected System's counters, and the journal of
+    /// accepted writes. Everything cascades from the Connected System, so deleting one (or the factory reset's
+    /// truncate) removes its store with it; the journal keeps its entries when the API key that made them is deleted.
+    /// </summary>
+    private static void ConfigureScimStore(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ScimStoreResource>(resource =>
+        {
+            resource.HasKey(r => r.Id);
+            resource.Property(r => r.Id).ValueGeneratedNever();
+            resource.Property(r => r.Payload).HasColumnType("jsonb");
+            resource.HasOne<ConnectedSystem>().WithMany().HasForeignKey(r => r.ConnectedSystemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // userName is unique without regard to case (RFC 7643 section 4.1.1). A stored generated column holds the
+            // folded value, so the unique index is an ordinary one the EF model can see, rather than a hand-written
+            // expression index a later migration could silently drop.
+            resource.Property<string?>(ScimStoreColumns.UserNameNormalised)
+                .HasMaxLength(ScimStoreLimits.IdentifierMaxLength)
+                .HasComputedColumnSql("lower(\"UserName\")", stored: true);
+
+            // Uniqueness holds among live resources only: a deleted resource's identifiers are free for reuse.
+            resource.HasIndex(nameof(ScimStoreResource.ConnectedSystemId), nameof(ScimStoreResource.ResourceType), ScimStoreColumns.UserNameNormalised)
+                .IsUnique()
+                .HasFilter($"\"DeletedAt\" IS NULL AND \"{ScimStoreColumns.UserNameNormalised}\" IS NOT NULL")
+                .HasDatabaseName(ScimStoreColumns.UserNameUniqueIndex);
+            resource.HasIndex(r => new { r.ConnectedSystemId, r.ResourceType, r.ExternalId })
+                .IsUnique()
+                .HasFilter("\"DeletedAt\" IS NULL AND \"ExternalId\" IS NOT NULL")
+                .HasDatabaseName(ScimStoreColumns.ExternalIdUniqueIndex);
+
+            // Delta Import reads a Connected System's resources by change sequence; listing walks live ones by id.
+            resource.HasIndex(r => new { r.ConnectedSystemId, r.ResourceType, r.ChangeSequence })
+                .HasDatabaseName("IX_ScimStoreResources_ChangeSequence");
+            resource.HasIndex(r => new { r.ConnectedSystemId, r.ResourceType, r.Id })
+                .HasFilter("\"DeletedAt\" IS NULL")
+                .HasDatabaseName("IX_ScimStoreResources_Live");
+        });
+
+        modelBuilder.Entity<ScimStoreGroupMember>(member =>
+        {
+            member.HasKey(m => new { m.GroupId, m.MemberId });
+            member.HasOne<ScimStoreResource>().WithMany().HasForeignKey(m => m.GroupId).OnDelete(DeleteBehavior.Cascade);
+            member.HasOne<ScimStoreResource>().WithMany().HasForeignKey(m => m.MemberId).OnDelete(DeleteBehavior.Cascade);
+            // Deleting a member looks up every Group it belongs to.
+            member.HasIndex(m => m.MemberId);
+        });
+
+        modelBuilder.Entity<ScimStoreState>(state =>
+        {
+            state.HasKey(s => s.ConnectedSystemId);
+            state.Property(s => s.ConnectedSystemId).ValueGeneratedNever();
+            state.HasOne<ConnectedSystem>().WithOne().HasForeignKey<ScimStoreState>(s => s.ConnectedSystemId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ScimStoreJournalEntry>(entry =>
+        {
+            entry.HasOne<ConnectedSystem>().WithMany().HasForeignKey(e => e.ConnectedSystemId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entry.HasOne<ApiKey>().WithMany().HasForeignKey(e => e.ApiKeyId).OnDelete(DeleteBehavior.SetNull);
+            entry.HasIndex(e => new { e.ConnectedSystemId, e.ResourceId, e.ChangeSequence });
+            // The history retention cleanup deletes by age.
+            entry.HasIndex(e => e.Occurred);
+        });
     }
 }

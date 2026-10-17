@@ -50,6 +50,12 @@ public class ChangeHistoryServer
         /// </summary>
         public int PasswordQueueRecordsDeleted { get; set; }
 
+        /// <summary>
+        /// SCIM store journal entries (#124) past the general retention period: the record of which SCIM requests
+        /// changed which resources, by which API key, between imports.
+        /// </summary>
+        public int ScimJournalEntriesDeleted { get; set; }
+
         public DateTime? OldestRecordDeleted { get; set; }
         public DateTime? NewestRecordDeleted { get; set; }
     }
@@ -442,6 +448,10 @@ public class ChangeHistoryServer
             Log.Information("ChangeHistoryCleanup: Removing password changes terminal before {PasswordOlderThan}", passwordOlderThan);
             result.PasswordQueueRecordsDeleted = await _application.PasswordSynchronisation.DeleteExpiredQueueRecordsAsync(passwordOlderThan, maxRecordsPerType);
 
+            // The SCIM store's journal is change history between imports, so it goes with the general history.
+            Log.Information("ChangeHistoryCleanup: Deleting expired SCIM store journal entries (older than {OlderThan})", olderThan);
+            result.ScimJournalEntriesDeleted = await _application.Repository.ScimStore.DeleteJournalEntriesOlderThanAsync(olderThan, maxRecordsPerType);
+
             // Calculate overall date range (use oldest/newest across all types)
             // Note: We can't get the exact IDs that were deleted without changing the repository methods,
             // so we'll use the olderThan date as a proxy for the date range
@@ -463,8 +473,8 @@ public class ChangeHistoryServer
             if (completeActivity)
                 await _application.Activities.CompleteActivityAsync(activity);
 
-            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {PasswordActivityCount} Password Synchronisation activities, {PasswordQueueCount} queued password changes deleted",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted);
+            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {PasswordActivityCount} Password Synchronisation activities, {PasswordQueueCount} queued password changes, {ScimJournalCount} SCIM store journal entries deleted",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted, result.ScimJournalEntriesDeleted);
 
             return result;
         }

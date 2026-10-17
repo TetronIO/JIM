@@ -1,6 +1,6 @@
 # SCIM 2.0 Service Provider Design
 
-- **Status:** Doing (Phase 1 primitives complete: filter grammar, ETags, schema composer, discovery documents, PATCH applier, resource intake and projection)
+- **Status:** Doing (Phase 1 complete; Phase 2a, the SCIM store's schema, change feed and journal, complete)
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
 - **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
@@ -187,28 +187,40 @@ Layers land on `main` one at a time, so a release can be cut with the Service Pr
   2. **Preview** for at least one release, so administrators can try it against their own identity provider (Microsoft Entra ID, Okta, Keycloak), where client quirks such as #2094 surface, while its behaviour can still change. The Connector, its Connected System page and the docs carry the Preview label.
   3. **Removed** once a release has shipped it in Preview without changes being needed: the catalogue entry, every gate, the flag-off tests and the harness's `Enable-JIMFeature` step go in the PR that closes the tracking issue.
 
+### D17. Every accepted write is journalled
+
+Decided 17 October 2026. An import sees each resource only as it stands when the import runs, so with nothing else a resource created and deleted between two imports would leave no trace in JIM, an attribute changed twice would show only its last value, and nothing would say which key or address made a change. That would fall short of what `engineering/COMPLIANCE_MAPPING.md` already claims for AU-2 and GDPR Article 30.
+
+- **The journal (Phase 2).** One row per resource per accepted write, written in the same transaction as the write: change sequence, resource id and type, operation, the changed attributes by SCIM name, the API key (id and name) and the client address. It cannot disagree with the store, and costs one insert per write.
+- **Names, not values.** The values are in the store and, once imported, in the Connected System Object's change history; a second copy of personal data in the journal would buy nothing (data minimisation). `password` cannot appear in any case (D5).
+- **Retention:** the journal is change history, so the History Retention Period and its cleanup govern it; no new setting.
+- **Attribution:** the store's write methods take the actor (key and address). Phase 4 supplies it from the authenticated scoped key.
+- **A summary Activity (Phase 5).** Per Connected System, key and 15-minute window, counts of creates, updates, deletes and rejections, aggregated as the security audit aggregates failed sign-ins, linking into the journal. One Activity per write was rejected: an initial load of 100,000 Users would be 100,000 Activities, swamping the operational view.
+- **From import back to request (Phase 3, then 5).** The Connected System Object's external id is the SCIM id, and a Delta Import reads exactly the sequence range from its watermark to its horizon, so "which SCIM requests caused this change" is a query over the journal: that resource's entries within the import's range (for a Full Import, from the previous import's watermark). Nothing is stored on the RPEI. Phase 3 makes sure the import's Activity records its range; Phase 5 shows the requests from a change record.
+
 ## Technical Architecture
 
 ### The SCIM store
 
-Working names; final names are settled in implementation.
-
 | Table | Purpose and key columns |
 |---|---|
-| `ScimResources` | One row per resource. `Id` (uuid, the SCIM id), `ConnectedSystemId` (FK, cascade delete), `ResourceType` (User or Group), `UserName`, `ExternalId`, `Version` (bigint), `ChangeSequence` (bigint), `Created`, `LastModified`, `DeletedAt` (tombstone), `Payload` (jsonb, sanitised). |
-| `ScimGroupMembers` | `GroupId`, `MemberId` (both FK to `ScimResources`). A child table, so adding one member does not rewrite a large group. |
-| `ScimStoreState` | One row per Connected System: `LastChangeSequence`, `TombstonePurgeFloor`. |
-| `ApiKeys` (existing) | Gains a generic scope (scope type plus target, here the Connected System), deleted with its Connected System. |
+| `ScimStoreResources` | One row per resource. `Id` (uuid, the SCIM id), `ConnectedSystemId` (FK, cascade delete), `ResourceType` (User or Group), `UserName`, `ExternalId`, `DisplayName`, `Version` (bigint), `ChangeSequence` (bigint), `Created`, `LastModified`, `DeletedAt` (tombstone), `Payload` (jsonb, sanitised, without `members`). A tombstone keeps only its id, type and stamps: identifiers and payload are cleared. |
+| `ScimStoreGroupMembers` | `GroupId`, `MemberId` (both FK to `ScimStoreResources`, cascade). A child table, so adding one member does not rewrite a large group. |
+| `ScimStoreStates` | One row per Connected System: `LastChangeSequence`, `TombstonePurgeFloor`. The row is also the store's write lock (see the change feed). |
+| `ScimStoreJournalEntries` | The journal (D17). `ConnectedSystemId` (cascade), `ChangeSequence`, `ResourceId` (no FK: entries outlive purged tombstones), `ResourceType`, `Operation`, `ChangedAttributes` (text[]), `ApiKeyId` (FK, set null when the key is deleted), `ApiKeyName`, `ClientAddress`, `Occurred`. |
 
-- **Uniqueness** is enforced by the database: a partial, case-insensitive unique index on `(ConnectedSystemId, ResourceType, lower(UserName))` and a partial unique index on `(ConnectedSystemId, ResourceType, ExternalId)`, both over live rows only. A retried POST therefore gets `409`, never a duplicate.
-- **Connected System lifecycle:** the tables cascade from `ConnectedSystems` and join the hand-ordered deletion sequence and its foreign-key coverage tests; writes take `FOR SHARE` on the Connected System row and are refused while it is being deleted. Factory reset must delete scoped keys without touching the infrastructure key.
+`ApiKeys` gains its generic scope (scope type plus target) in Phase 4, with the authentication that uses it.
+
+- **Uniqueness** is enforced by the database over live rows only: a partial unique index on `(ConnectedSystemId, ResourceType, UserNameNormalised)`, where `UserNameNormalised` is a stored generated column holding `lower("UserName")` (an ordinary column the EF model can see, rather than an expression index a later migration could drop), and a partial unique index on `(ConnectedSystemId, ResourceType, ExternalId)`. A retried POST therefore gets `409`, never a duplicate.
+- **Connected System lifecycle:** every table cascades from `ConnectedSystems`, so deleting a Connected System and the factory reset's truncate remove its store with no statement of their own; the foreign-key coverage tests confirm both. A write takes `FOR SHARE` on the Connected System row first, so it waits for a deletion in progress and then writes nothing, rather than racing the cascade. Factory reset must delete scoped keys without touching the infrastructure key (Phase 4).
 
 ### The change feed
 
-- Every write transaction increments its Connected System's `LastChangeSequence` (`UPDATE ... RETURNING`) and stamps the row's `ChangeSequence`, `Version` and `LastModified` after taking that row lock. Commit order therefore equals sequence order, so no write can slip behind a watermark. A timestamp, or a sequence assigned before commit, would recreate the lost-change race this design exists to avoid.
+- Every write transaction **starts** by incrementing its Connected System's `LastChangeSequence` (an upsert with `RETURNING`, which creates the row on the first write) and holds that row lock until it commits. Commit order therefore equals sequence order, so no write can slip behind a watermark; a timestamp, or a sequence assigned before commit, would recreate the lost-change race this design exists to avoid. Taking the lock first rather than last means a Connected System's writes run one at a time end to end, so a write needs no other row locks and two writes cannot deadlock; writes to different Connected Systems never wait for each other. Proven on PostgreSQL by a reader that, in one snapshot, reads the horizon and everything at or below it while eight writers contend, then checks nothing ever committed at or below a horizon it had already read.
+- A resource's `Version` rises once per write however many of its rows the write touches (its own row and its memberships), so one request is one version. Deleting a member raises the version of every Group it belonged to, in the same write, with the same change sequence.
 - `meta.lastModified` is stamped from the same clock that emits the response `Date` header, after the lock, inside a short transaction (the shipped client's Delta Import keeps a 60-second safety margin).
 - **Fallback:** if the per-system counter limits throughput during an identity provider's initial load, switch to an `xid8`/snapshot horizon. Measure before choosing.
-- **Tombstones** are purged only at or below a recorded Delta Import watermark and older than a minimum age, advancing the purge floor. A Delta Import whose watermark is below the purge floor fails with an Activity error asking for a Full Import; it never silently falls back.
+- **Tombstones** are purged only at or below a recorded Delta Import watermark and older than a minimum age, advancing the purge floor to the highest change sequence removed (it never falls). A Delta Import whose watermark is below the purge floor fails with an Activity error asking for a Full Import; it never silently falls back. The purge exists from Phase 2; it is scheduled in Phase 3, once there is an import watermark to purge below.
 
 ### Write path
 
@@ -302,22 +314,27 @@ PATCH applier, shared filter grammar, server-mode reader and writer, ETag helper
 
 ### Phase 2: SCIM store and service
 
-Migrations for the tables and indexes, the change feed, tombstones and purge floor, and the SCIM server in JIM.Application (create, replace, patch, delete, get, list) with the write-only intake. Includes the Connected System deletion sequence, factory reset and foreign-key coverage tests, and concurrent-writer tests on PostgreSQL proving commit order equals sequence order.
+Three PRs:
+
+- **2a ✅ Store.** Tables and indexes, the write session (the counter lock, sequences, versions, uniqueness outcomes, tombstones, memberships), the journal (D17) and its retention, the tombstone purge, the Connected System deletion and factory reset coverage, and concurrent-writer tests on PostgreSQL proving commit order equals sequence order.
+- **2b Server writes and Get.** The SCIM server in JIM.Application (create, replace, patch, delete, get) over the Phase 1 primitives: intake and the write-only refusal, reference checks (D9), `409` for uniqueness and `412` for `If-Match`, journalling. Membership changes take a direct path: a PATCH that only adds or removes members (including `members[value eq "x"]`) becomes row inserts and deletes without loading the Group's members, so one member added to a Group of 100,000 reads none of them; any other PATCH loads the Group whole and runs the PATCH applier. The direct path is tested against the applier on the same inputs.
+- **2c List.** Filtering and paging. The day-one filter subset becomes a small predicate model in JIM.Models, which the repository renders as parameterised SQL, so JIM.Data never depends on JIM.Scim; anything outside the subset is `400` `invalidFilter`. `userName`, `externalId` and `displayName` are columns; `emails.value` is matched with a JSONB `EXISTS` (measured before indexing). Index paging and cursors both order by `Id`; a cursor is the last id seen, encoded, and a malformed one is `400` `invalidCursor`.
 
 ### Phase 3: Service Provider Connector
 
 Introduces the feature flag and its gates (D16), in the same PR as the Connector's registration.
 
-The store reader seam, the connector (Full and Delta Import), registration in `ConnectorFactory` and `SeedingServer.BuiltInConnectors`, capability flags (`SupportsFullImport` and `SupportsDeltaImport` true, `SupportsExport` false), and import tests including tombstones, the purge-floor failure and the missing-reader failure.
+The store reader seam, the connector (Full and Delta Import), registration in `ConnectorFactory` and `SeedingServer.BuiltInConnectors`, capability flags (`SupportsFullImport` and `SupportsDeltaImport` true, `SupportsExport` false), and import tests including tombstones, the purge-floor failure and the missing-reader failure. Also: scheduling the tombstone purge below the recorded watermark, and recording each import's change-sequence range on its Activity so the journal lookup (D17) can find the requests behind a change.
 
 ### Phase 4: HTTP surface
 
-Scoped key authentication and failure semantics (D3), the `/scim` pipeline stages, discovery, Users and Groups (POST, GET, PUT, PATCH, DELETE, list with filtering and paging), error mapping, rate limiting and secure transport, behind the flag (D16).
+The `ApiKeys` scope column and scoped key authentication with its failure semantics (D3), the journal's actor taken from the authenticated key (D17), the `/scim` pipeline stages, discovery, Users and Groups (POST, GET, PUT, PATCH, DELETE, list with filtering and paging), error mapping, rate limiting and secure transport, behind the flag (D16).
 
 ### Phase 5: Surface parity and documentation
 
 - **Portal:** the Connected System page shows the base URL permanently, manages scoped keys (create, show once, rotate, revoke, last used, expiry), and shows a store summary (resource counts, last write, changes awaiting import) plus aggregated request rejections.
-- **REST API and PowerShell:** the same key management and store summary.
+- **Portal:** the SCIM summary Activity per Connected System, key and window (D17), and on a Connected System Object's change history, the SCIM requests behind each imported change.
+- **REST API and PowerShell:** the same key management and store summary, and the journal for a resource.
 - **Docs:** a connector page with per-provider setup (what to paste where), the recommended Schedule and the latency statement, the lifecycle table, and the "create a new Connected System" guidance; updates to the connectors index, architecture concepts, glossary and roadmap; changelog entries.
 
 ### Phase 6: Acceptance

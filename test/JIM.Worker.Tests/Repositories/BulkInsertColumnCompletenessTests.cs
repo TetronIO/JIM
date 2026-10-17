@@ -289,6 +289,28 @@ public class BulkInsertColumnCompletenessTests
     }
 
     [Test]
+    public void ScimStoreColumns_MatchMappedColumnsExactly()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreResource), "ScimStoreResources", ScimStoreColumns.Resources);
+            AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreGroupMember), "ScimStoreGroupMembers", ScimStoreColumns.GroupMembers);
+            AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreState), "ScimStoreStates", ScimStoreColumns.States);
+            AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreJournalEntry), "ScimStoreJournalEntries", ScimStoreColumns.JournalEntries);
+        }
+    }
+
+    [Test]
+    public void ScimStoreResourceUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "ScimStoreResources",
+            ScimStoreColumns.Resources,
+            [ScimStoreColumns.ResourcesUpdate],
+            ScimStoreColumns.ResourcesUpdateExclusions);
+    }
+
+    [Test]
     public void ServiceHeartbeatBulkColumns_MatchMappedColumnsExactly()
     {
         AssertColumnListMatchesModel(typeof(JIM.Models.Operations.ServiceHeartbeat), "ServiceHeartbeats", ServiceHeartbeatBulkColumns.ServiceHeartbeats);

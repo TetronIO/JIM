@@ -2748,6 +2748,157 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ScheduleSteps");
                 });
 
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreGroupMember", b =>
+                {
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("GroupId", "MemberId");
+
+                    b.HasIndex("MemberId");
+
+                    b.ToTable("ScimStoreGroupMembers");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreJournalEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid?>("ApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiKeyName")
+                        .HasColumnType("text");
+
+                    b.Property<long>("ChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.PrimitiveCollection<List<string>>("ChangedAttributes")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("ClientAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Occurred")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Operation")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ResourceType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId");
+
+                    b.HasIndex("Occurred");
+
+                    b.HasIndex("ConnectedSystemId", "ResourceId", "ChangeSequence");
+
+                    b.ToTable("ScimStoreJournalEntries");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreResource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTime>("LastModified")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("ResourceType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("UserNameNormalised")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasComputedColumnSql("lower(\"UserName\")", true);
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId", "ResourceType", "ChangeSequence")
+                        .HasDatabaseName("IX_ScimStoreResources_ChangeSequence");
+
+                    b.HasIndex("ConnectedSystemId", "ResourceType", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ScimStoreResources_ExternalId_Unique")
+                        .HasFilter("\"DeletedAt\" IS NULL AND \"ExternalId\" IS NOT NULL");
+
+                    b.HasIndex("ConnectedSystemId", "ResourceType", "Id")
+                        .HasDatabaseName("IX_ScimStoreResources_Live")
+                        .HasFilter("\"DeletedAt\" IS NULL");
+
+                    b.HasIndex("ConnectedSystemId", "ResourceType", "UserNameNormalised")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ScimStoreResources_UserName_Unique")
+                        .HasFilter("\"DeletedAt\" IS NULL AND \"UserNameNormalised\" IS NOT NULL");
+
+                    b.ToTable("ScimStoreResources");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreState", b =>
+                {
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("LastChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("TombstonePurgeFloor")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ConnectedSystemId");
+
+                    b.ToTable("ScimStoreStates");
+                });
+
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>
                 {
                     b.Property<int>("Id")
@@ -5838,6 +5989,53 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
 
                     b.Navigation("Schedule");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreGroupMember", b =>
+                {
+                    b.HasOne("JIM.Models.Scim.ScimStoreResource", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Scim.ScimStoreResource", null)
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreJournalEntry", b =>
+                {
+                    b.HasOne("JIM.Models.Security.ApiKey", null)
+                        .WithMany()
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreResource", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreState", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithOne()
+                        .HasForeignKey("JIM.Models.Scim.ScimStoreState", "ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>

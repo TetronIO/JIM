@@ -16,6 +16,7 @@ public interface IRepository : IDisposable
     public IExampleDataRepository ExampleData { get; }
     public IMetaverseRepository Metaverse { get; }
     public ISchedulingRepository Scheduling { get; }
+    public IScimStoreRepository ScimStore { get; }
     public ISearchRepository Search { get; }
     public ISecurityRepository Security { get; }
     public ISeedingRepository Seeding { get; }
