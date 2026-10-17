@@ -146,7 +146,11 @@ public static class ConnectedSystemObjectObsoletionService
                 "CSO will be deleted but MVO join state preserved (object considered 'always managed').");
 
             // Note: We still delete the CSO as it's obsolete in the source system,
-            // but we don't disconnect from MVO or trigger deletion rules
+            // but we don't disconnect from MVO or trigger deletion rules. The account is gone all the same, so an
+            // export rule that provisions it here puts it back (#2318; see the Disconnect path below).
+            if (RequiresReProvisioningReview(connectedSystemObject.MetaverseObject, connectedSystemObject.ConnectedSystemId, activeSyncRules, recallScope))
+                result.ScopeReviewMetaverseObjectId = connectedSystemObject.MetaverseObject.Id;
+
             if (syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                 SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
                     targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
@@ -344,6 +348,16 @@ public static class ConnectedSystemObjectObsoletionService
         // (e.g. so a join attempt in the same page does not see a stale join count).
         result.DisconnectedMetaverseObjectId = mvoId;
 
+        // Re-provisioning (#2318): where an export rule provisions this object type to the system it has just left,
+        // the object no longer has the account the rule says it should. Nothing else about it changed, so the
+        // change-driven export path never revisits it; the export scope review does, after the page has deleted the
+        // departed object (evaluating any sooner would still see it joined). An object whose deletion this
+        // disconnection scheduled or performed, or that was already pending deletion, is not put back.
+        if (mvoDeletionFate == MvoDeletionFate.NotDeleted
+            && !mvoDeletionPending
+            && RequiresReProvisioningReview(mvo, connectedSystemId, activeSyncRules, recallScope))
+            result.ScopeReviewMetaverseObjectId = mvoId;
+
         // Queue the CSO for batch deletion (deletion will happen at end of page processing).
         // The same RPEI is used for both the disconnection record and the deletion tracking.
         result.CsoDeletions.Add((connectedSystemObject, deletionExecutionItem));
@@ -440,6 +454,32 @@ public static class ConnectedSystemObjectObsoletionService
         // Return single RPEI with both Disconnected and CsoDeleted outcomes
         result.ExecutionItems.Add(deletionExecutionItem);
         return result;
+    }
+
+    /// <summary>
+    /// Whether the given Metaverse Object, about to lose its object in the given Connected System, needs an export
+    /// scope review to re-provision it there (#2318): an enabled export Synchronisation Rule provisions its type to
+    /// that system, the object is not pending deletion, and the obsoletion is the object disappearing rather than an
+    /// administrator deliberately withdrawing a Synchronisation Rule or Connected System. Scope is left to the
+    /// review, which evaluates every export rule in full; this only keeps out of it the objects no provisioning rule
+    /// could recreate.
+    /// </summary>
+    private static bool RequiresReProvisioningReview(
+        MetaverseObject mvo,
+        int connectedSystemId,
+        IReadOnlyCollection<SyncRule> activeSyncRules,
+        ContributorRecallScope recallScope)
+    {
+        if (recallScope.IsDeliberateWithdrawal || mvo.DeletionEligibleDate != null || mvo.Type == null)
+            return false;
+
+        var mvoTypeId = mvo.Type.Id;
+        return activeSyncRules.Any(rule =>
+            rule.Direction == SyncRuleDirection.Export
+            && rule.Enabled
+            && rule.ProvisionToConnectedSystem == true
+            && rule.ConnectedSystemId == connectedSystemId
+            && rule.ResolveMetaverseObjectTypeId() == mvoTypeId);
     }
 
     /// <summary>
