@@ -165,6 +165,10 @@ Describe 'Test-ScenarioIsDirectoryAgnostic' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 27 | Should -Be $true
     }
 
+    It 'is true for Scenario 028 (SCIM Connector against Keycloak)' {
+        Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 28 | Should -Be $true
+    }
+
     It 'is false for a scenario that does use a directory' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 1 | Should -Be $false
     }

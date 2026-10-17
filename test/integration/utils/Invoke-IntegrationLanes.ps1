@@ -99,7 +99,7 @@ function Remove-IntegrationLaneStack {
             }
             # The integration systems first: they sit on the JIM stack's network (declared external in the
             # integration Compose file), which the JIM stack's own `down` can only remove once they are gone.
-            docker compose @integrationArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim down -v --remove-orphans 2>&1 | Out-Null
+            docker compose @integrationArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim --profile keycloak-scim down -v --remove-orphans 2>&1 | Out-Null
             docker compose @jimArgs --profile with-db down -v --remove-orphans 2>&1 | Out-Null
             foreach ($container in $lane.DirectoryContainers) {
                 # Only a container this lane's integration project created; a fixed name alone could
