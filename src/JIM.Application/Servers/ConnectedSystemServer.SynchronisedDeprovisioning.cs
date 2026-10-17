@@ -3,6 +3,7 @@
 
 using JIM.Application.Expressions;
 using JIM.Application.Services;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -100,17 +101,11 @@ public partial class ConnectedSystemServer
         // The surviving systems' import rules whose scope can fail to evaluate (any criterion, since a survivor can hold
         // the attribute it reads under an earlier data type, #2329): an object whose survivor such a rule cannot decide is
         // held back rather than recalled on a guess. Empty, and free, when no surviving import rule has criteria.
-        var fallibleImportRules = allSyncRules
-            .Where(rule => rule.ConnectedSystemId != task.ConnectedSystemId && rule.Direction == SyncRuleDirection.Import &&
-                           rule.Enabled && ScopingEvaluationServer.CanFailToEvaluate(rule))
-            .ToList();
+        var fallibleImportRules = FallibleSurvivingRules(allSyncRules, task.ConnectedSystemId, SyncRuleDirection.Import);
 
         // Likewise the export rules whose scope can fail to evaluate. This run is one-shot: an object whose export scope it
         // cannot decide would keep stale values downstream with nothing to revisit it, so it is held back too.
-        var fallibleExportRules = allSyncRules
-            .Where(rule => rule.ConnectedSystemId != task.ConnectedSystemId && rule.Direction == SyncRuleDirection.Export &&
-                           rule.Enabled && ScopingEvaluationServer.CanFailToEvaluate(rule))
-            .ToList();
+        var fallibleExportRules = FallibleSurvivingRules(allSyncRules, task.ConnectedSystemId, SyncRuleDirection.Export);
 
         // Derived-input marks (#1750 Phase 4) come from the rule set as it stands once the system is gone: its own
         // rules' derived mappings go with it, so they neither mark it (its objects are being deleted anyway) nor carry
@@ -229,6 +224,21 @@ public partial class ConnectedSystemServer
                 result.AttributesCleared += residueResult.AttributesCleared;
                 result.PendingExportsStaged += residueResult.PendingExportsStaged;
                 result.PendingExportChangesWithdrawn += residueResult.PendingExportChangesWithdrawn;
+
+                // An object the residue recall held back (#2336) still carries this system's provenance, which the final
+                // deletion would sever. Fail as the object pass does, the system fenced and the next run starting over.
+                if (residueResult.MetaverseObjectsHeldBack > 0)
+                {
+                    task.CheckpointPhase = null;
+                    task.CheckpointConnectedSystemObjectId = null;
+                    task.CheckpointSyncRuleId = null;
+                    await Application.Tasking.UpdateWorkerTaskAsync(task);
+                    derivedInputMarks.LogSummary();
+                    Log.Warning("ExecuteSynchronisedDeprovisioningAsync: Connected System {ConnectedSystemId}: residue pass held back {HeldBack} Metaverse Object(s) " +
+                                "for Synchronisation Rule {SyncRuleId}; the system is not deleted.",
+                        task.ConnectedSystemId, residueResult.MetaverseObjectsHeldBack, importRule.Id);
+                    throw SynchronisedDeprovisioningIncompleteException.ForResidue(connectedSystem.Name, residueResult.MetaverseObjectsHeldBack);
+                }
 
                 task.CheckpointPhase = SynchronisedDeprovisioningPhase.ResiduePass;
                 task.CheckpointSyncRuleId = importRule.Id;
@@ -358,30 +368,38 @@ public partial class ConnectedSystemServer
         // evaluating again, so one evaluation decides: a second could run past the time limit after recall has begun.
         var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
 
+        // An object held back is recorded and counted, and left (with its Metaverse Object) exactly as it was.
+        void HoldBack(ConnectedSystemObject heldBack, string undecidable)
+        {
+            executionItems.Add(new ActivityRunProfileExecutionItem
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemObjectId = heldBack.Id,
+                ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
+                ErrorMessage = $"{undecidable} It and Metaverse Object {heldBack.MetaverseObjectId} were left as they were, " +
+                               "and the Connected System is not deleted until they can be processed.",
+                DisplayNameSnapshot = heldBack.NameOrId,
+                ObjectTypeSnapshot = heldBack.Type?.Name
+            });
+            Log.Warning("ExecuteSynchronisedDeprovisioningAsync: CSO {CsoId} held back; a surviving contributor's scope could not be decided: {Message}",
+                heldBack.Id, LogSanitiser.Sanitise(undecidable));
+            result.ConnectedSystemObjectsHeldBack++;
+        }
+
         foreach (var connectedSystemObject in batch)
         {
             // Fail closed (#2053): an object whose surviving contributor's scope cannot be decided is left exactly as it
             // was, with its Metaverse Object, rather than recalled on a guess. Checked before anything is touched.
-            if (await DescribeUndecidableScopeAsync(connectedSystemObject, fallibleImportRules, fallibleExportRules, survivorScopeAnswers) is { } undecidable)
+            if (await DescribeUndecidableScopeAsync(connectedSystemObject, fallibleImportRules, fallibleExportRules, survivorScopeAnswers,
+                    Application.SyncRepo) is { } undecidable)
             {
-                executionItems.Add(new ActivityRunProfileExecutionItem
-                {
-                    Id = Guid.NewGuid(),
-                    ConnectedSystemObjectId = connectedSystemObject.Id,
-                    ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
-                    ErrorMessage = $"{undecidable} It and Metaverse Object {connectedSystemObject.MetaverseObjectId} were left as they were, " +
-                                   "and the Connected System is not deleted until they can be processed.",
-                    DisplayNameSnapshot = connectedSystemObject.NameOrId,
-                    ObjectTypeSnapshot = connectedSystemObject.Type?.Name
-                });
-                Log.Warning("ExecuteSynchronisedDeprovisioningAsync: CSO {CsoId} held back; a surviving contributor's scope could not be decided: {Message}",
-                    connectedSystemObject.Id, LogSanitiser.Sanitise(undecidable));
-                result.ConnectedSystemObjectsHeldBack++;
+                HoldBack(connectedSystemObject, undecidable);
                 continue;
             }
 
             // Mark Obsolete and process through the shared obsoletion core. An object a crashed run already
             // obsoleted re-enters here identically; one it already deleted is simply absent from the page.
+            var statusBeforeObsoletion = connectedSystemObject.Status;
             connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
 
             var obsoletionResult = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
@@ -392,9 +410,8 @@ public partial class ConnectedSystemServer
                 remainingImportSourceEvaluator,
                 syncEngine,
                 Application.SyncRepo,
-                (survivor, rule) => survivorScopeAnswers.TryGetValue((survivor.Id, rule.Id), out var decided)
-                    ? decided
-                    : Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
+                ContributorReElectionService.AnsweringFrom(survivorScopeAnswers,
+                    (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule)),
                 survivorObjectTypes,
                 expressionEvaluator,
                 activity.PrepareRunProfileExecutionItem,
@@ -407,6 +424,16 @@ public partial class ConnectedSystemServer
                     if (!preRecallAttributeSnapshots.ContainsKey(mvo.Id))
                         preRecallAttributeSnapshots[mvo.Id] = mvo.AttributeValues.ToList();
                 });
+
+            // The core's own pre-flight (#2336) checks the pairs re-election evaluates, which the pre-flight above covers
+            // in all but edge cases; should it still hold the object back, nothing was changed, so the object is put back
+            // as it was and held back like any other.
+            if (obsoletionResult.UndecidableSurvivorScope is { } undecidableInCore)
+            {
+                connectedSystemObject.Status = statusBeforeObsoletion;
+                HoldBack(connectedSystemObject, undecidableInCore.Message);
+                continue;
+            }
 
             quietCsoDeletions.AddRange(obsoletionResult.QuietCsoDeletions);
             csoDeletions.AddRange(obsoletionResult.CsoDeletions);
@@ -601,15 +628,28 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The enabled rules of the systems that survive the deletion of <paramref name="connectedSystemId"/>, in the given
+    /// direction, whose scope can fail to evaluate: what the deprovisioning pre-flight checks. Empty, and so free, when no
+    /// such rule has criteria that can fail.
+    /// </summary>
+    private static List<SyncRule> FallibleSurvivingRules(IEnumerable<SyncRule> allSyncRules, int connectedSystemId, SyncRuleDirection direction) =>
+        allSyncRules
+            .Where(rule => rule.ConnectedSystemId != connectedSystemId && rule.Direction == direction &&
+                           rule.Enabled && ScopingEvaluationServer.CanFailToEvaluate(rule))
+            .ToList();
+
+    /// <summary>
     /// Why <paramref name="connectedSystemObject"/> cannot be processed safely, or null when it can: a surviving
     /// contributor's scope for a rule in <paramref name="fallibleImportRules"/>, or its Metaverse Object's scope for a rule
     /// in <paramref name="fallibleExportRules"/>, cannot be decided. Always null when both lists are empty. Reads only, so
     /// an object it names can be held back untouched; each survivor answer is kept in <paramref name="survivorScopeAnswers"/>
-    /// for re-election to use.
+    /// for re-election to use. Shared with the preview (#2336), which reads through its guard, so both hold back the same
+    /// objects.
     /// </summary>
+    /// <param name="syncRepository">Where survivors are read from: the run's repository, or a preview's read-only guard.</param>
     private async Task<string?> DescribeUndecidableScopeAsync(ConnectedSystemObject connectedSystemObject,
         List<SyncRule> fallibleImportRules, List<SyncRule> fallibleExportRules,
-        Dictionary<(Guid CsoId, int SyncRuleId), bool> survivorScopeAnswers)
+        Dictionary<(Guid CsoId, int SyncRuleId), bool> survivorScopeAnswers, ISyncRepository syncRepository)
     {
         if (connectedSystemObject.MetaverseObjectId is not { } metaverseObjectId)
             return null;
@@ -632,7 +672,7 @@ public partial class ConnectedSystemServer
         if (fallibleImportRules.Count == 0)
             return null;
 
-        var survivors = (await Application.SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId))
+        var survivors = (await syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId))
             .Where(candidate => candidate.ConnectedSystemId != connectedSystemObject.ConnectedSystemId &&
                                 candidate.Status != ConnectedSystemObjectStatus.Obsolete);
         foreach (var survivor in survivors)
@@ -644,7 +684,7 @@ public partial class ConnectedSystemServer
                 continue;
 
             // Evaluated on the fully loaded object (the discovery load carries no values); evaluation only reads it.
-            var hydrated = await Application.SyncRepo.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id) ?? survivor;
+            var hydrated = await syncRepository.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id) ?? survivor;
             foreach (var rule in rules.Where(rule => !survivorScopeAnswers.ContainsKey((survivor.Id, rule.Id))))
             {
                 try

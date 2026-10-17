@@ -11,6 +11,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Services;
@@ -29,6 +30,9 @@ namespace JIM.Application.Services;
 /// RemoveContributedAttributesOnObsoletion, surviving-contributor re-election
 /// (<see cref="ContributorReElectionService"/>) under the caller's <see cref="ContributorRecallScope"/>,
 /// grace-period value freezing, join breaking, and the export-relevant bookkeeping.</item>
+/// <item>the held-back path (#2336): on the Disconnect path, a surviving contributor whose scope cannot be decided
+/// stops the object before any of the above, recorded as <c>ScopingCriterionFailed</c>, with the object and its
+/// Metaverse Object left exactly as they were (<see cref="ConnectedSystemObjectObsoletionResult.UndecidableSurvivorScope"/>).</item>
 /// </list>
 /// Collaborators are parameters in the <see cref="ContributorReElectionService"/> style, so the run-time
 /// sync path in the worker and the queued Connected System deprovisioning run (#809 Phase 2) share one
@@ -166,6 +170,33 @@ public static class ConnectedSystemObjectObsoletionService
         var mvoId = mvo.Id;
         var mvoDisplayName = mvo.NameOrId;
 
+        // Survivor-scope pre-flight (#2336), before anything below changes the Metaverse Object: the recall re-elects a
+        // surviving contributor only if it is in its rule's scope, and where that cannot be decided (#2250, #2329) nothing
+        // may act on a guess. The object is held back: its Metaverse Object keeps its join, values and Deletion Rule state
+        // exactly as they are (the rule is not applied either, since its outcome and the recall are one change), and it
+        // stays obsolete for a later synchronisation to finish once the scope can be decided. Free when no rule that
+        // would re-elect a recalled attribute has criteria that can fail to evaluate.
+        var survivorScopeAnswers = new Dictionary<(Guid CsoId, int SyncRuleId), bool>();
+        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && priorityContext != null && mvo.Type != null &&
+            await ContributorReElectionService.FindUndecidableSurvivorScopeAsync(
+                mvo,
+                mvo.AttributeValues.Where(av => av.ContributedBySystemId == connectedSystemId).ToList(),
+                recallScope,
+                priorityContext,
+                syncRepository,
+                isCsoInScopeForImportRule,
+                survivorScopeAnswers) is { } undecidable)
+        {
+            deletionExecutionItem.ObjectChangeType = ObjectChangeType.NotSet;
+            deletionExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+            deletionExecutionItem.ErrorMessage = undecidable.Message;
+            result.UndecidableSurvivorScope = undecidable;
+            result.ExecutionItems.Add(deletionExecutionItem);
+            Log.Warning("ProcessObsoleteConnectedSystemObjectAsync: CSO {CsoId} held back, with Metaverse Object {MvoId}; a surviving contributor's scope could not be decided: {Message}",
+                connectedSystemObject.Id, mvoId, LogSanitiser.Sanitise(undecidable.Message));
+            return result;
+        }
+
         // Single RPEI for both disconnection and deletion (one-RPEI-per-CSO rule).
         // The ObjectChangeType is Disconnected (the meaningful event); CsoDeleted is recorded
         // as an outcome on the same RPEI since the deletion is a consequence of the disconnection.
@@ -251,7 +282,7 @@ public static class ConnectedSystemObjectObsoletionService
                     priorityContext,
                     syncEngine,
                     syncRepository,
-                    isCsoInScopeForImportRule,
+                    ContributorReElectionService.AnsweringFrom(survivorScopeAnswers, isCsoInScopeForImportRule),
                     objectTypes,
                     expressionEvaluator,
                     resolvePendingGeneratedValues,
