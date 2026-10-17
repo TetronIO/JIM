@@ -41,6 +41,8 @@ public class ActivitiesControllerTests
         _mockRepository = new Mock<IRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        _mockActivityRepo.Setup(r => r.GetChildActivityCountsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, int>());
         _mockLogger = new Mock<ILogger<ActivitiesController>>();
         _mockEtaTracker = new Mock<IActivityEtaTracker>();
         _application = new JimApplication(_mockRepository.Object);
@@ -102,6 +104,47 @@ public class ActivitiesControllerTests
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.TotalCount, Is.EqualTo(1));
         Assert.That(response.Items.Count(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_ActivityWithChildren_ReportsItsChildActivityCountAsync()
+    {
+        // #2346: the list left ChildActivityCount at 0 for every Activity, so an API client could not tell which ones
+        // have children to expand (Scenario 024 never found a password delivery filed beneath its queuing Activity).
+        var parent = new Activity { Id = Guid.NewGuid(), TargetName = "Parent", TargetType = ActivityTargetType.PasswordSynchronisation, Created = DateTime.UtcNow, Status = ActivityStatus.Complete };
+        var childless = new Activity { Id = Guid.NewGuid(), TargetName = "Childless", TargetType = ActivityTargetType.ConnectedSystemRunProfile, Created = DateTime.UtcNow, Status = ActivityStatus.Complete };
+        var pagedResult = new PagedResultSet<Activity> { Results = new List<Activity> { parent, childless }, TotalResults = 2, CurrentPage = 1, PageSize = 20 };
+        _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
+            .ReturnsAsync(pagedResult);
+        _mockActivityRepo.Setup(r => r.GetChildActivityCountsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, int> { [parent.Id] = 3 });
+
+        var result = await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }) as OkObjectResult;
+        var items = (result?.Value as PaginatedResponse<ActivityHeader>)!.Items.ToList();
+
+        Assert.That(items.Single(i => i.Id == parent.Id).ChildActivityCount, Is.EqualTo(3));
+        Assert.That(items.Single(i => i.Id == childless.Id).ChildActivityCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithActivities_ReadsThePageChildCountsInOneQueryAsync()
+    {
+        var first = new Activity { Id = Guid.NewGuid(), TargetName = "First", TargetType = ActivityTargetType.ConnectedSystemRunProfile, Created = DateTime.UtcNow, Status = ActivityStatus.Complete };
+        var second = new Activity { Id = Guid.NewGuid(), TargetName = "Second", TargetType = ActivityTargetType.ConnectedSystemRunProfile, Created = DateTime.UtcNow, Status = ActivityStatus.Complete };
+        var pagedResult = new PagedResultSet<Activity> { Results = new List<Activity> { first, second }, TotalResults = 2, CurrentPage = 1, PageSize = 20 };
+        _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
+            .ReturnsAsync(pagedResult);
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 });
+
+        _mockActivityRepo.Verify(r => r.GetChildActivityCountsAsync(
+            It.Is<IEnumerable<Guid>>(ids => ids.OrderBy(id => id).SequenceEqual(new[] { first.Id, second.Id }.OrderBy(id => id)))), Times.Once);
     }
 
     [Test]
@@ -1307,6 +1350,25 @@ public class ActivitiesControllerTests
         Assert.That(response!.PageSize, Is.EqualTo(20));
         Assert.That(response!.Items.Count(), Is.EqualTo(1));
         Assert.That(response!.Items.Single().TargetName, Is.EqualTo("Child Activity"));
+    }
+
+    [Test]
+    public async Task GetChildActivitiesAsync_ChildWithChildren_ReportsItsChildActivityCountAsync()
+    {
+        // #2346: a child Activity can have children of its own, which the client walks next.
+        var parentId = Guid.NewGuid();
+        var parent = new Activity { Id = parentId, TargetName = "Parent", TargetType = ActivityTargetType.PasswordSynchronisation, Created = DateTime.UtcNow, Status = ActivityStatus.Complete };
+        var child = new Activity { Id = Guid.NewGuid(), TargetName = "Child", TargetType = ActivityTargetType.PasswordSynchronisation, Created = DateTime.UtcNow, Status = ActivityStatus.Complete, ParentActivityId = parentId };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(parentId)).ReturnsAsync(parent);
+        _mockActivityRepo.Setup(r => r.GetChildActivitiesAsync(parentId, It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(new PagedResultSet<Activity> { Results = new List<Activity> { child }, TotalResults = 1, CurrentPage = 1, PageSize = 20 });
+        _mockActivityRepo.Setup(r => r.GetChildActivityCountsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, int> { [child.Id] = 2 });
+
+        var result = await _controller.GetChildActivitiesAsync(parentId, new PaginationRequest { Page = 1, PageSize = 20 }) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ActivityHeader>;
+
+        Assert.That(response!.Items.Single().ChildActivityCount, Is.EqualTo(2));
     }
 
     [Test]
