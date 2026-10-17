@@ -149,6 +149,9 @@ public partial class ConnectedSystemServer
             .OrderBy(rule => rule.Id)
             .ToList();
 
+        // Objects the recall left as they were because a surviving contributor's scope could not be decided (#2336).
+        var heldBackCount = 0;
+
         foreach (var importRule in importRules)
         {
             var objectType = importRule.ConnectedSystemObjectType
@@ -191,6 +194,7 @@ public partial class ConnectedSystemServer
             result.ValuesPreserved += ruleResult.ValuesPreserved;
             result.PendingExportsStaged += ruleResult.PendingExportsStaged;
             result.PendingExportChangesWithdrawn += ruleResult.PendingExportChangesWithdrawn;
+            heldBackCount += ruleResult.MetaverseObjectsHeldBack;
         }
 
         derivedInputMarks.LogSummary();
@@ -210,13 +214,24 @@ public partial class ConnectedSystemServer
         result.MetaverseObjectsMarkedWithNoConnector = await Application.Metaverse.MarkStateConvergentZeroJoinMvosForDeletionAsync(
             activity, "the post-clear reconciliation");
 
-        // The join record has served its purpose; delete it before clearing the arming. The repository
-        // update is deliberately immune to context tracking (its own contract), so the caller's in-memory
-        // instance is updated directly here too, letting the Full Synchronisation task processor observe
-        // the change without a re-fetch.
-        await Application.Repository.ConnectedSystems.DeleteConnectorSpaceClearJoinRecordsAsync(connectedSystem.Id);
-        await Application.Repository.ConnectedSystems.SetStrandedValueSweepArmedAtAsync(connectedSystem.Id, armedAt: null);
-        connectedSystem.StrandedValueSweepArmedAt = null;
+        // A held-back object's values are still stranded, and nothing but this sweep revisits them, so the sweep stays armed
+        // (join records and all) to run again at the next Full Synchronisation, which recalls only what is still stranded.
+        if (heldBackCount > 0)
+        {
+            Log.Warning("ExecuteStrandedValueSweepAsync: Connected System {ConnectedSystemId}: {HeldBack} Metaverse Object(s) held back; " +
+                        "the sweep stays armed and runs again at the next Full Synchronisation.",
+                connectedSystem.Id, heldBackCount);
+        }
+        else
+        {
+            // The join record has served its purpose; delete it before clearing the arming. The repository
+            // update is deliberately immune to context tracking (its own contract), so the caller's in-memory
+            // instance is updated directly here too, letting the Full Synchronisation task processor observe
+            // the change without a re-fetch.
+            await Application.Repository.ConnectedSystems.DeleteConnectorSpaceClearJoinRecordsAsync(connectedSystem.Id);
+            await Application.Repository.ConnectedSystems.SetStrandedValueSweepArmedAtAsync(connectedSystem.Id, armedAt: null);
+            connectedSystem.StrandedValueSweepArmedAt = null;
+        }
 
         Log.Information(
             "ExecuteStrandedValueSweepAsync: Connected System {ConnectedSystemId}: {RuleCount} Synchronisation Rule(s) swept, " +

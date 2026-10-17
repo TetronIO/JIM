@@ -2,9 +2,11 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
+using JIM.Application.Servers;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -84,17 +86,7 @@ public static class ContributorReElectionService
         if (mvo.Type == null)
             return [];
 
-        var objectTypeId = mvo.Type.Id;
-        var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
-
-        // An attribute is re-electable when the contributor cache holds a mapping from an ELIGIBLE
-        // Synchronisation Rule under the recall scope. Counting contributors (> 1) is not equivalent: when the
-        // withdrawn contribution's own mapping has been deleted or disabled (#1533) it is absent from the
-        // cache, so a sole surviving contributor counts as 1 yet must still be re-elected.
-        var reElectableAttributeIds = recalledAttributeIds
-            .Where(id => priorityContext.GetContributors(objectTypeId, id)
-                .Any(c => c.SyncRule != null && scope.IsEligibleContributorRule(c.SyncRule)))
-            .ToList();
+        var reElectableAttributeIds = GetReElectableAttributeIds(mvo.Type.Id, recalledValues, scope, priorityContext);
         if (reElectableAttributeIds.Count == 0)
             return [];
 
@@ -105,22 +97,7 @@ public static class ContributorReElectionService
         // re-election. The in-memory test database auto-fixes the navigation up and masks this; only a
         // real-database run can catch a regression here.
         var joinedCsos = await syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
-
-        // Gather the distinct (surviving CSO, contributing rule) pairs to re-flow, highest priority first so the
-        // strongest surviving contributor is written first and the gate skips the rest. DistinctBy keeps each
-        // pair's first (highest-priority) occurrence, so the ordering guarantee survives the dedup.
-        var survivorsToReflow = reElectableAttributeIds
-            .SelectMany(attributeId => priorityContext.GetContributors(objectTypeId, attributeId)
-                .Select(c => c.SyncRule)
-                .Where(r => r != null && scope.IsEligibleContributorRule(r))
-                .Select(r => r!)
-                .SelectMany(rule => joinedCsos
-                    .Where(c => c.ConnectedSystemId == rule.ConnectedSystemId &&
-                                scope.IsEligibleSurvivor(c) &&
-                                c.Status != ConnectedSystemObjectStatus.Obsolete)
-                    .Select(survivor => (Cso: survivor, Rule: rule))))
-            .DistinctBy(pair => (pair.Cso.Id, pair.Rule.Id))
-            .ToList();
+        var survivorsToReflow = SelectSurvivorsToReflow(mvo.Type.Id, reElectableAttributeIds, joinedCsos, scope, priorityContext);
 
         if (objectTypes == null)
             throw new MissingMemberException("objectTypes is null!");
@@ -141,8 +118,7 @@ public static class ContributorReElectionService
                 // survivor's type, and can resolve its reference attributes on PostgreSQL (the in-memory test database
                 // auto-tracks navigations and would mask a missing load). A tracked survivor resolves to the same
                 // instance, now fully hydrated.
-                if (survivor.Type == null || survivor.AttributeValues.Count == 0 ||
-                    survivor.AttributeValues.Any(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null))
+                if (NeedsHydration(survivor))
                 {
                     var loaded = await syncRepository.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id);
                     if (loaded != null)
@@ -210,6 +186,135 @@ public static class ContributorReElectionService
 
         return [];
     }
+
+    /// <summary>
+    /// The survivor-scope pre-flight (#2336): whether re-electing surviving contributors for
+    /// <paramref name="recalledValues"/> would meet a survivor whose scope for the contributing rule cannot be decided,
+    /// and if so why. A caller runs it BEFORE it changes anything on the Metaverse Object (a Deletion Rule, a recall, a
+    /// broken join), so an object it names can be left exactly as it was and errored as <c>ScopingCriterionFailed</c>,
+    /// rather than half-changed and then failed by <see cref="ReElectSurvivingContributorsAsync"/> part way through
+    /// (#2250: nothing acts on a guess).
+    /// <para>
+    /// It evaluates exactly the (survivor, rule) pairs re-election would, but only for rules whose scope can fail to
+    /// evaluate (<see cref="ScopingEvaluationServer.CanFailToEvaluate"/>), so it costs nothing, not even a query, when no
+    /// such rule contributes a recalled attribute: the usual case. It reads only. Every answer it reaches is recorded in
+    /// <paramref name="survivorScopeAnswers"/>; give re-election <see cref="AnsweringFrom"/> over them, so it reuses these
+    /// answers rather than evaluating the same criteria again (and cannot then meet an undecidable one).
+    /// </para>
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object whose attributes are about to be recalled (Type must be loaded).</param>
+    /// <param name="recalledValues">The values about to be withdrawn.</param>
+    /// <param name="scope">Whose contribution is being withdrawn, and who may take over.</param>
+    /// <param name="priorityContext">The attribute priority contributor cache (#91).</param>
+    /// <param name="syncRepository">The synchronisation repository, for survivor discovery and hydration.</param>
+    /// <param name="isCsoInScopeForImportRule">The import-rule scoping gate re-election will use.</param>
+    /// <param name="survivorScopeAnswers">Receives each decided answer, keyed by survivor and rule.</param>
+    /// <returns>The first undecidable criterion met, or null when every relevant survivor's scope is decided.</returns>
+    public static async Task<ScopingCriterionFailedException?> FindUndecidableSurvivorScopeAsync(
+        MetaverseObject mvo,
+        IReadOnlyCollection<MetaverseObjectAttributeValue> recalledValues,
+        ContributorRecallScope scope,
+        AttributePriorityContext priorityContext,
+        ISyncRepository syncRepository,
+        Func<ConnectedSystemObject, SyncRule, bool> isCsoInScopeForImportRule,
+        IDictionary<(Guid CsoId, int SyncRuleId), bool> survivorScopeAnswers)
+    {
+        if (mvo.Type == null || recalledValues.Count == 0)
+            return null;
+
+        var objectTypeId = mvo.Type.Id;
+        var reElectableAttributeIds = GetReElectableAttributeIds(objectTypeId, recalledValues, scope, priorityContext);
+        var anyFallibleRule = reElectableAttributeIds
+            .SelectMany(attributeId => priorityContext.GetContributors(objectTypeId, attributeId))
+            .Any(c => c.SyncRule != null && scope.IsEligibleContributorRule(c.SyncRule) && ScopingEvaluationServer.CanFailToEvaluate(c.SyncRule));
+        if (!anyFallibleRule)
+            return null;
+
+        var joinedCsos = await syncRepository.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
+        var pairs = SelectSurvivorsToReflow(objectTypeId, reElectableAttributeIds, joinedCsos, scope, priorityContext)
+            .Where(pair => ScopingEvaluationServer.CanFailToEvaluate(pair.Rule) && !survivorScopeAnswers.ContainsKey((pair.Cso.Id, pair.Rule.Id)))
+            .ToList();
+
+        // Each survivor as re-election will see it: the discovery load carries no values, so a survivor without them is
+        // evaluated on its full load, which is only read here, never written back.
+        var evaluatedSurvivors = new Dictionary<Guid, ConnectedSystemObject>();
+        foreach (var (survivor, rule) in pairs)
+        {
+            if (!evaluatedSurvivors.TryGetValue(survivor.Id, out var evaluated))
+            {
+                evaluated = NeedsHydration(survivor)
+                    ? await syncRepository.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id) ?? survivor
+                    : survivor;
+                evaluatedSurvivors[survivor.Id] = evaluated;
+            }
+
+            try
+            {
+                survivorScopeAnswers[(survivor.Id, rule.Id)] = isCsoInScopeForImportRule(evaluated, rule);
+            }
+            catch (ScopingCriterionFailedException scopingEx)
+            {
+                return scopingEx;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// A scoping gate that answers from <paramref name="survivorScopeAnswers"/> where the pre-flight
+    /// (<see cref="FindUndecidableSurvivorScopeAsync"/>) decided the pair, and asks
+    /// <paramref name="isCsoInScopeForImportRule"/> otherwise.
+    /// </summary>
+    public static Func<ConnectedSystemObject, SyncRule, bool> AnsweringFrom(
+        IReadOnlyDictionary<(Guid CsoId, int SyncRuleId), bool> survivorScopeAnswers,
+        Func<ConnectedSystemObject, SyncRule, bool> isCsoInScopeForImportRule) =>
+        (survivor, rule) => survivorScopeAnswers.TryGetValue((survivor.Id, rule.Id), out var decided)
+            ? decided
+            : isCsoInScopeForImportRule(survivor, rule);
+
+    /// <summary>
+    /// The recalled attributes a surviving contributor could take over: those the contributor cache holds a mapping for
+    /// from an ELIGIBLE Synchronisation Rule under the recall scope. Counting contributors (&gt; 1) is not equivalent: when
+    /// the withdrawn contribution's own mapping has been deleted or disabled (#1533) it is absent from the cache, so a
+    /// sole surviving contributor counts as 1 yet must still be re-elected.
+    /// </summary>
+    private static List<int> GetReElectableAttributeIds(int objectTypeId, IEnumerable<MetaverseObjectAttributeValue> recalledValues,
+        ContributorRecallScope scope, AttributePriorityContext priorityContext) =>
+        recalledValues.Select(av => av.AttributeId).Distinct()
+            .Where(id => priorityContext.GetContributors(objectTypeId, id)
+                .Any(c => c.SyncRule != null && scope.IsEligibleContributorRule(c.SyncRule)))
+            .ToList();
+
+    /// <summary>
+    /// The distinct (surviving Connected System Object, contributing rule) pairs to re-flow, highest priority first so the
+    /// strongest surviving contributor is written first and the gate skips the rest. DistinctBy keeps each pair's first
+    /// (highest-priority) occurrence, so the ordering guarantee survives the dedup. Shared by re-election and its
+    /// pre-flight, so the pre-flight checks exactly the pairs re-election evaluates.
+    /// </summary>
+    private static List<(ConnectedSystemObject Cso, SyncRule Rule)> SelectSurvivorsToReflow(int objectTypeId,
+        IEnumerable<int> reElectableAttributeIds, IReadOnlyCollection<ConnectedSystemObject> joinedCsos,
+        ContributorRecallScope scope, AttributePriorityContext priorityContext) =>
+        reElectableAttributeIds
+            .SelectMany(attributeId => priorityContext.GetContributors(objectTypeId, attributeId)
+                .Select(c => c.SyncRule)
+                .Where(r => r != null && scope.IsEligibleContributorRule(r))
+                .Select(r => r!)
+                .SelectMany(rule => joinedCsos
+                    .Where(c => c.ConnectedSystemId == rule.ConnectedSystemId &&
+                                scope.IsEligibleSurvivor(c) &&
+                                c.Status != ConnectedSystemObjectStatus.Obsolete)
+                    .Select(survivor => (Cso: survivor, Rule: rule))))
+            .DistinctBy(pair => (pair.Cso.Id, pair.Rule.Id))
+            .ToList();
+
+    /// <summary>
+    /// Whether a survivor from the discovery load lacks what re-flowing or scoping it reads: its object type, its values,
+    /// or the navigations of its reference values.
+    /// </summary>
+    private static bool NeedsHydration(ConnectedSystemObject survivor) =>
+        survivor.Type == null || survivor.AttributeValues.Count == 0 ||
+        survivor.AttributeValues.Any(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null);
 
     /// <summary>
     /// Identifies the attributes genuinely cleared by a set of pending Metaverse Object changes: a value was
