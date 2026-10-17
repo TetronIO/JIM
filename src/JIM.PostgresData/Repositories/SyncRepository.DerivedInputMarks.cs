@@ -24,6 +24,11 @@ namespace JIM.PostgresData.Repositories;
 /// the object. A mark set after that read, which the run's evaluation therefore may not have seen, survives the clear
 /// and the object is re-evaluated next run.
 /// </para>
+/// <para>
+/// The clear is shared with the synchronisation-pending mark (#2092): <see cref="ClearConnectedSystemObjectMarksAsync"/>
+/// clears either mark or both in one statement under the same guard, so clearing one never moves the row version the
+/// other's clear depends on.
+/// </para>
 /// </summary>
 public partial class SyncRepository
 {
@@ -71,31 +76,35 @@ public partial class SyncRepository
         var newlyMarked = (int)(await command.ExecuteScalarAsync() ?? 0);
 
         var markSet = distinct.ToHashSet();
-        FixUpTrackedDerivedInputChangePending(
+        ConnectedSystemObjectMarkFixUp.Apply(_context,
             cso => cso.MetaverseObjectId.HasValue && markSet.Contains(new DerivedInputChangeMark(cso.MetaverseObjectId.Value, cso.ConnectedSystemId)),
-            value: true);
+            cso => cso.DerivedInputChangePending, value: true);
 
         return newlyMarked;
     }
 
-    public async Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
+    public async Task<ConnectedSystemObjectMarkClearResult> ClearConnectedSystemObjectMarksAsync(IReadOnlyCollection<ConnectedSystemObjectMarkClear> clears)
     {
         if (clears.Count == 0)
-            return 0;
+            return new ConnectedSystemObjectMarkClearResult(0, 0);
 
-        // Clear only rows whose xmin still equals the version the run read when it loaded the object. A row whose
-        // xmin has moved was written since: most importantly re-marked by another system's run, whose input change
-        // this run's evaluation may not have seen. Leaving that row marked is fail-safe; the next run re-evaluates it
-        // (and a row rewritten for any other reason, such as this run's own join update, simply converges one run
-        // later, since that write does not recur). Only rows actually cleared are returned and fixed up.
+        // One statement for the page, clearing each mark only where asked, and only on rows whose xmin still equals the
+        // version the run read when it loaded the object. A row whose xmin has moved was written since: an import
+        // committing a further change (#2092), or another system's run re-marking a derived input (#1750), neither of
+        // which this run's processing saw. Leaving that row marked is fail-safe; the next run processes it. Because the
+        // guard matched, the row is exactly as loaded, so the marks the request names are the marks the row carries and
+        // the returned flags say precisely what was cleared.
         const string sql = """
             UPDATE "ConnectedSystemObjects" AS cso
-            SET "DerivedInputChangePending" = false
-            FROM unnest(@ids, @seenRowVersions) AS c("Id", "SeenRowVersion")
+            SET "SynchronisationPending" = CASE WHEN c."ClearSynchronisationPending" THEN false ELSE cso."SynchronisationPending" END,
+                "DerivedInputChangePending" = CASE WHEN c."ClearDerivedInputChangePending" THEN false ELSE cso."DerivedInputChangePending" END
+            FROM unnest(@ids, @seenRowVersions, @clearSynchronisationPending, @clearDerivedInputChangePending)
+                AS c("Id", "SeenRowVersion", "ClearSynchronisationPending", "ClearDerivedInputChangePending")
             WHERE cso."Id" = c."Id"
               AND cso.xmin = c."SeenRowVersion"
-              AND cso."DerivedInputChangePending"
-            RETURNING cso."Id"
+              AND ((c."ClearSynchronisationPending" AND cso."SynchronisationPending")
+                   OR (c."ClearDerivedInputChangePending" AND cso."DerivedInputChangePending"))
+            RETURNING cso."Id", c."ClearSynchronisationPending", c."ClearDerivedInputChangePending"
             """;
 
         var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
@@ -105,45 +114,28 @@ public partial class SyncRepository
             { Value = clears.Select(c => c.ConnectedSystemObjectId).ToArray() });
         command.Parameters.Add(new NpgsqlParameter("seenRowVersions", NpgsqlDbType.Array | NpgsqlDbType.Xid)
             { Value = clears.Select(c => c.SeenRowVersion).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("clearSynchronisationPending", NpgsqlDbType.Array | NpgsqlDbType.Boolean)
+            { Value = clears.Select(c => c.SynchronisationPending).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("clearDerivedInputChangePending", NpgsqlDbType.Array | NpgsqlDbType.Boolean)
+            { Value = clears.Select(c => c.DerivedInputChangePending).ToArray() });
 
-        var clearedIds = new HashSet<Guid>();
+        var synchronisationPendingCleared = new HashSet<Guid>();
+        var derivedInputCleared = new HashSet<Guid>();
         await using (var reader = await command.ExecuteReaderAsync())
         {
             while (await reader.ReadAsync())
-                clearedIds.Add(reader.GetGuid(0));
-        }
-
-        FixUpTrackedDerivedInputChangePending(cso => clearedIds.Contains(cso.Id), value: false);
-
-        return clearedIds.Count;
-    }
-
-    /// <summary>
-    /// Brings tracked Connected System Objects matching <paramref name="predicate"/> into line with a raw write of
-    /// <c>DerivedInputChangePending</c>: current and original value both set, so the property reads as persisted
-    /// rather than as a pending change, and a later whole-entity save writes the value the database already holds.
-    /// Change detection is suppressed while enumerating, for the reason <see cref="DetachTrackedEntities{T}"/> gives.
-    /// </summary>
-    private void FixUpTrackedDerivedInputChangePending(Func<ConnectedSystemObject, bool> predicate, bool value)
-    {
-        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
-        _context.ChangeTracker.AutoDetectChangesEnabled = false;
-        try
-        {
-            var entries = _context.ChangeTracker.Entries<ConnectedSystemObject>()
-                .Where(e => e.State != EntityState.Detached && e.State != EntityState.Added && predicate(e.Entity))
-                .ToList();
-
-            foreach (var property in entries.Select(entry => entry.Property(cso => cso.DerivedInputChangePending)))
             {
-                property.CurrentValue = value;
-                property.OriginalValue = value;
-                property.IsModified = false;
+                var id = reader.GetGuid(0);
+                if (reader.GetBoolean(1))
+                    synchronisationPendingCleared.Add(id);
+                if (reader.GetBoolean(2))
+                    derivedInputCleared.Add(id);
             }
         }
-        finally
-        {
-            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
-        }
+
+        ConnectedSystemObjectMarkFixUp.Apply(_context, cso => synchronisationPendingCleared.Contains(cso.Id), cso => cso.SynchronisationPending, value: false);
+        ConnectedSystemObjectMarkFixUp.Apply(_context, cso => derivedInputCleared.Contains(cso.Id), cso => cso.DerivedInputChangePending, value: false);
+
+        return new ConnectedSystemObjectMarkClearResult(synchronisationPendingCleared.Count, derivedInputCleared.Count);
     }
 }

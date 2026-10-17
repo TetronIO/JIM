@@ -124,6 +124,8 @@ public class ScopingFailureExportTests : WorkflowTestBase
         var cso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.HrSystem.Id &&
             c.AttributeValues.Any(av => av.Attribute?.Name == "EmployeeId" && av.StringValue == employeeId));
         cso.AttributeValues.Single(av => av.Attribute?.Name == "DisplayName").StringValue = displayName;
+        // As the import that changed it records it (#2092).
+        cso.SynchronisationPending = true;
     }
 
     private List<string> ExportedDisplayNames(Context ctx) => SyncRepo.PendingExports.Values

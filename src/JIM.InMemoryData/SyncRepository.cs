@@ -366,15 +366,17 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Delta sync's "modified since" test. Matches the production query's shape: a CSO counts when it was created
-    /// OR last updated after the watermark. A newly imported CSO has no LastUpdated until something changes it, so
+    /// Delta sync's "modified since" test, exactly the production query's: a CSO counts when it is marked pending
+    /// synchronisation (#2092) or for derived-input re-evaluation (#1750), or was created OR last updated after the
+    /// watermark. Strict, as PostgreSQL's is: an object last written at the instant the watermark records was processed
+    /// by the run that wrote the watermark. A newly imported CSO has no LastUpdated until something changes it, so
     /// testing LastUpdated alone hid every joiner from delta sync in tests (the production query never did).
-    /// Inclusive, as this provider has always been, so tests that set a watermark equal to a timestamp still see it.
     /// </summary>
     private static bool IsModifiedSince(ConnectedSystemObject cso, DateTime modifiedSince) =>
-        cso.Created >= modifiedSince || (cso.LastUpdated.HasValue && cso.LastUpdated.Value >= modifiedSince) ||
-        // A Metaverse-Derived Attribute Flow mark (#1750) selects the object as the production query does.
-        cso.DerivedInputChangePending;
+        cso.SynchronisationPending ||
+        cso.DerivedInputChangePending ||
+        cso.Created > modifiedSince ||
+        (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
@@ -392,13 +394,27 @@ public class SyncRepository : ISyncRepository
                 .ToList();
             var keysetResult = BuildPagedResult(remaining, 1, pageSize);
             keysetResult.CurrentPage = page;
+            FlagUnchangedObjects(keysetResult.Results, lastSyncTimestamp);
             return Task.FromResult(keysetResult);
         }
 
         var all = GetCsosForSystem(connectedSystemId)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
-        return Task.FromResult(BuildPagedResult(all, page, pageSize));
+        var result = BuildPagedResult(all, page, pageSize);
+        FlagUnchangedObjects(result.Results, lastSyncTimestamp);
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// The Full Synchronisation loader's partition, as the production loader applies it: with a watermark, an object
+    /// <see cref="ConnectedSystemObject.IsUnchangedSince"/> treats as unchanged is flagged, and Pass 2 skips it; without
+    /// one, nothing is. Set on every load, since this provider hands out its stored instances.
+    /// </summary>
+    private static void FlagUnchangedObjects(IEnumerable<ConnectedSystemObject> page, DateTime? lastSyncTimestamp)
+    {
+        foreach (var cso in page)
+            cso.IsUnchangedSinceLastSync = lastSyncTimestamp.HasValue && cso.IsUnchangedSince(lastSyncTimestamp.Value);
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
@@ -1005,6 +1021,8 @@ public class SyncRepository : ISyncRepository
                 cso.Id = Guid.NewGuid();
 
             FixupCsoNavigationProperties(cso);
+            // A created object is pending synchronisation (#2092), as every production create writer records it.
+            cso.SynchronisationPending = true;
             BumpRowVersion(cso);
             _csos[cso.Id] = cso;
             AddToCsIndex(cso);
@@ -1058,12 +1076,16 @@ public class SyncRepository : ISyncRepository
                 stored.ScopeReviewPending = cso.ScopeReviewPending;
                 stored.LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt;
                 stored.AttributeValues = cso.AttributeValues;
+                // An update is pending synchronisation (#2092): a constant, never the caller's value, as in production.
+                stored.SynchronisationPending = true;
+                cso.SynchronisationPending = true;
                 FixupCsoNavigationProperties(stored);
                 BumpRowVersion(stored);
                 UpdateMvoIndex(stored);
             }
             else
             {
+                cso.SynchronisationPending = true;
                 FixupCsoNavigationProperties(cso);
                 BumpRowVersion(cso);
                 _csos[cso.Id] = cso;
@@ -1113,8 +1135,10 @@ public class SyncRepository : ISyncRepository
         return UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
     }
 
-    public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    public Task<int> UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects,
+        IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null)
     {
+        var cleared = 0;
         foreach (var cso in connectedSystemObjects)
         {
             if (_csos.TryGetValue(cso.Id, out var stored))
@@ -1130,11 +1154,20 @@ public class SyncRepository : ISyncRepository
                 stored.JoinObjectMatchingRuleId = cso.JoinObjectMatchingRuleId;
                 stored.JoinMatchValue = cso.JoinMatchValue;
                 stored.Status = cso.Status;
+                // The synchronisation-pending mark (#2092) is cleared in the same write, guarded by the row version the
+                // page load read, as the production statement does.
+                if (synchronisationPendingSeenRowVersions != null &&
+                    synchronisationPendingSeenRowVersions.TryGetValue(stored.Id, out var seen) &&
+                    stored.xmin == seen && stored.SynchronisationPending)
+                {
+                    stored.SynchronisationPending = false;
+                    cleared++;
+                }
                 BumpRowVersion(stored);
                 UpdateMvoIndex(stored);
             }
         }
-        return Task.CompletedTask;
+        return Task.FromResult(cleared);
     }
 
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
@@ -1178,20 +1211,33 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(newlyMarked);
     }
 
-    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
+    public Task<ConnectedSystemObjectMarkClearResult> ClearConnectedSystemObjectMarksAsync(IReadOnlyCollection<ConnectedSystemObjectMarkClear> clears)
     {
-        // Mirrors the production xmin guard: a row whose version moved since the run loaded it keeps its mark.
-        var cleared = 0;
-        foreach (var (stored, _) in clears
-                     .Select(clear => (Cso: _csos.TryGetValue(clear.ConnectedSystemObjectId, out var cso) ? cso : null, clear.SeenRowVersion))
-                     .Where(x => x.Cso is { DerivedInputChangePending: true } && x.Cso.xmin == x.SeenRowVersion))
+        // Mirrors the production xmin guard: a row whose version moved since the run loaded it keeps its marks.
+        var synchronisationPendingCleared = 0;
+        var derivedInputCleared = 0;
+        foreach (var (stored, clear) in clears
+                     .Select(clear => (Cso: _csos.TryGetValue(clear.ConnectedSystemObjectId, out var cso) ? cso : null, Clear: clear))
+                     .Where(x => x.Cso != null && x.Cso.xmin == x.Clear.SeenRowVersion &&
+                                 ((x.Clear.SynchronisationPending && x.Cso.SynchronisationPending) ||
+                                  (x.Clear.DerivedInputChangePending && x.Cso.DerivedInputChangePending))))
         {
-            stored!.DerivedInputChangePending = false;
-            BumpRowVersion(stored);
-            cleared++;
+            if (clear.SynchronisationPending)
+            {
+                stored!.SynchronisationPending = false;
+                synchronisationPendingCleared++;
+            }
+
+            if (clear.DerivedInputChangePending)
+            {
+                stored!.DerivedInputChangePending = false;
+                derivedInputCleared++;
+            }
+
+            BumpRowVersion(stored!);
         }
 
-        return Task.FromResult(cleared);
+        return Task.FromResult(new ConnectedSystemObjectMarkClearResult(synchronisationPendingCleared, derivedInputCleared));
     }
 
     private uint _lastRowVersion;

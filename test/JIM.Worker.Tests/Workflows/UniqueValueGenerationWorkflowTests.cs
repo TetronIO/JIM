@@ -259,6 +259,7 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1),
             "Directory's own run cannot reconcile an assignment it did not generate; the stale row survives until HR's next run");
 
+        MarkHrObjectsForNextRun(ctx);
         var secondHrActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
@@ -334,6 +335,7 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         Assert.That(SyncRepo.RetiredGeneratedValues, Is.Empty, "Directory's run cannot see HR's assignment, so nothing is retired yet");
 
+        MarkHrObjectsForNextRun(ctx);
         var hrActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         var retired = SyncRepo.RetiredGeneratedValues.Single();
@@ -875,6 +877,7 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         // picks up the mutation on this tracked instance (the established pattern; see
         // RemovedMappingRecallWorkflowTests.FullSync_MappingDisabled_SoleContributor_LeavesValueInPlaceAsync).
         directoryOverrideMapping.Enabled = false;
+        RecordSyncRuleConfigurationChange();
 
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
@@ -951,6 +954,8 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         directoryOverrideMapping.Enabled = false;
 
+        RecordSyncRuleConfigurationChange();
+
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
@@ -996,6 +1001,8 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         Assert.That(SyncRepo.GeneratedValueAssignments.Keys, Has.Member(assignmentId), "sanity: Directory's own run does not touch HR's assignment");
 
         directoryOverrideMapping.Enabled = false;
+
+        RecordSyncRuleConfigurationChange();
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
@@ -1048,6 +1055,7 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         // 3. Directory's flow is disabled: HR's flow wins again and the export stages the rename.
         directoryOverrideMapping.Enabled = false;
+        RecordSyncRuleConfigurationChange();
         await RunFullSyncReturningActivityAsync(ctx.Hr);
         AssertAccountName(ctx, "percival.ashworth", ctx.HrImportRuleId, "Directory's flow disabled");
         Assert.That(PendingDirectoryAccountNames(ctx, sAMAccountNameAttr.Id), Has.Member("percival.ashworth"),
@@ -1055,11 +1063,13 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         // 4. Directory's flow is re-enabled: it wins again on its next run.
         directoryOverrideMapping.Enabled = true;
+        RecordSyncRuleConfigurationChange();
         await RunFullSyncReturningActivityAsync(ctx.Directory!);
         AssertAccountName(ctx, "pashworth99", directoryImportRule.Id, "Directory's flow re-enabled");
 
         // 5. Directory's flow is deleted, with recall: Directory's next run recalls its value and re-elects HR's.
         DeleteMappingFromRule(directoryImportRule, directoryOverrideMapping);
+        RecordSyncRuleConfigurationChange();
         await RunFullSyncReturningActivityAsync(ctx.Directory!);
         await RunFullSyncReturningActivityAsync(ctx.Hr);
         AssertAccountName(ctx, "percival.ashworth", ctx.HrImportRuleId, "Directory's flow deleted with recall");
@@ -1088,6 +1098,7 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         var accountNameValue = mvo.AttributeValues.Single(av => av.AttributeId == ctx.MvAccountNameAttributeId);
         mvo.AttributeValues.Remove(accountNameValue);
 
+        MarkHrObjectsForNextRun(ctx);
         await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
@@ -1095,6 +1106,17 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"), "the assignment's value must be reasserted");
             Assert.That(SyncRepo.GeneratedValueAssignments.Keys.Single(), Is.EqualTo(assignmentId), "the same assignment must survive");
         }
+    }
+
+    /// <summary>
+    /// Brings HR's objects back to HR's next Full Synchronisation, standing in for whatever would in production. The
+    /// in-memory loader now applies the unchanged-object skip as the PostgreSQL loader does (#2092), so without this a
+    /// Full Synchronisation passes over an object whose own data did not change, however its Metaverse Object moved.
+    /// </summary>
+    private void MarkHrObjectsForNextRun(GenerationContext ctx)
+    {
+        foreach (var cso in SyncRepo.ConnectedSystemObjects.Values.Where(c => c.ConnectedSystemId == ctx.Hr.Id))
+            cso.SynchronisationPending = true;
     }
 
     private SyncRuleMapping AddDirectoryAccountNameOverride(GenerationContext ctx, out ConnectedSystemObjectTypeAttribute sAMAccountNameAttr)
@@ -1433,6 +1455,7 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         var value = mvo.AttributeValues.Single(av => av.AttributeId == ctx.MvAccountNameAttributeId);
         Assert.That(value.StringValue, Is.EqualTo("joe.bloggs"));
 
+        MarkHrObjectsForNextRun(ctx);
         var secondActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
         var secondValue = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvAccountNameAttributeId);
         using (Assert.EnterMultipleScope())

@@ -8,7 +8,7 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 
 | Aspect | Full Sync | Delta Sync |
 |--------|-----------|------------|
-| CSO Selection | ALL CSOs (unchanged CSOs skip Attribute Flow unless Synchronisation Rule configuration changed since it was last fully applied) | Only CSOs created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
+| CSO Selection | ALL CSOs (unchanged CSOs skip Attribute Flow unless Synchronisation Rule configuration changed since it was last fully applied; a CSO carrying either mark is never unchanged) | Only CSOs marked `SynchronisationPending` (#2092) or `DerivedInputChangePending` (#1750), or created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
 | Early Exit | Never | Yes, if 0 modified CSOs and no Metaverse Object awaits an export scope review (#892, #1925) |
 | Per-page pipeline | Identical | Identical |
 | Watermark Update | Yes (establishes the baseline for the next Delta Sync) | Yes (even when 0 changes) |
@@ -27,15 +27,15 @@ flowchart TD
     Watermark --> CountModified[Count CSOs modified<br/>since watermark]
     CountModified --> HasChanges{Modified CSOs > 0,<br/>or any MVO flagged<br/>ScopeReviewPending?}
 
-    HasChanges -->|No| EarlyWatermark[Update watermark<br/>to UtcNow]
+    HasChanges -->|No| EarlyWatermark[Update watermark<br/>to UtcNow<br/>marks untouched]
     EarlyWatermark --> EarlyDone([Return - no work needed])
 
     HasChanges -->|Yes| CountPE[ObjectsToProcess = modified CSOs<br/>Pending Exports are handled as a<br/>side effect of CSO evaluation]
     CountPE --> LoadCaches[Load Synchronisation Rules, object types<br/>Drift detection cache<br/>Export evaluation cache: export rules to<br/>every Connected System, this one included #1284]
 
-    LoadCaches --> PageLoop{More CSO<br/>pages?}
+    LoadCaches --> PageLoop{Next page<br/>non-empty?}
 
-    PageLoop -->|Yes| LoadPage[Load next page of modified CSOs<br/>Created or LastUpdated > watermark<br/>Ordered by Id, keyset cursor:<br/>Id > last row of previous page #1858<br/>Seed page identity map #1612]
+    PageLoop -->|Yes| LoadPage[Load next page of CSOs: marked,<br/>or Created or LastUpdated > watermark<br/>Capture each marked row's xmin<br/>Ordered by Id, keyset cursor:<br/>Id > last row of previous page #1858<br/>Seed page identity map #1612]
     LoadPage --> CsoLoop{More CSOs<br/>in page?}
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
@@ -44,7 +44,7 @@ flowchart TD
     Pass1 --> Pass2[Pass 2: non-obsolete CSOs<br/>ProcessActiveConnectedSystemObjectAsync<br/>Identical to Full Sync:<br/>join, project, Attribute Flow, drift]
     Pass2 --> CsoLoop
 
-    CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. PersistPendingMetaverseObjectsAsync<br/>3. CreatePendingMvoChangeObjectsAsync<br/>4. EvaluateQueuedDriftAsync<br/>5. EvaluatePendingExportsAsync<br/>6. FlushPendingExportOperationsAsync<br/>7. ResolvePendingExportReferenceSnapshotsAsync<br/>8. FlushObsoleteCsoOperationsAsync<br/>9. FlushPendingMvoDeletionsAsync<br/>10. FlushRpeisAsync: bulk-insert via raw SQL<br/>11. FlushPendingMvoChangesAsync<br/>12. Clear change tracker and page<br/>identity map, update progress]
+    CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. PersistPendingMetaverseObjectsAsync:<br/>join states clear SynchronisationPending<br/>in the same statement, then one guarded<br/>clear of both marks, then scope flags<br/>3. CreatePendingMvoChangeObjectsAsync<br/>4. EvaluateQueuedDriftAsync<br/>5. EvaluatePendingExportsAsync<br/>6. FlushPendingExportOperationsAsync<br/>7. ResolvePendingExportReferenceSnapshotsAsync<br/>8. FlushObsoleteCsoOperationsAsync<br/>9. FlushPendingMvoDeletionsAsync<br/>10. FlushRpeisAsync: bulk-insert via raw SQL<br/>11. FlushPendingMvoChangesAsync<br/>12. Clear change tracker and page<br/>identity map, update progress]
     PageFlush --> PageLoop
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Merge reference-attribute changes under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
@@ -63,7 +63,7 @@ flowchart LR
     end
 
     subgraph "Subsequent Delta Syncs"
-        PrevWatermark[LastSyncCompletedAt<br/>= previous sync time] --> FilterCSOs[Only CSOs where<br/>Created or LastUpdated > watermark]
+        PrevWatermark[LastSyncCompletedAt<br/>= previous sync time] --> FilterCSOs[Only CSOs marked, or where<br/>Created or LastUpdated > watermark]
         FilterCSOs --> SubsetCSOs[Subset of CSOs<br/>processed]
     end
 
@@ -92,3 +92,7 @@ flowchart LR
 - **Keyset paging (#1858)**<br /> Delta sync pages through the modified set by keyset cursor (the next page starts after the last CSO Id of the previous one), as full sync already did. Each page boundary deletes that page's obsolete CSOs (`FlushObsoleteCsoOperationsAsync`), so the modified set shrinks while it is paged; an `OFFSET` into it skipped the rows that moved up into the gap (with a whole page of obsolete CSOs, every other page), and the watermark then moved past them.
 
 - **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 handles obsolete CSO teardown across all CSOs, populating `_pendingDisconnectedMvoIds` (Pending Export confirmation is done only by imports, #1826). Pass 2 runs join/projection/Attribute Flow only on non-obsolete CSOs. This ordering guarantees Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1.
+
+- **The synchronisation-pending mark (#2092)**<br /> The watermark alone is not commit-order safe: writers stamp `Created`/`LastUpdated` while processing an object, long before the batch commits, and a run that is in flight writes its watermark (`UtcNow`) after reading past rows that commit later. Such a change carries a timestamp below the new watermark, so neither the next Delta Synchronisation nor Full Synchronisation's unchanged skip would ever see it. `ConnectedSystemObjects.SynchronisationPending` closes this. Every writer that changes what synchronisation must see sets it with the change, never before it: import create (in the rows' own transaction; the parallel two-phase COPY marks in the transaction that commits the values), import update, Full Import deletion detection and explicit Delta Import deletes (the bulk update writes a constant `true`, and commits with its attribute value changes), Schema Refresh Removal, and provisioning by export evaluation. `ConnectedSystemObjectWriterCompletenessTests` fails for a new write path until it is classified. No whole-entity save writes it (ignored on update in EF, absent from the bulk update column list). The synchronisation clears it only on objects it processed, and only where the row's `xmin` still equals the version its page load read, so a change committed after the load keeps its mark. Because the run's own join-state write moves `xmin`, the clear for a newly joined object is folded into that statement; every other processed object is cleared by one guarded statement per page, shared with the derived-input mark so neither clear moves the other's guard; the unguarded scope-flag clear runs after both. Objects whose processing errored are cleared, as the watermark always passed them. The timestamp arms remain as belt and braces.
+
+- **Paging until empty (#2092)**<br /> Delta and Full Synchronisation page by keyset until a page comes back empty, not to a page count fixed at the start, so objects entering the selection mid-run above the cursor are processed by the same run. The starting count is only the progress estimate; `ObjectsProcessed` may exceed `ObjectsToProcess`. A mark set mid-run below the cursor is picked up by the next run.

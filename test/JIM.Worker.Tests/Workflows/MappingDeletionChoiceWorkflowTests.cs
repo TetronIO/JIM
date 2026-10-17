@@ -285,6 +285,9 @@ public class MappingDeletionChoiceWorkflowTests : WorkflowTestBase
         var mapping = ctx.HrImportRule.AttributeFlowRules.Single(m => m.TargetMetaverseAttributeId == ctx.MvDescriptionAttributeId);
         await Jim.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, ctx.User, keepContributedValues: keepContributedValues);
         ctx.HrImportRule.AttributeFlowRules.Remove(mapping);
+        // The repository's delete stamps the parent rule's LastUpdated so the next Full Synchronisation applies the
+        // change to every object (#1533); the in-memory sync store reads its own rule instances, so mirror that here.
+        RecordSyncRuleConfigurationChange();
     }
 
     /// <summary>

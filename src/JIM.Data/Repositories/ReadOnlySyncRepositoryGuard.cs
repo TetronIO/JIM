@@ -464,7 +464,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null, List<Guid>? pendingRemovalIds = null)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectsAsync));
 
-    public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    public Task<int> UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects,
+        IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectJoinStatesAsync));
 
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
@@ -473,8 +474,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks)
         => throw new PreviewWriteAttemptedException(nameof(MarkConnectedSystemObjectsDerivedInputChangePendingAsync));
 
-    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
-        => throw new PreviewWriteAttemptedException(nameof(ClearConnectedSystemObjectDerivedInputChangePendingAsync));
+    public Task<ConnectedSystemObjectMarkClearResult> ClearConnectedSystemObjectMarksAsync(IReadOnlyCollection<ConnectedSystemObjectMarkClear> clears)
+        => throw new PreviewWriteAttemptedException(nameof(ClearConnectedSystemObjectMarksAsync));
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectsWithNewAttributeValuesAsync));

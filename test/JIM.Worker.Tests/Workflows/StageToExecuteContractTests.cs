@@ -1493,8 +1493,13 @@ public class StageToExecuteContractTests : WorkflowTestBase
         return (sourceCso, statusValue);
     }
 
+    /// <summary>
+    /// An import's change to the object, as the import's update writer records it: the value, and the object marked
+    /// pending synchronisation (#2092), without which a Full Synchronisation's unchanged-object skip would pass it by.
+    /// </summary>
     private static void ReplaceStringAttributeValue(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string newValue)
     {
+        cso.SynchronisationPending = true;
         cso.AttributeValues.RemoveAll(av => av.AttributeId == attribute.Id);
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {

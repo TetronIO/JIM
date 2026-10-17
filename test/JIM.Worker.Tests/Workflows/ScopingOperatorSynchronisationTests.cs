@@ -84,6 +84,7 @@ public class ScopingOperatorSynchronisationTests : WorkflowTestBase
         Assert.That(joinedTo, Is.Not.Null, "precondition: the object projected under the fast pattern");
 
         ctx.Criterion.StringValue = "^(a+)+$";
+        RecordSyncRuleConfigurationChange();
         var activity = await RunFullSyncAsync(ctx.System);
 
         cso = SyncRepo.ConnectedSystemObjects.Values.Single();

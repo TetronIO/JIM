@@ -3328,6 +3328,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("SynchronisationPending")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("TypeId")
                         .HasColumnType("integer");
 
@@ -3369,6 +3372,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemId", "TypeId")
                         .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId");
+
+                    b.HasIndex(new[] { "ConnectedSystemId" }, "IX_ConnectedSystemObjects_ConnectedSystemId_SynchronisationPending")
+                        .HasFilter("\"SynchronisationPending\"");
 
                     b.ToTable("ConnectedSystemObjects");
                 });

@@ -322,8 +322,13 @@ public interface ISyncRepository
     /// <summary>
     /// Updates only the join state fields (MetaverseObjectId, JoinType, Status) on CSOs
     /// without touching their attribute values. Used after join/projection operations.
+    /// When <paramref name="synchronisationPendingSeenRowVersions"/> names an object, its synchronisation-pending mark
+    /// (#2092) is cleared in the same statement, but only while the row's <c>xmin</c> still equals the version given:
+    /// the join-state write moves the row's version, so a guarded clear issued after it could never apply.
     /// </summary>
-    Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    /// <returns>The number of objects whose synchronisation-pending mark was cleared.</returns>
+    Task<int> UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects,
+        IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null);
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on CSOs the sync engine has re-evaluated past the unchanged-skip
@@ -337,7 +342,7 @@ public interface ISyncRepository
     /// Metaverse-Derived Attribute Flow reading a Metaverse attribute that changed, so their next synchronisation,
     /// delta included, must re-evaluate the object. Every matched row is written, already-marked ones included, so its
     /// <c>xmin</c> moves: a hosting-system run that loaded the object before this mark then cannot clear it (see
-    /// <see cref="ClearConnectedSystemObjectDerivedInputChangePendingAsync"/>). One bulk statement for the whole batch,
+    /// <see cref="ClearConnectedSystemObjectMarksAsync"/>). One bulk statement for the whole batch,
     /// called at page flush; duplicate marks are harmless and an unjoined system has nothing to mark. Tracked instances
     /// of the marked rows are brought into line so a later save cannot write the stale value back. No-op when
     /// <paramref name="marks"/> is empty.
@@ -346,14 +351,14 @@ public interface ISyncRepository
     Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks);
 
     /// <summary>
-    /// Clears <c>DerivedInputChangePending</c> (#1750) on Connected System Objects whose synchronisation processing
-    /// completed without error, each only while the row's <c>xmin</c> still equals the version the synchronisation
-    /// read when it loaded the object. A row re-marked (or otherwise rewritten) since then keeps its mark and is
-    /// re-evaluated by the next run: fail-safe, never a lost input change. One bulk statement, called at page flush;
-    /// tracked instances of the cleared rows are brought into line. No-op when <paramref name="clears"/> is empty.
+    /// Clears the synchronisation-pending mark (#2092) and the derived-input mark (#1750), each where the request asks,
+    /// on Connected System Objects a synchronisation has processed, each only while the row's <c>xmin</c> still equals
+    /// the version the synchronisation read when it loaded the object. A row written since then (an import committing a
+    /// further change, another run re-marking it) keeps its marks and is processed by the next run. One statement for
+    /// the batch, called at page flush; tracked instances of the cleared rows are brought into line. No-op when
+    /// <paramref name="clears"/> is empty.
     /// </summary>
-    /// <returns>The number of objects whose mark was cleared.</returns>
-    Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears);
+    Task<ConnectedSystemObjectMarkClearResult> ClearConnectedSystemObjectMarksAsync(IReadOnlyCollection<ConnectedSystemObjectMarkClear> clears);
 
     /// <summary>
     /// Updates CSOs that have new attribute values added (e.g., secondary external ID during export).

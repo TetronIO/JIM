@@ -29,7 +29,8 @@ internal static class CsoBulkColumns
         "Status", "MetaverseObjectId", "JoinType", "DateJoined",
         "PartitionId", "ScopeReviewPending", "LastScopeEvaluatedAt",
         "ImportStateHash", "ImportStateFingerprint", "DerivedInputChangePending",
-        "JoinMethod", "JoinSyncRuleId", "JoinSyncRuleName", "JoinObjectMatchingRuleId", "JoinMatchValue"
+        "JoinMethod", "JoinSyncRuleId", "JoinSyncRuleName", "JoinObjectMatchingRuleId", "JoinMatchValue",
+        "SynchronisationPending"
     ];
 
     /// <summary>
@@ -49,6 +50,10 @@ internal static class CsoBulkColumns
     /// Connected System's synchronisation (a bulk mark on the hosting system's joined objects) and cleared by the
     /// hosting system's own, each through a dedicated statement, so an entity held across a long flush must never
     /// write back a stale value over a mark set concurrently.
+    /// SynchronisationPending (#2092) is excluded because it is never written from the entity: the bulk update sets it
+    /// to a constant true in the same statement (an update is a change synchronisation must process), so an import
+    /// holding an object loaded before a synchronisation cleared it still announces the change it commits, and nothing
+    /// can write a stale false over a concurrent mark.
     /// BulkInsertColumnCompletenessTests keeps this list in lockstep with
     /// <see cref="ConnectedSystemObjects"/> so a migration that adds a mutable column is a conscious
     /// decision here, not a silent omission.
@@ -79,7 +84,7 @@ internal static class CsoBulkColumns
     internal static readonly string[] ConnectedSystemObjectsUpdateExclusions =
     [
         "Id", "ConnectedSystemId", "Created", "TypeId", "ScopeReviewPending", "LastScopeEvaluatedAt",
-        "ImportStateHash", "ImportStateFingerprint", "DerivedInputChangePending"
+        "ImportStateHash", "ImportStateFingerprint", "DerivedInputChangePending", "SynchronisationPending"
     ];
 
     /// <summary>
