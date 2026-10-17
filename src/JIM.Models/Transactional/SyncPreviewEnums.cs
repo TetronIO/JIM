@@ -65,7 +65,11 @@ public enum SyncPreviewMessageCode
     /// <summary>Before provisioning, an Object Matching Rule found more than one existing Connected System Object in the
     /// target (#2052); the real sync would neither join the Metaverse Object to one nor provision it, and would record an
     /// AmbiguousProvisioningMatch error listing them.</summary>
-    AmbiguousProvisioningMatch
+    AmbiguousProvisioningMatch,
+    /// <summary>Dates an export would send to a multi-valued attribute are one date at the step of time the Connected
+    /// System holds it to (#2153); the real sync would send them as one and record a DatesCollapseAtTargetResolution
+    /// item. Not a failure: the attribute still exports.</summary>
+    DatesCollapseAtTargetResolution
 }
 
 /// <summary>

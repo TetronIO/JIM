@@ -501,3 +501,43 @@ public enum JoinRecordSource
     /// <summary>Neither recorded nor recoverable: the join predates recording and its history has gone.</summary>
     NotRecorded = 2
 }
+
+/// <summary>
+/// The finest step of time a Connected System holds a date and time attribute to (#2153, decision D2): an Active
+/// Directory GeneralizedTime holds whole seconds, a SQL <c>datetime2(3)</c> column milliseconds, a <c>date</c> column
+/// whole days. JIM holds a date to the microsecond, so a finer value exported to a coarser target would come back
+/// changed; export staging therefore floors what it sends to the target's resolution, and compares and diffs at it.
+/// </summary>
+/// <remarks>
+/// Persisted by value on Connected System attributes; values are explicit so a new member never re-labels a stored
+/// one. Ordered finest to coarsest.
+/// </remarks>
+public enum DateTimeResolution
+{
+    /// <summary>One microsecond, the finest time JIM holds.</summary>
+    Microsecond = 1,
+
+    /// <summary>Ten microseconds, for example SQL <c>datetime2(5)</c>.</summary>
+    TenMicroseconds = 2,
+
+    /// <summary>A hundred microseconds, for example SQL <c>datetime2(4)</c>.</summary>
+    HundredMicroseconds = 3,
+
+    /// <summary>One millisecond, for example SQL <c>datetime2(3)</c>.</summary>
+    Millisecond = 4,
+
+    /// <summary>Ten milliseconds, for example SQL Server's legacy <c>datetime</c> (which holds steps of a three-hundredth of a second).</summary>
+    TenMilliseconds = 5,
+
+    /// <summary>A hundred milliseconds, for example SQL <c>datetime2(1)</c>.</summary>
+    HundredMilliseconds = 6,
+
+    /// <summary>One second, for example Active Directory and Oracle <c>DATE</c>.</summary>
+    Second = 7,
+
+    /// <summary>One minute, for example SQL Server <c>smalldatetime</c>.</summary>
+    Minute = 8,
+
+    /// <summary>One day, for example a SQL <c>date</c> column.</summary>
+    Day = 9
+}

@@ -541,12 +541,24 @@ internal sealed class SqlConnectorExport
     /// <summary>
     /// Removes the one row holding a change's value, never every row the parent has.
     /// </summary>
+    /// <remarks>
+    /// A date for a column coarser than the microsecond is removed at its resolution (#2153, D2): every row of the parent in the step of time the value
+    /// names, from the value up to the next step. Export staging sends a date floored to that resolution, and the column
+    /// can hold it finer than that (SQL Server's legacy <c>datetime</c> stores .003 for a value sent as .000), so an
+    /// equality test would miss the row and leave it in place on every export. The rows of one step are one value to
+    /// JIM, so removing them together is removing that value.
+    /// </remarks>
     private SqlExportStatement RemoveRelatedRow(
         SqlRelatedTableConfiguration relatedTable,
         SqlExportColumnTypes relatedColumns,
         IReadOnlyList<SqlExportColumnValue> joinValues,
         PendingExportAttributeValueChange change)
     {
+        if (change.Attribute.Type == AttributeDataType.DateTime && change.DateTimeValue is { } date &&
+            DateTimeAttributeValue.IsCoarserThanMicrosecond(change.Attribute.DateTimeResolution) &&
+            date.Ticks < DateTime.MaxValue.Ticks - DateTimeAttributeValue.ResolutionTicks(change.Attribute.DateTimeResolution))
+            return RemoveRelatedDateStep(relatedTable, relatedColumns, joinValues, date, change.Attribute.DateTimeResolution);
+
         var boundValues = BindRelatedValue(relatedTable, relatedColumns, joinValues, change);
         var remove = new SqlDeleteCommand
         {
@@ -556,6 +568,34 @@ internal sealed class SqlConnectorExport
         };
 
         return new SqlExportStatement(_provider.BuildDeleteCommandText(remove), boundValues, AddsARow: false);
+    }
+
+    /// <summary>
+    /// Removes every row of the parent whose date falls in the step of <paramref name="resolution"/> that
+    /// <paramref name="date"/> names: see <see cref="RemoveRelatedRow"/>.
+    /// </summary>
+    private SqlExportStatement RemoveRelatedDateStep(
+        SqlRelatedTableConfiguration relatedTable,
+        SqlExportColumnTypes relatedColumns,
+        IReadOnlyList<SqlExportColumnValue> joinValues,
+        DateTime date,
+        DateTimeResolution? resolution)
+    {
+        var valueColumnType = relatedColumns.Require(relatedTable.ValueColumn);
+        var lower = DateTimeAttributeValue.ToResolution(date, resolution);
+        var upper = lower.AddTicks(DateTimeAttributeValue.ResolutionTicks(resolution));
+        var lowerValue = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(0), ToDatabaseDateTime(lower, valueColumnType), valueColumnType);
+        var upperValue = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(1), ToDatabaseDateTime(upper, valueColumnType), valueColumnType);
+
+        var remove = new SqlDeleteCommand
+        {
+            SchemaName = relatedTable.SchemaName,
+            ObjectName = relatedTable.TableName,
+            KeyColumns = ToColumnParameters(joinValues),
+            RangeColumn = new SqlRangeColumnParameter(relatedTable.ValueColumn, lowerValue.ParameterName, upperValue.ParameterName)
+        };
+
+        return new SqlExportStatement(_provider.BuildDeleteCommandText(remove), [.. joinValues, lowerValue, upperValue], AddsARow: false);
     }
 
     /// <summary>

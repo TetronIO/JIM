@@ -147,6 +147,7 @@ internal sealed class SqlConnectorSchema
             {
                 Description = DescribeSourceColumn(column),
                 CaseExact = IsCaseExact(column, isReference ? AttributeDataType.Reference : attributeType.Value),
+                DateTimeResolution = !isReference && attributeType.Value == AttributeDataType.DateTime ? _provider.ColumnDateTimeResolution(column.ColumnType) : null,
                 // The document names the Object Type every reference points at; carry it through so the
                 // schema merge can persist it and import resolution can use it (#1285).
                 ReferencesObjectTypeName = isReference ? referenceColumns[column.Name].ReferencesObjectType : null
@@ -249,7 +250,10 @@ internal sealed class SqlConnectorSchema
             {
                 // As for reference columns above: the declared target travels with the attribute (#1285).
                 ReferencesObjectTypeName = relatedTable.ReferencesObjectType,
-                CaseExact = IsCaseExact(valueColumn, relatedTable.ReferencesObjectType != null ? AttributeDataType.Reference : attributeType!.Value)
+                CaseExact = IsCaseExact(valueColumn, relatedTable.ReferencesObjectType != null ? AttributeDataType.Reference : attributeType!.Value),
+                DateTimeResolution = relatedTable.ReferencesObjectType == null && attributeType!.Value == AttributeDataType.DateTime
+                    ? _provider.ColumnDateTimeResolution(valueColumn.ColumnType)
+                    : null
             });
         }
     }

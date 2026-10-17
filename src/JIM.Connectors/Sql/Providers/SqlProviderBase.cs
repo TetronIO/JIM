@@ -3,6 +3,7 @@
 
 using JIM.Models.Connectors;
 using JIM.Models.Core;
+using JIM.Models.Staging;
 using System.Data.Common;
 using System.Globalization;
 using System.Text;
@@ -454,8 +455,13 @@ internal abstract class SqlProviderBase : ISqlProvider
         if (command.KeyColumns.Count == 0)
             throw new ArgumentException("A delete must be keyed on at least one column, or it would empty the table.", nameof(command));
 
+        var rangePredicate = command.RangeColumn == null
+            ? string.Empty
+            : $" AND {QuoteIdentifier(command.RangeColumn.ColumnName)} >= {GetParameterPlaceholder(command.RangeColumn.LowerParameterName)}" +
+              $" AND {QuoteIdentifier(command.RangeColumn.ColumnName)} < {GetParameterPlaceholder(command.RangeColumn.UpperParameterName)}";
+
         return $"DELETE FROM {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
-               $"WHERE {BuildKeyPredicate(command.KeyColumns)}";
+               $"WHERE {BuildKeyPredicate(command.KeyColumns)}{rangePredicate}";
     }
 
     /// <summary>
@@ -506,6 +512,11 @@ internal abstract class SqlProviderBase : ISqlProvider
     public bool ColumnCarriesAnOffset(SqlColumnType columnType)
     {
         return SqlTypeMapper.CarriesAnOffset(columnType);
+    }
+
+    public DateTimeResolution? ColumnDateTimeResolution(SqlColumnType columnType)
+    {
+        return SqlTypeMapper.DateTimeResolutionOf(DatabaseType, columnType);
     }
 
     #endregion
