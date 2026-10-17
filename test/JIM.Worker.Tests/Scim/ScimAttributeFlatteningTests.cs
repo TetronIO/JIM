@@ -559,6 +559,30 @@ public class ScimAttributeFlatteningTests
     }
     #endregion
 
+    #region date resolution (#2153, D2)
+
+    [Test]
+    public void ToConnectorSchemaAttribute_DateTime_IsHeldToTheSecond()
+    {
+        // RFC 7643 dateTime permits fractions, but a provider need not keep them, and most hold whole seconds; an
+        // administrator who knows the provider keeps finer can override the resolution.
+        var connectorAttribute = ScimAttributeMapper.Flatten(Simple("hireDate", ScimAttributeTypes.DateTime), ScimUrns.User)[0]
+            .ToConnectorSchemaAttribute();
+
+        Assert.That(connectorAttribute.DateTimeResolution, Is.EqualTo(JIM.Models.Staging.DateTimeResolution.Second));
+    }
+
+    [Test]
+    public void ToConnectorSchemaAttribute_String_HasNoResolution()
+    {
+        var connectorAttribute = ScimAttributeMapper.Flatten(Simple("userName", ScimAttributeTypes.String), ScimUrns.User)[0]
+            .ToConnectorSchemaAttribute();
+
+        Assert.That(connectorAttribute.DateTimeResolution, Is.Null);
+    }
+
+    #endregion
+
     #region case-exact declaration (#2051)
     [Test]
     public void ToConnectorSchemaAttribute_CaseExactString_DeclaresItCaseExact()

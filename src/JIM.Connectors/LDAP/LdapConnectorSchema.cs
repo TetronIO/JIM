@@ -317,7 +317,11 @@ internal class LdapConnectorSchema
         var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, attributePlurality, required, objectClass, writability)
         {
             // Active Directory states case-sensitivity through the syntax rather than a matching rule (#2051).
-            CaseExact = attributeDataType == AttributeDataType.Text && omSyntax.HasValue && LdapConnectorUtilities.IsAdSyntaxCaseExact(omSyntax.Value)
+            CaseExact = attributeDataType == AttributeDataType.Text && omSyntax.HasValue && LdapConnectorUtilities.IsAdSyntaxCaseExact(omSyntax.Value),
+
+            // Active Directory holds GeneralizedTime and UTC-Time to whole seconds, so export sends and compares its
+            // dates at the second (#2153, D2).
+            DateTimeResolution = attributeDataType == AttributeDataType.DateTime ? DateTimeResolution.Second : null
         };
 
         if (!string.IsNullOrEmpty(description))
@@ -699,7 +703,10 @@ internal class LdapConnectorSchema
             // Case-exactness follows the EQUALITY matching rule, inherited through SUP like SYNTAX. It describes
             // how text compares, so it is only declared on Text attributes (#2051).
             CaseExact = attributeDataType == AttributeDataType.Text &&
-                        Rfc4512SchemaParser.IsCaseExactMatchingRule(Rfc4512SchemaParser.ResolveEqualityOid(attrDef, attributeTypeDefs))
+                        Rfc4512SchemaParser.IsCaseExactMatchingRule(Rfc4512SchemaParser.ResolveEqualityOid(attrDef, attributeTypeDefs)),
+
+            // The step of time the syntax holds a date to (#2153, D2): GeneralizedTime the microsecond, UTC Time the second.
+            DateTimeResolution = attributeDataType == AttributeDataType.DateTime ? Rfc4512SchemaParser.GetRfcDateTimeResolution(syntaxOid) : null
         };
 
         if (!string.IsNullOrEmpty(attrDef.Description))

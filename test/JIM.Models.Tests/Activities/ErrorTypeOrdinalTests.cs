@@ -71,13 +71,16 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = 31,
         [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = 32,
 
+        // Dates an export sends to a multi-valued attribute are one date at the Connected System's resolution (#2153).
+        [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = 33,
+
         // An export the Connected System refused, or JIM refused to send, for a reason an administrator can act on (#2118).
-        [ActivityRunProfileExecutionItemErrorType.OutsideManagedScope] = 33,
-        [ActivityRunProfileExecutionItemErrorType.AccessDenied] = 34,
-        [ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem] = 35,
-        [ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation] = 36,
-        [ActivityRunProfileExecutionItemErrorType.MissingDependency] = 37,
-        [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = 38
+        [ActivityRunProfileExecutionItemErrorType.OutsideManagedScope] = 34,
+        [ActivityRunProfileExecutionItemErrorType.AccessDenied] = 35,
+        [ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem] = 36,
+        [ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation] = 37,
+        [ActivityRunProfileExecutionItemErrorType.MissingDependency] = 38,
+        [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = 39
     };
 
     [Test]

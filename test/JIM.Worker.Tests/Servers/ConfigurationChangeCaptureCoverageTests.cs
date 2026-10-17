@@ -144,7 +144,7 @@ public class ConfigurationChangeCaptureCoverageTests
 
         await _jim.ConnectedSystems.BulkUpdateAttributesAsync(
             connectedSystem, objectType,
-            new Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> { [9] = (true, null, null, null) },
+            new Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact, DateTimeResolution? DateTimeResolution)> { [9] = (true, null, null, null, null) },
             NewUser());
 
         AssertCapturedConnectedSystemVersion();

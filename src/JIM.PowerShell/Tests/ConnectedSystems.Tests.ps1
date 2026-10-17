@@ -410,6 +410,54 @@ Describe 'Set-JIMConnectedSystemAttribute' {
         }
     }
 
+    # A date attribute's resolution (#2153): discovered, and overridable on every Connector, so a schema refresh keeps
+    # the administrator's choice.
+    Context 'Date and time resolution' {
+
+        It 'Sends dateTimeResolution when -DateTimeResolution is given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3; dateTimeResolution = 'Millisecond'; dateTimeResolutionSetByAdministrator = $true } }
+
+                $result = Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -DateTimeResolution Millisecond -PassThru -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/1/object-types/2/attributes/3' -and
+                    $Body.dateTimeResolution -eq 'Millisecond'
+                }
+                $result.dateTimeResolution | Should -Be 'Millisecond'
+            }
+        }
+
+        It 'Leaves dateTimeResolution out when -DateTimeResolution is not given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Selected $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { -not $Body.ContainsKey('dateTimeResolution') }
+            }
+        }
+
+        It 'Refuses a resolution JIM does not know' {
+            { Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -DateTimeResolution Fortnight -Confirm:$false } |
+                Should -Throw
+        }
+
+        It 'Passes dateTimeResolution through a bulk update' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ updatedCount = 1; errors = $null } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeUpdates @{ 3 = @{ dateTimeResolution = 'Second' } } -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Body.attributes['3'].dateTimeResolution -eq 'Second' }
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {

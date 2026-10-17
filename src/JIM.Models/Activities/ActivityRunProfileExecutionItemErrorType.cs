@@ -254,6 +254,15 @@ public enum ActivityRunProfileExecutionItemErrorType
     ScopingCriterionFailed,
 
     /// <summary>
+    /// Two or more of the dates exported to a multi-valued attribute are the same date at the step of time the
+    /// Connected System holds that attribute to (#2153): for example two times within one second, for a directory that
+    /// holds whole seconds. The Connected System can only hold them as one value, so the export sends them as one; the
+    /// rest of the attribute, and the object's other attributes, still export. Reported so the merging is never silent.
+    /// The message names the attribute, the resolution and how many values the Connected System will hold.
+    /// </summary>
+    DatesCollapseAtTargetResolution,
+
+    /// <summary>
     /// JIM refused an export because it would write the object outside the containers selected for the Connected System
     /// (#2118). Writing there would succeed, and then JIM could not import the object back, would treat it as deleted on
     /// the next Full Import, and would disconnect it. The message names the target and the remedies: select the
