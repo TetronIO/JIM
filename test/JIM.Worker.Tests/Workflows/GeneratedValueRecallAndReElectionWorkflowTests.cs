@@ -238,9 +238,8 @@ public class GeneratedValueRecallAndReElectionWorkflowTests : WorkflowTestBase
         }
 
         // The generating system's own next synchronisation now sees its mapping as the sole (and so winning)
-        // contributor, and generates the value exactly as an ordinary import-mode generation would. The rule deletion is
-        // a configuration change, which that Full Synchronisation applies to every object.
-        RecordSyncRuleConfigurationChange();
+        // contributor, and generates the value exactly as an ordinary import-mode generation would. Nothing about the
+        // Training object itself changed: the recall marks it because Training generates the attribute it cleared (#2309).
         var secondActivity = await RunFullSyncReturningActivityAsync(ctx.Training);
 
         mvo = SyncRepo.MetaverseObjects[mvo.Id];

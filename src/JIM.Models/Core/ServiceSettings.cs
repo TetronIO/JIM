@@ -78,4 +78,12 @@ public class ServiceSettings
     /// Null means no cut-off has ever been set (all otherwise-valid cookies are accepted).
     /// </summary>
     public DateTime? SessionsValidFromUtc { get; set; }
+
+    /// <summary>
+    /// When a Synchronisation Rule was last deleted (UTC), by itself or with its Connected System; null when none ever
+    /// has been. Not a setting: part of the Synchronisation Rule configuration watermark, which otherwise reads only the
+    /// timestamps of rules and mappings that still exist, so a deletion would leave no trace in it and the next Full
+    /// Synchronisation would keep skipping unchanged objects instead of re-applying what the deletion changed (#2309).
+    /// </summary>
+    public DateTime? SyncRuleLastDeletedAt { get; set; }
 }

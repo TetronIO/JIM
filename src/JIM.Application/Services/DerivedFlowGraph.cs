@@ -34,6 +34,12 @@ namespace JIM.Application.Services;
 /// disabled rules, so enabling a flow can never introduce a cycle; <see cref="DerivedFlowGraphScope.EnabledMappingsOnly"/>
 /// is what synchronisation evaluates (decision 2).
 /// </para>
+/// <para>
+/// The graph also records which Connected Systems <em>generate</em> each attribute (#242), for
+/// <see cref="GetConnectedSystemsDependingOn"/> alone: a generated mapping reconciles its assignment against the attribute's
+/// current value whenever its own system synchronises the object, so it depends on that attribute as surely as a derived
+/// flow reading it does (#2309). It is not an edge, so it orders nothing and cannot form a cycle.
+/// </para>
 /// </remarks>
 public sealed class DerivedFlowGraph
 {
@@ -73,7 +79,11 @@ public sealed class DerivedFlowGraph
                 .Where(mapping => GetTargetAttributeId(mapping) != null && (includeDisabled || mapping.Enabled));
 
             foreach (var mapping in candidateMappings)
+            {
                 AddMappingIfDerived(typeGraph, rule, mapping);
+                if (mapping.Generation != null)
+                    AddGenerator(typeGraph, rule, mapping);
+            }
         }
 
         foreach (var typeGraph in _typeGraphs.Values.OrderBy(t => t.MetaverseObjectTypeId))
@@ -163,7 +173,20 @@ public sealed class DerivedFlowGraph
     /// Account Name and User Principal Name reads Email, a change to Account Name reaches the hosts of both). Ordered
     /// ascending; empty when nothing derived reads the attribute.
     /// </summary>
-    public IReadOnlyList<int> GetHostingSystemsReading(int metaverseObjectTypeId, int metaverseAttributeId)
+    public IReadOnlyList<int> GetHostingSystemsReading(int metaverseObjectTypeId, int metaverseAttributeId) =>
+        CollectDependentSystems(metaverseObjectTypeId, metaverseAttributeId, includeGenerators: false);
+
+    /// <summary>
+    /// The Connected System ids that must re-evaluate an object when <paramref name="metaverseAttributeId"/> changes:
+    /// <see cref="GetHostingSystemsReading"/>, plus those with a generated mapping targeting the attribute or any
+    /// attribute reached through it (#2309). A generated mapping reconciles its assignment only in its own system's
+    /// synchronisation, so a change another writer makes to the attribute (superseding the value, or clearing a sticky
+    /// one) needs that system to process the object again. What marking uses; ordered ascending.
+    /// </summary>
+    public IReadOnlyList<int> GetConnectedSystemsDependingOn(int metaverseObjectTypeId, int metaverseAttributeId) =>
+        CollectDependentSystems(metaverseObjectTypeId, metaverseAttributeId, includeGenerators: true);
+
+    private IReadOnlyList<int> CollectDependentSystems(int metaverseObjectTypeId, int metaverseAttributeId, bool includeGenerators)
     {
         if (!_typeGraphs.TryGetValue(metaverseObjectTypeId, out var typeGraph))
             return [];
@@ -175,6 +198,9 @@ public sealed class DerivedFlowGraph
 
         while (frontier.TryDequeue(out var attributeId))
         {
+            if (includeGenerators && typeGraph.GeneratorsByTarget.TryGetValue(attributeId, out var generators))
+                hostingSystems.UnionWith(generators);
+
             if (!typeGraph.ReadersByInput.TryGetValue(attributeId, out var readers))
                 continue;
 
@@ -220,6 +246,18 @@ public sealed class DerivedFlowGraph
     public static bool ReadsMetaverse(SyncRuleMapping mapping) => GetMetaverseInputNames(mapping).Count > 0;
 
     private static int? GetTargetAttributeId(SyncRuleMapping mapping) => mapping.ResolveTargetMetaverseAttributeId();
+
+    private static void AddGenerator(TypeGraph typeGraph, SyncRule rule, SyncRuleMapping mapping)
+    {
+        var targetAttributeId = GetTargetAttributeId(mapping)!.Value;
+        if (!typeGraph.GeneratorsByTarget.TryGetValue(targetAttributeId, out var generators))
+        {
+            generators = [];
+            typeGraph.GeneratorsByTarget[targetAttributeId] = generators;
+        }
+
+        generators.Add(rule.ConnectedSystemId);
+    }
 
     private TypeGraph GetOrCreateTypeGraph(SyncRule rule, Dictionary<int, MetaverseObjectType> suppliedTypes)
     {
@@ -460,6 +498,7 @@ public sealed class DerivedFlowGraph
         public List<DerivedFlow> Flows { get; } = [];
         public Dictionary<int, List<DerivedFlow>> ContributorsByTarget { get; } = new();
         public Dictionary<int, List<DerivedFlow>> ReadersByInput { get; } = new();
+        public Dictionary<int, HashSet<int>> GeneratorsByTarget { get; } = new();
         public Dictionary<int, int> Levels { get; } = new();
         public Dictionary<int, List<DerivedFlow>> FlowsByLevel { get; } = new();
         public HashSet<int> Unordered { get; } = [];

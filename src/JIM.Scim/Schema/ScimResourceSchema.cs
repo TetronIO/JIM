@@ -128,6 +128,18 @@ public sealed class ScimResourceSchema
     }
 
     /// <summary>
+    /// The top-level attributes of one schema: the base schema's with the common attributes (<paramref name="schemaUrn"/>
+    /// null, or the base URN), otherwise the named extension's. Empty for a schema the resource type does not declare.
+    /// </summary>
+    public IReadOnlyList<ScimSchemaAttribute> Attributes(string? schemaUrn)
+    {
+        if (schemaUrn == null || string.Equals(schemaUrn, BaseSchemaUrn, StringComparison.OrdinalIgnoreCase))
+            return [.. _schemasByUrn[BaseSchemaUrn].Attributes, .. CommonAttributes];
+
+        return _schemasByUrn.TryGetValue(schemaUrn, out var schema) ? schema.Attributes : [];
+    }
+
+    /// <summary>
     /// A sub-attribute of a complex attribute, found without regard to case.
     /// </summary>
     public static ScimSchemaAttribute? FindSubAttribute(ScimSchemaAttribute complex, string name)

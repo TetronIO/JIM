@@ -2984,6 +2984,21 @@ public abstract class SyncTaskProcessorBase
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
 
+        // Keep the message's promise (#2309): nothing about the loser's own data changed, so without a mark neither
+        // Delta Synchronisation nor Full Synchronisation's unchanged-object skip would process it again, and two objects
+        // would keep the same value. This page's join-state write and guarded clears have already run (inside
+        // PersistPendingMetaverseObjectsAsync), so the mark survives to the next run.
+        var loserMarks = losers
+            .Select(loser => new SynchronisationPendingMark(((MetaverseObject)loser.Request.CallerState!).Id, _connectedSystem.Id))
+            .Distinct()
+            .ToList();
+        if (loserMarks.Count > 0)
+        {
+            var marked = await _syncRepo.MarkConnectedSystemObjectsSynchronisationPendingAsync(loserMarks);
+            Log.Information("CommitGeneratedValueAssignmentsAsync: marked {Marked} of {Losers} commit loser(s) for synchronisation again, " +
+                "so each moves to its next candidate.", marked, loserMarks.Count);
+        }
+
         _pendingGeneratedValueAssignmentsToCommit.Clear();
     }
 
