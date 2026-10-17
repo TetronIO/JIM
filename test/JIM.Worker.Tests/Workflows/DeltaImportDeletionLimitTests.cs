@@ -133,6 +133,27 @@ public class DeltaImportDeletionLimitTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task DeltaImport_ObsoleteObjectsAwaitingSynchronisation_AreNotInTheShareBaseAsync()
+    {
+        // 3 objects still in the Connected System and 2 already Obsolete, awaiting the synchronisation that removes
+        // them. Deleting 2 of the 3 is 67% of what the Connected System holds, above a 50% limit; counted against all
+        // 5 it would read as 40% and be let through.
+        var (connectedSystem, type) = await ArrangeAsync();
+        var held = SeedHeld(connectedSystem, type, 3);
+        SeedCso(connectedSystem, type, Guid.NewGuid(), "Departed 1", ConnectedSystemObjectStatus.Obsolete);
+        SeedCso(connectedSystem, type, Guid.NewGuid(), "Departed 2", ConnectedSystemObjectStatus.Obsolete);
+
+        var (activity, _) = await RunDeltaImportAsync(connectedSystem, [held.Take(2).Select(cso => Delete(type, cso)).ToList()], maxPercent: 50);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await StatusesAsync(connectedSystem, held.Take(2)), Is.All.EqualTo(ConnectedSystemObjectStatus.Normal));
+            Assert.That(activity.DetectedDeletionsWithheld, Is.EqualTo(2));
+            Assert.That(activity.WarningMessage, Does.Contain("(67% of 3)"));
+        }
+    }
+
+    [Test]
     public async Task DeltaImport_ShareExactlyAtLimit_AppliesEveryDeleteAsync()
     {
         var (connectedSystem, type) = await ArrangeAsync();

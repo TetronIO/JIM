@@ -587,9 +587,9 @@
         : "If a Full Import would mark more objects as deleted than either limit, it marks none.";
 
     private static string DeletionLimitsCaption(ConnectedSystemRunType runType) => runType == ConnectedSystemRunType.DeltaImport
-        ? "Measured against the objects in this run's scope before it saves anything. Creates and updates are still applied. " +
+        ? "The percentage is of the objects in this run's scope not already marked as deleted, before it saves anything. Creates and updates are still applied. " +
           "Each Delta Import reports withheld deletions again until you raise a limit or run a Delta Import Run Profile without one."
-        : "Measured against the objects in this run's scope when it starts. Objects the import did see are still updated. " +
+        : "The percentage is of the objects in this run's scope not already marked as deleted, when it starts. Objects the import did see are still updated. " +
           "Fix the connector's scope or raise a limit, then run again.";
 
     private static string DeletionLimitTooltip(ConnectedSystemRunType runType) => runType == ConnectedSystemRunType.DeltaImport

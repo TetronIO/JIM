@@ -685,7 +685,7 @@ public class SyncImportTaskProcessor
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
-                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, deletionPartitionId, existingCsoCount);
+                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, deletionPartitionId);
             }
             deletionsSw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
@@ -1372,11 +1372,7 @@ public class SyncImportTaskProcessor
     /// refuses outright (Phase B leaves every candidate untouched, including the stale Pending Export
     /// cleanup for already-Obsolete ones) or applies exactly today's per-candidate behaviour.
     /// </summary>
-    /// <param name="existingCsoCount">
-    /// How many Connected System Objects were in the run's scope at the start of the run: the base the
-    /// percentage limit is measured against.
-    /// </param>
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, int existingCsoCount)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -1394,6 +1390,13 @@ public class SyncImportTaskProcessor
 
         var maxCount = _connectedSystemRunProfile.MaxDetectedDeletions;
         var maxPercent = _connectedSystemRunProfile.MaxDetectedDeletionsPercent;
+
+        // The base the percentage limit is measured against: the Connected System Objects in the run's scope that are
+        // not already Obsolete, counted before this run saves anything. An Obsolete object awaiting the synchronisation
+        // that removes it is no longer in the Connected System, so counting it would let a larger share through.
+        var existingCsoCount = maxCount.HasValue || maxPercent.HasValue
+            ? await _syncRepo.GetNonObsoleteConnectedSystemObjectCountAsync(_connectedSystem.Id, partitionId)
+            : 0;
 
         var countLimitExceeded = maxCount.HasValue && newlyMarkedCount > maxCount.Value;
         var percentLimitExceeded = maxPercent.HasValue && ShareThreshold.Exceeds(newlyMarkedCount, existingCsoCount, maxPercent.Value);
@@ -3314,10 +3317,10 @@ public class SyncImportTaskProcessor
         if (count == 0 || (maxCount == null && maxPercent == null))
             return false;
 
-        // The base is the one a Full Import's percentage uses: the Connected System Objects in the Run Profile's scope,
-        // counted before this run saves anything.
+        // The base is the one a Full Import's percentage uses: the Connected System Objects in the Run Profile's scope
+        // that are not already Obsolete, counted before this run saves anything.
         var partitionId = _connectedSystemRunProfile.Partition?.Id;
-        var existingCsoCount = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id, partitionId);
+        var existingCsoCount = await _syncRepo.GetNonObsoleteConnectedSystemObjectCountAsync(_connectedSystem.Id, partitionId);
 
         var countLimitExceeded = maxCount.HasValue && count > maxCount.Value;
         var percentLimitExceeded = maxPercent.HasValue && ShareThreshold.Exceeds(count, existingCsoCount, maxPercent.Value);

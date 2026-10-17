@@ -137,8 +137,9 @@ public class RunProfileSafeguardsDto
     public int? MaxDetectedDeletions { get; set; }
 
     /// <summary>
-    /// The maximum share, 0 to 100, of the Connected System Objects in the run's scope before it saves
-    /// anything that an import may newly mark as deleted. Full Import and Delta Import Run Profiles only.
+    /// The maximum share, 0 to 100, of the Connected System Objects in the run's scope that are not already
+    /// marked as deleted, before it saves anything, that an import may newly mark as deleted. Full Import and
+    /// Delta Import Run Profiles only.
     /// </summary>
     public int? MaxDetectedDeletionsPercent { get; set; }
 }

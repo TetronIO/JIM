@@ -63,7 +63,8 @@ function Set-JIMRunProfile {
 
     .PARAMETER MaxDetectedDeletionsPercent
         A Safeguard: the most Connected System Objects an import run may newly mark as deleted, as a share (0 to
-        100) of those in the run's scope before it saves anything, under the same rules as -MaxDetectedDeletions.
+        100) of those in the run's scope not already marked as deleted, before it saves anything, under the same
+        rules as -MaxDetectedDeletions.
 
     .PARAMETER PassThru
         Returns the updated Run Profile.

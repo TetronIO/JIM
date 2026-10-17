@@ -138,7 +138,8 @@ public class ConnectedSystemRunProfile : IAuditable
 
     /// <summary>
     /// Run Profile Safeguards (#1618): the maximum share, 0 to 100, of the Connected System Objects in
-    /// the run's scope before it saves anything that an import may newly mark as deleted. Only valid
+    /// the run's scope that are not already Obsolete, before it saves anything, that an import may newly
+    /// mark as deleted. Only valid
     /// when <see cref="RunType"/> is <see cref="ConnectedSystemRunType.FullImport"/> or
     /// <see cref="ConnectedSystemRunType.DeltaImport"/> (#2089). Null means no limit.
     /// </summary>

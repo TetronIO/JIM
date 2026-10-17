@@ -107,7 +107,7 @@ New-JIMRunProfile [-Name] <string> -ConnectedSystemName <string> -RunType <strin
 | `MaxUpdates` | `int` | No |  | A Safeguard: the most updates that may be pending for an Export run to attempt any of them, under the same rules as `-MaxCreates`. |
 | `MaxDeletes` | `int` | No |  | A Safeguard: the most deletes that may be pending for an Export run to attempt any of them, under the same rules as `-MaxCreates`. Recommended for an Export to a production directory. |
 | `MaxDetectedDeletions` | `int` | No |  | A Safeguard: the most Connected System Objects an import run may newly mark as deleted: those a Full Import no longer finds, or those a Delta Import's Connector reports deleted. If more would be, it marks none of them; 0 refuses to mark any. A Delta Import that withholds its deletions reports them again on every later run until they are let through. Only valid when `-RunType` is FullImport or DeltaImport; omit it for no limit. |
-| `MaxDetectedDeletionsPercent` | `int` | No |  | A Safeguard: the most Connected System Objects an import run may newly mark as deleted, as a share (0 to 100) of those in the run's scope before it saves anything, under the same rules as `-MaxDetectedDeletions`. Either limit tripping withholds every deletion in the run. |
+| `MaxDetectedDeletionsPercent` | `int` | No |  | A Safeguard: the most Connected System Objects an import run may newly mark as deleted, as a share (0 to 100) of those in the run's scope not already marked as deleted, before it saves anything, under the same rules as `-MaxDetectedDeletions`. Either limit tripping withholds every deletion in the run. |
 | `PassThru` | `switch` | No |  | Returns the created Run Profile. |
 
 ### Output
@@ -208,7 +208,7 @@ Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int
 | `MaxUpdates` | `int` | No |  | A Safeguard: the most updates that may be pending for an Export run to attempt any of them, under the same rules as `-MaxCreates`. |
 | `MaxDeletes` | `int` | No |  | A Safeguard: the most deletes that may be pending for an Export run to attempt any of them, under the same rules as `-MaxCreates`. |
 | `MaxDetectedDeletions` | `int` | No |  | A Safeguard: the most Connected System Objects an import run may newly mark as deleted: those a Full Import no longer finds, or those a Delta Import's Connector reports deleted. 0 refuses to mark any, and `$null` clears the limit. Only valid on a Full Import or Delta Import Run Profile. The Safeguards you do not give keep their values. |
-| `MaxDetectedDeletionsPercent` | `int` | No |  | A Safeguard: the most Connected System Objects an import run may newly mark as deleted, as a share (0 to 100) of those in the run's scope before it saves anything, under the same rules as `-MaxDetectedDeletions`. |
+| `MaxDetectedDeletionsPercent` | `int` | No |  | A Safeguard: the most Connected System Objects an import run may newly mark as deleted, as a share (0 to 100) of those in the run's scope not already marked as deleted, before it saves anything, under the same rules as `-MaxDetectedDeletions`. |
 | `PassThru` | `switch` | No |  | Returns the updated Run Profile. |
 
 ### Output
