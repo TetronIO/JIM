@@ -544,7 +544,8 @@ function Find-DirectoryEntry {
 
     # Paged on every directory, so no server builds one unbounded response: Active Directory refuses an
     # unpaged search matching more than MaxPageSize (1,000) entries outright (exit 4, sizeLimitExceeded).
-    # noprompt fetches every page without stopping; with -LLL ldapsearch prints no paging comments.
+    # noprompt fetches every page without stopping. -LLL notwithstanding, ldapsearch prints a "# pagedresults:"
+    # comment after each page: the parsed entries skip comments, and -AsText leaves that one out.
     $arguments = @(Get-DirectoryToolBindArgument -DirectoryConfig $DirectoryConfig) +
         @('-LLL', '-E', 'pr=1000/noprompt', '-b', $BaseDn, '-s', $Scope, $Filter) +
         @(Get-DirectorySearchAttributeList -Attributes $Attributes)
@@ -552,8 +553,12 @@ function Find-DirectoryEntry {
     $raw = Invoke-DirectoryLdapTool -DirectoryConfig $DirectoryConfig -Tool ldapsearch -Arguments $arguments
 
     if ($AsText) {
-        # Unfolded, with "attr:: <base64>" decoded, so the text reads as ldbsearch printed it.
+        # Unfolded, with "attr:: <base64>" decoded, so the text reads as ldbsearch printed it. Without the paging
+        # comment, so a search that matched nothing reads as nothing, as it did before the search was paged.
         $textLines = foreach ($line in (Expand-LDIFFoldedLine -RawLdif $raw.Output)) {
+            if ($line -match '^# pagedresults:') {
+                continue
+            }
             if ($line -match '^(?<name>[^:\s]+):: (?<value>[A-Za-z0-9+/=]*)$') {
                 "$($Matches['name']): $([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Matches['value'])))"
             }

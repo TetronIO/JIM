@@ -5593,5 +5593,43 @@ function Assert-NoWorkerErrors {
     Write-Host "✓ PASSED: No Error/Fatal lines in $($Containers -join ', ') logs" -ForegroundColor Green
 }
 
+function Remove-ContainerWithMissingNetwork {
+    <#
+    .SYNOPSIS
+        Removes each named container whose network no longer exists, keeping its volumes, and returns their names.
+    .DESCRIPTION
+        Scenario 016's database containers are kept between runs, but jim-network is not: the stack's teardown removes
+        it once nothing running is attached, and the next run creates it again under a new id. A kept container still
+        names the old id, so Docker refuses to start it ("failed to set up container networking: network ... not
+        found"), and docker compose up starts it rather than recreating it. Removed, Compose creates it afresh on the
+        current network, over the same named volumes, so its database survives. A container that does not exist, or
+        whose networks all exist, is left alone.
+    .PARAMETER ContainerName
+        The containers to check.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$ContainerName
+    )
+
+    foreach ($name in $ContainerName) {
+        $networkIds = docker inspect --format '{{range .NetworkSettings.Networks}}{{.NetworkID}} {{end}}' $name 2>$null
+        if ($LASTEXITCODE -ne 0) { continue }
+
+        $missing = $false
+        foreach ($networkId in @("$networkIds" -split '\s+' | Where-Object { $_ })) {
+            docker network inspect $networkId 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { $missing = $true; break }
+        }
+
+        if ($missing -and $PSCmdlet.ShouldProcess($name, 'Remove the container, whose network no longer exists')) {
+            docker rm -f $name 2>&1 | Out-Null
+            $name
+        }
+    }
+}
+
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember
