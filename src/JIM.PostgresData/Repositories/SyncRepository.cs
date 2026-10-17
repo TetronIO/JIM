@@ -63,6 +63,15 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null)
         => _repo.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId, partitionId);
 
+    public Task<int> GetNonObsoleteConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null)
+    {
+        var query = _context.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId && cso.Status != ConnectedSystemObjectStatus.Obsolete);
+        if (partitionId != null)
+            query = query.Where(cso => cso.PartitionId == partitionId);
+        return query.CountAsync();
+    }
+
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 

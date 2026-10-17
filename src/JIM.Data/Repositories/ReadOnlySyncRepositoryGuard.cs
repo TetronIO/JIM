@@ -32,6 +32,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null)
         => _inner.GetConnectedSystemObjectCountAsync(connectedSystemId, partitionId);
 
+    public Task<int> GetNonObsoleteConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null)
+        => _inner.GetNonObsoleteConnectedSystemObjectCountAsync(connectedSystemId, partitionId);
+
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _inner.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 

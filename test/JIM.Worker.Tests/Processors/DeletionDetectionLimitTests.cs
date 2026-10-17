@@ -161,13 +161,28 @@ public class DeletionDetectionLimitTests
     }
 
     [Test]
+    public async Task ProcessConnectedSystemObjectDeletions_ObsoleteObjectsAwaitingSynchronisation_AreNotInTheShareBaseAsync()
+    {
+        // 10 objects still in the Connected System, 3 of them now missing, and 5 already Obsolete awaiting the
+        // synchronisation that removes them. 3 of 10 is 30%, above a 25% limit; counted against all 15 it would read
+        // as 20% and be let through.
+        var result = await RunAsync(candidateCount: 3, maxDetectedDeletions: null, maxDetectedDeletionsPercent: 25,
+            existingCsoCount: 10, alreadyObsoleteCandidateCount: 5);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Updated, Is.Empty);
+            Assert.That(result.Activity.DetectedDeletionsWithheld, Is.EqualTo(3));
+            Assert.That(result.Activity.WarningMessage, Does.Contain("(30% of 10)"));
+        }
+    }
+
+    [Test]
     public void DetectedDeletionsWithheld_LeftNullUnlessDeletionDetectionRuns()
     {
-        // PerformImportAsync only calls ProcessConnectedSystemObjectDeletionsAsync at all when the Run
-        // Profile is a Full Import (the guard around line 548 is unchanged by Layer 2), so a Delta
-        // Import's Activity never has this method invoked against it and the counter stays at its
-        // default: null, not zero. Asserted here at the boundary this fixture actually controls, rather
-        // than by driving a full Delta Import.
+        // Only a Full Import that runs deletion detection, or a Delta Import that completes (#2089, see
+        // DeltaImportDeletionLimitTests), sets the counter; every other Activity keeps its default: null,
+        // not zero. Asserted here at the boundary this fixture actually controls.
         var activity = new Activity();
 
         Assert.That(activity.DetectedDeletionsWithheld, Is.Null);
@@ -185,10 +200,11 @@ public class DeletionDetectionLimitTests
         SyncRepository Repository);
 
     /// <summary>
-    /// Seeds <paramref name="candidateCount"/> Connected System Objects (Normal status) and, optionally,
-    /// <paramref name="alreadyObsoleteCandidateCount"/> more (Obsolete status), none of which appear in
-    /// an empty imported external id set, so every one of them is a deletion candidate. Invokes the
-    /// production two-phase orchestrator against a Full Import Run Profile carrying the given limits.
+    /// Seeds <paramref name="existingCsoCount"/> Connected System Objects that are not Obsolete, of which
+    /// <paramref name="candidateCount"/> are missing from the import and the rest were imported, plus, optionally,
+    /// <paramref name="alreadyObsoleteCandidateCount"/> Obsolete objects, also missing from the import. Every missing
+    /// object is a deletion candidate. Invokes the production two-phase orchestrator against a Full Import Run Profile
+    /// carrying the given limits.
     /// </summary>
     private static async Task<DeletionResult> RunAsync(
         int candidateCount,
@@ -205,6 +221,23 @@ public class DeletionDetectionLimitTests
 
         for (var i = 0; i < alreadyObsoleteCandidateCount; i++)
             SeedCandidate(repository, $"obsolete-{i}", ConnectedSystemObjectStatus.Obsolete, seedPendingExportsOnCandidates);
+
+        var importedExternalIds = Enumerable.Range(0, Math.Max(0, existingCsoCount - candidateCount)).Select(i => $"present-{i}").ToList();
+        foreach (var externalId in importedExternalIds)
+            SeedCandidate(repository, externalId, ConnectedSystemObjectStatus.Normal, seedPendingExport: false);
+        var externalIdsImported = new List<ExternalIdPair>
+        {
+            new()
+            {
+                ConnectedSystemObjectTypeId = ObjectTypeId,
+                ConnectedSystemImportObjectAttribute = new ConnectedSystemImportObjectAttribute
+                {
+                    Name = "id",
+                    Type = AttributeDataType.Text,
+                    StringValues = importedExternalIds
+                }
+            }
+        };
 
         var connectedSystem = new ConnectedSystem
         {
@@ -265,7 +298,7 @@ public class DeletionDetectionLimitTests
                 "resolve-then-apply behaviour here, because that behaviour is what these tests pin.");
 
         var toBeUpdated = new List<ConnectedSystemObject>();
-        var task = (Task)method.Invoke(processor, [new List<ExternalIdPair>(), new List<ConnectedSystemObject>(), toBeUpdated, null, existingCsoCount])!;
+        var task = (Task)method.Invoke(processor, [externalIdsImported, new List<ConnectedSystemObject>(), toBeUpdated, null])!;
         await task;
 
         const string fieldName = "_activityRunProfileExecutionItems";

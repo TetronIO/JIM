@@ -140,7 +140,7 @@ The same flow is available to automation: `Import-JIMConnectedSystemSchema -Prev
 
 ### Moving an attribute to its new type
 
-When a refresh changes an attribute's data type, each Connected System Object keeps the values it holds under the old type until a Full Import reads the attribute again. Until then, a mapping that reads the attribute would flow those old values as the wrong type, so disable those mappings before anything synchronises.
+When a refresh changes an attribute's data type, each Connected System Object keeps the values it holds under the old type until a Full Import reads the attribute again. Until then, a mapping that reads the attribute directly flows nothing from those objects and leaves each Metaverse Object's value as it is, while an Expression that reads it does not see the old values at all, so disable those mappings before anything synchronises.
 
 1. Apply the refresh with **Apply &amp; Disable Dependents**. Each mapping that reads the attribute, directly or in an Expression, is disabled.
 2. Run a Full Import. It reads the attribute on every object and replaces each old-type value with the value it reads as the new type. A Delta Import replaces values only on the objects it returns.

@@ -6,6 +6,7 @@ using System.Text.Json;
 using JIM.Connectors.SCIM.Authentication;
 using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Scim.Filtering;
 using JIM.Scim.Messages;
 using JIM.Scim.Schema;
 using JIM.Utilities;
@@ -59,27 +60,25 @@ internal sealed class ScimConnectorUniquenessProbe
     /// (<c>emails.value</c>): an address held in another entry is still in use, and <c>emails.value eq</c> is far more
     /// widely supported than a value filter. Extension attributes are addressed by their URN (RFC 7644 section 3.10).
     /// </summary>
-    internal static string? GetFilterAttributePath(ScimFlattenedAttribute attribute)
+    internal static ScimAttributePath? GetFilterAttributePath(ScimFlattenedAttribute attribute)
     {
         ArgumentNullException.ThrowIfNull(attribute);
 
-        var prefix = attribute.ExtensionUrn == null ? string.Empty : $"{attribute.ExtensionUrn}:";
-
         return attribute.Access switch
         {
-            ScimValueAccess.Simple => prefix + attribute.SourceAttributeName,
+            ScimValueAccess.Simple => new ScimAttributePath(attribute.ExtensionUrn, attribute.SourceAttributeName, null),
             ScimValueAccess.ComplexSubAttribute or ScimValueAccess.CanonicalSlot when attribute.SubAttributeName != null =>
-                $"{prefix}{attribute.SourceAttributeName}.{attribute.SubAttributeName}",
+                new ScimAttributePath(attribute.ExtensionUrn, attribute.SourceAttributeName, attribute.SubAttributeName),
             _ => null
         };
     }
 
     /// <summary>
-    /// The filter for one request: an equality assertion per value, joined by <c>or</c>, each value a quoted JSON
-    /// string (see <see cref="ScimFilterLiteral.Quote"/>).
+    /// The filter for one request: an equality assertion per value, joined by <c>or</c>, written through the one SCIM
+    /// filter grammar so each value stays a quoted JSON string (see <see cref="ScimFilterWriter"/>).
     /// </summary>
-    internal static string BuildFilter(string attributePath, IEnumerable<string> values) =>
-        string.Join(" or ", values.Select(value => $"{attributePath} eq {ScimFilterLiteral.Quote(value)}"));
+    internal static string BuildFilter(ScimAttributePath attributePath, IEnumerable<string> values) =>
+        ScimFilterWriter.Write(ScimFilter.AnyOf(attributePath, values));
 
     /// <summary>
     /// Searches the provider for the batch and reports an outcome per candidate. Never throws for a provider fault: a
@@ -136,7 +135,7 @@ internal sealed class ScimConnectorUniquenessProbe
             catch (ScimRequestException ex) when (IsFilterRefused(ex))
             {
                 _logger.Warning(ex, "ScimConnectorUniquenessProbe: The service provider would not filter {Endpoint} on {Attribute}.",
-                    LogSanitiser.Sanitise(resourceType.Endpoint), LogSanitiser.Sanitise(attributePath));
+                    LogSanitiser.Sanitise(resourceType.Endpoint), LogSanitiser.Sanitise(ScimFilterWriter.Write(attributePath)));
                 return UniquenessProbeResult.Undetermined(request.Candidates.Count,
                     $"The service provider would not search {resourceType.Name} resources by {request.AttributeName} (HTTP {(int)ex.StatusCode}{DescribeScimType(ex)})");
             }

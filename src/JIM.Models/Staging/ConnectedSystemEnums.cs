@@ -402,7 +402,24 @@ public enum ConnectedSystemExportErrorType
     /// so this is configuration to act on: give the provisioning Synchronisation Rule an Initial Password, or create
     /// the account disabled.
     /// </summary>
-    PasswordRequiredToEnableAccount
+    PasswordRequiredToEnableAccount,
+
+    /// <summary>
+    /// The Connected System refused the change because the account JIM connects as is not permitted to make it, or
+    /// because it did not accept JIM's credentials at all (#2118): an LDAP insufficientAccessRights result, an HTTP 401
+    /// or 403. Configuration to act on in the Connected System, by granting the account the rights the change needs or
+    /// correcting the credentials, not a JIM defect.
+    /// </summary>
+    AccessDenied,
+
+    /// <summary>
+    /// The Connected System answered the change and refused it, for a reason none of the more specific
+    /// classifications covers (#2118): a schema or constraint violation, a missing mandatory attribute, an object that
+    /// is not there, a request it will not perform. The message carries the Connected System's own words. Connectors
+    /// use this only where the Connected System itself answered; a connection that failed, or a Connected System that
+    /// was busy or unavailable, is not a refusal and stays <see cref="General"/>.
+    /// </summary>
+    RejectedByConnectedSystem
 }
 
 /// <summary>

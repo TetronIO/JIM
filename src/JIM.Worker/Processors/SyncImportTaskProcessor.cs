@@ -127,6 +127,19 @@ public class SyncImportTaskProcessor
     private int _detectedDeletionCount;
 
     /// <summary>
+    /// Deletes the Connector reported that a Delta Import withheld because, together, they exceeded the Run Profile's
+    /// deletion limits (#2089). They were read, and are left exactly as JIM held them.
+    /// </summary>
+    private int _withheldDeletionCount;
+
+    /// <summary>
+    /// #2089: each delete the Connector reported that this run marked an object deleted for, with what the object was
+    /// before, so a Delta Import whose deletes exceed the Run Profile's limits can put every one back before anything is
+    /// saved. A delete a later page supersedes (#2074) is taken out again, so this holds only the deletes still standing.
+    /// </summary>
+    private readonly List<ConnectorReportedDelete> _connectorReportedDeletes = new();
+
+    /// <summary>
     /// How many objects of each Object Type (by id) arrived this run with an External ID the Connector could not read
     /// (#2066). Deletion detection holds those types back; see <see cref="HoldBackObjectTypesWithUnreadableExternalIds"/>.
     /// </summary>
@@ -644,6 +657,15 @@ public class SyncImportTaskProcessor
             return;
         }
 
+        // A Delta Import's deletes are decided as one, once every page has been read and before anything is saved (#2089).
+        // Withheld, they must be read again: the watermark the run started with is kept, as for a run that fails, so the
+        // next Delta Import reports them again until an administrator acts on the warning.
+        if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport
+            && await WithholdConnectorReportedDeletesOverTheLimitsAsync(connectedSystemObjectsToBeUpdated))
+        {
+            watermarkToRecord = null;
+        }
+
         // process deletions
         // note: only run deletion detection for Full Imports
         // Delta Imports only return changed objects, so absence doesn't mean deletion
@@ -663,7 +685,7 @@ public class SyncImportTaskProcessor
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
-                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, deletionPartitionId, existingCsoCount);
+                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, deletionPartitionId);
             }
             deletionsSw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
@@ -1104,7 +1126,8 @@ public class SyncImportTaskProcessor
         _activity.ObjectsProcessed = totalObjectsImported;
         var unchangedCount = _hashSkippedCount + _unchangedObjectCount;
         _activity.Message = ImportOutcomeMessage.ForImport(totalObjectsImported, createdCount, _updatedObjectCount, unchangedCount,
-            _connectorReportedDeletionCount, _detectedDeletionCount, _activity.TotalErrors, throughput.FormatCompletion(totalObjectsImported));
+            _connectorReportedDeletionCount, _detectedDeletionCount, _activity.TotalErrors, throughput.FormatCompletion(totalObjectsImported),
+            _withheldDeletionCount);
 
         await _syncRepo.UpdateActivityAsync(_activity);
 
@@ -1120,13 +1143,14 @@ public class SyncImportTaskProcessor
                 _verificationDangerousDisagreementCount, _verificationBenignMismatchCount);
         }
 
-        // #2129: what became of each object read. Every object read is created, updated, unchanged, a reported deletion,
-        // or rejected with an error, so the rejected figure is what is left; detected deletions were not read and stand
-        // apart. A negative remainder means an object was counted twice, which is a counting fault, not a data fault.
-        var rejectedCount = totalObjectsImported - createdCount - _updatedObjectCount - unchangedCount - _connectorReportedDeletionCount;
-        Log.Information("PerformImportAsync: Outcome summary: Objects read: {TotalObjects}, Created: {Created}, Updated: {Updated}, Unchanged: {Unchanged} ({SkippedByHash} by content hash, {OtherUnchanged} compared or already deleted), Deleted: {ReportedDeletions} reported by the Connector and {DetectedDeletions} detected, Rejected: {Rejected}, Errors: {Errors}",
+        // #2129: what became of each object read. Every object read is created, updated, unchanged, a reported deletion
+        // (applied, or withheld by the Run Profile's deletion limits, #2089), or rejected with an error, so the rejected
+        // figure is what is left; detected deletions were not read and stand apart. A negative remainder means an object
+        // was counted twice, which is a counting fault, not a data fault.
+        var rejectedCount = totalObjectsImported - createdCount - _updatedObjectCount - unchangedCount - _connectorReportedDeletionCount - _withheldDeletionCount;
+        Log.Information("PerformImportAsync: Outcome summary: Objects read: {TotalObjects}, Created: {Created}, Updated: {Updated}, Unchanged: {Unchanged} ({SkippedByHash} by content hash, {OtherUnchanged} compared or already deleted), Deleted: {ReportedDeletions} reported by the Connector and {DetectedDeletions} detected, Deletions withheld: {WithheldDeletions}, Rejected: {Rejected}, Errors: {Errors}",
             totalObjectsImported, createdCount, _updatedObjectCount, unchangedCount, _hashSkippedCount, _unchangedObjectCount,
-            _connectorReportedDeletionCount, _detectedDeletionCount, rejectedCount, _activity.TotalErrors);
+            _connectorReportedDeletionCount, _detectedDeletionCount, _withheldDeletionCount, rejectedCount, _activity.TotalErrors);
         if (rejectedCount < 0)
         {
             Log.Warning("PerformImportAsync: The outcome counts exceed the {TotalObjects} objects read by {Excess}, so at least one object was counted twice. The Activity's message over-reports by that many; the objects themselves were processed as their execution items record.",
@@ -1151,6 +1175,7 @@ public class SyncImportTaskProcessor
         importSpan.SetTag("objectsUnchanged", unchangedCount);
         importSpan.SetTag("objectsDeletedByConnector", _connectorReportedDeletionCount);
         importSpan.SetTag("objectsDeletionDetected", _detectedDeletionCount);
+        importSpan.SetTag("objectsDeletionWithheld", _withheldDeletionCount);
         importSpan.SetTag("objectTypeChangesRefused", _objectTypeChangesRefusedCount);
         importSpan.SetTag("objectTypeChangesAllowed", _objectTypeChangesAllowedCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
@@ -1347,11 +1372,7 @@ public class SyncImportTaskProcessor
     /// refuses outright (Phase B leaves every candidate untouched, including the stale Pending Export
     /// cleanup for already-Obsolete ones) or applies exactly today's per-candidate behaviour.
     /// </summary>
-    /// <param name="existingCsoCount">
-    /// How many Connected System Objects were in the run's scope at the start of the run: the base the
-    /// percentage limit is measured against.
-    /// </param>
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, int existingCsoCount)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -1369,6 +1390,13 @@ public class SyncImportTaskProcessor
 
         var maxCount = _connectedSystemRunProfile.MaxDetectedDeletions;
         var maxPercent = _connectedSystemRunProfile.MaxDetectedDeletionsPercent;
+
+        // The base the percentage limit is measured against: the Connected System Objects in the run's scope that are
+        // not already Obsolete, counted before this run saves anything. An Obsolete object awaiting the synchronisation
+        // that removes it is no longer in the Connected System, so counting it would let a larger share through.
+        var existingCsoCount = maxCount.HasValue || maxPercent.HasValue
+            ? await _syncRepo.GetNonObsoleteConnectedSystemObjectCountAsync(_connectedSystem.Id, partitionId)
+            : 0;
 
         var countLimitExceeded = maxCount.HasValue && newlyMarkedCount > maxCount.Value;
         var percentLimitExceeded = maxPercent.HasValue && ShareThreshold.Exceeds(newlyMarkedCount, existingCsoCount, maxPercent.Value);
@@ -2730,6 +2758,8 @@ public class SyncImportTaskProcessor
                         if (laterPagesSupersede && duplicateKey != null)
                             _earlierPageCopies[duplicateKey] = new EarlierPageCopy(activityRunProfileExecutionItem, connectedSystemObject, connectedSystemObject.Status,
                                 CreatedCso: null, CountedAs: EarlierPageCopyCount.Deletion);
+                        _connectorReportedDeletes.Add(new ConnectorReportedDelete(activityRunProfileExecutionItem, connectedSystemObject,
+                            connectedSystemObject.Status, connectedSystemObject.LastUpdated));
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         _csoIdsQueuedForUpdate.Add(connectedSystemObject.Id);
@@ -3257,6 +3287,73 @@ public class SyncImportTaskProcessor
     private enum EarlierPageCopyCount { Creation, Update, Unchanged, Deletion }
 
     /// <summary>
+    /// #2089: a delete the Connector reported that this run marked <paramref name="Cso"/> deleted for, with its status and
+    /// last-updated time before, so the delete can be withheld after the last page as though it had never been applied.
+    /// </summary>
+    private sealed record ConnectorReportedDelete(
+        ActivityRunProfileExecutionItem ExecutionItem,
+        ConnectedSystemObject Cso,
+        ConnectedSystemObjectStatus StatusBefore,
+        DateTime? LastUpdatedBefore);
+
+    /// <summary>
+    /// Run Profile Safeguards on a Delta Import (#2089): once every page has been read, and before anything is saved,
+    /// decides whether the deletes the Connector reported are within the Run Profile's
+    /// <see cref="ConnectedSystemRunProfile.MaxDetectedDeletions"/> and
+    /// <see cref="ConnectedSystemRunProfile.MaxDetectedDeletionsPercent"/> limits. The count is the Connected System
+    /// Objects those deletes newly mark as deleted, across every page; replays for objects already deleted, deletes of
+    /// objects JIM does not hold, and deletes a later page superseded are never among them. Within the limits every
+    /// delete stands; over either, none does, as a Full Import's deletion detection decides (#1618). Creates and
+    /// updates are unaffected either way.
+    /// </summary>
+    /// <returns>True when the deletes were withheld, so the run must keep the watermark it started with.</returns>
+    private async Task<bool> WithholdConnectorReportedDeletesOverTheLimitsAsync(ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    {
+        var count = _connectorReportedDeletes.Count;
+        var maxCount = _connectedSystemRunProfile.MaxDetectedDeletions;
+        var maxPercent = _connectedSystemRunProfile.MaxDetectedDeletionsPercent;
+
+        _activity.DetectedDeletionsWithheld = 0;
+        if (count == 0 || (maxCount == null && maxPercent == null))
+            return false;
+
+        // The base is the one a Full Import's percentage uses: the Connected System Objects in the Run Profile's scope
+        // that are not already Obsolete, counted before this run saves anything.
+        var partitionId = _connectedSystemRunProfile.Partition?.Id;
+        var existingCsoCount = await _syncRepo.GetNonObsoleteConnectedSystemObjectCountAsync(_connectedSystem.Id, partitionId);
+
+        var countLimitExceeded = maxCount.HasValue && count > maxCount.Value;
+        var percentLimitExceeded = maxPercent.HasValue && ShareThreshold.Exceeds(count, existingCsoCount, maxPercent.Value);
+        if (!countLimitExceeded && !percentLimitExceeded)
+            return false;
+
+        // Withheld: each object is put back exactly as JIM held it, with no execution item and so no DeletionDetected
+        // outcome. Nothing has been saved yet, so nothing else needs undoing.
+        foreach (var delete in _connectorReportedDeletes)
+        {
+            delete.Cso.Status = delete.StatusBefore;
+            delete.Cso.LastUpdated = delete.LastUpdatedBefore;
+            connectedSystemObjectsToBeUpdated.Remove(delete.Cso);
+            _csoIdsQueuedForUpdate.Remove(delete.Cso.Id);
+            _activityRunProfileExecutionItems.Remove(delete.ExecutionItem);
+        }
+
+        _connectorReportedDeletes.Clear();
+        _connectorReportedDeletionCount -= count;
+        _withheldDeletionCount = count;
+        _activity.DetectedDeletionsWithheld = count;
+
+        var warning = ImportOutcomeMessage.ForWithheldConnectorReportedDeletes(count, existingCsoCount, maxCount, maxPercent);
+        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+            ? warning
+            : $"{_activity.WarningMessage}\n{warning}";
+
+        Log.Warning("WithholdConnectorReportedDeletesOverTheLimitsAsync: Delta Import deletes withheld. The Connector reported {Count} deletes of the {ExistingCsoCount} Connected System Objects in scope, above the Run Profile's limit(s) (MaxDetectedDeletions={MaxCount}, MaxDetectedDeletionsPercent={MaxPercent}). None were marked as deleted, and the watermark is kept so the next Delta Import reads them again.",
+            count, existingCsoCount, maxCount, maxPercent);
+        return true;
+    }
+
+    /// <summary>
     /// #2074: undoes what an object's copy on an earlier page of this Delta Import did, so the later copy now being
     /// processed takes its place as though the earlier one had never been read. A change log returns an object's changes
     /// in order, so the later copy is the object as it now stands: a re-insert after a delete, a further update, or a
@@ -3283,6 +3380,7 @@ public class SyncImportTaskProcessor
             case EarlierPageCopyCount.Deletion:
                 _connectorReportedDeletionCount--;
                 _unchangedObjectCount++;
+                _connectorReportedDeletes.RemoveAll(delete => ReferenceEquals(delete.ExecutionItem, earlier.ExecutionItem));
                 break;
             case EarlierPageCopyCount.Creation:
                 // The created figure is the number of objects left to create, which the removal below lowers.

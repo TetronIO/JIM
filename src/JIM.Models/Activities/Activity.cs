@@ -547,15 +547,17 @@ public class Activity
     public int? ExportDeletesWithheld { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
-    // Run Profile Safeguards Full Import deletion detection limit stat (#1618, Layer 2)
+    // Run Profile Safeguards import deletion limit stat (#1618, Layer 2; Delta Import #2089)
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// For Full Import activities that ran deletion detection: how many Connected System Objects the
-    /// Run Profile's Max detected deletions/Max detected deletions percent limits withheld this run.
-    /// Zero on a Full Import that applied its deletion detection (whether or not anything was found
-    /// missing); the withheld count on one that refused; null on every other activity, including a
-    /// Full Import that imported zero objects and so skipped detection entirely.
+    /// For Full Import activities that ran deletion detection, and every Delta Import activity that
+    /// staged what it read: how many Connected System Objects the Run Profile's Max detected
+    /// deletions/Max detected deletions percent limits withheld this run, from being marked deleted
+    /// because the Full Import no longer found them or the Delta Import's Connector reported them deleted.
+    /// Zero on a run that applied its deletions (whether or not there were any); the withheld count on
+    /// one that refused; null on every other activity, including a Full Import that imported zero
+    /// objects and so skipped detection entirely.
     /// </summary>
     public int? DetectedDeletionsWithheld { get; set; }
 

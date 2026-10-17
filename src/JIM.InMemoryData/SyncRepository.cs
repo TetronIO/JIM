@@ -358,6 +358,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(csos.Count());
     }
 
+    public Task<int> GetNonObsoleteConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null)
+    {
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.Status != ConnectedSystemObjectStatus.Obsolete);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        return Task.FromResult(csos.Count());
+    }
+
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
     {
         var count = GetCsosForSystem(connectedSystemId)
