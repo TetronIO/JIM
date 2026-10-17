@@ -100,6 +100,60 @@ public class ScopeReviewFlagDatabaseTests
 
     #endregion
 
+    #region Flagging disconnected objects for re-provisioning (#2318)
+
+    [Test]
+    public async Task FlagMetaverseObjectsForScopeReviewAsync_FlagsTheGivenObjectsAndNoOtherAsync()
+    {
+        var seeded = await SeedAsync();
+
+        int newlyFlagged;
+        await using (var context = NewContext())
+            newlyFlagged = await new PostgresDataRepository(context).Sync.FlagMetaverseObjectsForScopeReviewAsync([seeded.Alice, seeded.Bob, Guid.NewGuid()]);
+
+        var flags = await ReadMvoFlagsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(flags[seeded.Alice], Is.True);
+            Assert.That(flags[seeded.Bob], Is.True, "already flagged, and stays so");
+            Assert.That(flags[seeded.Finance], Is.False, "not given");
+            Assert.That(newlyFlagged, Is.EqualTo(1), "Bob was flagged already and the unknown id matches nothing, so only Alice is new");
+        }
+    }
+
+    [Test]
+    public async Task FlagMetaverseObjectsForScopeReviewAsync_TrackedObject_ReadsAsPersistedAsync()
+    {
+        var seeded = await SeedAsync();
+
+        await using var context = NewContext();
+        var tracked = await context.MetaverseObjects.AsTracking().SingleAsync(m => m.Id == seeded.Alice);
+        await new PostgresDataRepository(context).Sync.FlagMetaverseObjectsForScopeReviewAsync([seeded.Alice]);
+
+        var entry = context.Entry(tracked).Property(m => m.ScopeReviewPending);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tracked.ScopeReviewPending, Is.True);
+            Assert.That(entry.IsModified, Is.False, "the value is the persisted one, not a pending change");
+        }
+
+        // And a whole-entity save of that instance does not write the old value back.
+        tracked.CachedDisplayName = "Alice Renamed";
+        await context.SaveChangesAsync();
+        Assert.That((await ReadMvoFlagsAsync())[seeded.Alice], Is.True);
+    }
+
+    [Test]
+    public async Task FlagMetaverseObjectsForScopeReviewAsync_NoIds_WritesNothingAsync()
+    {
+        await SeedAsync();
+
+        await using var context = NewContext();
+        Assert.That(await new PostgresDataRepository(context).Sync.FlagMetaverseObjectsForScopeReviewAsync([]), Is.Zero);
+    }
+
+    #endregion
+
     #region The drain's clear
 
     [Test]

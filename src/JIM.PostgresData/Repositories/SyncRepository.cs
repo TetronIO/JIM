@@ -259,6 +259,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
         => _repo.Metaverse.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);
 
+    public Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids)
+        => _repo.Metaverse.FlagMetaverseObjectsForScopeReviewAsync(ids);
+
     public Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
         IReadOnlyCollection<Guid> referencedMetaverseObjectIds)
         => _repo.Metaverse.GetMetaverseObjectReferenceRecallCandidatesAsync(referencedMetaverseObjectIds);
