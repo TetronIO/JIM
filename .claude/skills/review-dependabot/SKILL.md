@@ -9,7 +9,7 @@ allowed-tools: Bash, Read, Glob, Grep, WebSearch, WebFetch
 
 Review all open Dependabot **and jim-automation** PRs against JIM's supply chain security and dependency governance policies, then merge those that pass assessment.
 
-`jim-automation[bot]` is JIM's own service principal, used by `apt-pin-check` and `tooling-pin-check` to raise PRs for pins Dependabot's ecosystems can't see (production apt packages; `@playwright/mcp` and `dotnet-ef`, pinned outside any Dependabot-readable manifest). These PRs carry the `dependencies` label and land on `automation/*` branches. Treat them as in-scope by default, folded into the same batch and merge train as Dependabot's PRs, not a separate pass; see `engineering/DEPENDENCY_PINNING.md` for what each bot covers.
+`jim-automation[bot]` is JIM's own service principal, used by `apt-pin-check` and `tooling-pin-check` to raise PRs for pins Dependabot's ecosystems can't see (production apt packages; `@playwright/mcp` and `dotnet-ef`, pinned outside any Dependabot-readable manifest). These PRs carry the `dependencies` label and land on `automation/*` branches. Treat them as in-scope by default, folded into the same batch as Dependabot's PRs, not a separate pass; see `engineering/DEPENDENCY_PINNING.md` for what each bot covers.
 
 If `$ARGUMENTS` is "review-only", produce the assessment but do NOT merge. Otherwise, present findings and merge approved PRs.
 
@@ -124,32 +124,36 @@ Recommendations should be one of:
 - **Hold** - Needs investigation (explain why)
 - **Reject** - Fails assessment (explain why)
 
-## Step 6: Merge (serial merge train)
+## Step 6: Merge (arm the whole batch)
 
-Unless running in review-only mode. Assessment (Steps 1 to 5) is batched because reading diffs costs no CI; merging is **strictly serial**: one PR at a time, in order. Branch protection requires every PR to be up to date with `main`, so each merge invalidates the rest of the batch; updating or triggering CI on any PR other than the next in the queue wastes CI minutes (a rebase-everything-after-every-merge pattern costs roughly N-squared/2 CI runs per batch of N, against a floor of N).
+Unless running in review-only mode. `main` has a merge queue, so a PR no longer has to be up to date with `main` to merge: the queue tests each entry against current `main` plus the entries ahead of it, and merges them one at a time. One merge therefore no longer invalidates the rest of the batch, and there is no train to run by hand. Arm every PR the assessment approved, in one pass.
 
-1. **Pick the next PR only.** Order: security fixes first, then any ordering constraint from the assessment (PRs sharing files), then oldest first. Do not comment on, update, or otherwise trigger CI on any other PR in the batch.
-2. **Bring it up to date and fix lock files in ONE push** (each push costs a full CI run, so never push a lock-file fix and a branch update separately):
-   - **Dependabot PRs only**: if the branch carries only Dependabot's own commits, comment `@dependabot rebase` and wait up to ~5 minutes (it normally responds in under a minute). If it responds, lock files may still need regenerating (see below) - do that on the rebased head in the same pass as any further update.
-   - **jim-automation PRs**: there is no bot listening for a rebase comment (`open-pin-pr.ps1` opens the PR and stops), so skip straight to updating locally - do not comment `@dependabot rebase` on a jim-automation branch, it will not act.
-   - Otherwise (the branch has external commits - lock-file regeneration, an earlier update - or Dependabot does not respond within the timeout): update locally. `git fetch origin`, `git checkout <branch>`, `git pull --no-rebase` (absorbs any remote drift, e.g. a stray "Update branch" click), `git merge origin/main --no-edit`. **Merge, don't rebase**: `main` squash-merges so branch history is discarded anyway, and a merge needs only a plain push (root `CLAUDE.md`). Dependabot stops maintaining a branch once it has external commits; that is expected - the train owns the branch from that point.
-   - **Unattended (scheduled) runs: verify, never fire-and-forget.** Nobody can wait or re-prompt, so a rebase comment is not the end of the step. After commenting `@dependabot rebase` (and arming auto-merge), wait briefly, then re-read the PR and compare its `base.sha` and head with current `main`. If the branch is still behind, do not leave it: fall back to the local merge above (or `update_pull_request_branch` where the sandbox has no `gh`/checkout; it is acceptable here because the train owns the branch from that point). End the run with each PR's final state (merged, armed with the branch current, or stuck and why); a PR armed on a stale branch never merges on its own because strict mode blocks it.
-   - **Conflicts**: resolve conflicted `.csproj` files manually, keeping BOTH sides' version bumps (`git diff HEAD origin/main -- <file>` shows what each side changed). Never hand-merge a `packages.lock.json` conflict - lock content derives from the csproj set, so regenerate instead.
-   - **Regenerate and verify before committing**: run `dotnet restore JIM.sln --force-evaluate` as its own command and check its exit status directly - do not bury it in a `&&`/pipe chain where a piped `tail` masks the exit code. Then `grep -rln '<<<<<<<' src/ test/` must return nothing (a marker-laden csproj otherwise gets committed silently; this happened). Then `git add -A`, commit, plain push.
-3. **Arm auto-merge**: `gh pr merge <number> --squash --auto`. Include a merge comment noting what was verified (pinning, security advisory) where the assessment found anything noteworthy.
-4. **Wait for the merge before touching the next PR** (background until-loop on the merge state per root `CLAUDE.md`, or a PR-activity subscription). Investigate red required checks on the current PR only; checks on queued PRs are stale by construction and not worth reading.
-5. **Advance** to the next PR and repeat from step 2.
-6. **Avoid the API "Update branch" endpoint (`update_pull_request_branch`) on branches Dependabot still maintains**: the merge commit it creates makes Dependabot ignore all subsequent `@dependabot rebase`/`recreate` commands. On a branch that already has external commits it is functionally equivalent to the local merge in step 2, but prefer the local merge for conflict control and the single-push discipline.
-7. **Recovery (last resort)**: for a branch that is truly wedged, a manual rebase replays only the version-bump commit on top of current `main`:
+1. **Get each PR green on its own head first.** For NuGet PRs that means the lock-file regeneration commit is present and CI is green on it (Step 3, NuGet Packages); fix any lock-file problem in ONE push, since each push costs a full CI run. Do not update a branch from `main` just because it is behind: that spends a CI run for nothing.
+2. **Arm in priority order**: security fixes first, then oldest. The queue takes PRs in the order they join it.
+   ```
+   gh pr merge <number> --auto
+   ```
+   This joins the queue straight away when the PR's checks have passed, and otherwise as soon as they do. Include a merge comment noting what was verified (pinning, security advisory) where the assessment found anything noteworthy.
+3. **Hold back PRs that will conflict with each other.** Two bumps that edit the same lines (one `.csproj`, one Dockerfile `FROM`, or two NuGet PRs that both regenerate the same `packages.lock.json`) will conflict once the first one merges. Arm the first, and arm the other only after the first has landed and the other has been brought up to date (step 5). Everything else goes in together.
+4. **Watch every armed PR** with `pwsh ./scripts/Watch-PullRequest.ps1 -Number <n>`, each in its own Bash background command (root `CLAUDE.md`, "Closing the loop after `--auto`"). A PR waiting in the queue is not something to act on.
+5. **Update a branch only when the watcher says so** (`Conflict`, or `RemovedFromQueue` because it conflicted with `main`), or when a held-back PR's turn comes:
+   - **Dependabot PRs whose branch carries only Dependabot's own commits**: comment `@dependabot rebase` and wait up to ~5 minutes (it normally responds in under a minute). Lock files may still need regenerating on the rebased head.
+   - **jim-automation PRs**: there is no bot listening for a rebase comment (`open-pin-pr.ps1` opens the PR and stops), so update locally; do not comment `@dependabot rebase` on a jim-automation branch.
+   - **Otherwise** (the branch has external commits, such as the lock-file regeneration, or Dependabot does not respond in time): `git fetch origin`, `git checkout <branch>`, `git pull --no-rebase` (absorbs any remote drift), `git merge origin/main --no-edit`. **Merge, don't rebase**: `main` squash-merges so branch history is discarded anyway, and a merge needs only a plain push (root `CLAUDE.md`). Dependabot stops maintaining a branch once it has external commits; that is expected.
+   - **Conflicts**: resolve conflicted `.csproj` files manually, keeping BOTH sides' version bumps (`git diff HEAD origin/main -- <file>` shows what each side changed). Never hand-merge a `packages.lock.json` conflict; lock content derives from the csproj set, so regenerate instead.
+   - **Regenerate and verify before committing**: run `dotnet restore JIM.sln --force-evaluate` as its own command and check its exit status directly; do not bury it in a `&&`/pipe chain where a piped `tail` masks the exit code. Then `grep -rln '<<<<<<<' src/ test/` must return nothing (a marker-laden csproj otherwise gets committed silently; this happened). Then `git add -A`, commit, plain push, and `gh pr merge <number> --auto` again.
+6. **`RemovedFromQueue` for failed checks**: the queue ran the PR's checks against `main` plus the entries ahead of it, and something failed there. Read the failed `merge_group` check the watcher names; a failure the PR's own run did not show usually means it clashes with a PR that merged just ahead of it. Fix, push, re-arm. If it is clearly transient, surface it rather than re-arming blind.
+7. **Unattended (scheduled) runs: verify, never fire-and-forget.** Nobody can wait or re-prompt, so arming is not the end of the step. Before finishing, read each PR once (`Watch-PullRequest.ps1 -Number <n> -Once`) and end the run with each PR's state: merged, queued, armed and waiting on its checks, or stuck and why. Where the sandbox has no `gh` or checkout, `update_pull_request_branch` is acceptable for a branch that genuinely needs updating (step 5's conditions), since external commits mean the run owns the branch from then on.
+8. **Avoid the API "Update branch" endpoint (`update_pull_request_branch`) on branches Dependabot still maintains**: the merge commit it creates makes Dependabot ignore all subsequent `@dependabot rebase`/`recreate` commands. On a branch that already has external commits it is functionally equivalent to the local merge in step 5, but prefer the local merge for conflict control and the single-push discipline.
+9. **Recovery (last resort)**: for a branch that is truly wedged, a manual rebase replays only the version-bump commit on top of current `main`:
    ```bash
    git fetch origin
    git checkout <dependabot-branch-name>
    git rebase origin/main
    git push --force-with-lease origin <dependabot-branch-name>
    ```
-   Prefer the merge path in step 2; force-push only when a plain push cannot represent the fix, and expect the harness to require explicit user approval for it.
-8. Report final status of all PRs
-
+   Prefer the merge path in step 5; force-push only when a plain push cannot represent the fix, and expect the harness to require explicit user approval for it.
+10. Report final status of all PRs
 ## Reference: JIM's Supply Chain Security Requirements
 
 - All dependency updates require human review - no auto-merge
