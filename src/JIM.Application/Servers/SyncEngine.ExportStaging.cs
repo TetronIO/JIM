@@ -842,11 +842,10 @@ public partial class SyncEngine
 
         // The new set: what the Metaverse Object holds, less this pass's removals, plus its additions.
         var newKeys = new HashSet<long>(addedKeys);
-        foreach (var held in mvo.AttributeValues.Where(av => av.AttributeId == sourceAttributeId && !av.NullValue && av.DateTimeValue.HasValue))
-        {
-            if (!removedRows.Contains(held) && perValueChangeType(held) != PendingExportAttributeChangeType.Remove)
-                newKeys.Add(DateTimeAttributeValue.Key(held.DateTimeValue!.Value));
-        }
+        newKeys.UnionWith(mvo.AttributeValues
+            .Where(av => av.AttributeId == sourceAttributeId && !av.NullValue && av.DateTimeValue.HasValue &&
+                         !removedRows.Contains(av) && perValueChangeType(av) != PendingExportAttributeChangeType.Remove)
+            .Select(av => DateTimeAttributeValue.Key(av.DateTimeValue!.Value)));
 
         // The old set: the new set less this pass's additions, plus its removals. A Create provisions from nothing.
         var oldKeys = new HashSet<long>();
