@@ -86,6 +86,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-016-SqlConnectorMatrix" -Quick             # representative subset for the regular gate
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-016-SqlConnectorMatrix" -FullMatrix        # full matrix including the 500,000-row scale import
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-015-ScimConnector"             # SCIM 2.0 Client Connector against the containerised test service provider
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-028-ScimKeycloak"               # SCIM 2.0 Client Connector against a real Keycloak's SCIM API
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-017-InitialPasswordProvisioning" # Initial Password provisioning and the park-then-release loop (Samba AD only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-018-WritebackToSource"         # a derived value written back into its source Connected System (#1284)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-019-AuxiliaryClasses"          # LDAP auxiliary object classes (#492, OpenLDAP only)
@@ -177,7 +178,7 @@ This single script handles everything:
 
 **Available Scenarios (`-Scenario` parameter):**
 
-In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019 and 022 are OpenLDAP only; Scenario 017 runs on Samba AD and the Active Directory lab only; Scenarios 023 and 026 support OpenLDAP and Samba AD only (they are skipped on the 389 Directory Server pass of a `-DirectoryType All` run); Scenarios 024 and 025 run on the Active Directory lab only (`-DirectoryType ActiveDirectory`, real Windows Server domain controllers on Hyper-V: see `test/integration/ad-lab/README.md`), which no container and no `-DirectoryType All` or `-PreRelease` run includes. Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand. Scenarios 011, 015, 016 and 027 are directory-agnostic (they accept `-DirectoryConfig` but never use it), so a `-DirectoryType All` run executes them once, in the first directory pass, rather than once per directory type with identical results each time; the per-scenario rules live in `utils/Get-ScenarioDirectoryTypes.ps1`.
+In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019 and 022 are OpenLDAP only; Scenario 017 runs on Samba AD and the Active Directory lab only; Scenarios 023 and 026 support OpenLDAP and Samba AD only (they are skipped on the 389 Directory Server pass of a `-DirectoryType All` run); Scenarios 024 and 025 run on the Active Directory lab only (`-DirectoryType ActiveDirectory`, real Windows Server domain controllers on Hyper-V: see `test/integration/ad-lab/README.md`), which no container and no `-DirectoryType All` or `-PreRelease` run includes. Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand. Scenarios 011, 015, 016, 027 and 028 are directory-agnostic (they accept `-DirectoryConfig` but never use it), so a `-DirectoryType All` run executes them once, in the first directory pass, rather than once per directory type with identical results each time; the per-scenario rules live in `utils/Get-ScenarioDirectoryTypes.ps1`.
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
@@ -196,6 +197,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario-013-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) |
 | `Scenario-014-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) |
 | `Scenario-015-ScimConnector` | SCIM 2.0 Client Connector end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted rather than validation skipped (#545) | file (HR CSV source), scim-provider |
+| `Scenario-028-ScimKeycloak` | SCIM 2.0 Client Connector against Keycloak's built-in SCIM API: group create then members, a membership change past Keycloak's 100-operation PATCH cap, Delta Import read in full, disable and delete, and an admin-protected account refused (#2349, #2094) | file (HR CSV source), keycloak-scim |
 | `Scenario-016-SqlConnectorMatrix` | JIM SQL Connector provider x capability matrix: the connector's capability rows driven against both priority 1 providers (Microsoft SQL Server and Oracle Database). Accepts `-Provider SqlServer\|Oracle\|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import (#170) | sqlserver-hris-a, oracle-hris-b |
 | `Scenario-017-InitialPasswordProvisioning` | Initial Password provisioning end to end: an account is provisioned, then the scenario signs in as the account holder with the password JIM set, proves the directory is forcing a change, changes it as the account holder, and signs in again. Also proves the park-then-release loop: a static Initial Password the target genuinely refuses parks every provisioned account, and correcting the Synchronisation Rule releases them to the Password Delivery Service within seconds, and a password an administrator sets on a parked account is delivered as its first password, enabling it as the rule asks. Samba AD only; `-Template` is ignored | samba-ad-primary |
 | `Scenario-018-WritebackToSource` | Whether a value JIM derives is written back into the Connected System it came from ([#1284](https://github.com/TetronIO/JIM/issues/1284)). Two JIM File Connector systems carry identically shaped outbound rules over the same Metaverse Objects, evaluated in one run, differing only in whether the target is the run's source. `-Template` is ignored | file (no directory container) |
@@ -2331,6 +2333,7 @@ JIM/
         ├── Setup-Scenario-022.ps1                            # Configures JIM for Scenario 022
         ├── Setup-Scenario-023.ps1                            # Configures JIM for Scenario 023 (composes Setup-Scenario-001 -GenerateAccountName -DeriveFromAccountName)
         ├── Setup-Scenario-026.ps1                            # Configures JIM for Scenario 026 (composes Setup-Scenario-001 -GenerateAccountName -DeriveFromAccountName)
+        ├── Setup-Scenario-028.ps1                            # Configures Keycloak (kcadm.sh) and JIM for Scenario 028 (SCIM Connector against Keycloak)
         ├── New-Scenario-016-TestDatabase.ps1                  # Deterministic SQL seeder for Scenario 016
         ├── Add-Scenario-008-Schedules.ps1                      # Optional schedule wiring for Scenario 008
         ├── Populate-SambaAD.ps1                            # Samba AD population (Scenarios 001, 004, 005, etc.)
@@ -2381,6 +2384,7 @@ JIM/
         │   ├── Invoke-Scenario-023-UniqueValueGeneration.ps1      # Unique Value Generation, release 1 (OpenLDAP or Samba AD)
         │   ├── Invoke-Scenario-026-DerivedAttributeFlows.ps1      # Metaverse-Derived Attribute Flows (OpenLDAP or Samba AD)
         │   ├── Invoke-Scenario-027-FirstSynchronisation.ps1       # The tested tutorial, run from its docs page (File Connector only)
+        │   ├── Invoke-Scenario-028-ScimKeycloak.ps1               # SCIM 2.0 Client Connector against Keycloak's SCIM API
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 011 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 004, 005)
         ├── docker/
@@ -2401,6 +2405,7 @@ JIM/
         │   │   ├── scripts/                                      # Suffix/accesslog setup scripts
         │   │   └── start-openldap.sh                             # Container startup
         │   ├── scim/                                              # SCIM 2.0 test service provider image (JIM.TestScimServiceProvider)
+        │   ├── keycloak-scim/start-keycloak-scim.sh               # Keycloak for Scenario 028: HTTPS from a certificate minted at start
         │   └── dirsrv/                                            # Custom 389 Directory Server image, same two suffixes
         │       ├── Dockerfile
         │       ├── Build-DirsrvImage.ps1                         # Image build script
@@ -2491,6 +2496,7 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 023 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity; release 2: never reuse; release 3: probing; release 4: Collision Remediation, derived collisions, Needs Decision, remediation off (#242) |
 | Scenario 026 | ✅ Passing (Medium, Samba AD and OpenLDAP) | Metaverse-Derived Attribute Flows: dependency ordering (Account Name, Email, User Principal Name), cross-system inputs in either order (the derived-input mark), stability, Missing Input Behaviour, cycle refusal, surface parity (#1750) |
 | Scenario 027 | ✅ Complete | The tested tutorial: runs `docs/getting-started/first-synchronisation.md` from the page and asserts its checkpoints (#1454) |
+| Scenario 028 | ✅ Implemented | SCIM 2.0 Client Connector against Keycloak's built-in SCIM API, guarding the Keycloak behaviours #2094 works around (#2349) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 016 going green) and performance baselines |
 | GitHub Actions | ✅ Release gate | `pre-release.yml` runs the pre-release regression when a release PR merges and on demand; `release.yml` requires it once `JIM_PRE_RELEASE_GATE_ENFORCED` is on |
 
