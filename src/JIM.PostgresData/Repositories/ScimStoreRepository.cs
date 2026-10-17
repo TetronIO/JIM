@@ -86,6 +86,48 @@ public class ScimStoreRepository : IScimStoreRepository
         }
     }
 
+    public async Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypesAsync(int connectedSystemId, CancellationToken cancellationToken = default)
+    {
+        return await Repository.Database.ScimStoreResourceTypes
+            .AsNoTracking()
+            .Where(t => t.ConnectedSystemId == connectedSystemId)
+            .OrderBy(t => t.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ScimStoreSchema>> GetSchemasAsync(int connectedSystemId, CancellationToken cancellationToken = default)
+    {
+        return await Repository.Database.ScimStoreSchemas
+            .AsNoTracking()
+            .Where(s => s.ConnectedSystemId == connectedSystemId)
+            .OrderBy(s => s.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AddDefinitionsAsync(int connectedSystemId, IReadOnlyCollection<ScimStoreSchema> schemas,
+        IReadOnlyCollection<ScimStoreResourceType> resourceTypes, CancellationToken cancellationToken = default)
+    {
+        foreach (var schema in schemas)
+            schema.ConnectedSystemId = connectedSystemId;
+        foreach (var resourceType in resourceTypes)
+            resourceType.ConnectedSystemId = connectedSystemId;
+
+        // One SaveChanges is one transaction: the definitions arrive together or not at all. Detached afterwards
+        // either way, so a refused set is not left in the tracker for the context's next save to try again.
+        var context = Repository.Database;
+        context.ScimStoreSchemas.AddRange(schemas);
+        context.ScimStoreResourceTypes.AddRange(resourceTypes);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        finally
+        {
+            foreach (var entry in context.ChangeTracker.Entries().Where(e => e.Entity is ScimStoreSchema or ScimStoreResourceType).ToList())
+                entry.State = EntityState.Detached;
+        }
+    }
+
     public async Task<ScimStoreState?> GetStateAsync(int connectedSystemId, CancellationToken cancellationToken = default)
     {
         return await Repository.Database.ScimStoreStates

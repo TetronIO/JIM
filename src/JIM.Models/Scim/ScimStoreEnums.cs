@@ -4,15 +4,6 @@
 namespace JIM.Models.Scim;
 
 /// <summary>
-/// The kinds of resource the SCIM store holds. Stored as an integer, so members are never renumbered.
-/// </summary>
-public enum ScimStoreResourceType
-{
-    User = 1,
-    Group = 2
-}
-
-/// <summary>
 /// What one accepted SCIM write did to one resource, as the store's journal records it. Stored as an integer, so
 /// members are never renumbered.
 /// </summary>
@@ -39,31 +30,25 @@ public enum ScimStoreOperation
     Deleted = 4,
 
     /// <summary>
-    /// The Group lost a member because that member was deleted. No request named the Group, but its membership, and
-    /// so its version, changed.
+    /// The resource lost a reference (a Group a member, for example) because the resource it referred to was deleted.
+    /// No request named it, but its contents, and so its version, changed.
     /// </summary>
-    MemberRemovedByDeletion = 5
+    ReferenceRemovedByDeletion = 5
 }
 
 /// <summary>
-/// The outcome of inserting or updating a resource row in a write session.
+/// The outcome of inserting or updating a resource in a write session.
 /// </summary>
 public enum ScimStoreWriteOutcome
 {
     /// <summary>
-    /// The row was written.
+    /// The resource was written.
     /// </summary>
     Written = 1,
 
     /// <summary>
-    /// Another live resource of the same type in the same Connected System already has this <c>userName</c>
-    /// (compared without regard to case). Nothing was written, and the session can no longer be committed.
+    /// Another live resource of the same type already holds one of the values that must be unique; nothing was
+    /// written, and the session is still usable.
     /// </summary>
-    UserNameTaken = 2,
-
-    /// <summary>
-    /// Another live resource of the same type in the same Connected System already has this <c>externalId</c>.
-    /// Nothing was written, and the session can no longer be committed.
-    /// </summary>
-    ExternalIdTaken = 3
+    UniquenessConflict = 2
 }

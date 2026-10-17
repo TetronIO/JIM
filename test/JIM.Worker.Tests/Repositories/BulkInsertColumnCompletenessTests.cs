@@ -294,7 +294,8 @@ public class BulkInsertColumnCompletenessTests
         using (Assert.EnterMultipleScope())
         {
             AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreResource), "ScimStoreResources", ScimStoreColumns.Resources);
-            AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreGroupMember), "ScimStoreGroupMembers", ScimStoreColumns.GroupMembers);
+            AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreUniqueValue), "ScimStoreUniqueValues", ScimStoreColumns.UniqueValues);
+            AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreReference), "ScimStoreReferences", ScimStoreColumns.References);
             AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreState), "ScimStoreStates", ScimStoreColumns.States);
             AssertColumnListMatchesModel(typeof(JIM.Models.Scim.ScimStoreJournalEntry), "ScimStoreJournalEntries", ScimStoreColumns.JournalEntries);
         }

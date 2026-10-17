@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Security.Cryptography;
+using System.Text;
 using JIM.Data.Repositories;
 using JIM.Models.Scim;
 using Npgsql;
@@ -15,25 +17,29 @@ namespace JIM.PostgresData.Repositories;
 /// the lock is taken.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The transaction runs at READ COMMITTED, so every statement here sees each write that committed before this session
-/// took the lock: the lock, not the isolation level, is what orders a Connected System's writes. Raw SQL rather than EF
-/// Core because the statements the contract needs (the upsert that is the lock, <c>RETURNING</c>, the unique-violation
-/// mapping) have no EF form, and these run on the request path of every SCIM write.
+/// took the lock: the lock, not the isolation level, is what orders a Connected System's writes. It also makes a
+/// uniqueness check followed by the write safe, because no other write to the same store can run in between; the
+/// unique values' primary key is the backstop, not the mechanism, so a conflict is reported without aborting the
+/// transaction.
+/// </para>
+/// <para>
+/// Raw SQL rather than EF Core because the statements the contract needs (the upsert that is the lock,
+/// <c>RETURNING</c>, array parameters) have no EF form, and these run on the request path of every SCIM write.
+/// </para>
 /// </remarks>
 internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
 {
-    private const string UniqueViolation = "23505";
-
     private readonly NpgsqlConnection _connection;
     private readonly NpgsqlTransaction _transaction;
     private readonly RawSqlConnectionLease _lease;
 
     // The version each resource reached in this session. A resource's version rises once per session, so a second
-    // touch (an update after a membership change, two membership operations) restamps it without raising it again.
+    // touch (an update after a reference change, two reference operations) restamps it without raising it again.
     private readonly Dictionary<Guid, long> _versions = [];
 
     private bool _committed;
-    private bool _failed;
 
     internal ScimStoreWriteSession(NpgsqlConnection connection, NpgsqlTransaction transaction, RawSqlConnectionLease lease,
         int connectedSystemId, long changeSequence, DateTime timestamp)
@@ -52,109 +58,123 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
 
     public DateTime Timestamp { get; }
 
-    public async Task<ScimStoreResource?> GetLiveResourceAsync(ScimStoreResourceType resourceType, Guid id)
+    public async Task<ScimStoreResource?> GetLiveResourceAsync(int resourceTypeId, Guid id)
     {
         await using var command = Command($"""
             SELECT {BulkSqlHelpers.ToQuotedList(ScimStoreColumns.Resources)}
             FROM "ScimStoreResources"
-            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "ResourceType" = @type AND "DeletedAt" IS NULL
+            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "ResourceTypeId" = @type AND "DeletedAt" IS NULL
             """);
         command.Parameters.AddWithValue("id", id);
-        command.Parameters.AddWithValue("type", (int)resourceType);
+        command.Parameters.AddWithValue("type", resourceTypeId);
 
         await using var reader = await command.ExecuteReaderAsync();
         return await reader.ReadAsync() ? ReadResource(reader) : null;
     }
 
-    public async Task<IReadOnlyDictionary<Guid, ScimStoreResourceType>> GetLiveResourceTypesAsync(IReadOnlyCollection<Guid> ids)
+    public async Task<IReadOnlyDictionary<Guid, int>> GetLiveResourceTypeIdsAsync(IReadOnlyCollection<Guid> ids)
     {
-        var types = new Dictionary<Guid, ScimStoreResourceType>();
+        var types = new Dictionary<Guid, int>();
         if (ids.Count == 0)
             return types;
 
         await using var command = Command("""
-            SELECT "Id", "ResourceType" FROM "ScimStoreResources"
+            SELECT "Id", "ResourceTypeId" FROM "ScimStoreResources"
             WHERE "Id" = ANY(@ids) AND "ConnectedSystemId" = @system AND "DeletedAt" IS NULL
             """);
-        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() });
+        command.Parameters.Add(UuidArray("ids", ids));
 
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
-            types[reader.GetGuid(0)] = (ScimStoreResourceType)reader.GetInt32(1);
+            types[reader.GetGuid(0)] = reader.GetInt32(1);
         return types;
     }
 
-    public async Task<IReadOnlyList<Guid>> GetGroupMemberIdsAsync(Guid groupId)
+    public async Task<IReadOnlyList<Guid>> GetReferenceTargetIdsAsync(Guid sourceId, string attribute)
     {
-        await using var command = Command("""SELECT "MemberId" FROM "ScimStoreGroupMembers" WHERE "GroupId" = @group""");
-        command.Parameters.AddWithValue("group", groupId);
+        await using var command = Command("""
+            SELECT "TargetId" FROM "ScimStoreReferences" WHERE "SourceId" = @source AND "Attribute" = @attribute
+            """);
+        command.Parameters.AddWithValue("source", sourceId);
+        command.Parameters.AddWithValue("attribute", attribute);
         return await ReadGuidsAsync(command);
     }
 
-    public async Task<ScimStoreWriteOutcome> InsertResourceAsync(ScimStoreResource resource)
+    public async Task<ScimStoreWriteResult> InsertResourceAsync(ScimStoreResource resource, IReadOnlyCollection<ScimStoreUniqueValue> uniqueValues)
     {
         ArgumentNullException.ThrowIfNull(resource);
+        ArgumentNullException.ThrowIfNull(uniqueValues);
         EnsureUsable();
+
+        var unique = Hashed(uniqueValues);
+        var conflict = await FindConflictAsync(resource.ResourceTypeId, unique, except: null);
+        if (conflict != null)
+            return ScimStoreWriteResult.Conflict(conflict);
 
         // Values in exactly ScimStoreColumns.Resources order.
         object?[] values =
         [
-            resource.Id, ConnectedSystemId, (int)resource.ResourceType, resource.UserName, resource.ExternalId,
-            resource.DisplayName, 1L, ChangeSequence, resource.Created, Timestamp, null, resource.Payload
+            resource.Id, ConnectedSystemId, resource.ResourceTypeId, 1L, ChangeSequence, resource.Created, Timestamp, null,
+            resource.Payload
         ];
-        await using var command = Command($"""
+        await using (var command = Command($"""
             INSERT INTO "ScimStoreResources" ({BulkSqlHelpers.ToQuotedList(ScimStoreColumns.Resources)})
             VALUES ({string.Join(", ", values.Select((_, i) => $"@p{i}"))})
-            """);
-        AddResourceParameters(command, ScimStoreColumns.Resources, values);
+            """))
+        {
+            AddResourceParameters(command, ScimStoreColumns.Resources, values);
+            await command.ExecuteNonQueryAsync();
+        }
 
-        var outcome = await ExecuteWriteAsync(command);
-        if (outcome == ScimStoreWriteOutcome.Written)
-            _versions[resource.Id] = 1;
-        return outcome;
+        await InsertUniqueValuesAsync(resource.ResourceTypeId, resource.Id, unique);
+        _versions[resource.Id] = 1;
+        return ScimStoreWriteResult.Written(1);
     }
 
-    public async Task<(ScimStoreWriteOutcome Outcome, long Version)> UpdateResourceAsync(ScimStoreResource resource)
+    public async Task<ScimStoreWriteResult> UpdateResourceAsync(ScimStoreResource resource, IReadOnlyCollection<ScimStoreUniqueValue> uniqueValues)
     {
         ArgumentNullException.ThrowIfNull(resource);
+        ArgumentNullException.ThrowIfNull(uniqueValues);
         EnsureUsable();
 
-        // Values in exactly ScimStoreColumns.ResourcesUpdate order.
-        object?[] values = [resource.UserName, resource.ExternalId, resource.DisplayName, ChangeSequence, Timestamp, resource.Payload];
-        var assignments = string.Join(", ", ScimStoreColumns.ResourcesUpdate.Select((column, i) => $"\"{column}\" = @p{i}"));
-        await using var command = Command($"""
-            UPDATE "ScimStoreResources" SET {assignments}, "Version" = "Version" + @raise
-            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "ResourceType" = @type AND "DeletedAt" IS NULL
-            RETURNING "Version"
-            """);
-        AddResourceParameters(command, ScimStoreColumns.ResourcesUpdate, values);
-        command.Parameters.AddWithValue("raise", RaiseFor(resource.Id));
-        command.Parameters.AddWithValue("id", resource.Id);
-        command.Parameters.AddWithValue("type", (int)resource.ResourceType);
+        var unique = Hashed(uniqueValues);
+        var conflict = await FindConflictAsync(resource.ResourceTypeId, unique, except: resource.Id);
+        if (conflict != null)
+            return ScimStoreWriteResult.Conflict(conflict);
 
-        try
+        // Values in exactly ScimStoreColumns.ResourcesUpdate order.
+        object?[] values = [ChangeSequence, Timestamp, resource.Payload];
+        var assignments = string.Join(", ", ScimStoreColumns.ResourcesUpdate.Select((column, i) => $"\"{column}\" = @p{i}"));
+        long version;
+        await using (var command = Command($"""
+            UPDATE "ScimStoreResources" SET {assignments}, "Version" = "Version" + @raise
+            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "ResourceTypeId" = @type AND "DeletedAt" IS NULL
+            RETURNING "Version"
+            """))
         {
-            var version = await command.ExecuteScalarAsync()
-                          ?? throw new InvalidOperationException($"SCIM resource {resource.Id} is not live in Connected System {ConnectedSystemId}.");
-            _versions[resource.Id] = (long)version;
-            return (ScimStoreWriteOutcome.Written, (long)version);
+            AddResourceParameters(command, ScimStoreColumns.ResourcesUpdate, values);
+            command.Parameters.AddWithValue("raise", RaiseFor(resource.Id));
+            command.Parameters.AddWithValue("id", resource.Id);
+            command.Parameters.AddWithValue("type", resource.ResourceTypeId);
+            version = await command.ExecuteScalarAsync() as long?
+                      ?? throw new InvalidOperationException($"SCIM resource {resource.Id} is not live in Connected System {ConnectedSystemId}.");
         }
-        catch (PostgresException ex) when (ex.SqlState == UniqueViolation)
-        {
-            _failed = true;
-            return (UniquenessOutcome(ex), 0);
-        }
+
+        await DeleteUniqueValuesAsync(resource.Id);
+        await InsertUniqueValuesAsync(resource.ResourceTypeId, resource.Id, unique);
+        _versions[resource.Id] = version;
+        return ScimStoreWriteResult.Written(version);
     }
 
-    public async Task<IReadOnlyList<Guid>?> TombstoneResourceAsync(ScimStoreResourceType resourceType, Guid id)
+    public async Task<IReadOnlyList<Guid>?> TombstoneResourceAsync(int resourceTypeId, Guid id)
     {
         EnsureUsable();
 
         await using (var tombstone = Command("""
             UPDATE "ScimStoreResources"
             SET "DeletedAt" = @timestamp, "LastModified" = @timestamp, "ChangeSequence" = @sequence,
-                "Version" = "Version" + @raise, "UserName" = NULL, "ExternalId" = NULL, "DisplayName" = NULL, "Payload" = NULL
-            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "ResourceType" = @type AND "DeletedAt" IS NULL
+                "Version" = "Version" + @raise, "Payload" = NULL
+            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "ResourceTypeId" = @type AND "DeletedAt" IS NULL
             RETURNING "Version"
             """))
         {
@@ -162,77 +182,84 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
             tombstone.Parameters.AddWithValue("sequence", ChangeSequence);
             tombstone.Parameters.AddWithValue("raise", RaiseFor(id));
             tombstone.Parameters.AddWithValue("id", id);
-            tombstone.Parameters.AddWithValue("type", (int)resourceType);
+            tombstone.Parameters.AddWithValue("type", resourceTypeId);
             if (await tombstone.ExecuteScalarAsync() is not long version)
                 return null;
             _versions[id] = version;
         }
 
-        // Its own memberships as a Group, then its memberships of other Groups, each of which has now changed.
-        await using (var asGroup = Command("""DELETE FROM "ScimStoreGroupMembers" WHERE "GroupId" = @id"""))
+        // Its unique values are free for reuse, and its own references go with it.
+        await DeleteUniqueValuesAsync(id);
+        await using (var own = Command("""DELETE FROM "ScimStoreReferences" WHERE "SourceId" = @id"""))
         {
-            asGroup.Parameters.AddWithValue("id", id);
-            await asGroup.ExecuteNonQueryAsync();
+            own.Parameters.AddWithValue("id", id);
+            await own.ExecuteNonQueryAsync();
         }
 
-        List<Guid> groups;
-        await using (var asMember = Command("""DELETE FROM "ScimStoreGroupMembers" WHERE "MemberId" = @id RETURNING "GroupId" """))
+        // References to it from other resources go too, and each of those resources has now changed.
+        List<Guid> sources;
+        await using (var toIt = Command("""DELETE FROM "ScimStoreReferences" WHERE "TargetId" = @id RETURNING "SourceId" """))
         {
-            asMember.Parameters.AddWithValue("id", id);
-            groups = await ReadGuidsAsync(asMember);
+            toIt.Parameters.AddWithValue("id", id);
+            sources = (await ReadGuidsAsync(toIt)).Distinct().ToList();
         }
 
-        foreach (var group in groups)
-            await TouchGroupAsync(group);
-        return groups;
+        foreach (var source in sources)
+            await TouchResourceAsync(source);
+        return sources;
     }
 
-    public async Task<long> AddGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> memberIds)
+    public async Task<long> AddReferencesAsync(Guid sourceId, string attribute, IReadOnlyCollection<Guid> targetIds)
     {
-        var version = await TouchGroupAsync(groupId);
-        if (memberIds.Count == 0)
+        var version = await TouchResourceAsync(sourceId);
+        if (targetIds.Count == 0)
             return version;
 
         await using var command = Command($"""
-            INSERT INTO "ScimStoreGroupMembers" ({BulkSqlHelpers.ToQuotedList(ScimStoreColumns.GroupMembers)})
-            SELECT @group, member FROM unnest(@members) AS member
+            INSERT INTO "ScimStoreReferences" ({BulkSqlHelpers.ToQuotedList(ScimStoreColumns.References)})
+            SELECT @source, @attribute, target FROM unnest(@targets) AS target
             ON CONFLICT DO NOTHING
             """);
-        command.Parameters.AddWithValue("group", groupId);
-        command.Parameters.Add(new NpgsqlParameter("members", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = memberIds.Distinct().ToArray() });
+        command.Parameters.AddWithValue("source", sourceId);
+        command.Parameters.AddWithValue("attribute", attribute);
+        command.Parameters.Add(UuidArray("targets", targetIds.Distinct().ToArray()));
         await command.ExecuteNonQueryAsync();
         return version;
     }
 
-    public async Task<long> RemoveGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> memberIds)
+    public async Task<long> RemoveReferencesAsync(Guid sourceId, string attribute, IReadOnlyCollection<Guid> targetIds)
     {
-        var version = await TouchGroupAsync(groupId);
-        if (memberIds.Count == 0)
+        var version = await TouchResourceAsync(sourceId);
+        if (targetIds.Count == 0)
             return version;
 
         await using var command = Command("""
-            DELETE FROM "ScimStoreGroupMembers" WHERE "GroupId" = @group AND "MemberId" = ANY(@members)
+            DELETE FROM "ScimStoreReferences"
+            WHERE "SourceId" = @source AND "Attribute" = @attribute AND "TargetId" = ANY(@targets)
             """);
-        command.Parameters.AddWithValue("group", groupId);
-        command.Parameters.Add(new NpgsqlParameter("members", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = memberIds.ToArray() });
+        command.Parameters.AddWithValue("source", sourceId);
+        command.Parameters.AddWithValue("attribute", attribute);
+        command.Parameters.Add(UuidArray("targets", targetIds));
         await command.ExecuteNonQueryAsync();
         return version;
     }
 
-    public async Task<long> ReplaceGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> memberIds)
+    public async Task<long> ReplaceReferencesAsync(Guid sourceId, string attribute, IReadOnlyCollection<Guid> targetIds)
     {
-        await TouchGroupAsync(groupId);
+        await TouchResourceAsync(sourceId);
 
         await using (var command = Command("""
-            DELETE FROM "ScimStoreGroupMembers" WHERE "GroupId" = @group AND NOT ("MemberId" = ANY(@members))
+            DELETE FROM "ScimStoreReferences"
+            WHERE "SourceId" = @source AND "Attribute" = @attribute AND NOT ("TargetId" = ANY(@targets))
             """))
         {
-            command.Parameters.AddWithValue("group", groupId);
-            command.Parameters.Add(new NpgsqlParameter("members", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = memberIds.ToArray() });
+            command.Parameters.AddWithValue("source", sourceId);
+            command.Parameters.AddWithValue("attribute", attribute);
+            command.Parameters.Add(UuidArray("targets", targetIds));
             await command.ExecuteNonQueryAsync();
         }
 
-        return await AddGroupMembersAsync(groupId, memberIds);
+        return await AddReferencesAsync(sourceId, attribute, targetIds);
     }
 
     public async Task AppendJournalEntriesAsync(IReadOnlyCollection<ScimStoreJournalEntry> entries)
@@ -254,7 +281,7 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
             await writer.WriteAsync(entry.ConnectedSystemId, NpgsqlDbType.Integer);
             await writer.WriteAsync(entry.ChangeSequence, NpgsqlDbType.Bigint);
             await writer.WriteAsync(entry.ResourceId, NpgsqlDbType.Uuid);
-            await writer.WriteAsync((int)entry.ResourceType, NpgsqlDbType.Integer);
+            await writer.WriteAsync(entry.ResourceTypeName, NpgsqlDbType.Varchar);
             await writer.WriteAsync((int)entry.Operation, NpgsqlDbType.Integer);
             await writer.WriteAsync(entry.ChangedAttributes.ToArray(), NpgsqlDbType.Array | NpgsqlDbType.Text);
             await WriteNullableAsync(writer, entry.ApiKeyId, NpgsqlDbType.Uuid);
@@ -282,59 +309,95 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
     }
 
     /// <summary>
-    /// Stamps a live Group as changed by this write and returns its version, raising the version only on the session's
-    /// first touch of it.
+    /// Stamps a live resource as changed by this write and returns its version, raising the version only on the
+    /// session's first touch of it.
     /// </summary>
-    private async Task<long> TouchGroupAsync(Guid groupId)
+    private async Task<long> TouchResourceAsync(Guid id)
     {
         EnsureUsable();
         await using var command = Command("""
             UPDATE "ScimStoreResources"
             SET "ChangeSequence" = @sequence, "LastModified" = @timestamp, "Version" = "Version" + @raise
-            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "ResourceType" = @type AND "DeletedAt" IS NULL
+            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "DeletedAt" IS NULL
             RETURNING "Version"
             """);
         command.Parameters.AddWithValue("sequence", ChangeSequence);
         command.Parameters.Add(new NpgsqlParameter("timestamp", NpgsqlDbType.TimestampTz) { Value = Timestamp });
-        command.Parameters.AddWithValue("raise", RaiseFor(groupId));
-        command.Parameters.AddWithValue("id", groupId);
-        command.Parameters.AddWithValue("type", (int)ScimStoreResourceType.Group);
+        command.Parameters.AddWithValue("raise", RaiseFor(id));
+        command.Parameters.AddWithValue("id", id);
 
         var version = await command.ExecuteScalarAsync() as long?
-                      ?? throw new InvalidOperationException($"SCIM Group {groupId} is not live in Connected System {ConnectedSystemId}.");
-        _versions[groupId] = version;
+                      ?? throw new InvalidOperationException($"SCIM resource {id} is not live in Connected System {ConnectedSystemId}.");
+        _versions[id] = version;
         return version;
     }
 
-    private long RaiseFor(Guid id) => _versions.ContainsKey(id) ? 0 : 1;
-
-    private async Task<ScimStoreWriteOutcome> ExecuteWriteAsync(NpgsqlCommand command)
+    /// <summary>
+    /// The first attribute (by name) whose value another live resource of the type already holds, or null. Safe as a
+    /// check followed by a write because the session holds the store's write lock.
+    /// </summary>
+    private async Task<string?> FindConflictAsync(int resourceTypeId, IReadOnlyList<(string Attribute, string Value, byte[] Hash)> unique, Guid? except)
     {
-        try
-        {
-            await command.ExecuteNonQueryAsync();
-            return ScimStoreWriteOutcome.Written;
-        }
-        catch (PostgresException ex) when (ex.SqlState == UniqueViolation)
-        {
-            // The transaction is now aborted; the caller can only dispose the session.
-            _failed = true;
-            return UniquenessOutcome(ex);
-        }
+        if (unique.Count == 0)
+            return null;
+
+        await using var command = Command("""
+            SELECT held."Attribute" FROM "ScimStoreUniqueValues" held
+            INNER JOIN unnest(@attributes, @hashes) AS wanted("Attribute", "ValueHash")
+                ON held."Attribute" = wanted."Attribute" AND held."ValueHash" = wanted."ValueHash"
+            WHERE held."ConnectedSystemId" = @system AND held."ResourceTypeId" = @type
+              AND (@except IS NULL OR held."ResourceId" <> @except)
+            ORDER BY held."Attribute"
+            LIMIT 1
+            """);
+        command.Parameters.AddWithValue("type", resourceTypeId);
+        command.Parameters.Add(new NpgsqlParameter("attributes", NpgsqlDbType.Array | NpgsqlDbType.Varchar) { Value = unique.Select(u => u.Attribute).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("hashes", NpgsqlDbType.Array | NpgsqlDbType.Bytea) { Value = unique.Select(u => u.Hash).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("except", NpgsqlDbType.Uuid) { Value = (object?)except ?? DBNull.Value });
+        return await command.ExecuteScalarAsync() as string;
     }
 
-    private static ScimStoreWriteOutcome UniquenessOutcome(PostgresException ex) => ex.ConstraintName switch
+    private async Task InsertUniqueValuesAsync(int resourceTypeId, Guid resourceId, IReadOnlyList<(string Attribute, string Value, byte[] Hash)> unique)
     {
-        ScimStoreColumns.UserNameUniqueIndex => ScimStoreWriteOutcome.UserNameTaken,
-        ScimStoreColumns.ExternalIdUniqueIndex => ScimStoreWriteOutcome.ExternalIdTaken,
-        // A primary key clash is a server-assigned id colliding, which must never be reported as the client's fault.
-        _ => throw new InvalidOperationException($"Unexpected uniqueness violation on {ex.ConstraintName}.", ex)
-    };
+        if (unique.Count == 0)
+            return;
+
+        // Columns in exactly ScimStoreColumns.UniqueValues order.
+        await using var command = Command($"""
+            INSERT INTO "ScimStoreUniqueValues" ({BulkSqlHelpers.ToQuotedList(ScimStoreColumns.UniqueValues)})
+            SELECT @system, @type, u.attribute, u.value, u.hash, @resource
+            FROM unnest(@attributes, @values, @hashes) AS u(attribute, value, hash)
+            """);
+        command.Parameters.AddWithValue("type", resourceTypeId);
+        command.Parameters.AddWithValue("resource", resourceId);
+        command.Parameters.Add(new NpgsqlParameter("attributes", NpgsqlDbType.Array | NpgsqlDbType.Varchar) { Value = unique.Select(u => u.Attribute).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("values", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = unique.Select(u => u.Value).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("hashes", NpgsqlDbType.Array | NpgsqlDbType.Bytea) { Value = unique.Select(u => u.Hash).ToArray() });
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task DeleteUniqueValuesAsync(Guid resourceId)
+    {
+        await using var command = Command("""DELETE FROM "ScimStoreUniqueValues" WHERE "ResourceId" = @id""");
+        command.Parameters.AddWithValue("id", resourceId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// The unique values with their key hashes, one per attribute and value: a caller naming the same pair twice is
+    /// holding it once.
+    /// </summary>
+    private static List<(string Attribute, string Value, byte[] Hash)> Hashed(IReadOnlyCollection<ScimStoreUniqueValue> uniqueValues) =>
+        uniqueValues
+            .Select(u => (u.Attribute, u.Value))
+            .Distinct()
+            .Select(u => (u.Attribute, u.Value, SHA256.HashData(Encoding.UTF8.GetBytes(u.Value))))
+            .ToList();
+
+    private long RaiseFor(Guid id) => _versions.ContainsKey(id) ? 0 : 1;
 
     private void EnsureUsable()
     {
-        if (_failed)
-            throw new InvalidOperationException("This SCIM store write was refused by a uniqueness rule and can only be disposed.");
         if (_committed)
             throw new InvalidOperationException("This SCIM store write has already been committed.");
     }
@@ -345,6 +408,9 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         command.Parameters.AddWithValue("system", ConnectedSystemId);
         return command;
     }
+
+    private static NpgsqlParameter UuidArray(string name, IEnumerable<Guid> ids) =>
+        new(name, NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() };
 
     private static void AddResourceParameters(NpgsqlCommand command, string[] columns, object?[] values)
     {
@@ -359,8 +425,7 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
     private static NpgsqlDbType ResourceColumnType(string column) => column switch
     {
         "Id" => NpgsqlDbType.Uuid,
-        "ConnectedSystemId" or "ResourceType" => NpgsqlDbType.Integer,
-        "UserName" or "ExternalId" or "DisplayName" => NpgsqlDbType.Varchar,
+        "ConnectedSystemId" or "ResourceTypeId" => NpgsqlDbType.Integer,
         "Version" or "ChangeSequence" => NpgsqlDbType.Bigint,
         "Created" or "LastModified" or "DeletedAt" => NpgsqlDbType.TimestampTz,
         "Payload" => NpgsqlDbType.Jsonb,
@@ -372,16 +437,13 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         // Read in ScimStoreColumns.Resources order.
         Id = reader.GetGuid(0),
         ConnectedSystemId = reader.GetInt32(1),
-        ResourceType = (ScimStoreResourceType)reader.GetInt32(2),
-        UserName = reader.IsDBNull(3) ? null : reader.GetString(3),
-        ExternalId = reader.IsDBNull(4) ? null : reader.GetString(4),
-        DisplayName = reader.IsDBNull(5) ? null : reader.GetString(5),
-        Version = reader.GetInt64(6),
-        ChangeSequence = reader.GetInt64(7),
-        Created = reader.GetFieldValue<DateTimeOffset>(8).UtcDateTime,
-        LastModified = reader.GetFieldValue<DateTimeOffset>(9).UtcDateTime,
-        DeletedAt = reader.IsDBNull(10) ? null : reader.GetFieldValue<DateTimeOffset>(10).UtcDateTime,
-        Payload = reader.IsDBNull(11) ? null : reader.GetString(11)
+        ResourceTypeId = reader.GetInt32(2),
+        Version = reader.GetInt64(3),
+        ChangeSequence = reader.GetInt64(4),
+        Created = reader.GetFieldValue<DateTimeOffset>(5).UtcDateTime,
+        LastModified = reader.GetFieldValue<DateTimeOffset>(6).UtcDateTime,
+        DeletedAt = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7).UtcDateTime,
+        Payload = reader.IsDBNull(8) ? null : reader.GetString(8)
     };
 
     private static async Task<List<Guid>> ReadGuidsAsync(NpgsqlCommand command)

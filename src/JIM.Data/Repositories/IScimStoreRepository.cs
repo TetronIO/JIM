@@ -6,8 +6,9 @@ using JIM.Models.Scim;
 namespace JIM.Data.Repositories;
 
 /// <summary>
-/// The SCIM store: the Users and Groups identity providers push to Connected Systems using the SCIM 2.0 Service
-/// Provider Connector, their Group memberships, each store's change sequence, and the journal of accepted writes.
+/// The SCIM store: the resources identity providers push to Connected Systems using the SCIM 2.0 Service Provider
+/// Connector, the resource type and schema definitions each Connected System's store accepts, each store's change
+/// sequence, and the journal of accepted writes.
 /// </summary>
 /// <remarks>
 /// Every change goes through a write session (<see cref="BeginWriteAsync"/>), which serialises a Connected System's
@@ -26,6 +27,24 @@ public interface IScimStoreRepository
     /// own connection, so use nothing else on the repository while one is open.
     /// </remarks>
     Task<IScimStoreWriteSession?> BeginWriteAsync(int connectedSystemId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The resource types a Connected System's store accepts.
+    /// </summary>
+    Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypesAsync(int connectedSystemId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The schemas a Connected System's store uses.
+    /// </summary>
+    Task<IReadOnlyList<ScimStoreSchema>> GetSchemasAsync(int connectedSystemId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds schema and resource type definitions to a Connected System's store, together or not at all: the core User,
+    /// Group and Enterprise User definitions when the Connected System is created, and later any custom ones. Each
+    /// row's Connected System is set from <paramref name="connectedSystemId"/>.
+    /// </summary>
+    Task AddDefinitionsAsync(int connectedSystemId, IReadOnlyCollection<ScimStoreSchema> schemas,
+        IReadOnlyCollection<ScimStoreResourceType> resourceTypes, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// A Connected System's store counters, or null before its first write.

@@ -41,7 +41,12 @@ public class ScimStoreJournalEntry
     /// </summary>
     public Guid ResourceId { get; set; }
 
-    public ScimStoreResourceType ResourceType { get; set; }
+    /// <summary>
+    /// The resource type's name when the write was made (for example <c>User</c>): a name rather than a key, so the
+    /// entry still reads correctly after the type's definition is removed.
+    /// </summary>
+    [MaxLength(ScimStoreLimits.NameMaxLength)]
+    public string ResourceTypeName { get; set; } = null!;
 
     public ScimStoreOperation Operation { get; set; }
 

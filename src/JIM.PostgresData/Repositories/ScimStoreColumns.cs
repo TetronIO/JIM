@@ -4,62 +4,52 @@
 namespace JIM.PostgresData.Repositories;
 
 /// <summary>
-/// The SCIM store's column lists and schema names, the single source of truth for its raw-SQL writers
-/// (<see cref="ScimStoreRepository"/>). Each writer interpolates its list through <c>BulkSqlHelpers.ToQuotedList</c>
+/// The SCIM store's column lists, the single source of truth for its raw-SQL writers (<see cref="ScimStoreWriteSession"/>
+/// and <see cref="ScimStoreRepository"/>). Each writer interpolates its list through <c>BulkSqlHelpers.ToQuotedList</c>
 /// and MUST write values in exactly list order. BulkInsertColumnCompletenessTests asserts each insert list matches the
-/// EF model's mapped columns, and that every resource column has a conscious home in the update list or its
-/// documented exclusion list, so a migration cannot silently leave a writer behind.
+/// EF model's mapped columns, and that every resource column has a conscious home in the update list or its documented
+/// exclusion list, so a migration cannot silently leave a writer behind. The resource type and schema definitions are
+/// configuration, written through EF Core, and have no list here.
 /// </summary>
 internal static class ScimStoreColumns
 {
     /// <summary>
-    /// The stored generated column holding <c>lower("UserName")</c>, the case-insensitive uniqueness key. A shadow
-    /// property: nothing outside the database reads it.
-    /// </summary>
-    internal const string UserNameNormalised = "UserNameNormalised";
-
-    /// <summary>
-    /// The unique index a duplicate <c>userName</c> violates; a write naming it is reported as a uniqueness conflict.
-    /// </summary>
-    internal const string UserNameUniqueIndex = "IX_ScimStoreResources_UserName_Unique";
-
-    /// <summary>
-    /// The unique index a duplicate <c>externalId</c> violates.
-    /// </summary>
-    internal const string ExternalIdUniqueIndex = "IX_ScimStoreResources_ExternalId_Unique";
-
-    /// <summary>
-    /// Insert columns for ScimStoreResources. <c>UserNameNormalised</c> is omitted: the database generates it.
+    /// Insert columns for ScimStoreResources.
     /// </summary>
     internal static readonly string[] Resources =
     [
-        "Id", "ConnectedSystemId", "ResourceType", "UserName", "ExternalId", "DisplayName", "Version", "ChangeSequence",
-        "Created", "LastModified", "DeletedAt", "Payload"
+        "Id", "ConnectedSystemId", "ResourceTypeId", "Version", "ChangeSequence", "Created", "LastModified", "DeletedAt",
+        "Payload"
     ];
 
     /// <summary>
-    /// Update columns for replacing a live resource: what a PUT or PATCH can change, plus the stamps every write sets.
-    /// <c>Version</c> is assigned in SQL rather than from a parameter, so it is listed with the exclusions.
+    /// Update columns for replacing a live resource: its payload, plus the stamps every write sets. <c>Version</c> is
+    /// assigned in SQL rather than from a parameter, so it is listed with the exclusions.
     /// </summary>
-    internal static readonly string[] ResourcesUpdate =
-    [
-        "UserName", "ExternalId", "DisplayName", "ChangeSequence", "LastModified", "Payload"
-    ];
+    internal static readonly string[] ResourcesUpdate = ["ChangeSequence", "LastModified", "Payload"];
 
     /// <summary>
     /// Resource columns the update deliberately does not write: the identity of the row (<c>Id</c>,
-    /// <c>ConnectedSystemId</c>, <c>ResourceType</c>, <c>Created</c>), the version (raised in SQL), and
+    /// <c>ConnectedSystemId</c>, <c>ResourceTypeId</c>, <c>Created</c>), the version (raised in SQL), and
     /// <c>DeletedAt</c>, which only the tombstone statement sets.
     /// </summary>
     internal static readonly string[] ResourcesUpdateExclusions =
     [
-        "Id", "ConnectedSystemId", "ResourceType", "Created", "Version", "DeletedAt"
+        "Id", "ConnectedSystemId", "ResourceTypeId", "Created", "Version", "DeletedAt"
     ];
 
     /// <summary>
-    /// Insert columns for ScimStoreGroupMembers.
+    /// Insert columns for ScimStoreUniqueValues.
     /// </summary>
-    internal static readonly string[] GroupMembers = ["GroupId", "MemberId"];
+    internal static readonly string[] UniqueValues =
+    [
+        "ConnectedSystemId", "ResourceTypeId", "Attribute", "Value", "ValueHash", "ResourceId"
+    ];
+
+    /// <summary>
+    /// Insert columns for ScimStoreReferences.
+    /// </summary>
+    internal static readonly string[] References = ["SourceId", "Attribute", "TargetId"];
 
     /// <summary>
     /// Insert columns for ScimStoreStates: a Connected System's first write creates its row.
@@ -71,7 +61,7 @@ internal static class ScimStoreColumns
     /// </summary>
     internal static readonly string[] JournalEntries =
     [
-        "ConnectedSystemId", "ChangeSequence", "ResourceId", "ResourceType", "Operation", "ChangedAttributes",
+        "ConnectedSystemId", "ChangeSequence", "ResourceId", "ResourceTypeName", "Operation", "ChangedAttributes",
         "ApiKeyId", "ApiKeyName", "ClientAddress", "Occurred"
     ];
 }

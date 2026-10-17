@@ -14,11 +14,13 @@ namespace JIM.Data.Repositories;
 /// Every row the session writes is stamped with <see cref="ChangeSequence"/> and <see cref="Timestamp"/>, and every
 /// resource it changes gets its <see cref="ScimStoreResource.Version"/> raised by one, by the session itself; callers
 /// cannot set those. A resource's version rises once per session however many of its rows the session touches (its
-/// own row and its memberships), so one request is one version. Disposing a session without <see cref="CommitAsync"/> rolls everything back.
+/// own row, its unique values and its references), so one request is one version. Disposing a session without
+/// <see cref="CommitAsync"/> rolls everything back.
 /// </para>
 /// <para>
-/// A write refused by a uniqueness rule leaves the transaction unusable: the method reports the conflict, and the
-/// session can then only be disposed.
+/// The session knows nothing of User or Group. Resource types are the Connected System's
+/// <see cref="ScimStoreResourceType"/> rows; which values must be unique, and which attributes are held as references,
+/// is decided by the caller from the schemas and passed in as data.
 /// </para>
 /// </remarks>
 public interface IScimStoreWriteSession : IAsyncDisposable
@@ -43,55 +45,61 @@ public interface IScimStoreWriteSession : IAsyncDisposable
     /// A live resource of this Connected System, or null when there is none of that type with that id (or only a
     /// tombstone).
     /// </summary>
-    Task<ScimStoreResource?> GetLiveResourceAsync(ScimStoreResourceType resourceType, Guid id);
+    Task<ScimStoreResource?> GetLiveResourceAsync(int resourceTypeId, Guid id);
 
     /// <summary>
-    /// Which of these ids are live resources of this Connected System, and of which type. Ids that are not (unknown,
-    /// another Connected System's, or tombstoned) are absent from the result.
+    /// Which of these ids are live resources of this Connected System, and of which resource type. Ids that are not
+    /// (unknown, another Connected System's, or tombstoned) are absent from the result.
     /// </summary>
-    Task<IReadOnlyDictionary<Guid, ScimStoreResourceType>> GetLiveResourceTypesAsync(IReadOnlyCollection<Guid> ids);
+    Task<IReadOnlyDictionary<Guid, int>> GetLiveResourceTypeIdsAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
-    /// A Group's member ids.
+    /// The resources a resource refers to through one reference attribute (a Group's <c>members</c>).
     /// </summary>
-    Task<IReadOnlyList<Guid>> GetGroupMemberIdsAsync(Guid groupId);
+    Task<IReadOnlyList<Guid>> GetReferenceTargetIdsAsync(Guid sourceId, string attribute);
 
     /// <summary>
-    /// Inserts a new resource at version 1. The caller supplies the id, type, identifiers, payload and
-    /// <see cref="ScimStoreResource.Created"/>; the session stamps the rest.
+    /// Inserts a new resource at version 1, holding <paramref name="uniqueValues"/>. The caller supplies the id, type,
+    /// payload and <see cref="ScimStoreResource.Created"/>; the session stamps the rest. When another live resource of
+    /// the same type already holds one of the values, nothing is written and the conflict is reported; the session
+    /// stays usable.
     /// </summary>
-    Task<ScimStoreWriteOutcome> InsertResourceAsync(ScimStoreResource resource);
+    /// <param name="uniqueValues">Every value of the resource that must be unique, each with its attribute name and its
+    /// value already normalised for comparison.</param>
+    Task<ScimStoreWriteResult> InsertResourceAsync(ScimStoreResource resource, IReadOnlyCollection<ScimStoreUniqueValue> uniqueValues);
 
     /// <summary>
-    /// Replaces a live resource's identifiers and payload, raising its version by one. Returns the version it now has
-    /// on success.
+    /// Replaces a live resource's payload and its unique values, raising its version. Conflicts are reported as for
+    /// <see cref="InsertResourceAsync"/>, with nothing written.
     /// </summary>
-    Task<(ScimStoreWriteOutcome Outcome, long Version)> UpdateResourceAsync(ScimStoreResource resource);
+    /// <exception cref="InvalidOperationException">The resource is not live.</exception>
+    Task<ScimStoreWriteResult> UpdateResourceAsync(ScimStoreResource resource, IReadOnlyCollection<ScimStoreUniqueValue> uniqueValues);
 
     /// <summary>
-    /// Deletes a live resource, leaving a tombstone: identifiers and payload cleared, version raised. Its memberships
-    /// go too, both as a Group and as a member; every Group that lost it as a member has its version raised and is
-    /// returned, so the caller can journal the change. Returns null when the resource is not live.
+    /// Deletes a live resource, leaving a tombstone: payload cleared, unique values and its own references removed,
+    /// version raised. References to it from other resources are removed too, and every resource that lost one has its
+    /// version raised and is returned, so the caller can journal the change. Returns null when the resource is not
+    /// live.
     /// </summary>
-    Task<IReadOnlyList<Guid>?> TombstoneResourceAsync(ScimStoreResourceType resourceType, Guid id);
+    Task<IReadOnlyList<Guid>?> TombstoneResourceAsync(int resourceTypeId, Guid id);
 
     /// <summary>
-    /// Adds members to a Group; ids that are already members are ignored. Returns the Group's version.
+    /// Adds references from a resource; ones it already holds are ignored. Returns the source's version.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The Group is not live.</exception>
-    Task<long> AddGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> memberIds);
+    /// <exception cref="InvalidOperationException">The source is not live.</exception>
+    Task<long> AddReferencesAsync(Guid sourceId, string attribute, IReadOnlyCollection<Guid> targetIds);
 
     /// <summary>
-    /// Removes members from a Group; ids that are not members are ignored. Returns the Group's version.
+    /// Removes references from a resource; ones it does not hold are ignored. Returns the source's version.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The Group is not live.</exception>
-    Task<long> RemoveGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> memberIds);
+    /// <exception cref="InvalidOperationException">The source is not live.</exception>
+    Task<long> RemoveReferencesAsync(Guid sourceId, string attribute, IReadOnlyCollection<Guid> targetIds);
 
     /// <summary>
-    /// Makes a Group's members exactly these. Returns the Group's version.
+    /// Makes a resource's references through one attribute exactly these. Returns the source's version.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The Group is not live.</exception>
-    Task<long> ReplaceGroupMembersAsync(Guid groupId, IReadOnlyCollection<Guid> memberIds);
+    /// <exception cref="InvalidOperationException">The source is not live.</exception>
+    Task<long> ReplaceReferencesAsync(Guid sourceId, string attribute, IReadOnlyCollection<Guid> targetIds);
 
     /// <summary>
     /// Records what this write did. The session stamps each entry's Connected System, change sequence and time.

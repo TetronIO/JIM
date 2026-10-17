@@ -4,15 +4,19 @@
 namespace JIM.Models.Scim;
 
 /// <summary>
-/// Size limits on the SCIM store's indexed columns. The SCIM server refuses a request exceeding one with a SCIM error
-/// before anything is written; the column limits are the backstop.
+/// Size limits on the SCIM store's indexed names. The SCIM server refuses a definition or request exceeding one before
+/// anything is written; the column limits are the backstop.
 /// </summary>
 public static class ScimStoreLimits
 {
     /// <summary>
-    /// The longest <c>userName</c>, <c>externalId</c> or <c>displayName</c> the store accepts, in characters. Ample
-    /// for any real identifier, and short enough that the unique indexes over these columns can never be refused for
-    /// an oversized entry.
+    /// The longest resource type name or endpoint, in characters.
     /// </summary>
-    public const int IdentifierMaxLength = 1024;
+    public const int NameMaxLength = 200;
+
+    /// <summary>
+    /// The longest schema URN or attribute name (an extension attribute's name carries its schema's URN), in
+    /// characters.
+    /// </summary>
+    public const int AttributeMaxLength = 400;
 }
