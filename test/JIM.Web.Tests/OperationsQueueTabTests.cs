@@ -73,14 +73,6 @@ public class OperationsQueueTabTests : JimComponentTestContext
             .ReturnsAsync(new Dictionary<Guid, List<ScheduleStepObservation>>());
     }
 
-    [TearDown]
-    public async Task TearDownAsync()
-    {
-        // The tab holds a polling loop and grids that talk to JavaScript; NUnit reuses the fixture instance across
-        // tests, so each rendered component is disposed here rather than left running into the next test.
-        await DisposeComponentsAsync();
-    }
-
     /// <summary>
     /// Arranges the one read the queue makes, answering with whatever the supplied list holds at the time. A copy
     /// is returned per read because the real repository hands back fresh headers each time, and the tab detects

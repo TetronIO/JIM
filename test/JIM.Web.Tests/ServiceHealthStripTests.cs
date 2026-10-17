@@ -40,9 +40,6 @@ public class ServiceHealthStripTests : JimComponentTestContext
         JSInterop.Setup<bool>("jimInterop.isClipboardAvailable").SetResult(true);
     }
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private static ServiceHealthReport HealthyReport() => ServiceHealthDisplayTests.Report(
         ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2),
         ServiceHealthDisplayTests.Derive(JimService.WorkerDelivery, 2),
