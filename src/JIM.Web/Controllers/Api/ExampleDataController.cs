@@ -254,12 +254,8 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Creating Data Generation Template: {Name}", LogSanitiser.Sanitise(request.Name));
 
-        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
-        if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
-        {
-            _logger.LogWarning("Could not identify the initiating principal for Data Generation Template creation");
-            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
-        }
+        if (!TryGetInitiatorInfo(out var initiatorType, out var initiatorId, out var initiatorName))
+            return UnidentifiedInitiator();
 
         var (objectTypes, resolutionError) = await BuildTemplateObjectTypesAsync(request.ObjectTypes);
         if (resolutionError != null)
@@ -324,12 +320,8 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Updating Data Generation Template: {Id}", id);
 
-        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
-        if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
-        {
-            _logger.LogWarning("Could not identify the initiating principal for Data Generation Template update");
-            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
-        }
+        if (!TryGetInitiatorInfo(out var initiatorType, out var initiatorId, out var initiatorName))
+            return UnidentifiedInitiator();
 
         var existing = await _application.ExampleData.GetTemplateAsync(id);
         if (existing == null)
@@ -405,12 +397,8 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     {
         _logger.LogInformation("Deleting Data Generation Template: {Id}", id);
 
-        var (initiatorType, initiatorId, initiatorName) = GetInitiatorInfo();
-        if (initiatorId == null && string.IsNullOrWhiteSpace(initiatorName))
-        {
-            _logger.LogWarning("Could not identify the initiating principal for Data Generation Template deletion");
-            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
-        }
+        if (!TryGetInitiatorInfo(out var initiatorType, out var initiatorId, out var initiatorName))
+            return UnidentifiedInitiator();
 
         var template = await _application.ExampleData.GetTemplateAsync(id);
         if (template == null)
