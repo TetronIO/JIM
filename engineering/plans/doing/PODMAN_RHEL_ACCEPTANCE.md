@@ -92,7 +92,7 @@ Anything you had to do that the page does not say is a documentation bug: note i
 
 ### D. Optional: upgrade from v0.16.0 (RHEL 10)
 
-Install v0.16.0 rootful with its own `setup.sh`, sign in and run a Full Import, then upgrade to the new release as [Upgrading on Podman](../../../docs/administration/upgrading.md#upgrading-on-podman) describes, including its notes for upgrading from v0.16.0 or earlier. JIM comes back with its data, and checks 8 and 9 pass. Customers already on v0.16.0 will take this path.
+Install v0.16.0 rootful with its own `setup.sh`, sign in and run a Full Import, then upgrade to the new release as [Upgrading on Podman](../../../docs/administration/upgrading-podman.md) describes, including its notes for upgrading from v0.16.0 or earlier. JIM comes back with its data, and checks 8 and 9 pass. Customers already on v0.16.0 will take this path.
 
 ### E. Optional: behind Apache httpd
 

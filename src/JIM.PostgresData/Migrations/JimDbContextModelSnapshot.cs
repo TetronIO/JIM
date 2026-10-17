@@ -3650,6 +3650,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DateTimeResolution")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("DateTimeResolutionSetByAdministrator")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 

@@ -32,6 +32,40 @@ public class ScheduleCronExpressionTests
     }
 
     [Test]
+    public void BuildSpecificTimes_TimesAtDifferentMinutes_RefusesRatherThanRunningAtTheFirstTimesMinute()
+    {
+        // 06:00 and 18:30 used to build "0 6,18 * * 1", so the Schedule ran at 18:00, not 18:30 (#2070).
+        Assert.That(() => ScheduleCronExpression.BuildSpecificTimes([1], [new TimeSpan(6, 0, 0), new TimeSpan(18, 30, 0)]),
+            Throws.ArgumentException.With.Message.Contains("same minute"));
+    }
+
+    [Test]
+    public void RunTimesShareAMinute_SameMinute_IsTrueWithNoError()
+    {
+        var shared = ScheduleCronExpression.RunTimesShareAMinute([new TimeSpan(6, 30, 0), new TimeSpan(18, 30, 0)], out var error);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(shared, Is.True);
+            Assert.That(error, Is.Null);
+        }
+    }
+
+    [Test]
+    public void RunTimesShareAMinute_DifferentMinutes_IsFalseWithTheMessageTheApiGives()
+    {
+        var shared = ScheduleCronExpression.RunTimesShareAMinute([new TimeSpan(6, 0, 0), new TimeSpan(18, 30, 0)], out var error);
+        ScheduleCronExpression.TryFromPattern(SchedulePatternType.SpecificTimes, "1", "06:00,18:30", null, null, null, null,
+            out _, out var apiError);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(shared, Is.False);
+            Assert.That(error, Is.Not.Null.And.EqualTo(apiError));
+        }
+    }
+
+    [Test]
     public void BuildInterval_EveryNHoursAllDay_UsesAStep()
     {
         Assert.That(ScheduleCronExpression.BuildInterval([1, 2, 3, 4, 5, 6], 1, ScheduleIntervalUnit.Hours, null, null),

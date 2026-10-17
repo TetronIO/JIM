@@ -50,7 +50,7 @@ SCIM's nested and multi-valued attributes are flattened into the flat attributes
 | `emails` (type `work`) | `emails.work` | A multi-valued attribute with canonical types becomes one single-valued attribute per type, so a flow has a definite target. |
 | `emails` (marked primary) | `emails.primary` | The entry the provider flags as primary is addressable in its own right. |
 | `addresses` (type `work`) | `addresses.work.streetAddress`, ... | An address has no single value, so the slot is cut per sub-attribute. |
-| `roles`, `entitlements`, `x509Certificates` (no canonical types) | `roles.value`, `roles.display`, ... | Each sub-attribute becomes a multi-valued attribute. The Boolean `primary` sub-attribute is left out: separated from its entry, it would say only that some entry is primary and some is not, and a Boolean attribute holds one value. |
+| `roles`, `entitlements`, `x509Certificates` (no canonical types) | `roles.value`, `roles.type`, `roles.display` | Each sub-attribute becomes a multi-valued attribute. Only `roles.value` can be exported: each value is one entry, so exporting a value adds an entry and taking one away removes that entry alone, leaving the provider's other entries untouched. `roles.type` and `roles.display` are read-only, because once separated from their entries JIM cannot tell which entry each belongs to. The Boolean `primary` sub-attribute is left out: separated from its entry, it would say only that some entry is primary and some is not, and a Boolean attribute holds one value. |
 | A multi-valued `dateTime` attribute | unchanged | Every element of the array is imported, to the microsecond. |
 | `members`, `groups`, `manager` | unchanged | An attribute carrying a reference stays whole, keeping its plurality, so group membership survives as a reference. |
 | `urn:...:enterprise:2.0:User:department` | `enterpriseUser.department` | An extension attribute is prefixed with its schema's name. |
@@ -93,6 +93,8 @@ The watermark is recorded only when a run finishes, and is deliberately set a mi
 | Delete | `DELETE`. A resource that has already gone counts as success. |
 
 Where the provider maintains entity tags, updates carry `If-Match`, so an export cannot silently overwrite a change made in the provider since JIM last read it. A rejected update is reported as a concurrency conflict and reconciled by the next import.
+
+A `dateTime` value is written in UTC, with a fraction of a second only where it has one. A provider's schema cannot say how finely it keeps dates, so schema discovery gives every `dateTime` attribute a [Date resolution](../configuration/connected-system-attributes.md#date-resolution) of one second, and JIM exports and compares dates to the second. Where a provider keeps milliseconds, change the resolution on the Schema tab or with `Set-JIMConnectedSystemAttribute -DateTimeResolution`. Removing one date of a multi-valued attribute finds it as an instant, however the provider writes it.
 
 An attribute the provider's schema does not have, or will not accept a write to, fails that object rather than exporting the rest of it: a partial change recorded as applied is worse than one that failed.
 
@@ -150,7 +152,7 @@ When a synchronisation generates a value that is exported unchanged to an attrib
 | Setting | Required | Description |
 |---|---|---|
 | Authentication Method | Yes | OAuth 2.0 Client Credentials, HTTP Basic, Static Bearer Token, or Custom Header. |
-| Token Endpoint URL | With OAuth 2.0 | The token endpoint used to acquire access tokens. |
+| Token Endpoint URL | With OAuth 2.0 | The token endpoint used to acquire access tokens. HTTPS is required, except for loopback addresses when testing locally, because the Client Secret is sent to this address. If the authorisation server uses a private certificate authority, add its certificate in **Admin > Certificates**. |
 | Client ID | With OAuth 2.0 | The client identifier issued by the provider. |
 | Client Secret | With OAuth 2.0 | The client secret issued with it. Tokens are cached until shortly before they expire and refreshed automatically. |
 | OAuth Scope | No | Optional space-separated scopes to request. |
@@ -221,10 +223,10 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 
 ## Security Considerations
 
-- **HTTPS is required.** Identity data must not travel over cleartext HTTP. Plain HTTP is permitted only for loopback addresses, so that a local test provider can be used during evaluation.
+- **HTTPS is required** for both the Base URL and, with OAuth 2.0, the Token Endpoint URL. Identity data and the Client Secret must not travel over cleartext HTTP. Plain HTTP is permitted only for loopback addresses, so that a local test provider can be used during evaluation. JIM refuses any other address when you save the settings, before it tests the connection, and again when a Run Profile starts.
 - **Secrets are encrypted at rest** and never logged, sanitised or otherwise.
 - **Least privilege.** Give the credential only the SCIM permissions the Run Profiles you have configured need: read for import, write for export. A Connected System a generated value is exported to also needs read access with filtering across the resource types it probes, including for a credential that only exports; see [Probing for values already in use](#probing-for-values-already-in-use).
-- **No cloud dependency.** The connector calls only the Base URL you configure, so it works unchanged in an air-gapped deployment against an on-premises provider.
+- **No cloud dependency.** The connector calls only the Base URL you configure and, with OAuth 2.0, the Token Endpoint URL, so it works unchanged in an air-gapped deployment against an on-premises provider.
 
 ## Troubleshooting
 

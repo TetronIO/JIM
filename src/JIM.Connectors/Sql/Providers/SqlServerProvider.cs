@@ -285,7 +285,9 @@ internal class SqlServerProvider : SqlProviderBase
         $"DATA_TYPE AS {SqlCatalogueColumns.DataTypeName}, " +
         $"CHARACTER_MAXIMUM_LENGTH AS {SqlCatalogueColumns.MaxLength}, " +
         $"NUMERIC_PRECISION AS {SqlCatalogueColumns.NumericPrecision}, " +
-        $"NUMERIC_SCALE AS {SqlCatalogueColumns.NumericScale}, " +
+        // A date column's fractional seconds precision rides in the scale, where a number's digits after the point do:
+        // the two never both apply to one column, and the date resolution reads it from there (#2153).
+        $"COALESCE(NUMERIC_SCALE, DATETIME_PRECISION) AS {SqlCatalogueColumns.NumericScale}, " +
         $"IS_NULLABLE AS {SqlCatalogueColumns.IsNullable}, " +
         $"ORDINAL_POSITION AS {SqlCatalogueColumns.OrdinalPosition}, " +
         // The collation's comparison style carries an "ignore case" flag in its lowest bit, as the uniqueness probe

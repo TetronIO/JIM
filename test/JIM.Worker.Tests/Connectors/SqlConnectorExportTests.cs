@@ -588,8 +588,9 @@ public class SqlConnectorExportTests
     }
 
     [Test]
-    public async Task ExportAsync_ARefusalThatIsNotADuplicate_StaysAGeneralFailure()
+    public async Task ExportAsync_ARefusalThatIsNotADuplicate_IsRejectedByTheConnectedSystem()
     {
+        // A foreign key violation is the database considering the change and saying no, not a fault in JIM (#2118).
         var provider = new FakeSqlProvider
         {
             GeneratedKey = 4711,
@@ -601,9 +602,47 @@ public class SqlConnectorExportTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
             Assert.That(results[0].RejectedAttributeName, Is.Null);
+            Assert.That(results[0].ErrorMessage, Does.Contain("violates foreign key constraint \"person_dept_fkey\""));
         }
+    }
+
+    [Test]
+    public async Task ExportAsync_APermissionRefusal_IsAccessDenied()
+    {
+        var provider = new FakeSqlProvider
+        {
+            GeneratedKey = 4711,
+            FailWhenCommandTextContains = "INSERT",
+            FailureDetail = ("42501: permission denied for table person", "42501")
+        };
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.AccessDenied));
+            Assert.That(results[0].ErrorMessage, Does.Contain("permission denied for table person"));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_AConnectionFailure_StaysAGeneralFailure()
+    {
+        // The database never considered the change, so nothing was refused.
+        var provider = new FakeSqlProvider
+        {
+            GeneratedKey = 4711,
+            FailWhenCommandTextContains = "INSERT",
+            FailureDetail = ("08006: connection failure", "08006")
+        };
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.General));
     }
 
     #endregion
@@ -739,6 +778,48 @@ public class SqlConnectorExportTests
                 "Removing one value of a multi-valued attribute removes one related row, never every row the parent has.");
             Assert.That(delete.Parameters.Values, Does.Contain("555-0100").And.Contain(4711));
             Assert.That(delete.Transaction, Is.SameAs(provider.Transactions.Single()));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_RemovingADateFromARelatedTable_DeletesEveryRowInThatStepOfTheColumnsResolutionAsync()
+    {
+        // #2153, D2: export sends the date floored to the column's resolution, and the column may hold it finer (a legacy
+        // datetime holds .003 for a value sent as .000). Removing by exact equality would miss that row and leave it
+        // behind forever; removing the step of the resolution the value names takes exactly the row the target holds.
+        var provider = new FakeSqlProvider();
+        DeclareTheUsualTables(provider);
+        provider.Catalogue.AddTable("HR", "EMPLOYEE_REVIEWS",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("REVIEWED_AT", "datetime2", Scale: 0));
+        var second = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change("ReviewDates", AttributeDataType.DateTime, dateTime: second, plurality: AttributePlurality.MultiValued,
+            changeType: PendingExportAttributeChangeType.Remove);
+        change.Attribute.DateTimeResolution = DateTimeResolution.Second;
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711), change);
+
+        await ExportAsync(provider, """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "relatedTables": [
+                    { "attributeName": "ReviewDates", "schema": "HR", "table": "EMPLOYEE_REVIEWS", "valueColumn": "REVIEWED_AT", "joinColumns": [ "EMPLOYEE_ID" ] }
+                  ]
+                }
+              ]
+            }
+            """, [pendingExport]);
+
+        var delete = provider.ExecutedStatements.Single();
+        var dates = delete.Parameters.Values.OfType<DateTime>().Order().ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delete.CommandText, Does.StartWith("DELETE FROM [HR].[EMPLOYEE_REVIEWS] WHERE [EMPLOYEE_ID] = @"));
+            Assert.That(delete.CommandText, Does.Contain("[REVIEWED_AT] >= @").And.Contain("[REVIEWED_AT] < @"));
+            Assert.That(dates.Select(date => date.Ticks), Is.EqualTo(new[] { second.Ticks, second.AddSeconds(1).Ticks }),
+                "The step runs from the value to the next step of the resolution.");
         }
     }
 
@@ -1877,9 +1958,9 @@ public class SqlConnectorExportTests
     /// The name of the parameter a column's value was bound to, read back out of the statement the
     /// Connector generated, so a test asserts on the value rather than on the parameter numbering.
     /// </summary>
-    private static string ParameterFor(FakeExecutedCommand command, string columnName)
+    private static string ParameterFor(FakeExecutedCommand command, string columnName, string comparison = "=")
     {
-        var marker = $"[{columnName}] = @";
+        var marker = $"[{columnName}] {comparison} @";
         var index = command.CommandText.IndexOf(marker, StringComparison.Ordinal);
 
         Assert.That(index, Is.GreaterThanOrEqualTo(0), $"The statement does not write column '{columnName}': {command.CommandText}");

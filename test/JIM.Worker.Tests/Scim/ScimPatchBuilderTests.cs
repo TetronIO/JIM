@@ -185,6 +185,60 @@ public class ScimPatchBuilderTests
     }
 
     [Test]
+    public void Build_AddingAMultiValuedComplexValue_AppendsOneEntryToTheAttribute()
+    {
+        // A path of "roles.value" names every entry's value; RFC 7644 section 3.5.2.1 replaces an existing target (#2090).
+        var operation = Single(new ScimAttributeChange("roles.value", ScimPatchOperations.Add, "Owner"), UserSchema());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(operation.Op, Is.EqualTo(ScimPatchOperations.Add));
+            Assert.That(operation.Path, Is.EqualTo("roles"));
+            Assert.That(operation.Value?.ToJsonString(), Is.EqualTo("""[{"value":"Owner"}]"""));
+        }
+    }
+
+    [Test]
+    public void Build_RemovingAMultiValuedComplexValue_NamesTheEntryInAFilter()
+    {
+        var operation = Single(new ScimAttributeChange("entitlements.value", ScimPatchOperations.Remove, "Auditor"), UserSchema());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(operation.Path, Is.EqualTo("entitlements[value eq \"Auditor\"]"));
+            Assert.That(operation.Value, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Build_RemovingAMultiValuedComplexValueContainingAQuote_EscapesIt()
+    {
+        var operation = Single(new ScimAttributeChange("roles.value", ScimPatchOperations.Remove, "say \"hi\""), UserSchema());
+
+        Assert.That(operation.Path, Is.EqualTo("roles[value eq \"say \\\"hi\\\"\"]"));
+    }
+
+    [Test]
+    public void Build_ClearingAMultiValuedComplexValue_RemovesTheAttributeByItsPathAlone()
+    {
+        var operation = Single(new ScimAttributeChange("roles.value", ScimPatchOperations.Remove, null), UserSchema());
+
+        Assert.That(operation.Path, Is.EqualTo("roles"));
+    }
+
+    [Test]
+    public void Build_ChangingTheTypeOfAMultiValuedComplexEntry_IsReportedRatherThanSent()
+    {
+        var result = ScimPatchBuilder.Build([new ScimAttributeChange("roles.type", ScimPatchOperations.Add, "hr")], UserSchema());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Operations, Is.Empty);
+            Assert.That(result.UnknownAttributes, Is.EqualTo(new[] { "roles.type" }));
+        }
+    }
+
+    [Test]
     public void Build_RemovingAReferenceContainingAQuoteAndABackslash_EscapesBoth()
     {
         var operation = Single(new ScimAttributeChange("members", ScimPatchOperations.Remove, "a\"b\\"), GroupSchema());

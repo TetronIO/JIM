@@ -57,6 +57,14 @@ public class ConnectorSchemaAttribute
     public bool CaseExact { get; set; }
 
     /// <summary>
+    /// For a <see cref="AttributeDataType.DateTime"/> attribute, the finest step of time the Connected System holds its
+    /// values to, where the Connector can tell (an Active Directory GeneralizedTime holds whole seconds, a SQL column its
+    /// declared fractional precision). Null when it cannot, which JIM takes as the microsecond. See
+    /// <see cref="ConnectedSystemObjectTypeAttribute.DateTimeResolution"/>.
+    /// </summary>
+    public DateTimeResolution? DateTimeResolution { get; set; }
+
+    /// <summary>
     /// Whether this is an operational attribute: one the Connected System maintains for its own operation. See
     /// <see cref="ConnectedSystemObjectTypeAttribute.IsOperational"/>.
     /// </summary>

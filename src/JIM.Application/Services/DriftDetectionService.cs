@@ -284,8 +284,12 @@ public class DriftDetectionService
 
         // Exactly what export staging stages for this mapping: the evaluation pipeline (#2055) and the same handling of
         // its outcome. Nothing staged (no value, or a mapping-level error already recorded) leaves the target as it is.
+        // Dates the target holds as one are reported by export staging when they are sent (#2153, D2); a drift check
+        // re-reading the same result would report them again on every synchronisation, so that report is not kept here.
+        var stagingErrors = new List<AttributeFlowError>();
         var staged = SyncEngine.StageExportExpressionMapping(mapping, source, exportRule, mvAttributeDictionary,
-            _expressionEvaluator, heldValues, result.AttributeFlowErrors);
+            _expressionEvaluator, heldValues, stagingErrors);
+        result.AttributeFlowErrors.AddRange(stagingErrors.Where(error => error.Kind != AttributeFlowErrorKind.DatesCollapseAtTargetResolution));
         if (staged.Count == 0)
         {
             Log.Debug("EvaluateDrift: Expression for attribute {AttrName} stages nothing for MVO {MvoId}, so the Connected System keeps its value",
@@ -770,10 +774,11 @@ public class DriftDetectionService
             var duplicateCount = 0;
             foreach (var av in mvoAttrValues)
             {
-                var value = GetTypedValueFromMvoAttributeValue(av, source.MetaverseAttribute.Type);
+                var value = GetTypedValueFromMvoAttributeValue(av, source.MetaverseAttribute.Type, targetCsoAttribute.DateTimeResolution);
                 if (value != null)
                 {
-                    if (!valueSet.Add(value))
+                    // Dates one at the target's resolution are expected to merge (#2153, D2); export staging reports it.
+                    if (!valueSet.Add(value) && value is not DateTime)
                         duplicateCount++;
                 }
                 else
@@ -804,14 +809,16 @@ public class DriftDetectionService
             if (mvoAttrValue == null)
                 return null;
 
-            return GetTypedValueFromMvoAttributeValue(mvoAttrValue, source.MetaverseAttribute.Type);
+            return GetTypedValueFromMvoAttributeValue(mvoAttrValue, source.MetaverseAttribute.Type, targetCsoAttribute.DateTimeResolution);
         }
     }
 
     /// <summary>
-    /// Extracts the typed value from an MVO attribute value based on the attribute data type.
+    /// Extracts the typed value from an MVO attribute value based on the attribute data type. A date is taken as the
+    /// target holds it, floored to its <paramref name="targetResolution"/> (#2153, D2), so a difference the target cannot
+    /// hold is never drift, and dates the target holds as one are one expected value.
     /// </summary>
-    private static object? GetTypedValueFromMvoAttributeValue(MetaverseObjectAttributeValue av, AttributeDataType type)
+    private static object? GetTypedValueFromMvoAttributeValue(MetaverseObjectAttributeValue av, AttributeDataType type, DateTimeResolution? targetResolution)
     {
         return type switch
         {
@@ -819,7 +826,7 @@ public class DriftDetectionService
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
             AttributeDataType.Decimal => av.DecimalValue,
-            AttributeDataType.DateTime => SyncEngine.CanonicalDate(av.DateTimeValue),
+            AttributeDataType.DateTime => SyncEngine.DateAtResolution(av.DateTimeValue, targetResolution),
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
             AttributeDataType.Binary => av.ByteValue,
@@ -855,7 +862,7 @@ public class DriftDetectionService
             var valueSet = new HashSet<object>();
             foreach (var av in csoAttrValues)
             {
-                var value = GetTypedValueFromCsoAttributeValue(av, attribute.Type);
+                var value = GetTypedValueFromCsoAttributeValue(av, attribute.Type, attribute.DateTimeResolution);
                 if (value != null)
                 {
                     valueSet.Add(value);
@@ -876,7 +883,7 @@ public class DriftDetectionService
             if (csoAttrValue == null)
                 return null;
 
-            return GetTypedValueFromCsoAttributeValue(csoAttrValue, attribute.Type);
+            return GetTypedValueFromCsoAttributeValue(csoAttrValue, attribute.Type, attribute.DateTimeResolution);
         }
     }
 
@@ -884,7 +891,7 @@ public class DriftDetectionService
     /// Extracts the typed value from a CSO attribute value based on the attribute data type.
     /// For reference attributes, returns the MVO ID that the referenced CSO is joined to.
     /// </summary>
-    private static object? GetTypedValueFromCsoAttributeValue(ConnectedSystemObjectAttributeValue av, AttributeDataType type)
+    private static object? GetTypedValueFromCsoAttributeValue(ConnectedSystemObjectAttributeValue av, AttributeDataType type, DateTimeResolution? resolution)
     {
         return type switch
         {
@@ -892,7 +899,8 @@ public class DriftDetectionService
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
             AttributeDataType.Decimal => av.DecimalValue,
-            AttributeDataType.DateTime => SyncEngine.CanonicalDate(av.DateTimeValue),
+            // At the attribute's resolution (#2153, D2), as the expected value is taken.
+            AttributeDataType.DateTime => SyncEngine.DateAtResolution(av.DateTimeValue, resolution),
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
             AttributeDataType.Binary => av.ByteValue,

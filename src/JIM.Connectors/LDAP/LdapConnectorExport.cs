@@ -2445,10 +2445,19 @@ internal class LdapConnectorExport
         return null;
     }
 
-    private static string ConvertDateTimeToLdapFormat(DateTime dateTime)
+    /// <summary>
+    /// A date as GeneralizedTime (#2153, S6): the canonical value, in UTC, with the invariant culture. A whole second
+    /// keeps the <c>.0Z</c> form every directory has always been sent, which is all Active Directory holds; a fraction is
+    /// written with up to six digits, trailing zeros trimmed, so a microsecond reaches an RFC directory exactly. Export
+    /// staging has already floored the value to the attribute's resolution, so a directory that holds whole seconds is
+    /// never sent a fraction.
+    /// </summary>
+    internal static string ConvertDateTimeToLdapFormat(DateTime dateTime)
     {
-        // LDAP uses generalizedTime format: YYYYMMDDHHMMSS.0Z
-        return dateTime.ToUniversalTime().ToString("yyyyMMddHHmmss.0Z");
+        var canonical = DateTimeAttributeValue.ToCanonical(dateTime);
+        return canonical.Ticks % TimeSpan.TicksPerSecond == 0
+            ? canonical.ToString("yyyyMMddHHmmss'.0Z'", CultureInfo.InvariantCulture)
+            : canonical.ToString("yyyyMMddHHmmss.FFFFFF'Z'", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -2642,7 +2651,8 @@ internal class LdapConnectorExport
         if (LdapAccountEnableRefusalClassifier.IsAccountEnableRefusal(ex, pendingExport, _directoryType))
             return LdapAccountEnableRefusalClassifier.FailureFor(ex);
 
-        return ConnectedSystemExportResult.Failed(ex.Message);
+        // Any other result the directory returned is a refusal, not a JIM fault (#2118).
+        return LdapDirectoryRefusalClassifier.FailureFor(ex) ?? ConnectedSystemExportResult.Failed(ex.Message);
     }
 
     /// <summary>
@@ -2659,7 +2669,7 @@ internal class LdapConnectorExport
             LogSanitiser.Sanitise(_placeholderMemberDn), LogSanitiser.Sanitise(dn), LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN);
 
         return ConnectedSystemExportResult.Failed(
-            $"Failed to add placeholder member '{_placeholderMemberDn}' to group '{dn}' — " +
+            $"Failed to add placeholder member '{_placeholderMemberDn}' to group '{dn}'; " +
             $"the directory may have referential integrity enabled. " +
             $"Update the '{LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN}' connector setting to point to an existing entry in the directory.",
             ConnectedSystemExportErrorType.PlaceholderMemberConstraintViolation);

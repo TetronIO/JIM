@@ -57,6 +57,62 @@ public class SchemaAttributeEditTests
     }
 
     [Test]
+    public void CanEdit_ADateOnAConnectorWithDefinitiveTypes_IsEditableForItsResolution()
+    {
+        // #2153, D2: a date's resolution is offered on every Connector, as the case-exact declaration is.
+        Assert.That(SchemaAttributeEdit.CanEdit(new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.DateTime }, supportsUserSelectedTypes: false), Is.True);
+    }
+
+    [Test]
+    public void ApplyDateTimeResolution_Changed_SetsItAndRecordsItAsTheAdministrators()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.DateTime, DateTimeResolution = DateTimeResolution.Second };
+
+        SchemaAttributeEdit.ApplyDateTimeResolution(attribute, DateTimeResolution.Millisecond);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attribute.DateTimeResolution, Is.EqualTo(DateTimeResolution.Millisecond));
+            Assert.That(attribute.DateTimeResolutionSetByAdministrator, Is.True);
+        }
+    }
+
+    [Test]
+    public void ApplyDateTimeResolution_Unchanged_LeavesItDiscovered()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.DateTime, DateTimeResolution = DateTimeResolution.Second };
+
+        SchemaAttributeEdit.ApplyDateTimeResolution(attribute, DateTimeResolution.Second);
+
+        Assert.That(attribute.DateTimeResolutionSetByAdministrator, Is.False);
+    }
+
+    [Test]
+    public void ApplyDateTimeResolution_MicrosecondOnAnAttributeHoldingNone_IsUnchanged()
+    {
+        // None means the microsecond, so choosing the microsecond changes nothing and pins nothing.
+        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.DateTime };
+
+        SchemaAttributeEdit.ApplyDateTimeResolution(attribute, DateTimeResolution.Microsecond);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attribute.DateTimeResolution, Is.Null);
+            Assert.That(attribute.DateTimeResolutionSetByAdministrator, Is.False);
+        }
+    }
+
+    [Test]
+    public void ApplyDateTimeResolution_OnANonDateAttribute_IsNotSet()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text };
+
+        SchemaAttributeEdit.ApplyDateTimeResolution(attribute, DateTimeResolution.Second);
+
+        Assert.That(attribute.DateTimeResolution, Is.Null);
+    }
+
+    [Test]
     public void ApplyCaseExact_OnAnAttributeRetypedAwayFromText_IsNotDeclared()
     {
         // The type override is applied first (by the server), so a retyped attribute is no longer Text here.

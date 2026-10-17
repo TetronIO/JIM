@@ -176,6 +176,26 @@
             </div>
         }
 
+        @* ─── Date and time resolution (#2153) ─── *@
+        @if (SchemaAttributeEdit.OffersDateTimeResolution(EditedAttributeType()))
+        {
+            <div class="@(ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes ? "mt-5" : string.Empty)" data-testid="jim-schema-attribute-date-time-resolution">
+                <MudSelect T="DateTimeResolution" Label="Dates are held to" Variant="Variant.Outlined" @bind-Value="_objectTypeAttributeBeingEditedResolution">
+                    @foreach (var resolution in Enum.GetValues<DateTimeResolution>())
+                    {
+                        <MudSelectItem Value="@resolution">@SchemaAttributeEdit.Describe(resolution)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                    The finest step of time the Connected System keeps. JIM sends each date taken down to it, and compares at it,
+                    so a fraction the Connected System cannot hold is never exported again and again.
+                    @(_objectTypeAttributeBeingEdited?.DateTimeResolutionSetByAdministrator == true
+                        ? "An administrator set this, so a schema refresh keeps it."
+                        : "Currently as discovered from the Connected System's schema. Changing it makes it yours, and a schema refresh keeps it.")
+                </MudText>
+            </div>
+        }
+
     </DialogContent>
     <DialogActions>
         <MudButton
@@ -677,6 +697,23 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn Title="Date Resolution" Sortable="false" Hidden="@(!_selectedObjectTypeHasDateAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Date Resolution" Name="dateresolution" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (SchemaAttributeEdit.OffersDateTimeResolution(context.Item.Type))
+                        {
+                            <MudTooltip Text="@(context.Item.DateTimeResolutionSetByAdministrator ? "The finest step of time the Connected System holds these dates to. Set by an administrator, so a schema refresh keeps it." : context.Item.DateTimeResolution.HasValue ? "The finest step of time the Connected System holds these dates to. Discovered from the Connected System's schema." : "Not yet discovered: refresh the schema to discover it. Until then JIM holds and sends these dates to the microsecond.")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Text">@SchemaAttributeEdit.Describe(SchemaAttributeEdit.EffectiveDateTimeResolution(context.Item))</MudChip>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn Title="Writability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Writability" Name="writability" />
@@ -895,6 +932,7 @@
     private bool _selectedObjectTypeHasDescriptions;
     private bool _selectedObjectTypeHasConstrainedAttributes;
     private bool _selectedObjectTypeHasCaseExactAttributes;
+    private bool _selectedObjectTypeHasDateAttributes;
     private IReadOnlyCollection<AttributeWritability> _selectedSchemaWritabilities = new List<AttributeWritability>();
     private string _schemaSearchString = "";
     private IReadOnlyCollection<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
@@ -914,6 +952,7 @@
     private string? _objectTypeAttributeBeingEditedText;
     private bool _objectTypeAttributeBeingEditedIsEditable;
     private bool _objectTypeAttributeBeingEditedCaseExact;
+    private DateTimeResolution _objectTypeAttributeBeingEditedResolution = DateTimeResolution.Microsecond;
 
     private const string ObjectTypeQueryParameterName = "ot";
     private bool _objectTypeDeepLinkApplied;
@@ -950,6 +989,7 @@
             _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
             _selectedObjectTypeHasConstrainedAttributes = _selectedObjectType.Attributes.Any(q => q.Writability != AttributeWritability.Writable);
             _selectedObjectTypeHasCaseExactAttributes = _selectedObjectType.Attributes.Any(q => q.CaseExact);
+            _selectedObjectTypeHasDateAttributes = _selectedObjectType.Attributes.Any(q => q.Type == AttributeDataType.DateTime);
         }
     }
 
@@ -1035,6 +1075,7 @@
             "plurality" => Order(a => a.AttributePlurality),
             "writability" => Order(a => a.Writability),
             "caseexact" => Order(a => a.CaseExact),
+            "dateresolution" => Order(a => a.Type == AttributeDataType.DateTime ? (int)SchemaAttributeEdit.EffectiveDateTimeResolution(a) : 0),
             "description" => Order(a => a.Description ?? string.Empty, StringComparer.OrdinalIgnoreCase),
             _ => Order(a => a.Name, StringComparer.OrdinalIgnoreCase)
         };
@@ -1412,6 +1453,7 @@
         _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
         _selectedObjectTypeHasConstrainedAttributes = _selectedObjectType.Attributes.Any(q => q.Writability != AttributeWritability.Writable);
         _selectedObjectTypeHasCaseExactAttributes = _selectedObjectType.Attributes.Any(q => q.CaseExact);
+        _selectedObjectTypeHasDateAttributes = _selectedObjectType.Attributes.Any(q => q.Type == AttributeDataType.DateTime);
     }
 
     /// <summary>
@@ -1849,6 +1891,7 @@
         _objectTypeAttributeBeingEdited = connectedSystemObjectTypeAttribute;
         _objectTypeAttributeBeingEditedText = connectedSystemObjectTypeAttribute.Type.ToString();
         _objectTypeAttributeBeingEditedCaseExact = connectedSystemObjectTypeAttribute.CaseExact;
+        _objectTypeAttributeBeingEditedResolution = SchemaAttributeEdit.EffectiveDateTimeResolution(connectedSystemObjectTypeAttribute);
         _editSchemaAttributeDialogVisible = true;
     }
 
@@ -1863,13 +1906,14 @@
             : _objectTypeAttributeBeingEdited?.Type ?? AttributeDataType.NotSet;
 
     /// <summary>
-    /// Mirrors what confirming can act on (a type override, or a case-exact declaration), so the button is never
-    /// enabled with nothing to confirm.
+    /// Mirrors what confirming can act on (a type override, a case-exact declaration or a date resolution), so the
+    /// button is never enabled with nothing to confirm.
     /// </summary>
     private bool CanConfirmAttributeEdit() =>
         _objectTypeAttributeBeingEdited != null &&
         ((ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes && _objectTypeAttributeBeingEditedIsEditable) ||
-         SchemaAttributeEdit.OffersCaseExact(EditedAttributeType()));
+         SchemaAttributeEdit.OffersCaseExact(EditedAttributeType()) ||
+         SchemaAttributeEdit.OffersDateTimeResolution(EditedAttributeType()));
 
     private async Task HandleEditAttributeButtonClickAsync()
     {
@@ -1895,6 +1939,7 @@
         }
 
         SchemaAttributeEdit.ApplyCaseExact(_objectTypeAttributeBeingEdited, _objectTypeAttributeBeingEditedCaseExact);
+        SchemaAttributeEdit.ApplyDateTimeResolution(_objectTypeAttributeBeingEdited, _objectTypeAttributeBeingEditedResolution);
 
         RecomputeSelectedObjectTypeFlags();
         _editSchemaAttributeDialogVisible = false;

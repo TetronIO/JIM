@@ -189,7 +189,7 @@ $stop = if ($cell.Runtime -eq 'docker') {
     Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading a connected deployment' -Step 'Stop the services'
 }
 else {
-    Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading on Podman' -Step 'Stop JIM'
+    Get-DocumentedCommand -Page 'upgrading-podman.md' -Heading 'Upgrading on Podman' -Step 'Stop JIM'
 }
 Add-Check 'JIM stopped, as the upgrading guide says' ((Invoke-Documented -Command $stop -WorkingDirectory $installPath -Title 'stopping JIM') -eq 0)
 Invoke-LabVm -Name $vm -Command @('mkdir', '-p', '/root/backup') | Out-Null
@@ -204,14 +204,20 @@ foreach ($backup in $backups) {
 
 # 3. The upgrade, by the Upgrading guide.
 if ($cell.Runtime -eq 'docker') {
+    # The PostgreSQL image the previous release runs, which the installer must keep on the host for rolling back
+    # (#2299).
+    $previousDatabaseImage = "$(Invoke-LabVm -Name $vm -Command @('docker', 'inspect', '--format', '{{.Image}}', 'jim.database'))".Trim()
     # Run as root already: without sudo, which would drop the backup confirmation given in advance.
     $upgrade = (Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading with the installer' -Tab 'Air-gapped') -replace '(?m)^sudo\s+', ''
     $upgradeCommand = "export JIM_SETUP_BACKUP_CONFIRMED=true`n$upgrade"
     $upgraded = Invoke-Documented -Command $upgradeCommand -WorkingDirectory $bundleFolder -Title 'the upgrade, with the installer'
     Add-Check "upgraded to $newVersion with setup.sh --upgrade" ($upgraded -eq 0)
+    $kept = "$(Invoke-LabVm -Name $vm -AllowFailure -Command @('docker', 'image', 'inspect', '--format', '{{.Id}}', 'docker.io/library/postgres:jim-previous'))".Trim()
+    Add-Check "$previousVersion's PostgreSQL image kept as postgres:jim-previous, for rolling back" ($kept -eq $previousDatabaseImage) `
+        "kept '$kept', ran '$previousDatabaseImage'"
 }
 else {
-    $page = 'upgrading.md'
+    $page = 'upgrading-podman.md'
     $heading = 'Upgrading on Podman'
     Add-Check '2. the current pod files kept, for rolling back' ((Invoke-Documented -Title 'keeping the pod files' -WorkingDirectory $installPath `
                 -Command (Get-DocumentedCommand -Page $page -Heading $heading -Step 'Keep the current pod files')) -eq 0)
@@ -279,6 +285,14 @@ if ($cell.Runtime -eq 'docker') {
     Add-Check 'rollback 2: database restored into an empty one, as documented' ((Invoke-Documented -Title 'the database restore' -WorkingDirectory /root/backup -Command $restoreDatabase) -eq 0)
     Add-Check 'rollback 3: the installer''s .previous files put back' ((Invoke-Documented -Title 'the .previous files' `
                 -Command (Get-DocumentedCommand -Page $page -Heading 'Rolling back' -Step 'Point `JIM_VERSION` back' -Block 2)) -eq 0)
+    # The previous PostgreSQL image left with only the name the installer kept, as the containerd image store leaves
+    # it when the release's image takes over its tag (#2299), whether or not the two releases' images differ.
+    $names = @(Invoke-LabVm -Name $vm -Command @('docker', 'image', 'inspect', '--format', '{{join .RepoTags "\n"}}', $previousDatabaseImage) |
+            Where-Object { $_ })
+    foreach ($name in (Get-LabImageNameToDrop -Name $names)) {
+        Invoke-LabVm -Name $vm -Command @('docker', 'rmi', $name) | Out-Null
+    }
+    Write-CellLog "$previousVersion's PostgreSQL image left with only the installer's name for it (was: $($names -join ', '))"
     # With every compose file JIM was started with, the administrator's own included, as the step says.
     $start = Get-DocumentedCommand -Page $page -Heading 'Rolling back' -Step 'Start the services'
     $startWithOwnFile = $start -replace '-f docker-compose\.production\.yml', '-f docker-compose.production.yml -f docker-compose.local.yml'
@@ -286,12 +300,15 @@ if ($cell.Runtime -eq 'docker') {
         throw 'Rolling back''s start command no longer names docker-compose.production.yml, to add the own compose file beside'
     }
     Add-Check 'rollback 4: started with every compose file' ((Invoke-Documented -Title 'starting the services' -Command $startWithOwnFile) -eq 0)
+    $database = "$(Invoke-LabVm -Name $vm -AllowFailure -Command @('docker', 'inspect', '--format', '{{.Image}}', 'jim.database'))".Trim()
+    Add-Check "rollback 4: the database runs $previousVersion's PostgreSQL image, without a download" ($database -eq $previousDatabaseImage) `
+        "runs '$database', expected '$previousDatabaseImage'"
 }
 else {
     # On Podman the guide gives the rollback in words: stop JIM, restore the backup, put the .previous pod files back,
     # and start JIM.
     Add-Check 'rollback: JIM stopped' ((Invoke-Documented -Title 'stopping JIM' -WorkingDirectory $installPath `
-                -Command (Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading on Podman' -Step 'Stop JIM')) -eq 0)
+                -Command (Get-DocumentedCommand -Page 'upgrading-podman.md' -Heading 'Upgrading on Podman' -Step 'Stop JIM')) -eq 0)
     Add-Check 'rollback: encryption keys restored, as documented' ((Invoke-Documented -Title 'the key restore' -WorkingDirectory /root/backup -Command $restoreKeys) -eq 0)
     Add-Check 'rollback: database restored into an empty one, as documented' ((Invoke-Documented -Title 'the database restore' -WorkingDirectory /root/backup -Command $restoreDatabase) -eq 0)
     Add-Check 'rollback: the .previous pod files put back' ((Invoke-Documented -Title 'the .previous pod files' -WorkingDirectory $installPath `
