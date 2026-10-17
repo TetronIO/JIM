@@ -262,6 +262,46 @@ public class SyncEngineHeldUnderAnotherDataTypeFlowTests
 
     #endregion
 
+    #region Reference
+
+    /// <summary>
+    /// The reference writer follows the same rule: a Reference attribute whose rows hold only another type's value (the
+    /// attribute was changed to Reference) holds no reference JIM can read, which is not the absence of one, so the
+    /// Metaverse Object's references are left as they are, in the ordinary and the final reference pass alike.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public void FlowInboundAttributes_ReferenceHoldingOnlyAnotherType_LeavesTheReferencesAsHeld(bool isFinalReferencePass)
+    {
+        var (mvo, cso, types, rule) = Arrange(AttributeDataType.Reference, AttributePlurality.MultiValued);
+        AddCsoValue(cso, v => v.StringValue = "CN=Ada Ashcroft,OU=Corp");
+        var held = AddMvoValue(mvo, v => v.ReferenceValueId = GuidA, syncRuleId: 7, systemId: OtherConnectedSystemId);
+
+        var errors = _engine.FlowInboundAttributes(cso, rule, types, isFinalReferencePass: isFinalReferencePass,
+            priorityContext: new AttributePriorityContext([rule]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            AssertNothingStaged(mvo, errors);
+            Assert.That(held.ContributedBySystemId, Is.EqualTo(OtherConnectedSystemId), "no provenance takeover");
+        }
+    }
+
+    /// <summary>The control: Reference rows holding nothing at all are no value, so the writer still removes the reference.</summary>
+    [Test]
+    public void FlowInboundAttributes_ReferenceRowHoldingNothing_RemovesTheReference()
+    {
+        var (mvo, cso, types, rule) = Arrange(AttributeDataType.Reference, AttributePlurality.MultiValued);
+        AddCsoValue(cso, _ => { });
+        var held = AddMvoValue(mvo, v => v.ReferenceValueId = GuidA);
+
+        _engine.FlowInboundAttributes(cso, rule, types, priorityContext: new AttributePriorityContext([rule]));
+
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.EqualTo(new[] { held }));
+    }
+
+    #endregion
+
     #region Fixtures
 
     /// <summary>The seven typed writers #2184 concerns, and Text as the control.</summary>

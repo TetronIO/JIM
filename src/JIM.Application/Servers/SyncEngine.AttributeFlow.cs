@@ -144,7 +144,19 @@ public partial class SyncEngine
                         // held under another type (#2128) or holding nothing is neither a value to flow nor a value to
                         // count. The usual case, every row holding the type, reuses the list as it is.
                         List<ConnectedSystemObjectAttributeValue>? typedValues = null;
-                        if (csotAttribute.Type != AttributeDataType.Reference)
+                        if (csotAttribute.Type == AttributeDataType.Reference)
+                        {
+                            // The reference writer takes the rows whole and resolves them itself, but a value held
+                            // only under another type (the attribute was changed to Reference) is still not the
+                            // absence of a reference (#2184): left to the writer it would read as no reference and
+                            // remove the Metaverse Object's. Rows holding nothing at all still reach it, and clear.
+                            if (HeldOnlyUnderAnotherDataType(csoAttributeValues, csotAttribute.Id, AttributeDataType.Reference) is { } heldType)
+                            {
+                                LogHeldOnlyUnderAnotherDataType(cso, csotAttribute, heldType, syncRuleMapping);
+                                continue;
+                            }
+                        }
+                        else
                         {
                             typedValues = RowsHoldingValueOfType(csoAttributeValues, csotAttribute.Type);
                             if (typedValues.Count == 0)
@@ -156,12 +168,7 @@ public partial class SyncEngine
                                 // provenance takeover. The next import that reads the attribute replaces the row.
                                 if (HeldOnlyUnderAnotherDataType(csoAttributeValues, csotAttribute.Id, csotAttribute.Type) is { } heldType)
                                 {
-                                    Log.Warning(
-                                        "ProcessMapping: Connected System Object {CsoId} holds attribute '{SourceAttr}' only as " +
-                                        "{HeldType}, not as its {AttrType} type, so no value flowed to '{TargetAttr}' and the " +
-                                        "Metaverse Object's value is left as it is until an import reads the attribute again.",
-                                        cso.Id, LogSanitiser.Sanitise(csotAttribute.Name), heldType,
-                                        csotAttribute.Type, LogSanitiser.Sanitise(syncRuleMapping.TargetMetaverseAttribute.Name));
+                                    LogHeldOnlyUnderAnotherDataType(cso, csotAttribute, heldType, syncRuleMapping);
                                     continue;
                                 }
 
@@ -1576,6 +1583,21 @@ public partial class SyncEngine
         }
 
         return heldType;
+    }
+
+    /// <summary>
+    /// The Warning Attribute Flow logs when it leaves a Metaverse Object's value as it is because the source attribute is
+    /// held only under another data type: never silently, naming the object, the attribute and the type it is held as.
+    /// </summary>
+    private static void LogHeldOnlyUnderAnotherDataType(
+        ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute csotAttribute, AttributeDataType heldType, SyncRuleMapping syncRuleMapping)
+    {
+        Log.Warning(
+            "ProcessMapping: Connected System Object {CsoId} holds attribute '{SourceAttr}' only as " +
+            "{HeldType}, not as its {AttrType} type, so no value flowed to '{TargetAttr}' and the " +
+            "Metaverse Object's value is left as it is until an import reads the attribute again.",
+            cso.Id, LogSanitiser.Sanitise(csotAttribute.Name), heldType,
+            csotAttribute.Type, LogSanitiser.Sanitise(syncRuleMapping.TargetMetaverseAttribute?.Name));
     }
 
     /// <summary>
