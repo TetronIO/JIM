@@ -88,12 +88,14 @@ public sealed class MatchValueResolver
                 target.Type, null);
 
         var values = new List<object>();
-        foreach (var value in attributeValues
-                     .Where(av => av.AttributeId == attributeId)
-                     .Select(av => SyncEngine.ToExpressionValue(av, attribute.Type))
-                     .Where(value => value != null && value is not "" && !values.Contains(value)))
+        var anyHeldUnderAnotherType = false;
+        foreach (var attributeValue in attributeValues.Where(av => av.AttributeId == attributeId))
         {
-            values.Add(value!);
+            var value = SyncEngine.ToExpressionValue(attributeValue, attribute.Type);
+            if (value == null)
+                anyHeldUnderAnotherType |= attributeValue.IsHeldUnderAnotherDataType(attribute.Type);
+            else if (value is not "" && !values.Contains(value))
+                values.Add(value);
         }
 
         if (values.Count > 0)
@@ -101,7 +103,8 @@ public sealed class MatchValueResolver
 
         // Nothing of the attribute's type. A value held under another one (#2319) is not no value: matching on it as
         // no value would find nothing and project a duplicate of the identity the object already has.
-        return SyncEngine.HeldOnlyUnderAnotherDataType(attributeValues, attributeId.Value, attribute.Type) is { } heldType
+        return anyHeldUnderAnotherType &&
+               SyncEngine.HeldOnlyUnderAnotherDataType(attributeValues, attributeId.Value, attribute.Type) is { } heldType
             ? MatchValueResolution.Failed(DescribeHeldUnderAnotherDataType($"The Connected System attribute '{attribute.Name}'", heldType, attribute.Type),
                 target.Type, null)
             : MatchValueResolution.NoValue(target.Type, null);
