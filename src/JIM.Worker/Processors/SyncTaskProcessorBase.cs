@@ -134,14 +134,20 @@ public abstract class SyncTaskProcessorBase
     private readonly List<(MetaverseObject Mvo, int ConnectedSystemId)> _pendingDerivedInputMarks = [];
 
     // This system's Connected System Objects that carried the derived-input mark and whose Pass 2 processing
-    // completed without error, each with the row version (xmin) its page load read; cleared in bulk at page flush
-    // (the ScopeReviewPending fail-safe pattern), and only while the row version is unchanged.
-    private readonly List<DerivedInputChangeClear> _pendingDerivedInputClears = [];
+    // completed without error; cleared in bulk at page flush (the ScopeReviewPending fail-safe pattern), and only
+    // while the row version is unchanged since the page load (_markedSeenRowVersions).
+    private readonly HashSet<Guid> _pendingDerivedInputClears = [];
 
-    // The row version (xmin) of each marked Connected System Object on the current page, as the page load read it.
-    // Captured by CaptureDerivedInputRowVersions straight after the load, before this run writes anything, because
-    // an EF save of a tracked object refreshes its xmin to this run's own write, which would defeat the guard.
-    private readonly Dictionary<Guid, uint> _derivedInputSeenRowVersions = [];
+    // This system's Connected System Objects that carried the synchronisation-pending mark (#2092) and that this run
+    // processed (errored objects included: the run has passed them, as the watermark always did). Cleared at page
+    // flush under the same row-version guard, folded into the join-state write for objects that have one, so that
+    // write's own move of the row version cannot defeat the guard.
+    private readonly HashSet<Guid> _pendingSynchronisationPendingClears = [];
+
+    // The row version (xmin) of each marked Connected System Object on the current page (either mark), as the page
+    // load read it. Captured by CaptureMarkedRowVersions straight after the load, before this run writes anything,
+    // because an EF save of a tracked object refreshes its xmin to this run's own write, which would defeat the guard.
+    private readonly Dictionary<Guid, uint> _markedSeenRowVersions = [];
 
     // Connected System Objects on the current page whose derived pass returned an Attribute Flow error (for example
     // Missing Input Behaviour "Fail the mapping" on an mv input). Decision 10: a derived-flow error fails the object,
@@ -153,6 +159,8 @@ public abstract class SyncTaskProcessorBase
     private int _derivedInputMarksSet;
     private int _derivedInputMarksCleared;
     private int _derivedInputMarksKept;
+    private int _synchronisationPendingMarksCleared;
+    private int _synchronisationPendingMarksKept;
 
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
@@ -164,6 +172,11 @@ public abstract class SyncTaskProcessorBase
     // Used by AttemptJoinAsync to avoid false CouldNotJoinDueToExistingJoin errors when an obsolete CSO
     // is disconnected and a new CSO tries to join the same MVO within the same page.
     protected readonly List<Guid> _pendingDisconnectedMvoIds = [];
+
+    // Metaverse Objects this page disconnected from a system an export rule provisions to (#2318), flagged for the
+    // export scope review once the page's writes persist, so the review re-provisions them after the departed objects
+    // are deleted.
+    private readonly HashSet<Guid> _pendingReProvisioningReviewMvoIds = [];
 
     // Batch collection for quiet CSO deletions (pre-disconnected CSOs that don't need RPEIs)
     // These are CSOs that were already disconnected during synchronous MVO deletion and just need cleanup
@@ -310,6 +323,13 @@ public abstract class SyncTaskProcessorBase
     /// No-op in production (null by default).
     /// </summary>
     internal Action? OnCsoProcessedInPass2 { get; set; }
+
+    /// <summary>
+    /// Test hook: invoked after each CSO is processed in Pass 2, with the object, so a test can act at an exact point
+    /// in the run (for example commit an import's change to an object the run has already processed, #2092).
+    /// No-op in production (null by default).
+    /// </summary>
+    internal Action<ConnectedSystemObject>? OnConnectedSystemObjectProcessedInPass2 { get; set; }
 
     /// <summary>
     /// Test hook: the page identity map's cumulative absorption count (#1612). Production code never reads
@@ -1104,6 +1124,13 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected async Task ProcessActiveConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
+        // The run has reached this object, so its synchronisation-pending mark (#2092) is cleared at page flush, whatever
+        // the outcome below: obsolete (handled in Pass 1), skipped for want of rules, processed, or errored (an errored
+        // object is reported on its own execution item, and the watermark has always passed it). Recorded before the
+        // early returns for that reason; the clear itself applies only if the row is unchanged since the page load.
+        if (connectedSystemObject.SynchronisationPending && _markedSeenRowVersions.ContainsKey(connectedSystemObject.Id))
+            _pendingSynchronisationPendingClears.Add(connectedSystemObject.Id);
+
         // Skip obsolete CSOs - already fully handled in Pass 1
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
@@ -1394,9 +1421,9 @@ public abstract class SyncTaskProcessorBase
             // ordinary flow's mapping-level error, which follows the ScopeReviewPending behaviour above.
             if (connectedSystemObject.DerivedInputChangePending &&
                 !_derivedFlowErroredCsoIds.Contains(connectedSystemObject.Id) &&
-                _derivedInputSeenRowVersions.TryGetValue(connectedSystemObject.Id, out var seenRowVersion))
+                _markedSeenRowVersions.ContainsKey(connectedSystemObject.Id))
             {
-                _pendingDerivedInputClears.Add(new DerivedInputChangeClear(connectedSystemObject.Id, seenRowVersion));
+                _pendingDerivedInputClears.Add(connectedSystemObject.Id);
             }
         }
         catch (SyncJoinException joinEx)
@@ -1691,6 +1718,8 @@ public abstract class SyncTaskProcessorBase
             _pendingExportEvaluations.Add((exportEvaluation.Mvo, exportEvaluation.ChangedAttributes, exportEvaluation.RemovedAttributes));
         if (result.DisconnectedMetaverseObjectId is { } disconnectedMvoId)
             _pendingDisconnectedMvoIds.Add(disconnectedMvoId);
+        if (result.ScopeReviewMetaverseObjectId is { } reviewMvoId)
+            _pendingReProvisioningReviewMvoIds.Add(reviewMvoId);
 
         return result.ExecutionItems;
     }
@@ -2547,11 +2576,13 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Page flush for the derived-input mark (#1750): applies the page's collected marks as one bulk update, and clears
-    /// the mark on this system's objects whose processing succeeded as another; neither makes a per-object call. Runs
-    /// after the page's Metaverse Objects are persisted, so a Metaverse Object projected on this page has its id.
+    /// Page flush for the Connected System Object marks: applies the page's collected derived-input marks (#1750) as one
+    /// bulk update, then clears, in one guarded statement, the derived-input mark on this system's objects whose
+    /// re-evaluation succeeded and the synchronisation-pending mark (#2092) on those the page processed and whose
+    /// join-state write did not already clear it; none makes a per-object call. Runs after the page's Metaverse Objects
+    /// are persisted, so a Metaverse Object projected on this page has its id.
     /// </summary>
-    private async Task FlushDerivedInputMarksAsync()
+    private async Task FlushMarksAsync()
     {
         if (_pendingDerivedInputMarks.Count > 0)
         {
@@ -2580,25 +2611,39 @@ public abstract class SyncTaskProcessorBase
             _pendingDerivedInputMarks.Clear();
         }
 
-        if (_pendingDerivedInputClears.Count > 0)
+        if (_pendingDerivedInputClears.Count > 0 || _pendingSynchronisationPendingClears.Count > 0)
         {
-            var cleared = await _syncRepo.ClearConnectedSystemObjectDerivedInputChangePendingAsync(_pendingDerivedInputClears);
-            _derivedInputMarksCleared += cleared;
-            _derivedInputMarksKept += _pendingDerivedInputClears.Count - cleared;
-            Log.Debug("FlushDerivedInputMarksAsync: cleared the derived-input mark on {Cleared} of {Requested} re-evaluated Connected System Object(s); " +
-                "the rest were written since their page load (for example re-marked by another run) and stay marked for the next run.",
-                cleared, _pendingDerivedInputClears.Count);
+            // One guarded statement for both marks (#2092, #1750): clearing them separately would have the first
+            // statement move the row version the second's guard compares against.
+            var clears = _pendingSynchronisationPendingClears.Union(_pendingDerivedInputClears)
+                .Select(id => new ConnectedSystemObjectMarkClear(id, _markedSeenRowVersions[id],
+                    SynchronisationPending: _pendingSynchronisationPendingClears.Contains(id),
+                    DerivedInputChangePending: _pendingDerivedInputClears.Contains(id)))
+                .ToList();
+            var result = await _syncRepo.ClearConnectedSystemObjectMarksAsync(clears);
+
+            _derivedInputMarksCleared += result.DerivedInputChangePendingCleared;
+            _derivedInputMarksKept += _pendingDerivedInputClears.Count - result.DerivedInputChangePendingCleared;
+            _synchronisationPendingMarksCleared += result.SynchronisationPendingCleared;
+            _synchronisationPendingMarksKept += _pendingSynchronisationPendingClears.Count - result.SynchronisationPendingCleared;
+            Log.Debug("FlushMarksAsync: cleared the synchronisation-pending mark on {SyncCleared} of {SyncRequested} processed Connected System " +
+                "Object(s) and the derived-input mark on {DerivedCleared} of {DerivedRequested} re-evaluated one(s); the rest were written since " +
+                "their page load (an import's further change, or another run's re-mark) and stay marked for the next run.",
+                result.SynchronisationPendingCleared, _pendingSynchronisationPendingClears.Count,
+                result.DerivedInputChangePendingCleared, _pendingDerivedInputClears.Count);
             _pendingDerivedInputClears.Clear();
+            _pendingSynchronisationPendingClears.Clear();
         }
 
-        _derivedInputSeenRowVersions.Clear();
+        _markedSeenRowVersions.Clear();
         _derivedFlowErroredCsoIds.Clear();
     }
 
     /// <summary>
-    /// Records the row version (<c>xmin</c>) of each marked Connected System Object on a freshly loaded page, so the
-    /// mark can later be cleared only if nobody re-marked the row after this run read it (#1750). Call straight after
-    /// the page load, before anything on the page is written.
+    /// Records the row version (<c>xmin</c>) of each marked Connected System Object on a freshly loaded page (either
+    /// mark: derived-input, #1750; synchronisation-pending, #2092), so a mark can later be cleared only if nobody wrote
+    /// the row after this run read it: another run's re-mark, or an import committing a change this run's processing
+    /// never saw. Call straight after the page load, before anything on the page is written.
     /// <para>
     /// Why this version is early enough: the clear must be guarded by a row version read NO LATER than the Metaverse
     /// values the derived flows evaluate. Both page loaders (<c>GetConnectedSystemObjectsModifiedSinceAsync</c> for
@@ -2615,19 +2660,26 @@ public abstract class SyncTaskProcessorBase
     /// can only make the clear skip (fail-safe), never succeed wrongly.
     /// </para>
     /// </summary>
-    protected void CaptureDerivedInputRowVersions(IEnumerable<ConnectedSystemObject> loadedPage)
+    protected void CaptureMarkedRowVersions(IEnumerable<ConnectedSystemObject> loadedPage)
     {
-        foreach (var cso in loadedPage.Where(cso => cso.DerivedInputChangePending))
-            _derivedInputSeenRowVersions[cso.Id] = cso.xmin;
+        _markedSeenRowVersions.Clear();
+        foreach (var cso in loadedPage.Where(cso => cso.DerivedInputChangePending || cso.SynchronisationPending))
+            _markedSeenRowVersions[cso.Id] = cso.xmin;
     }
 
     /// <summary>
-    /// End-of-run summary for the derived-input mark (#1750): how many other systems' objects this run marked for
-    /// re-evaluation, and how many of this system's marked objects it re-evaluated and cleared. Only logged when the
-    /// run has a derived flow graph.
+    /// End-of-run summary for the Connected System Object marks: how many synchronisation-pending marks (#2092) this run
+    /// cleared and kept; and, when the run has a derived flow graph, how many other systems' objects it marked for
+    /// derived-input re-evaluation (#1750) and how many of this system's marked objects it re-evaluated and cleared.
     /// </summary>
-    protected void LogDerivedInputMarkSummary()
+    protected void LogMarkSummary()
     {
+        // Synchronisation-pending marks (#2092): always reported, since every run that processes anything clears them.
+        // A kept mark is not an error: the object was written after this run loaded it, and the next run processes it.
+        Log.Information("Synchronisation-pending marks for {ConnectedSystemName}: {Cleared} cleared on processed Connected System Object(s); " +
+            "{Kept} kept because the object was written after this run loaded it, so the next synchronisation processes it.",
+            _connectedSystem.Name, _synchronisationPendingMarksCleared, _synchronisationPendingMarksKept);
+
         if (_attributePriorityContext?.DerivedFlowGraph == null)
             return;
 
@@ -3864,7 +3916,7 @@ public abstract class SyncTaskProcessorBase
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
         if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0 && _pendingScopeReviewClears.Count == 0 &&
-            _pendingDerivedInputMarks.Count == 0 && _pendingDerivedInputClears.Count == 0)
+            _pendingDerivedInputMarks.Count == 0 && _pendingDerivedInputClears.Count == 0 && _pendingSynchronisationPendingClears.Count == 0)
             return;
 
         // Unique Value Generation (#242, Phase 2 work package G) integrity guard: every pending generation
@@ -3954,7 +4006,7 @@ public abstract class SyncTaskProcessorBase
                 .ToList();
             if (obsoleteSlotsToRelease.Count > 0)
             {
-                await _syncRepo.UpdateConnectedSystemObjectJoinStatesAsync(obsoleteSlotsToRelease);
+                await UpdateJoinStatesClearingSynchronisationPendingAsync(obsoleteSlotsToRelease);
                 Log.Verbose("PersistPendingMetaverseObjectsAsync: Released {Count} obsolete CSO join slot(s) before writing new joins", obsoleteSlotsToRelease.Count);
             }
 
@@ -3968,26 +4020,28 @@ public abstract class SyncTaskProcessorBase
                     cso.MetaverseObjectId = cso.MetaverseObject.Id;
             }
 
-            await _syncRepo.UpdateConnectedSystemObjectJoinStatesAsync(_pendingCsoJoinUpdates);
+            await UpdateJoinStatesClearingSynchronisationPendingAsync(_pendingCsoJoinUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} CSO join states in batch", _pendingCsoJoinUpdates.Count);
             _pendingCsoJoinUpdates.Clear();
         }
 
+        // Metaverse-Derived Attribute Flows (#1750): mark other hosting systems' objects whose derived inputs changed
+        // this page; then clear, under the row versions the page load read, the derived-input mark on this system's
+        // objects re-evaluated without error and the synchronisation-pending mark (#2092) on the rest of what the page
+        // processed. After the substantive MVO/CSO writes, so a mark is only cleared once its object's outcome is safely
+        // stored; after the creates, so an object projected on this page has the id its marks need.
+        await FlushMarksAsync();
+
         // Clear the Temporal Scope Reconciler flag for CSOs re-evaluated this page (#892). Done last, after the
         // page's substantive MVO/CSO writes have persisted, so a flag is only cleared once its object's outcome
         // is safely stored; if an earlier write throws, the flag stays set and the object is reconsidered next sweep.
+        // After the guarded mark clears above too: this unguarded write moves the row version they compare against.
         if (_pendingScopeReviewClears.Count > 0)
         {
             await _syncRepo.ClearConnectedSystemObjectScopeReviewPendingAsync(_pendingScopeReviewClears);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Cleared ScopeReviewPending on {Count} CSO(s) in batch", _pendingScopeReviewClears.Count);
             _pendingScopeReviewClears.Clear();
         }
-
-        // Metaverse-Derived Attribute Flows (#1750): mark other hosting systems' objects whose derived inputs changed
-        // this page, and clear the mark on this system's objects re-evaluated without error. Last, like the scope
-        // flag, so a mark is only cleared once its object's outcome is safely stored; after the creates, so an object
-        // projected on this page has the id its marks need.
-        await FlushDerivedInputMarksAsync();
 
         // Re-key deferred MVO→RPEI mappings now that newly projected MVOs have real IDs.
         // This enables EvaluateOutboundExportsAsync to find the originating RPEI for outcome linking.
@@ -4002,6 +4056,27 @@ public abstract class SyncTaskProcessorBase
         }
 
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Writes join states and, in the same statement, clears the synchronisation-pending mark (#2092) on those of the
+    /// objects this page processed whose row is unchanged since the page load. The join-state write moves the row
+    /// version, so a guarded clear issued after it could never apply and every newly joined object would be processed
+    /// again by the next run. The objects handed over are taken out of the page's pending clears whether or not their
+    /// clear applied: one that did not was written after the load (an import's further change) and keeps its mark.
+    /// </summary>
+    private async Task UpdateJoinStatesClearingSynchronisationPendingAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    {
+        var seenRowVersions = connectedSystemObjects
+            .Where(cso => _pendingSynchronisationPendingClears.Contains(cso.Id))
+            .DistinctBy(cso => cso.Id)
+            .ToDictionary(cso => cso.Id, cso => _markedSeenRowVersions[cso.Id]);
+
+        var cleared = await _syncRepo.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects, seenRowVersions);
+
+        _synchronisationPendingMarksCleared += cleared;
+        _synchronisationPendingMarksKept += seenRowVersions.Count - cleared;
+        _pendingSynchronisationPendingClears.ExceptWith(seenRowVersions.Keys);
     }
 
     /// <summary>
@@ -5318,6 +5393,18 @@ public abstract class SyncTaskProcessorBase
             await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
+        }
+
+        // Flag the disconnected Metaverse Objects an export rule provisions back (#2318) before their departed objects
+        // are deleted, so a failure between the two leaves the flag set and the next synchronisation still reviews
+        // them; a review that runs while the departed object remains simply finds it and stages nothing.
+        if (_pendingReProvisioningReviewMvoIds.Count > 0)
+        {
+            var flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
+            Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Count} Metaverse Object(s) for an export scope review, " +
+                "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); {Newly} newly flagged",
+                _pendingReProvisioningReviewMvoIds.Count, flagged);
+            _pendingReProvisioningReviewMvoIds.Clear();
         }
 
         // Then handle normal obsolete CSO deletions (with RPEI tracking)

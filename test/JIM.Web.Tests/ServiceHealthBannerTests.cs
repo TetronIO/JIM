@@ -52,9 +52,6 @@ public class ServiceHealthBannerTests : JimComponentTestContext
             .ReturnsAsync(() => [.. _heartbeats]);
     }
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private void Arrange(params ServiceHeartbeat[] heartbeats) => _heartbeats = [.. heartbeats];
 
     private static ServiceHeartbeat Heartbeat(

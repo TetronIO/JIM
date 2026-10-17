@@ -154,8 +154,9 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
         cso = await ReloadEntityAsync(cso);
         Assert.That(cso.MetaverseObjectId, Is.Not.Null, "The first sync must have joined the CSO");
 
-        // The source value changes
+        // The source value changes, as an import records it: the value, and the object marked pending synchronisation
         cso.AttributeValues.Single(av => av.AttributeId == csoDisplayNameAttr.Id).StringValue = "John Smith-Jones";
+        cso.SynchronisationPending = true;
 
         // Act 1 - preview the changed object against the live joined state
         var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);

@@ -61,14 +61,6 @@ public class OperationsHistoryTabTests : JimComponentTestContext
         _navigation.NavigateTo("/admin/operations?t=history");
     }
 
-    [TearDown]
-    public async Task TearDownAsync()
-    {
-        // The tab holds a polling loop and a grid that talks to JavaScript; NUnit reuses the fixture instance
-        // across tests, so each rendered component is disposed here rather than left running into the next test.
-        await DisposeComponentsAsync();
-    }
-
     /// <summary>
     /// Arranges the one range read the tab makes, returning the supplied executions and total for every window.
     /// </summary>

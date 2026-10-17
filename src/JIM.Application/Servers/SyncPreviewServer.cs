@@ -2217,6 +2217,8 @@ public class SyncPreviewServer
         if (joinedMvo != null)
             DescribeMetaverseObject(result.Inbound, joinedMvo);
         var workingCso = ObsoletionPreviewClone.Of(cso, joinedMvo, []);
+        // Held before the teardown, which breaks the working object's join.
+        var workingMvo = workingCso.MetaverseObject;
 
         var teardown = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
             workingCso,
@@ -2262,6 +2264,19 @@ public class SyncPreviewServer
                 await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [exportEvaluation.Mvo.Id]);
             ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([exportEvaluation.Mvo], context.Cache,
                 synchronisationChanges: (exportEvaluation.ChangedAttributes, exportEvaluation.RemovedAttributes)));
+        }
+
+        // The re-provisioning the run's export scope review makes (#2318), where a provisioning export rule targets the
+        // system this object is leaving: the review runs after the page has deleted the departed object, so it is
+        // evaluated here as the review sees it, without that object, and with nothing changed beyond the teardown.
+        if (teardown.ScopeReviewMetaverseObjectId is { } reviewMvoId && workingMvo != null)
+        {
+            if (refreshCacheForWorkingMvo)
+                await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [reviewMvoId]);
+            context.Cache.CsoLookup.Remove((reviewMvoId, cso.ConnectedSystemId));
+            ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
+                synchronisationChanges: ([], null)));
+            context.ScopeReviewedMetaverseObjectIds.Add(reviewMvoId);
         }
 
         // An immediate deletion deprovisions downstream, nested under its deletion node as the run nests it.

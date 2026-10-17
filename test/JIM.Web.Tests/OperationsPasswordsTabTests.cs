@@ -68,14 +68,6 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
         _navigation = Services.GetRequiredService<NavigationManager>();
     }
 
-    [TearDown]
-    public async Task TearDownAsync()
-    {
-        // The tab holds a grid that talks to JavaScript; NUnit reuses the fixture instance across tests, so each
-        // rendered component is disposed here rather than left running into the next test.
-        await DisposeComponentsAsync();
-    }
-
     private void ArrangeWindow(List<PendingPasswordChangeHeader> rows) =>
         _syncRepository
             .Setup(r => r.GetPendingPasswordChangeHeadersAsync(

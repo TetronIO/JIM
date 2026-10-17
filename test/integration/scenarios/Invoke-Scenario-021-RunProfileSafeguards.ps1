@@ -49,8 +49,9 @@
           detectedDeletionsWithheld equals the deleted count
         - A second Delta Import refuses the same count again, which proves the watermark did not advance
         - Max detected deletions equal to the count: every delete is applied and nothing is withheld
-        - Clears the limit, synchronises the Obsolete objects away and re-provisions the deleted users, so later
-          scenarios see the full population
+        - Clears the limit; the LDAP Delta Synchronisation that disconnects the Obsolete objects also stages a
+          provisioning Create for each deleted user with nothing changed in HR (#2318), and the export restores
+          them, so later scenarios see the full population
 
 .PARAMETER Step
     Which test step to execute
@@ -622,44 +623,25 @@ try {
         $appliedDeparting = @($departingIds | Where-Object { $_ -in $obsoleteIdsAfter })
         Assert-Equal -Expected $deleteCount -Actual $appliedDeparting.Count -Message "Every deleted user's Connected System Object is Obsolete"
 
-        # Step 3e: Clear the limit, synchronise the Obsolete objects away and re-provision the deleted users. Their
-        # Metaverse Objects are unchanged, so the disconnection alone stages nothing; JIM provisions a missing target
-        # account the next time the object changes. Touch the departed employees' title in the HR CSV to provision
-        # them, then put the CSV back so the directory ends where it started.
+        # Step 3e: Clear the limit, synchronise the Obsolete objects away and re-provision the deleted users. JIM is
+        # authoritative for provisioning to the directory, so the LDAP Delta Synchronisation that disconnects each
+        # deleted user's object also stages the provisioning Create that puts the account back (#2318): nothing in HR
+        # changes, and the export restores the directory to where it started.
         Write-TestStep "3e" "Clear the limit and re-provision the deleted users"
         Set-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $deltaProfileId -MaxDetectedDeletions $null | Out-Null
         $clearedProfile = Get-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId | Where-Object { $_.id -eq $deltaProfileId }
         Assert-Condition -Condition ($null -eq $clearedProfile.safeguards.maxDetectedDeletions -and $null -eq $clearedProfile.safeguards.maxDetectedDeletionsPercent) -Message "Both deletion limits are cleared on the Delta Import"
         $ldapSync = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $ldapSync.activityId -Name "LDAP Delta Sync (Test 3 restore)"
-        Assert-Equal -Expected $deleteCount -Actual ([int](Get-JIMActivityStats -ActivityId $ldapSync.activityId).totalDisconnections) -Message "The Delta Sync disconnected every deleted user"
-
-        $baselineCsvRows3 = @(Import-Csv $csvPath)
-        $departingNames = @($departingUsers | ForEach-Object { [string]$_.displayName })
-        $touchedCsv = @($baselineCsvRows3 | ForEach-Object {
-            $row = $_.PSObject.Copy()
-            if ($row.displayName -in $departingNames) { $row.title = "$($row.title) (re-provisioned)" }
-            $row
-        })
-        $touchedCount = @($touchedCsv | Where-Object { $_.title -like '* (re-provisioned)' }).Count
-        Assert-Equal -Expected $deleteCount -Actual $touchedCount -Message "Every deleted user has an HR row to touch"
-        $touchedCsv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        Copy-CsvToConnectorFiles -SourcePath $csvPath
-        Invoke-ImportAndSync -Config $config -Name "Test 3 re-provision" | Out-Null
+        $ldapSyncStats = Get-JIMActivityStats -ActivityId $ldapSync.activityId
+        Assert-Equal -Expected $deleteCount -Actual ([int]$ldapSyncStats.totalDisconnections) -Message "The Delta Sync disconnected every deleted user"
+        Assert-Equal -Expected $deleteCount -Actual ([int]$ldapSyncStats.totalProvisioned) -Message "The same Delta Sync re-provisioned every deleted user, with nothing changed in HR"
         Assert-Equal -Expected $deleteCount -Actual (Get-LdapPendingExportCount -Config $config) -Message "A create is pending for each deleted user"
+
         Assert-ExportAppliedInFull -Config $config -Expected $deleteCount -Name "Test 3 re-provision"
         Invoke-LdapConfirmingImport -Config $config -Name "Test 3 re-provision"
         foreach ($user in $departingUsers) {
             Assert-Condition -Condition (Test-DirectoryEntryPresent -DirectoryConfig $DirectoryConfig -BaseDn $user.secondaryExternalIdValue -Filter "(objectClass=*)") -Message "$($user.secondaryExternalIdValue) exists in the directory again"
-        }
-
-        $baselineCsvRows3 | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        Copy-CsvToConnectorFiles -SourcePath $csvPath
-        Invoke-ImportAndSync -Config $config -Name "Test 3 restore" | Out-Null
-        $pendingAfterDeltaRestore = Get-LdapPendingExportCount -Config $config
-        if ($pendingAfterDeltaRestore -gt 0) {
-            Assert-ExportAppliedInFull -Config $config -Expected $pendingAfterDeltaRestore -Name "Test 3 restore"
-            Invoke-LdapConfirmingImport -Config $config -Name "Test 3 restore"
         }
         Assert-Equal -Expected 0 -Actual (Get-LdapPendingExportCount -Config $config) -Message "No export is pending to LDAP once the directory is restored"
 

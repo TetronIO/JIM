@@ -21,9 +21,6 @@ public class ConnectedSystemDetectedFactsTests : JimComponentTestContext
     private const string FactMarker = "jim-detected-fact";
     private const string EmptyMarker = "jim-detected-facts-empty";
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private IRenderedComponent<ConnectedSystemDetectedFacts> RenderStrip(List<ConnectorCapability>? capabilities) =>
         Render<ConnectedSystemDetectedFacts>(p => p.Add(c => c.Capabilities, capabilities));
 

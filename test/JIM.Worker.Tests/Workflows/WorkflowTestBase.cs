@@ -474,6 +474,18 @@ public abstract class WorkflowTestBase
     }
 
     /// <summary>
+    /// Records a Synchronisation Rule configuration change as saving a rule does, by stamping its LastUpdated. A test
+    /// that edits a rule's in-memory configuration directly must call this before a Full Synchronisation that is meant
+    /// to apply the change: without it the run's unchanged-object skip, which only a configuration change turns off,
+    /// passes over every object whose own data did not change, as it would in production.
+    /// </summary>
+    protected void RecordSyncRuleConfigurationChange()
+    {
+        foreach (var rule in SyncRepo.SyncRules.Values)
+            rule.LastUpdated = DateTime.UtcNow;
+    }
+
+    /// <summary>
     /// Updates a CSO's LastUpdated timestamp to simulate a modification.
     /// </summary>
     protected Task ModifyCsoAsync(ConnectedSystemObject cso, DateTime? modifiedAt = null)

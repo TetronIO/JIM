@@ -76,6 +76,17 @@ public class ConnectedSystemObjectObsoletionResult
     public Guid? DisconnectedMetaverseObjectId { get; set; }
 
     /// <summary>
+    /// The Metaverse Object to flag for an export scope review because it has just lost its object in a Connected
+    /// System that an enabled export Synchronisation Rule provisions to for its type (#2318): the account was deleted
+    /// in that system, and the review stages the provisioning Create that puts it back if the object is still in the
+    /// rule's scope. The caller flags it once the page's writes are persisted; the review then runs after the
+    /// departed object has been deleted. Null when no such rule exists, when the object's deletion is scheduled or
+    /// immediate, or when the obsoletion is a deliberate withdrawal (a Synchronisation Rule or Connected System being
+    /// deleted).
+    /// </summary>
+    public Guid? ScopeReviewMetaverseObjectId { get; set; }
+
+    /// <summary>
     /// The Metaverse Object deletion-rule verdict for the disconnection, when one was evaluated: the fate
     /// (not deleted, scheduled, deleted immediately), the human-readable reason and any grace period.
     /// Null when the object was not joined or the join was preserved.

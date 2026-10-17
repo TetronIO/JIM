@@ -184,8 +184,9 @@ public partial class SyncRepository : ISyncRepository
         List<Guid>? pendingRemovalIds = null)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects, pendingAdditions, pendingRemovalIds);
 
-    public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _repo.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
+    public Task<int> UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects,
+        IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null)
+        => _repo.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects, synchronisationPendingSeenRowVersions);
 
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
         => _repo.ConnectedSystems.ClearConnectedSystemObjectScopeReviewPendingAsync(ids);
@@ -257,6 +258,9 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
         => _repo.Metaverse.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);
+
+    public Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids)
+        => _repo.Metaverse.FlagMetaverseObjectsForScopeReviewAsync(ids);
 
     public Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
         IReadOnlyCollection<Guid> referencedMetaverseObjectIds)

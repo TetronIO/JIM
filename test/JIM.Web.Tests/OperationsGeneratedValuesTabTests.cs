@@ -69,9 +69,6 @@ public class OperationsGeneratedValuesTabTests : JimComponentTestContext
         _navigation = Services.GetRequiredService<NavigationManager>();
     }
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private void ArrangeCounts(int needsDecision = 0, int renameAllowed = 0, int corrected = 0) =>
         _syncRepository.Setup(r => r.GetGeneratedValueDecisionCountsAsync(It.IsAny<DateTime>())).ReturnsAsync(
             needsDecision + renameAllowed + corrected == 0

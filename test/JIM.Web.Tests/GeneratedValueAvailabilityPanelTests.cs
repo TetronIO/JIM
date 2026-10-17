@@ -21,9 +21,6 @@ public class GeneratedValueAvailabilityPanelTests : JimComponentTestContext
 {
     private const string RowMarker = "[data-testid='generated-value-availability-row']";
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private static GeneratedValueParticipant Row(int systemId, string systemName, GeneratedValueParticipantCheck check, GeneratedValueParticipantReason reason,
         bool canBeExcluded = true, bool isExcluded = false, bool reportsCollisions = false) => new()
     {
