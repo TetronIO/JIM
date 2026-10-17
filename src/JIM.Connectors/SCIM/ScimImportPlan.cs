@@ -32,11 +32,13 @@ internal sealed record ScimImportPlan(
     /// <param name="configured">The administrator's Change Detection setting.</param>
     /// <param name="capabilities">What the provider advertised at discovery.</param>
     /// <param name="watermark">The instant the last completed import began reading, if there was one.</param>
+    /// <param name="provider">The provider, where JIM recognises it as one that does not do what it advertises.</param>
     public static ScimImportPlan Create(
         ConnectedSystemRunType runType,
         ScimDeltaStrategy configured,
         ScimProviderCapabilities capabilities,
-        DateTimeOffset? watermark)
+        DateTimeOffset? watermark,
+        ScimKnownProvider provider = ScimKnownProvider.Unrecognised)
     {
         ArgumentNullException.ThrowIfNull(capabilities);
 
@@ -47,6 +49,17 @@ internal sealed record ScimImportPlan(
         // A deliberate choice is not a shortfall, so it is not reported as one on every run.
         if (configured == ScimDeltaStrategy.FullScan)
             return FullScan();
+
+        // Overrides an explicit Last Modified Filter as well as Auto (#2094). The filter is not merely slower against
+        // Keycloak, it is wrong: the Delta Import would succeed having missed every change Keycloak did not stamp, which
+        // is silent divergence. Reading everything is always correct.
+        if (provider == ScimKnownProvider.Keycloak)
+        {
+            return FullScan(
+                "Delta Import was requested, but the service provider is Keycloak, which does not update a resource's last-modified date for most changes " +
+                "(group membership and renames made through SCIM, and anything changed in the Admin Console, the Admin REST API, LDAP federation or by the user). " +
+                "Filtering on it would miss those changes, so every resource was read instead. Set Change Detection to 'Full Scan' on the Connected System to stop this warning.");
+        }
 
         // Auto follows what the provider advertises. The explicit Last Modified Filter choice overrides
         // that, because providers do support filtering without advertising it.
