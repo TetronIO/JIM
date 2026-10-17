@@ -1250,8 +1250,10 @@ public interface ISyncRepository
     /// Gets the most recent configuration change instant across all Synchronisation Rules and their mappings
     /// (each entity's LastUpdated, falling back to Created), or null when no rules exist. Rule enable/disable,
     /// scoping and matching changes stamp the rule; mapping creation, attribute priority reordering and
-    /// "Null is a value" changes stamp the mapping, so this covers every configuration surface that affects
-    /// inbound resolution. A Full Synchronisation compares it against the last completed sync to decide whether
+    /// "Null is a value" changes stamp the mapping, and a mapping's deletion stamps its parent rule (#1533). A deleted
+    /// rule leaves no row behind, so its deletion, alone or with its Connected System, is read from the Service
+    /// Settings singleton (#2309). Together these cover every configuration surface that affects inbound resolution.
+    /// A Full Synchronisation compares it against the last completed sync to decide whether
     /// the unchanged-object optimisation must be disabled for the run so new configuration reaches every object.
     /// </summary>
     Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync();
