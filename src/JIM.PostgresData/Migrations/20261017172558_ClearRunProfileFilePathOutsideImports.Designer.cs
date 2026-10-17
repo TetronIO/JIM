@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261017163044_ClearRunProfileFilePathOutsideImports")]
+    [Migration("20261017172558_ClearRunProfileFilePathOutsideImports")]
     partial class ClearRunProfileFilePathOutsideImports
     {
         /// <inheritdoc />
@@ -1259,6 +1259,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("SessionsValidFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SyncRuleLastDeletedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
