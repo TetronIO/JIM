@@ -82,13 +82,41 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** The Connected System's count of unresolved references falls after the next import.
 
+## **Access Denied**: `Export failed: The directory refused the change because the account JIM connects as does not have permission ...`
+
+The SCIM Connector's messages begin `The service provider did not accept JIM's credentials (401)` or `... do not have permission to make it (403)`, and the SQL Connector's begin `The database refused the change because the account JIM connects as does not have permission ...`.
+
+**What it means.** The Connected System refused the export because the account JIM connects as may not make that change, or because it did not accept JIM's credentials at all. The message ends with the Connected System's own words. This is configuration in the Connected System, not a fault in JIM, so the run ends **Complete with warning**. The change is still waiting, as a Pending Export: JIM tries it again at each Export run after waiting 2, 4, 8 and then 16 minutes, and marks it Failed after the fifth refusal.
+
+**How to fix.** For a directory, grant the bind account the rights to create, modify, move or delete the object and write the attributes the export carries; the [LDAP Connector](../connectors/jim-ldap-connector.md) page lists what each directory needs. For a SCIM service provider, a 401 means the Connected System's credentials are wrong, expired or revoked; a 403 means they lack a permission or scope the change needs. For a database, grant the account JIM connects as `INSERT`, `UPDATE` and `DELETE` on each table the export writes to, including related tables; [Database account permissions](../connectors/jim-sql-connector-security.md#database-account-permissions) lists what each database needs.
+
+**Check.** The next Export run writes the change: its Pending Export shows **Exported**, and clears once an import confirms it. A Pending Export already marked Failed is not attempted again; it clears when an import from the Connected System shows its values in place, for example once you make the change there yourself.
+
+## **Export Rejected**: `Export failed: The directory refused the change (...): ...`
+
+The SQL Connector's messages begin `The database refused the change (...)`, naming the SQLSTATE, SQL Server error number or `ORA-` code in brackets.
+
+**What it means.** The Connected System considered the export and said no, for a reason of its own: the object breaks its schema or a constraint, a required value is missing, the parent container is not there, a value does not fit its column, a table or column it names does not exist, a database trigger raised an error, or it will not perform the change. The result in brackets and the rest of the message are the Connected System's own; a SCIM service provider's message is its own throughout. The run ends **Complete with warning**, and the Pending Export is retried as for **Access Denied** above.
+
+**How to fix.** Act on the Connected System's reason: supply the value, correct the data in the source, or change the Attribute Flow that produced it. A **Value Already in Use** error instead means the value is held by another object; [When a target rejects a value](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) covers that one. A **Password Required** error from Active Directory is explained in [Active Directory will not enable an account that has no password](../connectors/jim-ldap-connector-troubleshooting.md#active-directory-will-not-enable-an-account-that-has-no-password).
+
+**Check.** As for **Access Denied** above.
+
+## **Export Refused**: `Export failed: Cannot write to '...': it is outside the containers selected for this Connected System ...`
+
+**What it means.** JIM did not send the export, because it would have placed the object in a container that is not selected on the Connected System's **Scope** tab. JIM cannot import an object from there, so it would treat the object as deleted at the next Full Import. The object stays where it is, and the run ends **Complete with warning**.
+
+**How to fix.** Select the container on the Connected System's **Scope** tab, or change the Attribute Flow that produced the Distinguished Name the message names.
+
+**Check.** As for **Access Denied** above.
+
 ## **Operation Failed**: `Export failed: ...`
 
-**What it means.** The Connected System refused an export, and the rest of the message is its own reason: the account JIM connects as lacks the rights, the change breaks the system's own rules, or a required value is missing. JIM records any refusal it cannot classify as an error it did not anticipate, so the run ends **Complete with error** even though the cause is usually the Connected System's configuration. The change is still waiting, as a Pending Export: JIM tries it again at each Export run after waiting 2, 4, 8 and then 16 minutes, and marks it Failed after the fifth refusal.
+**What it means.** The export did not reach a Connected System that could consider it: the connection dropped, the server was busy or unavailable or ran out of time, a database deadlocked, or a SCIM service provider answered with a server error (5xx). JIM records these as errors it did not anticipate, so the run ends **Complete with error**. The Pending Export is retried as for **Access Denied** above.
 
-**How to fix.** Act on the Connected System's reason: grant the rights, supply the value, or change the Attribute Flow. A **Value Already in Use** error instead means the value is held by another object; [When a target rejects a value](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) covers that one. A **Password Required** error from Active Directory is explained in [Active Directory will not enable an account that has no password](../connectors/jim-ldap-connector-troubleshooting.md#active-directory-will-not-enable-an-account-that-has-no-password).
+**How to fix.** Check that the Connected System is reachable and healthy, then run the Export Run Profile again. If the message names something else, collect what **Still stuck?** below lists.
 
-**Check.** The next Export run writes the change: its Pending Export shows **Exported**, and clears once an import confirms it (at once, for the File and SQL Connectors). A Pending Export already marked Failed is not attempted again; it clears when an import from the Connected System shows its values in place, for example once you make the change there yourself.
+**Check.** As for **Access Denied** above.
 
 ## **Export Pending**: `We exported a change, but did not get confirmation of it`
 

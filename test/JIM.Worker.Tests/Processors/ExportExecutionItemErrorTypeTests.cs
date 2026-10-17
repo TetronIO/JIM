@@ -31,6 +31,19 @@ public class ExportExecutionItemErrorTypeTests
             Is.EqualTo(ActivityRunProfileExecutionItemErrorType.PasswordRequiredToEnableAccount));
     }
 
+    // #2118: each of these is a Connected System saying no, or JIM refusing a write it would not be able to read back,
+    // and each names something an administrator can act on.
+    [TestCase(ConnectedSystemExportErrorType.OutsideManagedScope, ActivityRunProfileExecutionItemErrorType.OutsideManagedScope)]
+    [TestCase(ConnectedSystemExportErrorType.AccessDenied, ActivityRunProfileExecutionItemErrorType.AccessDenied)]
+    [TestCase(ConnectedSystemExportErrorType.RejectedByConnectedSystem, ActivityRunProfileExecutionItemErrorType.RejectedByConnectedSystem)]
+    [TestCase(ConnectedSystemExportErrorType.PlaceholderMemberConstraintViolation, ActivityRunProfileExecutionItemErrorType.PlaceholderMemberConstraintViolation)]
+    [TestCase(ConnectedSystemExportErrorType.MissingDependency, ActivityRunProfileExecutionItemErrorType.MissingDependency)]
+    [TestCase(ConnectedSystemExportErrorType.ConcurrencyConflict, ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict)]
+    public void ToExecutionItemErrorType_ConnectedSystemRefusal_IsRecordedAsItsOwnErrorType(ConnectedSystemExportErrorType exportErrorType, ActivityRunProfileExecutionItemErrorType expected)
+    {
+        Assert.That(SyncExportTaskProcessor.ToExecutionItemErrorType(exportErrorType), Is.EqualTo(expected));
+    }
+
     [TestCase(ConnectedSystemExportErrorType.InvalidGeneratedExternalId, ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId)]
     [TestCase(ConnectedSystemExportErrorType.ClassMembershipRequirementsNotMet, ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet)]
     [TestCase(ConnectedSystemExportErrorType.General, ActivityRunProfileExecutionItemErrorType.UnhandledError)]
@@ -38,5 +51,21 @@ public class ExportExecutionItemErrorTypeTests
     public void ToExecutionItemErrorType_OtherClassifications_KeepTheirExistingMapping(ConnectedSystemExportErrorType? exportErrorType, ActivityRunProfileExecutionItemErrorType expected)
     {
         Assert.That(SyncExportTaskProcessor.ToExecutionItemErrorType(exportErrorType), Is.EqualTo(expected));
+    }
+
+    /// <summary>
+    /// A Connector classifies a failure precisely so it is not reported as a JIM defect. Every classification but
+    /// General must therefore reach its own execution item error type; one left to the default arm is the very fault
+    /// #2118 found four of.
+    /// </summary>
+    [Test]
+    public void ToExecutionItemErrorType_EveryClassificationButGeneral_IsNotRecordedAsUnhandledError()
+    {
+        var flattened = Enum.GetValues<ConnectedSystemExportErrorType>()
+            .Where(type => type != ConnectedSystemExportErrorType.General)
+            .Where(type => SyncExportTaskProcessor.ToExecutionItemErrorType(type) == ActivityRunProfileExecutionItemErrorType.UnhandledError)
+            .ToList();
+
+        Assert.That(flattened, Is.Empty, "these classifications are recorded as Unhandled Error, which reads as a JIM defect");
     }
 }
