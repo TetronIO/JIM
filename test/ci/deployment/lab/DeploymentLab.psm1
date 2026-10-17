@@ -260,6 +260,35 @@ function Get-LabSetupMessage {
     }
 }
 
+function Get-LabImageNameToDrop {
+    <#
+    .SYNOPSIS
+        Returns the names to take off the PostgreSQL image JIM ran before an upgrade, leaving only the one the
+        installer keeps for rolling back (#2299).
+
+    .DESCRIPTION
+        When a release's PostgreSQL image takes over the previous one's tag, Docker's containerd image store keeps the
+        previous image only through the name the installer gives it. Taking every other name off reproduces that on
+        any upgrade, whether or not the two releases' images differ. An image the installer did not keep is left as it
+        is: stripping every name would only show that the image is gone.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [string[]]$Name,
+
+        [string]$KeptTag = 'jim-previous'
+    )
+
+    $kept = @($Name | Where-Object { $_ -like "*:$KeptTag" })
+    if ($kept.Count -eq 0) {
+        return
+    }
+    $Name | Where-Object { $_ -notlike "*:$KeptTag" }
+}
+
 function Compare-LabFingerprint {
     <#
     .SYNOPSIS
@@ -966,6 +995,6 @@ function Get-LabReleaseBundle {
 
 Export-ModuleMember -Function Test-LabMatrix, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
     Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
-    Get-LabSetupMessage, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
+    Get-LabSetupMessage, Get-LabImageNameToDrop, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
     Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, Get-LabVmAddress,
     Invoke-LabSignIn, Get-LabPowerShellArchive, Get-LabReleaseBundle

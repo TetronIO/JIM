@@ -126,11 +126,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A change an import commits while a Delta Synchronisation of the same Connected System is running, such as in the same Schedule parallel group, is now always synchronised. It could be skipped silently, by every later Delta and Full Synchronisation, until the object changed again. (#2092)
+- 🐛 The SCIM 2.0 Client Connector now exports every value of `roles`, `entitlements` and `x509Certificates`, adding or removing one without touching the rest; it sent only the first. `roles.type` and similar become read-only at the next schema refresh. (#2090)
 - 🐛 Rolling back an air-gapped upgrade on Docker's containerd image store no longer tries to download the previous release's PostgreSQL image: the installer keeps it on the host, as `postgres:jim-previous`, when it upgrades. (#2299)
 - 🐛 JIM's web portal, Worker and Scheduler no longer grow in memory with every page load, request and task until restarted; each kept every database session it had opened, so a long-running deployment would eventually run out of memory. (#2115)
 - 🐛 The Pending Deletions page can now be reached from the portal: from the **Administration** page, and from an Object Type's Deletion Rules panel, which opens it filtered to that type. (#2059)
 - 🐛 The API's OpenAPI document now states which endpoints need an SSO access token or API key, and that health, version and sign-in configuration need neither; it declared no authentication at all, so tools generating clients from it sent none. (#2088)
 - 🐛 `Export-JIMCertificate` now works in a PowerShell session signed in with SSO; it previously sent only an API key, so the download was refused. (#2088)
+- 🐛 Exporting a Trusted Certificate added by file path now works: JIM reads the certificate from that file. A certificate that cannot be found or read now gets a `404 Not Found` with a message saying why, which `Export-JIMCertificate` reports, instead of `406 Not Acceptable`. Every export is now DER-encoded, including certificates uploaded as PEM. (#2109)
 - 🐛 A Delta Import that reads a deletion and a re-insert of the same object on different pages now keeps the object, instead of rejecting the re-insert as a duplicate and leaving the object to be deleted at the next synchronisation. An object changed on both sides of a page boundary is no longer reported as a duplicate either. (#2074)
 - 🐛 Restarting JIM now renews the infrastructure API key (`JIM_INFRASTRUCTURE_API_KEY`) for another 24 hours once it has expired, so it can be used to recover access, such as after a Factory Reset that removed every administrator. A disabled key stays disabled. (#2278)
 - 🐛 Previews of Attribute Flow, destructive toggle and Object Matching changes no longer fail as a whole when one object's scope cannot be decided: that object is listed as one the run would fail, with the reason, and the rest are previewed. (#2264)
@@ -278,6 +280,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 - 🔒 A password delivered to Active Directory or Samba AD at the same moment an export disables the account no longer re-enables it: JIM writes the account's flags only if they are still the ones it read, and otherwise leaves them as the export set them and tries the delivery again. (#2161)
 - 🔒 API requests refused for an expired, mis-signed or malformed SSO access token are now recorded in the security audit log, as failed API keys and sign-ins already are. (#2108)
+- 🔒 The unauthenticated readiness check (`/api/v1/health/ready`) no longer returns the error behind a failure, which could reveal database connection details such as the host and user name; the response drops its `error` field and JIM logs the cause instead. (#2188)
 - 🔒 The SCIM 2.0 Client Connector now refuses a plain-HTTP OAuth Token Endpoint URL except for loopback addresses, so a Client Secret is never sent unencrypted, including by the connection test when you save the settings. A Connected System already saved with one fails its next Run Profile before anything is sent; change it to the authorisation server's HTTPS address. (#2093)
 
 ### Performance

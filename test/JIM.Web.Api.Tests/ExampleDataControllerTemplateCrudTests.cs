@@ -13,6 +13,7 @@ using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Security;
 using JIM.Web.Controllers.Api;
+using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -39,6 +40,7 @@ public class ExampleDataControllerTemplateCrudTests
     private Mock<ILogger<ExampleDataController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private ExampleDataController _controller = null!;
+    private Guid _apiKeyId;
 
     private MetaverseObjectType _userType = null!;
     private MetaverseAttribute _textAttribute = null!;
@@ -72,6 +74,7 @@ public class ExampleDataControllerTemplateCrudTests
 
         // Authenticate as an API key so the base controller resolves a non-null initiating principal.
         var apiKeyId = Guid.NewGuid();
+        _apiKeyId = apiKeyId;
         var apiKey = new ApiKey
         {
             Id = apiKeyId,
@@ -83,13 +86,9 @@ public class ExampleDataControllerTemplateCrudTests
         };
         _mockApiKeyRepo.Setup(r => r.GetByIdAsync(apiKeyId)).ReturnsAsync(apiKey);
 
-        var claims = new List<Claim>
-        {
-            new("auth_method", "api_key"),
-            new(ClaimTypes.NameIdentifier, apiKeyId.ToString()),
-            new(ClaimTypes.Name, "TestApiKey")
-        };
-        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "ApiKey"));
+        // The claims the API key handler really issues, so the endpoints are exercised as production reaches them.
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey), ApiKeyAuthenticationHandler.SchemeName));
         var httpContext = new DefaultHttpContext { User = principal };
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
@@ -265,6 +264,32 @@ public class ExampleDataControllerTemplateCrudTests
         // The same Metaverse Object Type id appears twice in the request (the Object Type itself and the
         // reference attribute's source); resolution must reuse one instance rather than loading it twice.
         _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectTypeAsync(1, It.IsAny<bool>()), Times.Once);
+    }
+
+    [Test]
+    public async Task CreateTemplateAsync_CalledWithAnApiKey_RecordsTheKeyAsTheCreatorAsync()
+    {
+        var request = BuildValidCreateRequest();
+        ExampleDataTemplate? created = null;
+        _mockExampleDataRepo.Setup(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()))
+            .Callback<ExampleDataTemplate>(t => { t.Id = 42; created = t; })
+            .Returns(Task.CompletedTask);
+        _mockExampleDataRepo.Setup(r => r.CreateTemplateGraphAsync(It.IsAny<ExampleDataTemplate>()))
+            .Callback<ExampleDataTemplate>(t => { t.Id = 42; created = t; })
+            .Returns(Task.CompletedTask);
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(42)).ReturnsAsync(() => created);
+
+        await _controller.CreateTemplateAsync(request);
+
+        Assert.That(created, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(created!.CreatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
+            Assert.That(created!.CreatedById, Is.EqualTo(_apiKeyId));
+            Assert.That(created!.CreatedByName, Is.EqualTo("TestApiKey"));
+        }
+        _mockActivityRepo.Verify(a => a.CreateActivityAsync(It.Is<Activity>(act =>
+            act.InitiatedByType == ActivityInitiatorType.ApiKey && act.InitiatedById == _apiKeyId)), Times.Once);
     }
 
     [Test]

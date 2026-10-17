@@ -7,6 +7,7 @@ using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
@@ -290,30 +291,40 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     /// <remarks>
     /// Returns the certificate as a binary file download. The certificate is returned
     /// in DER (Distinguished Encoding Rules) format, which can be converted to PEM
-    /// if needed using standard tools like OpenSSL.
+    /// if needed using standard tools like OpenSSL. A certificate added by file path
+    /// is read from that file on the JIM server, as connections read it.
     /// </remarks>
     /// <param name="id">The unique identifier (GUID) of the certificate to download.</param>
     /// <returns>The certificate file as application/x-x509-ca-cert.</returns>
+    /// <response code="200">The DER-encoded certificate.</response>
+    /// <response code="404">No certificate has this ID, or its file could not be read as a certificate.</response>
     [HttpGet("{id:guid}/download", Name = "DownloadCertificate")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK, "application/x-x509-ca-cert")]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [Produces("application/x-x509-ca-cert")]
     public async Task<IActionResult> DownloadAsync(Guid id)
     {
+        // No [Produces] for the certificate type here: it would constrain the JSON error responses too, which MVC
+        // then refuses with 406 Not Acceptable. A file result sets its own content type.
         _logger.LogDebug("Downloading certificate data: {Id}", id);
         var certificate = await _application.Certificates.GetByIdAsync(id);
 
         if (certificate == null)
             return NotFound(ApiErrorResponse.NotFound($"Certificate with ID {id} not found."));
 
-        if (certificate.CertificateData == null || certificate.CertificateData.Length == 0)
-            return NotFound(ApiErrorResponse.NotFound("Certificate data is not available."));
+        var derData = await _application.Certificates.GetDerEncodedDataAsync(certificate);
+        if (derData == null)
+        {
+            var reason = certificate.SourceType == CertificateSourceType.FilePath
+                ? $"Certificate file '{certificate.FilePath}' could not be read as a certificate on the JIM server."
+                : "Certificate data could not be read.";
+            return NotFound(ApiErrorResponse.NotFound(reason));
+        }
 
         // Create a safe filename from the certificate name
         var safeFileName = string.Join("_", certificate.Name.Split(Path.GetInvalidFileNameChars())) + ".cer";
 
-        return File(certificate.CertificateData, "application/x-x509-ca-cert", safeFileName);
+        return File(derData, "application/x-x509-ca-cert", safeFileName);
     }
 
     #region Configuration Change History

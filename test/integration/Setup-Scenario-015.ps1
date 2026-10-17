@@ -17,8 +17,9 @@
 
     HR also carries a pipe-separated "badges" column, split into the multi-valued Metaverse attribute
     "Badges" and exported to the provider's own User extension (custom.badges, a multi-valued string).
-    It is empty for every seeded user; the scenario's MultiValuedRemoval step gives one user values and
-    then takes one away (#2181).
+    The same badges also flow to the core roles.value, a multi-valued complex attribute whose entries
+    are identified by their value (#2090). The column is empty for every seeded user; the scenario's
+    MultiValuedRemoval step gives one user values and then takes one away (#2181).
 
     Two systems rather than one is not incidental. JIM deliberately never exports a value back to the
     Connected System it came from (Q3 circular-sync prevention, OUTBOUND_SYNC_DESIGN.md), so a scenario
@@ -117,6 +118,9 @@ $userExportRuleName = "SCIM Users Export (MV -> SCIM)"
 $certificateName = "SCIM Test Service Provider"
 $badgesMvAttributeName = "Badges"
 $badgesScimAttributeName = "custom.badges"
+# The same badges also flow to the core roles attribute, a multi-valued complex attribute with no canonical
+# types, where each value is an entry of its own (#2090).
+$rolesScimAttributeName = "roles.value"
 
 Write-TestSection "Scenario 015 Setup: SCIM 2.0 Client Connector"
 Write-Host "SCIM provider: $ScimBaseUrl" -ForegroundColor Gray
@@ -291,7 +295,7 @@ if (-not $groupType) { throw "The provider published no 'Group' resource type." 
 
 # The flattening of SCIM's complex and multi-valued attributes is the connector's own work, so assert it
 # reached the schema rather than trusting that discovery merely returned something.
-foreach ($expected in @("userName", "name.givenName", "emails.work", "id")) {
+foreach ($expected in @("userName", "name.givenName", "emails.work", "id", $rolesScimAttributeName)) {
     if (-not ($userType.attributes | Where-Object { $_.name -eq $expected })) {
         throw "The imported User schema is missing '$expected'; SCIM attribute flattening did not produce the expected shape."
     }
@@ -310,7 +314,7 @@ Write-TestStep "Step 10" "Selecting SCIM object types and attributes"
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $scimSystem.id -ObjectTypeId $userType.id -Selected $true | Out-Null
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $scimSystem.id -ObjectTypeId $groupType.id -Selected $true | Out-Null
 
-$userAttributeNames = @("id", "userName", "active", "displayName", "name.givenName", "name.familyName", "emails.work", "meta.version", $badgesScimAttributeName)
+$userAttributeNames = @("id", "userName", "active", "displayName", "name.givenName", "name.familyName", "emails.work", "meta.version", $badgesScimAttributeName, $rolesScimAttributeName)
 $userAttributeUpdates = @{}
 foreach ($attribute in $userType.attributes | Where-Object { $_.name -in $userAttributeNames }) {
     $userAttributeUpdates[$attribute.id] = @{ selected = $true; isExternalId = ($attribute.name -eq "id") }
@@ -478,6 +482,12 @@ New-JIMSyncRuleMapping -SyncRuleId $userExportRule.id `
 # removal of that value alone (#2181). Empty for every seeded user, so it adds nothing to the earlier steps.
 New-JIMSyncRuleMapping -SyncRuleId $userExportRule.id `
     -TargetConnectedSystemAttributeId (Get-CsAttribute $userType $badgesScimAttributeName).id `
+    -SourceMetaverseAttributeId (Get-MvAttribute $badgesMvAttributeName).id | Out-Null
+
+# And to roles.value, where each badge is a whole roles entry: created as one entry per value, and an added or
+# removed badge adds or removes its own entry alone (#2090).
+New-JIMSyncRuleMapping -SyncRuleId $userExportRule.id `
+    -TargetConnectedSystemAttributeId (Get-CsAttribute $userType $rolesScimAttributeName).id `
     -SourceMetaverseAttributeId (Get-MvAttribute $badgesMvAttributeName).id | Out-Null
 
 # A provisioned resource must carry a userName, or the provider holds an anonymous shell; for already

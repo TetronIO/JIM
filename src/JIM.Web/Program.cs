@@ -491,10 +491,12 @@ try
             return Task.CompletedTask;
         });
 
-        // Anonymous endpoints (health probes, version, auth configuration) opt out of the document-wide requirement.
+        // Anonymous endpoints (health probes, version, auth configuration) opt out of the document-wide requirement,
+        // and a response that declares its own content type (a certificate download) is published with that type only.
         options.AddOperationTransformer((operation, context, _) =>
         {
             OpenApiSecurityConfiguration.ApplyToOperation(operation, context.Description.ActionDescriptor.EndpointMetadata);
+            OpenApiResponseContentTypes.ApplyToOperation(operation, context.Description.ActionDescriptor.EndpointMetadata);
             return Task.CompletedTask;
         });
     });

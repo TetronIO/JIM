@@ -176,6 +176,7 @@ nav:
       - Preview Features: administration/preview-features.md
       - Configuration Reference: administration/configuration.md
       - Upgrading: administration/upgrading.md
+      - Upgrading on Podman: administration/upgrading-podman.md
       - Backup & Disaster Recovery: administration/backup-recovery.md
       - Factory Reset: administration/factory-reset.md
       - Logs: administration/logs.md
