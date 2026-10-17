@@ -591,6 +591,23 @@ Describe 'Find-DirectoryEntry' {
         $arguments[$pagingAt + 1] | Should -Be 'pr=1000/noprompt'
     }
 
+    It 'leaves the paging comment out of -AsText, so a search that matched nothing reads as nothing' {
+        # ldapsearch prints "# pagedresults: cookie=" after each page even with -LLL: Scenario 001's case-only
+        # rename printed it in its failure text (2026-10-16). #2325 made Invoke-LDAPSearch leave it out.
+        Add-DockerResponse -ExitCode 0 -Output @('# pagedresults: cookie=')
+
+        Find-DirectoryEntry -DirectoryConfig (Get-AdTestConfig) -Filter '(sAMAccountName=nobody)' -AsText | Should -BeNullOrEmpty
+    }
+
+    It 'keeps the entries and drops only the paging comment with -AsText' {
+        Add-DockerResponse -ExitCode 0 -Output @('dn: CN=Alice,DC=x', 'cn: Alice', '', '# pagedresults: cookie=')
+
+        $text = Find-DirectoryEntry -DirectoryConfig (Get-AdTestConfig) -Filter '(sAMAccountName=alice)' -AsText
+
+        $text | Should -Match 'dn: CN=Alice,DC=x'
+        $text | Should -Not -Match 'pagedresults'
+    }
+
     It 'returns unfolded LDIF text with -AsText, in the shape ldbsearch printed' {
         Add-DockerResponse -ExitCode 0 -Output @('dn: CN=Alice,OU=Finance,DC=panoply,DC=l', ' ocal', 'department: Finance')
 
