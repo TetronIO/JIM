@@ -47,7 +47,7 @@ Each Run Profile on the Connected System, or each one whose name matches `-Name`
 | `PageSize` | `int` | How many items to process in one batch. |
 | `PartitionName` | `string` | The partition name if this Run Profile targets a specific partition. |
 | `TargetsDeselectedPartition` | `bool` | True when this Run Profile targets a partition that is no longer selected on the Connected System, which makes the Run Profile inoperable: a deselected partition is not managed by JIM, so executing this Run Profile is refused rather than reading scope the administrator has withdrawn. |
-| `FilePath` | `string` | File path for file-based connectors. |
+| `FilePath` | `string` | The file a Full Import reads, for a file-based Connector; empty when it reads the Connected System's File Path. |
 | `VerifyImportContentHashes` | `bool` | Whether Verification Mode is enabled: the Full Import skips no object whose content looks unchanged, and instead raises an error for any object whose stored content hash disagrees with what was read. Only meaningful when `RunType` is `FullImport`. |
 | `AllowObjectTypeChanges` | `bool` | Whether this Full Import carries out an Object Type change rather than refusing it. Only ever true when `RunType` is `FullImport`, and only has an effect on a Connected System whose Connector can tell an Object Type change from a new object, as the LDAP Connector can. |
 | `Safeguards` | `object` | The limits on what this Run Profile may attempt. Always present. It has `MaxCreates`, `MaxUpdates`, `MaxDeletes`, `MaxDetectedDeletions` and `MaxDetectedDeletionsPercent`. |
@@ -100,7 +100,7 @@ New-JIMRunProfile [-Name] <string> -ConnectedSystemName <string> -RunType <strin
 | `RunType` | `string` | Yes |  | The operation the Run Profile carries out: an import from the Connected System, a synchronisation with the Metaverse, or an export to the Connected System. One of `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
 | `PageSize` | `int` | No | `100` | How many items to process in one batch. From 1 to 10,000. |
 | `PartitionId` | `int` | No |  | The partition the Run Profile targets, for a Connector with partitions. Omit it and the Run Profile follows every selected partition. |
-| `FilePath` | `string` | No |  | The file to read or write, for a file-based Connector. |
+| `FilePath` | `string` | No |  | The file a Full Import reads, for a file-based Connector. Omit it to read the file the Connected System's File Path setting names. |
 | `VerifyImportContentHashes` | `switch` | No |  | Enables Verification Mode: the Full Import skips no object whose content looks unchanged, and raises an error for any object whose stored content hash disagrees with what was read. Only valid when `-RunType` is FullImport. Use it to check the skip, and leave it off for normal, faster Full Imports. |
 | `AllowObjectTypeChanges` | `switch` | No |  | Lets this Full Import carry out an Object Type change rather than refusing it: an object that arrives under a different Object Type is imported as a new Connected System Object, and the old one is retired. Only valid when `-RunType` is FullImport, and only has an effect for a Connector that can tell an Object Type change from a new object, as the LDAP Connector can. |
 | `MaxCreates` | `int` | No |  | A Safeguard: the most creates that may be pending for an Export run to attempt any of them. If more are pending when the run starts, it attempts none of them; 0 refuses creates outright. Only valid when `-RunType` is Export; omit it for no limit. |
@@ -201,7 +201,7 @@ Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int
 | `Name` | `string` | No |  | The new name. |
 | `PageSize` | `int` | No |  | How many items to process in one batch. From 1 to 10,000. |
 | `PartitionId` | `int` | No |  | The partition the Run Profile targets, for a Connector with partitions. |
-| `FilePath` | `string` | No |  | The file to read or write, for a file-based Connector. |
+| `FilePath` | `string` | No |  | The file a Full Import reads, for a file-based Connector. Set it to an empty string to read the file the Connected System's File Path setting names. |
 | `VerifyImportContentHashes` | `bool` | No |  | Whether Verification Mode is enabled: `$true` to enable it, `$false` to disable it. Only a Full Import Run Profile accepts `$true`. |
 | `AllowObjectTypeChanges` | `bool` | No |  | Whether this Full Import carries out an Object Type change rather than refusing it: `$true` to allow it, `$false` to go back to refusing it. Only a Full Import Run Profile accepts `$true`. |
 | `MaxCreates` | `int` | No |  | A Safeguard: the most creates that may be pending for an Export run to attempt any of them. 0 refuses creates outright, and `$null` clears the limit. Only valid on an Export Run Profile. The Safeguards you do not give keep their values. |

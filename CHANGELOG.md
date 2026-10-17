@@ -126,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A File Connector Full Import Run Profile with no **File Path** now imports the file the Connected System's **File Path** names, rather than failing with `ImportAsync: FilePath is missing or empty!`. A Run Profile's own **File Path** still takes precedence. (#2117)
 - 🐛 **Max detected deletions percent** on a Full Import no longer counts objects already marked as deleted, which let a run mark a larger share of what the Connected System still holds than the limit allowed. (#2089)
 - 🐛 An export the target system refused, such as access denied, a schema violation or a write outside the selected containers, is now reported as **Access Denied**, **Export Rejected** or **Export Refused** with the remedy, completing the run with a warning rather than as an unanticipated error. (#2118)
 - 🐛 The SCIM 2.0 Client Connector now exports every value of `roles`, `entitlements` and `x509Certificates`, adding or removing one without touching the rest; it sent only the first. `roles.type` and similar become read-only at the next schema refresh. (#2090)
