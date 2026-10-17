@@ -9020,11 +9020,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Id plus the mutable columns; cast/parameter order below MUST match
         // CsoBulkColumns.ConnectedSystemObjectsUpdate exactly.
         var columnsPerRow = 1 + CsoBulkColumns.ConnectedSystemObjectsUpdate.Length;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = (BulkSqlHelpers.MaxParametersPerStatement - 1) / columnsPerRow;
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
+        // Rows are locked in the database's uuid order, across the chunks and within each (the locked CTE), as the
+        // synchronisation's join-state write locks them: this update runs in one transaction with the attribute value
+        // changes it announces (#2092), so a different order could deadlock with a synchronisation writing the same rows.
+        foreach (var chunk in BulkSqlHelpers.ChunkList(BulkSqlHelpers.OrderByDatabaseUuid(objects, cso => cso.Id), chunkSize))
         {
             var sql = new System.Text.StringBuilder();
+            var lockParameterIndex = chunk.Count * columnsPerRow;
+            sql.Append($@"WITH locked AS (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY({{{lockParameterIndex}}}) ORDER BY ""Id"" FOR NO KEY UPDATE) ");
             sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ");
             sql.Append(string.Join(", ", CsoBulkColumns.ConnectedSystemObjectsUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
             // #2092: an update is a change synchronisation must process. A constant, never the entity's value, so an
@@ -9058,7 +9063,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             sql.Append(@") AS v(""Id"", ");
             sql.Append(BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectsUpdate));
-            sql.Append(@") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") WHERE t.""Id"" = v.""Id"" AND t.""Id"" IN (SELECT ""Id"" FROM locked)");
+            parameters.Add(chunk.Select(cso => cso.Id).ToArray());
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -9075,14 +9081,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Id plus the join state plus the row version the synchronisation's page load read; cast/parameter order below
         // MUST match CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate exactly.
         var columnsPerRow = 2 + CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate.Length;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = (BulkSqlHelpers.MaxParametersPerStatement - 1) / columnsPerRow;
         var clearedIds = new HashSet<Guid>();
 
         var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
         var transaction = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
+        // Rows are locked in the database's uuid order (the locked CTE), as the import's update locks them, so the two
+        // cannot deadlock over the same rows (#2092).
+        foreach (var chunk in BulkSqlHelpers.ChunkList(BulkSqlHelpers.OrderByDatabaseUuid(objects, cso => cso.Id), chunkSize))
         {
             // The synchronisation-pending mark (#2092) is cleared in the same statement as the join it led to, and only
             // where the row is unchanged since the page load (the SET expressions read the row as it was before this
@@ -9090,6 +9098,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // newly joined object would be processed again by the next run. A row written after the load (an import's
             // further change) keeps its mark. Positional parameters ($n), since the statement returns the cleared rows.
             var sql = new System.Text.StringBuilder();
+            sql.Append($@"WITH locked AS (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY(${chunk.Count * columnsPerRow + 1}::uuid[]) ORDER BY ""Id"" FOR NO KEY UPDATE) ");
             sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ");
             sql.Append(string.Join(", ", CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
             sql.Append(@", ""SynchronisationPending"" = CASE WHEN v.""SeenRowVersion"" IS NOT NULL AND t.xmin = v.""SeenRowVersion"" THEN false ELSE t.""SynchronisationPending"" END");
@@ -9119,7 +9128,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             sql.Append(@") AS v(""Id"", ");
             sql.Append(BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectsJoinStateUpdate));
-            sql.Append(@", ""SeenRowVersion"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@", ""SeenRowVersion"") WHERE t.""Id"" = v.""Id"" AND t.""Id"" IN (SELECT ""Id"" FROM locked)");
+            command.Parameters.Add(new NpgsqlParameter { Value = chunk.Select(cso => cso.Id).ToArray(), NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid });
             sql.Append(@" RETURNING t.""Id"", v.""SeenRowVersion"" IS NOT NULL AND NOT t.""SynchronisationPending""");
             command.CommandText = sql.ToString();
 

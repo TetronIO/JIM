@@ -94,16 +94,34 @@ public partial class SyncRepository
         // which this run's processing saw. Leaving that row marked is fail-safe; the next run processes it. Because the
         // guard matched, the row is exactly as loaded, so the marks the request names are the marks the row carries and
         // the returned flags say precisely what was cleared.
+        //
+        // The clear never waits for a row lock (SKIP LOCKED). A row another transaction holds is being written, an
+        // import mid-commit say, which will move its row version, so skipping it is the guard's own outcome: it stays
+        // marked. Waiting instead deadlocked against a concurrent import's update transaction, each holding rows the
+        // other wanted (found at runtime, #2092). Locking in Id order before updating also keeps the statement's own
+        // lock order deterministic.
         const string sql = """
+            WITH c AS (
+                SELECT * FROM unnest(@ids, @seenRowVersions, @clearSynchronisationPending, @clearDerivedInputChangePending)
+                    AS c("Id", "SeenRowVersion", "ClearSynchronisationPending", "ClearDerivedInputChangePending")
+            ),
+            locked AS (
+                SELECT cso."Id"
+                FROM "ConnectedSystemObjects" AS cso
+                JOIN c ON cso."Id" = c."Id"
+                WHERE cso.xmin = c."SeenRowVersion"
+                  AND ((c."ClearSynchronisationPending" AND cso."SynchronisationPending")
+                       OR (c."ClearDerivedInputChangePending" AND cso."DerivedInputChangePending"))
+                ORDER BY cso."Id"
+                FOR NO KEY UPDATE OF cso SKIP LOCKED
+            )
             UPDATE "ConnectedSystemObjects" AS cso
             SET "SynchronisationPending" = CASE WHEN c."ClearSynchronisationPending" THEN false ELSE cso."SynchronisationPending" END,
                 "DerivedInputChangePending" = CASE WHEN c."ClearDerivedInputChangePending" THEN false ELSE cso."DerivedInputChangePending" END
-            FROM unnest(@ids, @seenRowVersions, @clearSynchronisationPending, @clearDerivedInputChangePending)
-                AS c("Id", "SeenRowVersion", "ClearSynchronisationPending", "ClearDerivedInputChangePending")
+            FROM c
+            JOIN locked ON locked."Id" = c."Id"
             WHERE cso."Id" = c."Id"
               AND cso.xmin = c."SeenRowVersion"
-              AND ((c."ClearSynchronisationPending" AND cso."SynchronisationPending")
-                   OR (c."ClearDerivedInputChangePending" AND cso."DerivedInputChangePending"))
             RETURNING cso."Id", c."ClearSynchronisationPending", c."ClearDerivedInputChangePending"
             """;
 

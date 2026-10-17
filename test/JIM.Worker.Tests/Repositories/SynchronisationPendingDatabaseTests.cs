@@ -455,6 +455,46 @@ public class SynchronisationPendingDatabaseTests
     }
 
     /// <summary>
+    /// An import that is mid-commit holds its rows locked. The clear must never wait for it: waiting is how the clear
+    /// and the import deadlocked at runtime (each holding rows the other wanted). A locked row is about to be written,
+    /// which moves its row version anyway, so skipping it is the guard's own outcome: it stays marked and the next run
+    /// processes it. The rows nobody holds are cleared as usual.
+    /// </summary>
+    [Test]
+    public async Task ClearConnectedSystemObjectMarksAsync_RowLockedByAnUncommittedWriter_IsSkippedWithoutWaitingAsync()
+    {
+        var s = await SeedAsync();
+        await SetMarkDirectlyAsync(s.JoinedCsoId, true);
+        await SetMarkDirectlyAsync(s.UnjoinedCsoId, true);
+        var seenJoined = await ReadRowVersionAsync(s.JoinedCsoId);
+        var seenUnjoined = await ReadRowVersionAsync(s.UnjoinedCsoId);
+
+        // An import's transaction has written one of the rows and not yet committed.
+        await using var import = NewContext();
+        await using var importTransaction = await import.Database.BeginTransactionAsync();
+        await import.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""LastUpdated"" = now() WHERE ""Id"" = {0}", s.JoinedCsoId);
+
+        await using var run = NewContext();
+        run.Database.SetCommandTimeout(5);
+        ConnectedSystemObjectMarkClearResult result = default;
+        Assert.That(async () => result = await new PostgresDataRepository(run).Sync.ClearConnectedSystemObjectMarksAsync(
+            [
+                new ConnectedSystemObjectMarkClear(s.JoinedCsoId, seenJoined, SynchronisationPending: true, DerivedInputChangePending: false),
+                new ConnectedSystemObjectMarkClear(s.UnjoinedCsoId, seenUnjoined, SynchronisationPending: true, DerivedInputChangePending: false)
+            ]), Throws.Nothing, "the clear must not wait on a row another transaction holds");
+
+        await importTransaction.CommitAsync();
+        var marks = await ReadMarksAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SynchronisationPendingCleared, Is.EqualTo(1));
+            Assert.That(marks[s.JoinedCsoId], Is.True, "the row the import held keeps its mark");
+            Assert.That(marks[s.UnjoinedCsoId], Is.False, "the row nobody held is cleared");
+        }
+    }
+
+    /// <summary>
     /// The derived-input mark (#1750) is cleared by the same statement, and only where asked: a row carrying both marks
     /// whose derived flows failed keeps its derived-input mark while its synchronisation-pending mark is cleared.
     /// </summary>

@@ -44,6 +44,14 @@ internal static class BulkSqlHelpers
         string.Join(", ", columns.Select(c => $"\"{c}\""));
 
     /// <summary>
+    /// Orders rows by uuid exactly as PostgreSQL orders them (bytewise, which is the canonical text form's ordinal
+    /// order; .NET's <see cref="Guid.CompareTo(Guid)"/> differs). Writers that lock the same rows in one transaction
+    /// or statement each must take the locks in this one order, or two of them can deadlock (#2092).
+    /// </summary>
+    internal static List<T> OrderByDatabaseUuid<T>(IEnumerable<T> source, Func<T, Guid> id) =>
+        source.OrderBy(item => id(item).ToString(), StringComparer.Ordinal).ToList();
+
+    /// <summary>
     /// Splits a list into chunks of at most the specified size.
     /// </summary>
     internal static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
