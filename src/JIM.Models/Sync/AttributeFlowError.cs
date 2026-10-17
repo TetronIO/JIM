@@ -54,7 +54,14 @@ public enum AttributeFlowErrorKind
     /// Unlike every other kind, the attribute still exports; only the merging is reported. Recorded as
     /// <c>DatesCollapseAtTargetResolution</c>.
     /// </summary>
-    DatesCollapseAtTargetResolution
+    DatesCollapseAtTargetResolution,
+
+    /// <summary>
+    /// An export mapping targets an attribute on the credential denylist, such as <c>password</c> (#2091). A password
+    /// reaches a Connected System only through Password Synchronisation, so the mapping is never evaluated and nothing is
+    /// staged for it; the object's other attributes still export. Recorded as <c>CredentialAttributeNotExported</c>.
+    /// </summary>
+    CredentialAttributeTarget
 }
 
 /// <summary>

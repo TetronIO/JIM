@@ -458,6 +458,22 @@ public partial class SyncEngine
                 continue;
             }
 
+            // A credential attribute (password, unicodePwd) is never staged, on any Connector, whatever the mapping
+            // says (#2091). A mapping from before the attribute was denied would otherwise keep writing the secret into
+            // Pending Exports until the schema was refreshed. Checked before evaluation, so an Expression producing a
+            // password is never run either; the value is never logged or recorded.
+            if (CredentialAttributes.IsCredentialAttribute(mapping.TargetConnectedSystemAttribute.Name))
+            {
+                Log.Warning("CreateAttributeValueChanges: Export mapping targets credential attribute {TargetAttribute}; nothing is staged for it. MVO {MvoId}",
+                    LogSanitiser.Sanitise(mapping.TargetConnectedSystemAttribute.Name), mvo.Id);
+                flowErrors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.CredentialAttributeTarget,
+                    TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name
+                });
+                continue;
+            }
+
             // Unique Value Generation (#242, Phase 2 work package H): a generated mapping evaluates its base
             // expression exactly as an ordinary expression mapping does, but never resolves a value here (the
             // engine performs no I/O, plan decision 6) - it stages a marked, unresolved change for the worker

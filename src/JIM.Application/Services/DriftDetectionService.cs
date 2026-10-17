@@ -146,6 +146,11 @@ public class DriftDetectionService
                     continue;
                 }
 
+                // A credential attribute is never exported, so a difference on one is never drift to correct (#2091);
+                // the synchronisation's export evaluation reports the mapping.
+                if (CredentialAttributes.IsCredentialAttribute(mapping.TargetConnectedSystemAttribute.Name))
+                    continue;
+
                 // Unique Value Generation (#242): a Generated Value is an ordinary Attribute Flow that generates
                 // once (product-owner decision 2026-10-01), so it is drift-checked exactly like any export flow,
                 // against the value JIM actually asserts: the export-mode assignment for this Connected System

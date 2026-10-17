@@ -260,5 +260,13 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// rest of the attribute, and the object's other attributes, still export. Reported so the merging is never silent.
     /// The message names the attribute, the resolution and how many values the Connected System will hold.
     /// </summary>
-    DatesCollapseAtTargetResolution
+    DatesCollapseAtTargetResolution,
+
+    /// <summary>
+    /// An export Attribute Flow targets an attribute on the credential denylist, such as <c>password</c> (#2091).
+    /// Nothing is staged or sent for it, and the object's other attributes still export. A password reaches a Connected
+    /// System only through Password Synchronisation; the message names the attribute, never a value, and says to remove
+    /// the Attribute Flow.
+    /// </summary>
+    CredentialAttributeNotExported
 }

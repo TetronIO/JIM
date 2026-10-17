@@ -72,7 +72,10 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = 32,
 
         // Dates an export sends to a multi-valued attribute are one date at the Connected System's resolution (#2153).
-        [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = 33
+        [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = 33,
+
+        // An export Attribute Flow targets a credential attribute such as password, which is never exported (#2091).
+        [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = 34
     };
 
     [Test]
