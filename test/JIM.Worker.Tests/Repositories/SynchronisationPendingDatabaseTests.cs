@@ -243,6 +243,41 @@ public class SynchronisationPendingDatabaseTests
         }
     }
 
+    [Test]
+    public async Task MarkConnectedSystemObjectsSynchronisationPendingAsync_MarksTheJoinedObjectAndMovesItsRowVersionAsync()
+    {
+        // A Unique Value Generation commit loser (#2309): its own data has not changed, but its next synchronisation
+        // must move it to another candidate. Addressed by join, already-marked rows re-written so xmin moves.
+        var s = await SeedAsync();
+        await SetMarkDirectlyAsync(s.JoinedCsoId, true);
+        var versionBefore = await ReadRowVersionAsync(s.JoinedCsoId);
+        await SetMarkDirectlyAsync(s.JoinedCsoId, false);
+        var versionUnmarked = await ReadRowVersionAsync(s.JoinedCsoId);
+
+        await using var ctx = NewContext();
+        var tracked = await ctx.ConnectedSystemObjects.AsTracking().SingleAsync(c => c.Id == s.JoinedCsoId);
+        var newlyMarked = await new PostgresDataRepository(ctx).Sync.MarkConnectedSystemObjectsSynchronisationPendingAsync(
+            [new SynchronisationPendingMark(s.MvoId, s.SystemId), new SynchronisationPendingMark(s.MvoId, s.SystemId + 1000),
+             new SynchronisationPendingMark(s.UnjoinedMvoId, s.SystemId)]);
+
+        var marks = await ReadMarksAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(newlyMarked, Is.EqualTo(1), "only the object joined to the Metaverse Object in the named system matches");
+            Assert.That(marks[s.JoinedCsoId], Is.True);
+            Assert.That(marks[s.UnjoinedCsoId], Is.False, "an unjoined object is never addressed by a join");
+            Assert.That(await ReadRowVersionAsync(s.JoinedCsoId), Is.Not.EqualTo(versionUnmarked).And.Not.EqualTo(versionBefore),
+                "the write moves xmin, so a run that loaded the object earlier cannot clear the mark");
+            Assert.That(tracked.SynchronisationPending, Is.True, "the tracked instance must reflect the row the raw UPDATE wrote");
+            Assert.That(ctx.Entry(tracked).Property(c => c.SynchronisationPending).IsModified, Is.False,
+                "the fix-up records database state, not a pending change");
+        }
+
+        var again = await new PostgresDataRepository(ctx).Sync.MarkConnectedSystemObjectsSynchronisationPendingAsync(
+            [new SynchronisationPendingMark(s.MvoId, s.SystemId)]);
+        Assert.That(again, Is.Zero, "an already-marked row is re-written but not counted");
+    }
+
     /// <summary>
     /// The mark is written by raw SQL on a context that may hold the object tracked; the tracked instance must reflect
     /// it, so nothing reading the instance later in the run sees a stale false.

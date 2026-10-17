@@ -20,7 +20,7 @@ public static class DerivedInputMarking
 {
     /// <summary>
     /// The Connected Systems whose import Synchronisation Rules host a derived flow reading any of
-    /// <paramref name="changedAttributeIds"/> (transitively through derived levels), excluding
+    /// <paramref name="changedAttributeIds"/> (transitively through derived levels) or generate one of them (#2309), excluding
     /// <paramref name="excludedConnectedSystemId"/>: the system whose synchronisation made the change, whose derived
     /// pass has already run on this pass's values. Ascending and distinct; empty when there is no graph or nothing
     /// derived reads the changed attributes.
@@ -45,7 +45,7 @@ public static class DerivedInputMarking
 
         return changedAttributeIds
             .Distinct()
-            .SelectMany(attributeId => graph.GetHostingSystemsReading(metaverseObjectTypeId, attributeId))
+            .SelectMany(attributeId => graph.GetConnectedSystemsDependingOn(metaverseObjectTypeId, attributeId))
             .Where(connectedSystemId => connectedSystemId != excludedConnectedSystemId)
             .Distinct()
             .Order()

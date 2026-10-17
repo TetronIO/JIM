@@ -83,6 +83,54 @@ public partial class SyncRepository
         return newlyMarked;
     }
 
+    public async Task<int> MarkConnectedSystemObjectsSynchronisationPendingAsync(IReadOnlyCollection<SynchronisationPendingMark> marks)
+    {
+        if (marks.Count == 0)
+            return 0;
+
+        var distinct = marks.Distinct().ToList();
+
+        // The derived-input mark's statement with the synchronisation-pending column: one statement, joined on
+        // (ConnectedSystemId, MetaverseObjectId), every matched row written (already-marked rows included) so its xmin
+        // moves and a run that loaded the object earlier cannot clear the mark with its guarded clear.
+        const string sql = """
+            WITH marks AS (
+                SELECT DISTINCT m."MetaverseObjectId", m."ConnectedSystemId"
+                FROM unnest(@metaverseObjectIds, @connectedSystemIds) AS m("MetaverseObjectId", "ConnectedSystemId")
+            ),
+            targets AS (
+                SELECT cso."Id", cso."SynchronisationPending" AS "WasMarked"
+                FROM "ConnectedSystemObjects" AS cso
+                JOIN marks ON cso."MetaverseObjectId" = marks."MetaverseObjectId"
+                          AND cso."ConnectedSystemId" = marks."ConnectedSystemId"
+            ),
+            updated AS (
+                UPDATE "ConnectedSystemObjects" AS cso
+                SET "SynchronisationPending" = true
+                FROM targets
+                WHERE cso."Id" = targets."Id"
+                RETURNING targets."WasMarked"
+            )
+            SELECT count(*) FILTER (WHERE NOT "WasMarked")::integer FROM updated
+            """;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("metaverseObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
+            { Value = distinct.Select(m => m.MetaverseObjectId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemIds", NpgsqlDbType.Array | NpgsqlDbType.Integer)
+            { Value = distinct.Select(m => m.ConnectedSystemId).ToArray() });
+        var newlyMarked = (int)(await command.ExecuteScalarAsync() ?? 0);
+
+        var markSet = distinct.ToHashSet();
+        ConnectedSystemObjectMarkFixUp.Apply(_context,
+            cso => cso.MetaverseObjectId.HasValue && markSet.Contains(new SynchronisationPendingMark(cso.MetaverseObjectId.Value, cso.ConnectedSystemId)),
+            cso => cso.SynchronisationPending, value: true);
+
+        return newlyMarked;
+    }
+
     public async Task<ConnectedSystemObjectMarkClearResult> ClearConnectedSystemObjectMarksAsync(IReadOnlyCollection<ConnectedSystemObjectMarkClear> clears)
     {
         if (clears.Count == 0)
