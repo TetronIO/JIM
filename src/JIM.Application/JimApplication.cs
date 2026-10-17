@@ -365,6 +365,15 @@ public class JimApplication : IDisposable
 
     private bool _disposed;
 
+    // The DI scope this instance was resolved from, when JimApplicationFactory created it. Disposing the instance
+    // disposes the scope, which is what releases the container's own reference to it (see JimApplicationFactory).
+    private IDisposable? _ownedScope;
+
+    /// <summary>
+    /// Hands this instance the DI scope it was resolved from, to be disposed along with it.
+    /// </summary>
+    internal void OwnScope(IDisposable scope) => _ownedScope = scope;
+
     public void Dispose()
     {
         Dispose(true);
@@ -376,13 +385,16 @@ public class JimApplication : IDisposable
         if (_disposed)
             return;
 
+        // Set before disposing anything: disposing the owned scope disposes the transients it tracked, this
+        // instance among them, and that re-entrant call must return here rather than dispose everything twice.
+        _disposed = true;
+
         if (disposing)
         {
             // Dispose the repository to release database connections
             Repository.Dispose();
+            _ownedScope?.Dispose();
         }
-
-        _disposed = true;
     }
 
     #endregion

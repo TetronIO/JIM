@@ -75,9 +75,11 @@ JIM automatically detects the directory type during schema discovery by inspecti
 | Guid (Active Directory `objectGUID`) | 16 bytes | Any other length, given as hexadecimal |
 | Text, Reference, Binary | As the directory returns them | Never |
 
-Every value of a multi-valued DateTime attribute is imported, such as each of the times in an OpenLDAP password policy's `pwdFailureTime`, to the microsecond. Two values less than a microsecond apart cannot be kept apart, so JIM reports both rather than keeping one. A Boolean holds one value: an entry holding both `TRUE` and `FALSE` has each reported rather than one chosen. Either way the values are listed under **Attribute Values Not Imported** on the object's execution item (see [Values JIM could not import](../configuration/activity-execution-items.md#values-jim-could-not-import)), and the attribute is left as JIM already held it.
+Every value of a multi-valued DateTime attribute is imported to the microsecond, such as each time in OpenLDAP's `pwdFailureTime`; two values less than a microsecond apart are both reported rather than one kept. A Boolean holding both `TRUE` and `FALSE` has each reported. Either way they are listed under **Attribute Values Not Imported** on the execution item (see [Values JIM could not import](../configuration/activity-execution-items.md#values-jim-could-not-import)), and the attribute is left as JIM held it.
 
-A date of ten or twelve digits with a time zone can be either a `GeneralizedTime` or a `UTCTime`. JIM reads it as the one that gives a year from 1950 to 2049. If both do, as `200805121430Z` does (12 May 2008 14:30, or 5 August 2020 12:14:30), JIM does not guess and reports the value.
+A date is exported as `GeneralizedTime` at its [Date resolution](../configuration/connected-system-attributes.md#date-resolution): whole seconds, written `.0Z`, to Active Directory and Samba AD; up to six fractional digits to other directories.
+
+A date of ten or twelve digits with a time zone can be a `GeneralizedTime` or a `UTCTime`; JIM reads it as the one giving a year from 1950 to 2049. Where both do, as `200805121430Z` does (12 May 2008 14:30, or 5 August 2020 12:14:30), JIM reports the value.
 
 ### Security and Connectivity
 

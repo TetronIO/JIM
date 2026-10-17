@@ -96,7 +96,7 @@ public static class OptimisticExportApplyCalculator
 
             if (!indexByAttribute.TryGetValue(change.AttributeId, out var index))
             {
-                index = BuildAttributeIndex(change.Attribute.Type, existing);
+                index = BuildAttributeIndex(change.Attribute.Type, existing, change.Attribute.DateTimeResolution);
                 indexByAttribute[change.AttributeId] = index;
             }
 
@@ -312,6 +312,12 @@ public static class OptimisticExportApplyCalculator
         public Dictionary<Guid, List<ConnectedSystemObjectAttributeValue>>? GuidValues { get; init; }
         public Dictionary<bool, List<ConnectedSystemObjectAttributeValue>>? BooleanValues { get; init; }
         public Dictionary<long, List<ConnectedSystemObjectAttributeValue>>? DateTimeTicksValues { get; init; }
+
+        /// <summary>
+        /// The resolution <see cref="DateTimeTicksValues"/> is keyed at: the target attribute's (#2153, D2), so a value
+        /// sent floored to it finds the held value it stands for.
+        /// </summary>
+        public DateTimeResolution? DateTimeResolution { get; init; }
     }
 
     /// <summary>
@@ -323,7 +329,7 @@ public static class OptimisticExportApplyCalculator
     /// (both of a change's UnresolvedReferenceValue and StringValue probe against that one field -
     /// see <see cref="FindMatchesInIndex"/>).
     /// </summary>
-    private static CalculatorAttributeIndex BuildAttributeIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> existing)
+    private static CalculatorAttributeIndex BuildAttributeIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> existing, DateTimeResolution? dateTimeResolution)
     {
         return attrType switch
         {
@@ -384,9 +390,10 @@ public static class OptimisticExportApplyCalculator
             AttributeDataType.DateTime => new CalculatorAttributeIndex
             {
                 AttributeType = attrType,
+                DateTimeResolution = dateTimeResolution,
                 DateTimeTicksValues = existing
                     .Where(v => v.DateTimeValue.HasValue)
-                    .GroupBy(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value))
+                    .GroupBy(v => DateTimeAttributeValue.Key(v.DateTimeValue!.Value, dateTimeResolution))
                     .ToDictionary(g => g.Key, g => g.ToList())
             },
 
@@ -422,7 +429,7 @@ public static class OptimisticExportApplyCalculator
                 if (value.BoolValue.HasValue) AddToKeyedIndex(index.BooleanValues!, value.BoolValue.Value, value);
                 break;
             case AttributeDataType.DateTime:
-                if (value.DateTimeValue.HasValue) AddToKeyedIndex(index.DateTimeTicksValues!, DateTimeAttributeValue.Key(value.DateTimeValue.Value), value);
+                if (value.DateTimeValue.HasValue) AddToKeyedIndex(index.DateTimeTicksValues!, DateTimeAttributeValue.Key(value.DateTimeValue.Value, index.DateTimeResolution), value);
                 break;
             // Binary: no index to maintain - FindMatchesInIndex scans the working list directly.
         }
@@ -468,7 +475,7 @@ public static class OptimisticExportApplyCalculator
                 if (value.BoolValue.HasValue) RemoveFromKeyedIndex(index.BooleanValues!, value.BoolValue.Value, value);
                 break;
             case AttributeDataType.DateTime:
-                if (value.DateTimeValue.HasValue) RemoveFromKeyedIndex(index.DateTimeTicksValues!, DateTimeAttributeValue.Key(value.DateTimeValue.Value), value);
+                if (value.DateTimeValue.HasValue) RemoveFromKeyedIndex(index.DateTimeTicksValues!, DateTimeAttributeValue.Key(value.DateTimeValue.Value, index.DateTimeResolution), value);
                 break;
             // Binary: no index to maintain.
         }
@@ -542,7 +549,7 @@ public static class OptimisticExportApplyCalculator
 
             case AttributeDataType.DateTime:
                 if (!change.DateTimeValue.HasValue) return [];
-                return index.DateTimeTicksValues!.TryGetValue(DateTimeAttributeValue.Key(change.DateTimeValue.Value), out var dateTimeMatches) ? dateTimeMatches.ToList() : [];
+                return index.DateTimeTicksValues!.TryGetValue(DateTimeAttributeValue.Key(change.DateTimeValue.Value, index.DateTimeResolution), out var dateTimeMatches) ? dateTimeMatches.ToList() : [];
 
             case AttributeDataType.Binary:
                 // Byte arrays do not hash usefully and Binary attributes are never large

@@ -240,6 +240,16 @@
     private int? _selectedObjectTypeId;
     private List<MetaverseObjectType> _objectTypes = new();
 
+    /// <summary>
+    /// The Object Type filter from the URL (?type=users), as linked from an Object Type's Deletion Rules panel.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = Utilities.PendingDeletionsTypeQueryParameter)]
+    public string? TypeFilter { get; set; }
+
+    // The grid renders, and asks for its first window, while initialisation is still awaiting the Object Types;
+    // window loads wait on this so a filtered link never paints the unfiltered list first.
+    private readonly TaskCompletionSource _filterResolved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     // Summary counts. Taken across the whole match set by the server, not derived from the rows on screen: the
     // list is virtualised and holds only a window of them, and even the paged predecessor of this page counted
     // no further than its first hundred objects, so every card but the total under-reported beyond that.
@@ -257,9 +267,17 @@
             new("Pending Deletions", href: null, disabled: true)
         };
 
-        // Load object types for filter
-        using var jim = JimFactory.Create();
-        _objectTypes = await jim.Metaverse.GetMetaverseObjectTypesAsync(false);
+        // Load object types for the filter, and apply the one the URL names, if any
+        try
+        {
+            using var jim = JimFactory.Create();
+            _objectTypes = await jim.Metaverse.GetMetaverseObjectTypesAsync(false);
+            _selectedObjectTypeId = Utilities.FindMetaverseObjectTypeForPendingDeletions(_objectTypes, TypeFilter)?.Id;
+        }
+        finally
+        {
+            _filterResolved.TrySetResult();
+        }
 
         // Load summary counts
         await LoadSummaryAsync();
@@ -282,6 +300,8 @@
     /// </summary>
     private async Task<VirtualisedWindow<PendingDeletionItem>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
+        await _filterResolved.Task.WaitAsync(token);
+
         using var jim = JimFactory.Create();
         var result = await jim.Metaverse.GetMetaverseObjectsPendingDeletionRangeAsync(
             request.StartIndex,
@@ -323,8 +343,11 @@
 
         // The filter changes which objects match, so the totals must be re-counted, and the reader's scroll
         // position describes a match set that no longer exists.
+        // Keep the URL naming the filter, so a reload or a shared link shows the same list.
         if (_grid != null)
         {
+            var typePluralName = _objectTypes.FirstOrDefault(t => t.Id == newValue)?.PluralName.ToLowerInvariant();
+            await _grid.SetQueryParameterAsync(Utilities.PendingDeletionsTypeQueryParameter, typePluralName);
             await _grid.ResetScrollAsync();
             await _grid.RefreshAsync(invalidateTotals: true);
         }

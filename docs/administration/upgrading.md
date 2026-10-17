@@ -20,7 +20,7 @@ Upgrading JIM means replacing the `jim.web`, `jim.worker` and `jim.scheduler` co
 - [ ] **Take a full backup: database plus encryption keys**, as a matched pair, following [Backup & Disaster Recovery](backup-recovery.md). Take it after stopping the services (below) so the two artefacts are consistent with each other.
 - [ ] **Disable all Schedules**, and record which ones you disabled. This stops new runs starting under you while you work. See [Pausing work first](#pausing-work).
 - [ ] **Let in-flight work finish.** With Schedules disabled, wait for any running Activities to complete before stopping the services. See [Pausing work first](#pausing-work) for what happens if you do not.
-- [ ] **Keep the outgoing images.** Do not run `docker image prune` before the new version has been verified; the previous images are your fastest rollback path.
+- [ ] **Keep the outgoing images.** Do not run `docker image prune` before the new version has been verified; the previous images are your fastest rollback path. Air-gapped, keep the previous bundle too.
 - [ ] **Compare `.env.example` with your `.env`.** New releases can introduce configuration variables. See the [Configuration Reference](configuration.md).
 - [ ] **Upgrading from v0.15 or earlier on Docker: put JIM's certificate in place first.** From v0.16.0, `docker-compose.production.yml` serves HTTPS itself, on host port 443 by default, and needs the certificate and its key at `tls/tls.crt` and `tls/tls.key` beside the compose files (see [The Certificate](tls-and-reverse-proxy.md#the-certificate)). Until both exist, `docker compose up` stops with an error naming the missing file and JIM does not start; your data is untouched, so putting the files in place and running it again completes the upgrade. If a reverse proxy on the same host terminates TLS for JIM, use [Plain HTTP for a Proxy on the Same Host](tls-and-reverse-proxy.md#plain-http-for-a-proxy-on-the-same-host) instead, which needs no certificate.
 
@@ -74,7 +74,7 @@ It upgrades `/opt/jim`, or the folder `JIM_INSTALL_DIR` names. In order, it:
 1. Stops if the new release is not newer than the one JIM runs, and asks you to confirm the database and encryption keys are backed up (set `JIM_SETUP_BACKUP_CONFIRMED=true` to answer in advance; a "no" cancels the upgrade).
 2. Stops if `docker-compose.yml` or `docker-compose.production.yml` has been edited since it installed them, because it replaces them. Put changes of your own in a compose file of your own beside them, such as `docker-compose.local.yml`, and start JIM once with it added (`-f docker-compose.local.yml`): the upgrade starts JIM with every compose file it was last started with. Nothing changes when it stops at this step or the one before. It records the files it installs in `compose-files.sha256`; an installation made before it kept that record is upgraded with a warning instead.
 3. Installs the release's compose files, keeping the previous ones and `.env` beside them as `docker-compose.yml.previous`, `docker-compose.production.yml.previous` and `.env.previous`, sets `JIM_VERSION`, and saves the release's `.env.example` beside `.env`, naming any setting it adds that your `.env` does not mention. With the bundled PostgreSQL, it sizes the database's memory to the host where `.env` does not already (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)).
-4. Loads the release's images from the bundle, or downloads them, while the current version keeps running. With the bundled PostgreSQL, it moves JIM onto the release's PostgreSQL image, checking it against the ID the bundle records where Docker's classic image store needs `JIM_DB_IMAGE`.
+4. Loads the release's images from the bundle, or downloads them, while the current version keeps running. With the bundled PostgreSQL, it keeps the image JIM runs now as `postgres:jim-previous`, for [rolling back](#rolling-back), then moves JIM onto the release's PostgreSQL image, checking it against the ID the bundle records where Docker's classic image store needs `JIM_DB_IMAGE`.
 5. Restarts JIM on the new version, which applies any database upgrade as it starts, and waits until JIM is ready. It keeps the release's copy of `setup.sh` in the installation.
 
 Anything that fails before the restart puts the previous compose files and `.env` back, leaving JIM running as it was, and an earlier upgrade's `.previous` files intact. Then carry on at [Check it worked](#verifying).
@@ -131,9 +131,12 @@ The same upgrade as [the installer's](#with-the-installer), by hand.
 
 2. **Stop the services** and **take your backup**, as in steps 1 and 2 above.
 
-3. **Load the new images**, PostgreSQL's included: a release can move the bundled database to a newer PostgreSQL 18 image, and its compose file then names that image, which only the bundle can supply.
+3. **Load the new images**, PostgreSQL's included: a release can move the bundled database to a newer PostgreSQL 18 image, and its compose file then names that image, which only the bundle can supply. With the bundled PostgreSQL, first keep the image it runs, for rolling back, as the installer does.
 
     ```bash
+    docker tag "$(docker inspect -f '{{.Image}}' jim.database)" docker.io/library/postgres:jim-previous
+
+    # In the extracted bundle
     for f in docker-images/*.tar; do docker load -i "$f"; done
     ```
 
@@ -200,11 +203,11 @@ On Podman, an upgrade replaces the pod files, which name the release's images, a
 
     Upgrading from v0.16.0 or earlier with the bundled PostgreSQL: its memory settings now come from `jim-config.yaml`, and without them it uses defaults for a 4 GB host, where the earlier pod file asked for 8 GB of `shared_buffers`. On a larger host, add them to `jim-config.yaml`, sized as the installer would (see [Bundled PostgreSQL Memory](configuration.md#bundled-postgresql-memory)).
 
-    Upgrading a rootful JIM on a host running firewalld from v0.16.0 or earlier: enable `netavark-firewalld-reload.service` as [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, or a firewalld reload leaves JIM unable to reach its database until you restart JIM.
+    Upgrading a rootful JIM from v0.16.0 or earlier, make the host changes [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows:
 
-    Upgrading a rootful JIM on RHEL or a derivative from v0.16.0 or earlier: tell NetworkManager to leave Podman's interfaces alone, as [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, or a restart or reboot can leave JIM's database unplugged from its network, with JIM's services logging `No route to host`.
-
-    Upgrading a rootful JIM on Ubuntu 24.04 from v0.16.0 or earlier: add the AppArmor signal rule in [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor), without which JIM's services crash and restart, and in step 4 restart the server instead of the two services. Podman loads the rule only when the server starts.
+    - **firewalld:** enable `netavark-firewalld-reload.service`, or a firewalld reload leaves JIM unable to reach its database until you restart JIM.
+    - **RHEL or a derivative:** tell NetworkManager to leave Podman's interfaces alone, or a restart or reboot can leave JIM's database unplugged from its network, with JIM's services logging `No route to host`.
+    - **Ubuntu 24.04:** add the AppArmor signal rule, without which JIM's services crash and restart, and in step 4 restart the server instead of the two services. Podman loads the rule only when the server starts.
 
 4. **Start JIM**, restarting the database first so it runs the release's PostgreSQL image:
 
@@ -219,14 +222,14 @@ To roll back on Podman, stop JIM, restore the pre-upgrade backup (see [Rolling b
 
 ## ⚙️ What happens during the upgrade window
 
-Understanding the startup sequence explains why the web interface is briefly unavailable after an upgrade:
+The web interface is briefly unavailable after an upgrade while JIM starts:
 
 - **The worker leads.** `jim.worker` is the first service to initialise. It applies any database upgrades automatically.
 - **Built-in configuration catches up.** The worker then adds any built-in configuration the release ships that your instance lacks, such as a new Service Setting or built-in Schedule, and leaves everything already present as it is, including settings you have changed. Anything it adds appears in the change history under a **System Initialisation** Activity.
 - **The web and scheduler wait.** `jim.web` and `jim.scheduler` poll the application's readiness state and do not begin serving until the database upgrade has completed and JIM has left maintenance mode. `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second while it waits.
 - **Readiness is externally observable.** `GET /api/v1/health/ready` returns `503 Service Unavailable` with `"status": "not_ready"` throughout, then `200 OK` with `"status": "ready"` once JIM is serving.
 
-How long this takes depends on what the release changes in the database. Most upgrades are near-instant; one that rewrites a large table scales with your object count, which is one reason to time the upgrade against a production-sized staging environment first.
+Most database upgrades are near-instant; one that rewrites a large table scales with your object count, so time it against a production-sized staging environment first.
 
 !!! warning "If the database upgrade fails"
     The worker logs the full error and JIM stays unready, so the web interface never opens up. Fix the underlying cause (a permissions problem on the database user is the usual culprit) and restart the services. Do not restore a backup unless the upgrade has left the schema in a state you cannot move forwards from.
@@ -257,7 +260,7 @@ How long this takes depends on what the release changes in the database. Most up
     Get-JIMHealth -Url "https://jim.your-domain.local" -Ready
     ```
 
-4. **Secrets still decrypt.** Run an import against a Connected System that authenticates with a stored credential. A successful connection confirms the services found the encryption key volume and can decrypt what is in the database. A "Failed to decrypt credential" error means the key volume did not come across; stop and resolve that before running any synchronisation.
+4. **Secrets still decrypt.** Run an import against a Connected System that authenticates with a stored credential; a successful connection proves JIM can decrypt what the database holds. A "Failed to decrypt credential" error means the key volume did not come across; stop and resolve that before running any synchronisation.
 
 5. **Re-enable the Schedules you disabled.** Only once the checks above pass. Use the list you recorded in [Pausing work first](#pausing-work), so Schedules that were already disabled before the upgrade stay that way:
 
@@ -271,7 +274,7 @@ How long this takes depends on what the release changes in the database. Most up
 6. **Scheduled work resumes.** Confirm the Scheduler is picking up the re-enabled Schedules, that each shows a sensible next run time, and that the next expected run actually fires.
 
 !!! danger "An upgrade is not finished until the Schedules are back on"
-    Leaving Schedules disabled is a silent failure mode: JIM appears healthy, the version check passes, and nothing synchronises until someone reports stale data days later. Make re-enabling them an explicit, checked-off step.
+    Leaving Schedules disabled is a silent failure mode: JIM appears healthy, the version check passes, and nothing synchronises until someone reports stale data days later.
 
 ## 🧩 Upgrading the PowerShell module
 
@@ -285,7 +288,7 @@ Update-Module -Name JIM
 Copy-Item -Recurse -Force ./powershell/JIM "$env:USERPROFILE\Documents\PowerShell\Modules\"
 ```
 
-See [PowerShell Module](deployment.md#powershell-module) in the Deployment Guide for the full installation options.
+For the other ways to install it, see [PowerShell Module](deployment.md#powershell-module).
 
 ## ↩️ Rolling back {#rolling-back}
 
@@ -320,7 +323,14 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
       --profile with-db up -d
     ```
 
-    Leave out `docker-compose.production.yml` and every container still reports healthy, but `jim.web` publishes no port, so JIM is unreachable. The stopped `jim.web` container records the compose files it was last started with, if you are unsure which they were:
+    If Docker cannot resolve or download the PostgreSQL image, the previous one was not kept as `postgres:jim-previous` and has gone. Load the previous release's images from its bundle, then run the command again:
+
+    ```bash
+    # In the previous release's extracted bundle
+    for f in docker-images/*.tar; do docker load -i "$f"; done
+    ```
+
+    Without `docker-compose.production.yml`, every container reports healthy but `jim.web` publishes no port, so JIM is unreachable. If you are unsure which compose files JIM was started with, the stopped `jim.web` container records them:
 
     ```bash
     docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' jim.web

@@ -67,6 +67,26 @@ public class ConnectedSystemObjectTypeAttribute
     public bool CaseExactSetByAdministrator { get; set; }
 
     /// <summary>
+    /// For a <see cref="AttributeDataType.DateTime"/> attribute, the finest step of time the Connected System holds the
+    /// attribute's values to (#2153, decision D2): whole seconds for Active Directory, milliseconds for a SQL
+    /// <c>datetime2(3)</c> column. Null means the microsecond, the finest time JIM holds, and is what an attribute
+    /// discovered before resolutions existed carries until its schema is refreshed.
+    /// </summary>
+    /// <remarks>
+    /// Export floors each date it sends to this resolution, and no-net-change detection, export confirmation and Drift
+    /// Detection compare at it, so a difference the Connected System cannot hold never churns exports. Discovered by the
+    /// Connector and overridable by an administrator; a schema refresh restates it unless
+    /// <see cref="DateTimeResolutionSetByAdministrator"/> is set. Meaningless for other types, which hold null.
+    /// </remarks>
+    public DateTimeResolution? DateTimeResolution { get; set; }
+
+    /// <summary>
+    /// Whether an administrator chose <see cref="DateTimeResolution"/>, rather than schema discovery stating it. A schema
+    /// refresh leaves an administrator's choice alone, as it does an overridden <see cref="Type"/>.
+    /// </summary>
+    public bool DateTimeResolutionSetByAdministrator { get; set; }
+
+    /// <summary>
     /// Whether the Connected System requires a value for this attribute on an object of the class named by
     /// <see cref="ClassName"/>, i.e. an RFC 4512 MUST.
     /// </summary>

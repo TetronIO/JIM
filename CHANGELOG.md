@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ A Scoping Criterion can compare a value an expression computes, such as `Lower(Trim(cs["department"]))`, as the type you choose, and explanations show what it read and computed. An object it cannot decide is left as it is with an error, never scoped on a guess. (#2054)
 - ✨ Multi-valued date attributes import every value from every Connector, such as OpenLDAP's `pwdFailureTime`. Dates JIM cannot keep apart, and a true or false attribute holding both values, are reported on the Activity rather than one being chosen. (#2153)
+- ✨ Each date attribute has a **Date Resolution**, the finest step of time its Connected System keeps (whole seconds for Active Directory); JIM exports and compares dates at it, so they never re-export forever. Adjustable on the Schema tab, REST and `-DateTimeResolution`. (#2153)
 - ✨ Widen a single-valued Metaverse Attribute to multi-valued while Metaverse Objects hold values: every value is kept, the change is audited, and single-valued targets still receive one value. (#2153)
 - ✨ LDAP schema discovery on OpenLDAP, 389 Directory Server and other RFC 4512 directories now offers operational attributes such as `pwdFailureTime`, `createTimestamp` and `memberOf` on every structural Object Type, unselected and read-only, grouped on the Schema tab and flagged `isOperational` over REST and PowerShell. (#2153)
 - ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`: `RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")`. Patterns are checked and time-limited like scoping's. (#2053)
@@ -109,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
 - 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
 - 🔄 The REST API returns every date attribute value in UTC, ending in `Z`, whatever the server's time zone, and expressions read every date in UTC, so joining one to text with `+` writes `Z` rather than the server's offset. (#2153)
+- 🔄 Exported dates keep their fraction of a second where the target holds one, on LDAP and SCIM. Dates a target can only hold as one are sent once and reported as **Dates Merged**. Refresh existing schemas to pick up resolutions. (#2153)
 - 🔄 A Boolean attribute is always single-valued: no surface creates a multi-valued Boolean Metaverse Attribute, a schema refresh or type override makes a Boolean Connected System attribute single-valued, and SCIM no longer discovers `roles.primary` and its siblings. (#2153)
 - 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
 - 🔄 `Start-JIMSchedule` and `Stop-JIMScheduleExecution -PassThru` now return the Schedule Execution with its `StepDisplay`, as `Get-JIMScheduleExecution` does. (#1083)
@@ -123,6 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Rolling back an air-gapped upgrade on Docker's containerd image store no longer tries to download the previous release's PostgreSQL image: the installer keeps it on the host, as `postgres:jim-previous`, when it upgrades. (#2299)
+- 🐛 JIM's web portal, Worker and Scheduler no longer grow in memory with every page load, request and task until restarted; each kept every database session it had opened, so a long-running deployment would eventually run out of memory. (#2115)
+- 🐛 The Pending Deletions page can now be reached from the portal: from the **Administration** page, and from an Object Type's Deletion Rules panel, which opens it filtered to that type. (#2059)
 - 🐛 The API's OpenAPI document now states which endpoints need an SSO access token or API key, and that health, version and sign-in configuration need neither; it declared no authentication at all, so tools generating clients from it sent none. (#2088)
 - 🐛 `Export-JIMCertificate` now works in a PowerShell session signed in with SSO; it previously sent only an API key, so the download was refused. (#2088)
 - 🐛 Exporting a Trusted Certificate added by file path now works: JIM reads the certificate from that file. A certificate that cannot be found or read now gets a `404 Not Found` with a message saying why, which `Export-JIMCertificate` reports, instead of `406 Not Acceptable`. Every export is now DER-encoded, including certificates uploaded as PEM. (#2109)
@@ -183,6 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Active Directory Enumeration attributes such as `sAMAccountType` are discovered as Number attributes, not as Booleans that read every value as false; after upgrading, refresh each Active Directory schema as **Refreshing the schema** describes. (#2128)
 - 🐛 After a schema refresh changes an attribute's data type, the next import replaces the values held under the old type rather than keeping both, and the refresh names an Expression that reads the attribute among the mappings to disable. (#2128)
 - 🐛 Connectors no longer drop or pick among the values of a multi-valued date or Boolean: LDAP cleared the value JIM held, a SQL related table kept one arbitrary row, and SCIM kept the last element of an array. (#2153)
+- 🐛 Removing one date from a SCIM multi-valued attribute now finds it however the service provider writes it (`.000Z`, or an offset), instead of leaving it in place. (#2153)
 - 🐛 Pending Export pages show true or false, Long Number, Decimal and GUID values instead of `[null]`, and every page shows a date's fraction of a second when it has one. (#2153)
 - 🐛 A date with finer than microsecond precision, such as a SQL `datetime2(7)` value, no longer reads as changed on every Full Import, and no longer raises a false Verification Mode disagreement. JIM holds every date in UTC, to the microsecond. (#2153)
 - 🐛 A date exported by JIM now confirms on the next import and is no longer reported as drift, however the server's time zone is set. (#2153)
@@ -272,6 +278,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
 - 🔒 A password delivered to Active Directory or Samba AD at the same moment an export disables the account no longer re-enables it: JIM writes the account's flags only if they are still the ones it read, and otherwise leaves them as the export set them and tries the delivery again. (#2161)
 - 🔒 API requests refused for an expired, mis-signed or malformed SSO access token are now recorded in the security audit log, as failed API keys and sign-ins already are. (#2108)
+- 🔒 The SCIM 2.0 Client Connector now refuses a plain-HTTP OAuth Token Endpoint URL except for loopback addresses, so a Client Secret is never sent unencrypted, including by the connection test when you save the settings. A Connected System already saved with one fails its next Run Profile before anything is sent; change it to the authorisation server's HTTPS address. (#2093)
 
 ### Performance
 
