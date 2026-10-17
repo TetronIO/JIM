@@ -1258,6 +1258,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("SessionsValidFromUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("SyncRuleLastDeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SSOUniqueIdentifierMetaverseAttributeId");

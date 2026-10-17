@@ -94,7 +94,9 @@ internal static class ScimExportErrorClassifier
                 ConnectedSystemExportErrorType.AccessDenied),
             (int)HttpStatusCode.Forbidden => ConnectedSystemExportResult.Failed(
                 "The service provider refused the change because the credentials JIM uses do not have permission to make it " +
-                "(403). Grant them the permissions or scopes this change needs at the service provider. " +
+                "(403). If it refuses every change, grant them the permissions or scopes the changes need at the service provider. " +
+                "If it refuses only some objects, it is protecting them (Keycloak protects any account or group holding an administrative role), " +
+                "so scope those objects out of the Synchronisation Rule. " +
                 $"The provider said: {message}",
                 ConnectedSystemExportErrorType.AccessDenied),
             _ => ConnectedSystemExportResult.Failed(message, Classify(statusCode, error?.ScimType))

@@ -15,9 +15,6 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class GeneratedValueExportSummaryTests : JimComponentTestContext
 {
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private IRenderedComponent<GeneratedValueExportSummary> RenderSummary(int corrected, int needingDecision) =>
         Render<GeneratedValueExportSummary>(p => p
             .Add(c => c.Corrected, corrected)

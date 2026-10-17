@@ -65,12 +65,6 @@ public class ScheduleEditorDialogTests : JimComponentTestContext
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));
     }
 
-    [TearDown]
-    public async Task TearDownAsync()
-    {
-        await DisposeComponentsAsync();
-    }
-
     private static ScheduleStep Step(int stepIndex, int connectedSystemId, int runProfileId, ScheduleStepFailureBehaviour onFailure,
         StepExecutionMode mode = StepExecutionMode.Sequential) => new()
     {

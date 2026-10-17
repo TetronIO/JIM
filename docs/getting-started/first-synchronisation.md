@@ -209,20 +209,19 @@ It has a scope, too. Your JIM most likely holds one User already: you, the admin
 
 ## Step 6: Create the Run Profiles
 
-A Run Profile is one operation JIM runs against a Connected System. You need three: a Full Import to read the HR file, a Full Synchronisation to apply the rules, and an Export to write the staff directory. The Full Import needs the HR file's path again, because the File Connector imports from the Run Profile's own **File Path**.
+A Run Profile is one operation JIM runs against a Connected System. You need three: a Full Import to read the HR file, a Full Synchronisation to apply the rules, and an Export to write the staff directory. Each one reads or writes the file its Connected System names, so leave **File Path** empty on all three.
 
 === "Portal"
 
     1. Open the `HR System` Connected System (**Admin**, then **Connected Systems**), and select its **Run Profiles** tab.
-    2. Select **Create Run Profile**. Enter `Full Import` as the **Name**, choose **Full Import** as the **Run Type**, enter `/connector-files/tutorial/hr-people.csv` as the **File Path**, and select **Create Run Profile**.
+    2. Select **Create Run Profile**. Enter `Full Import` as the **Name**, choose **Full Import** as the **Run Type**, and select **Create Run Profile**.
     3. Select **Create Run Profile** again. Enter `Full Synchronisation` as the **Name**, choose **Full Synchronisation** as the **Run Type**, and select **Create Run Profile**.
-    4. Open the `Staff Directory` Connected System's **Run Profiles** tab, and create a Run Profile named `Export` with **Export** as its **Run Type**. It writes to the file the Connected System names, so leave its **File Path** empty.
+    4. Open the `Staff Directory` Connected System's **Run Profiles** tab, and create a Run Profile named `Export` with **Export** as its **Run Type**.
 
 === "PowerShell"
 
     ```powershell
-    New-JIMRunProfile -ConnectedSystemName 'HR System' -Name 'Full Import' -RunType FullImport `
-        -FilePath '/connector-files/tutorial/hr-people.csv' | Out-Null
+    New-JIMRunProfile -ConnectedSystemName 'HR System' -Name 'Full Import' -RunType FullImport | Out-Null
     New-JIMRunProfile -ConnectedSystemName 'HR System' -Name 'Full Synchronisation' -RunType FullSynchronisation | Out-Null
     New-JIMRunProfile -ConnectedSystemName 'Staff Directory' -Name 'Export' -RunType Export | Out-Null
     ```

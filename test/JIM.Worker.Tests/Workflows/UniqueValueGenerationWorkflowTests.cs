@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Application.UniqueValues;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -259,7 +260,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1),
             "Directory's own run cannot reconcile an assignment it did not generate; the stale row survives until HR's next run");
 
-        MarkHrObjectsForNextRun(ctx);
         var secondHrActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
@@ -335,7 +335,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         Assert.That(SyncRepo.RetiredGeneratedValues, Is.Empty, "Directory's run cannot see HR's assignment, so nothing is retired yet");
 
-        MarkHrObjectsForNextRun(ctx);
         var hrActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         var retired = SyncRepo.RetiredGeneratedValues.Single();
@@ -1093,12 +1092,15 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         var assignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
 
         // Simulate the value having been cleared off the object (FR 10's "reassert if cleared" scenario) while
-        // the assignment itself remains live.
+        // the assignment itself remains live, by a writer outside HR's synchronisation (a direct edit, a recall), which
+        // marks the Connected Systems that depend on the attribute exactly as those writers do (#2309).
         var mvo = SyncRepo.MetaverseObjects.Values.Single();
         var accountNameValue = mvo.AttributeValues.Single(av => av.AttributeId == ctx.MvAccountNameAttributeId);
         mvo.AttributeValues.Remove(accountNameValue);
+        var marks = new DerivedInputMarkBatch(DerivedFlowGraphFactory.Create(SyncRepo.SyncRules.Values, []), "test: value cleared");
+        marks.Collect(mvo, [accountNameValue]);
+        await marks.FlushAsync(SyncRepo);
 
-        MarkHrObjectsForNextRun(ctx);
         await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
@@ -1106,17 +1108,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"), "the assignment's value must be reasserted");
             Assert.That(SyncRepo.GeneratedValueAssignments.Keys.Single(), Is.EqualTo(assignmentId), "the same assignment must survive");
         }
-    }
-
-    /// <summary>
-    /// Brings HR's objects back to HR's next Full Synchronisation, standing in for whatever would in production. The
-    /// in-memory loader now applies the unchanged-object skip as the PostgreSQL loader does (#2092), so without this a
-    /// Full Synchronisation passes over an object whose own data did not change, however its Metaverse Object moved.
-    /// </summary>
-    private void MarkHrObjectsForNextRun(GenerationContext ctx)
-    {
-        foreach (var cso in SyncRepo.ConnectedSystemObjects.Values.Where(c => c.ConnectedSystemId == ctx.Hr.Id))
-            cso.SynchronisationPending = true;
     }
 
     private SyncRuleMapping AddDirectoryAccountNameOverride(GenerationContext ctx, out ConnectedSystemObjectTypeAttribute sAMAccountNameAttr)
@@ -1455,7 +1446,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         var value = mvo.AttributeValues.Single(av => av.AttributeId == ctx.MvAccountNameAttributeId);
         Assert.That(value.StringValue, Is.EqualTo("joe.bloggs"));
 
-        MarkHrObjectsForNextRun(ctx);
         var secondActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
         var secondValue = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvAccountNameAttributeId);
         using (Assert.EnterMultipleScope())

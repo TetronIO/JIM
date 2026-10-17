@@ -357,7 +357,7 @@ public class VirtualisedDataGridTests : JimComponentTestContext
         cut.WaitForAssertion(() =>
             Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.fit"), Is.True));
 
-        await DisposeComponentsAsync();
+        await DisposeRenderedComponentsAsync();
 
         Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.unfit"), Is.True,
             "disposal must release the resize listener the fit registered");

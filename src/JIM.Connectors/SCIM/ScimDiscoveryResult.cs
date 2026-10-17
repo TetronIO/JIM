@@ -39,6 +39,12 @@ public class ScimDiscoveryResult
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Where the provider says its <c>/ServiceProviderConfig</c> lives (its <c>meta.location</c>), where it said. Built
+    /// from the provider's own view of its address, so it can name a product a reverse proxy hides (#2094).
+    /// </summary>
+    public string? ServiceProviderConfigLocation { get; init; }
+
+    /// <summary>
     /// Discovery shortfalls worth reporting to an administrator, including the capability warnings.
     /// Never silently absorbed: a provider gap must not read as a JIM one.
     /// </summary>

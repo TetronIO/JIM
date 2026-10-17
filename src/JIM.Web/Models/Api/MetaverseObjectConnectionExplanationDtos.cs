@@ -310,7 +310,10 @@ public class ScopingCriterionExplanationDto
     /// <summary>Each attribute an expression criterion read, with the values the object held for it; empty otherwise.</summary>
     public List<ScopingExpressionInputExplanationDto> ExpressionInputs { get; set; } = [];
 
-    /// <summary>Why an expression criterion could not be evaluated for the object; null otherwise.</summary>
+    /// <summary>
+    /// Why the criterion could not be evaluated for the object: an expression that failed, or an attribute the object
+    /// holds only under an earlier data type until a Full Import reads it again; null otherwise.
+    /// </summary>
     public string? FailureReason { get; set; }
 
     public static ScopingCriterionExplanationDto FromModel(ScopingCriterionExplanation model) => new()

@@ -30,13 +30,18 @@ internal readonly struct CsoScopingValueSource(ConnectedSystemObject connectedSy
         return true;
     }
 
-    public bool TryGetNextValue(int attributeId, ref int position, out ScopingValue value)
+    /// <remarks>
+    /// A value that does not hold <paramref name="type"/> is skipped, as Attribute Flow skips it: one held under an
+    /// earlier data type (#2128) is not this type's value. The evaluator asks <see cref="HeldOnlyUnderAnotherDataType"/>
+    /// before reading any, so a value held only that way never reads as no value.
+    /// </remarks>
+    public bool TryGetNextValue(int attributeId, AttributeDataType type, ref int position, out ScopingValue value)
     {
         var values = connectedSystemObject.AttributeValues;
         while (position < values.Count)
         {
             var candidate = values[position++];
-            if (candidate.AttributeId != attributeId)
+            if (candidate.AttributeId != attributeId || !candidate.HoldsValueOfType(type))
                 continue;
 
             value = new ScopingValue(candidate.StringValue, candidate.IntValue, candidate.LongValue, candidate.DecimalValue,
@@ -48,20 +53,37 @@ internal readonly struct CsoScopingValueSource(ConnectedSystemObject connectedSy
         return false;
     }
 
-    public int CountValues(int attributeId)
+    public int CountValues(int attributeId, AttributeDataType type)
     {
         var count = 0;
         var values = connectedSystemObject.AttributeValues;
         for (var i = 0; i < values.Count; i++)
         {
-            if (values[i].AttributeId == attributeId)
+            if (values[i].AttributeId == attributeId && values[i].HoldsValueOfType(type))
                 count++;
         }
         return count;
     }
 
-    public ExpressionContext ExpressionContext(DateTime nowUtc) =>
-        new(connectedSystemAttributes: MatchValueResolver.BuildInputs(connectedSystemObject.AttributeValues, connectedSystemObject.Type))
+    /// <remarks>
+    /// The rule is the one every reader applies, <see cref="SyncEngine.HeldOnlyUnderAnotherDataType"/>. It is asked only
+    /// once a value of the attribute is found not to hold <paramref name="type"/>, so the usual object costs one pass
+    /// and allocates nothing.
+    /// </remarks>
+    public AttributeDataType? HeldOnlyUnderAnotherDataType(int attributeId, AttributeDataType type)
+    {
+        var values = connectedSystemObject.AttributeValues;
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (values[i].AttributeId == attributeId && !values[i].HoldsValueOfType(type))
+                return SyncEngine.HeldOnlyUnderAnotherDataType(values, attributeId, type);
+        }
+        return null;
+    }
+
+    public ExpressionContext ExpressionContext(DateTime nowUtc, out IReadOnlyDictionary<string, AttributeDataType>? heldUnderAnotherDataType) =>
+        new(connectedSystemAttributes: MatchValueResolver.BuildInputs(connectedSystemObject.AttributeValues, connectedSystemObject.Type,
+            out heldUnderAnotherDataType))
         {
             NowUtc = nowUtc
         };

@@ -45,6 +45,9 @@ public static class ScimAttributeMapper
     /// <summary>The <c>returned</c> characteristic of an attribute a provider never sends back (RFC 7643 section 7).</summary>
     private const string ReturnedNever = "never";
 
+    /// <summary>The <c>returned</c> characteristic of an attribute a provider sends back only when asked for it by name.</summary>
+    private const string ReturnedRequest = "request";
+
     /// <summary>The sub-attribute holding the URI of a referenced resource (RFC 7643 section 2.4).</summary>
     private const string RefSubAttribute = "$ref";
 
@@ -314,8 +317,16 @@ public static class ScimAttributeMapper
     {
         return new ScimFlattenedAttribute(name, path, type, plurality, required, writability, schemaUrn, source.Description,
             access, sourceAttributeName, subAttributeName, canonicalType, selectsPrimary, extensionUrn, source.CaseExact,
-            isWriteOnly: IsWriteOnly(source) || (parent != null && IsWriteOnly(parent)));
+            isWriteOnly: IsWriteOnly(source) || (parent != null && IsWriteOnly(parent)),
+            isReturnedOnRequest: IsReturnedOnRequest(source) || (parent != null && IsReturnedOnRequest(parent)));
     }
+
+    /// <summary>
+    /// Whether an attribute is returned only when a request names it (RFC 7643 section 7, <c>returned</c>
+    /// <c>request</c>), which import has to do to see it at all (#2094).
+    /// </summary>
+    private static bool IsReturnedOnRequest(ScimSchemaAttribute attribute) =>
+        string.Equals(attribute.Returned, ReturnedRequest, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether an attribute is write-only (RFC 7643 section 7): <c>mutability</c> <c>writeOnly</c>, or <c>returned</c>

@@ -23,18 +23,32 @@ internal interface IScopingValueSource
     /// <summary>
     /// The object's next value for the attribute at or after <paramref name="position"/>, advancing
     /// <paramref name="position"/> past it; false once there are no more. Start at zero. Scoping compares every value
-    /// an attribute holds (#1923), and walking them this way allocates nothing.
+    /// an attribute holds (#1923), and walking them this way allocates nothing. Only a value of the attribute's
+    /// <paramref name="type"/> is one: a value held under another data type is not read as a value of this one (#2329).
     /// </summary>
-    bool TryGetNextValue(int attributeId, ref int position, out ScopingValue value);
+    bool TryGetNextValue(int attributeId, AttributeDataType type, ref int position, out ScopingValue value);
 
-    /// <summary>How many values the object holds for the attribute. Explanations only; synchronisation never asks.</summary>
-    int CountValues(int attributeId);
+    /// <summary>
+    /// How many values of <paramref name="type"/> the object holds for the attribute. Explanations only;
+    /// synchronisation never asks.
+    /// </summary>
+    int CountValues(int attributeId, AttributeDataType type);
+
+    /// <summary>
+    /// The data type the object holds the attribute as when it holds it only under another type than
+    /// <paramref name="type"/>, its current one (#2329); null when it holds a value of <paramref name="type"/>, or none
+    /// at all. Such a value is held, not missing, so a criterion cannot decide on it either way.
+    /// </summary>
+    AttributeDataType? HeldOnlyUnderAnotherDataType(int attributeId, AttributeDataType type);
 
     /// <summary>
     /// The context an expression criterion is evaluated in (#2054): the object's attributes as <c>cs["..."]</c> on an
     /// import rule or <c>mv["..."]</c> on an export rule, read exactly as Attribute Flow reads them.
     /// </summary>
-    ExpressionContext ExpressionContext(DateTime nowUtc);
+    /// <param name="nowUtc">The instant the evaluation resolves "now" against.</param>
+    /// <param name="heldUnderAnotherDataType">The attributes the object holds only under another data type (#2329), by
+    /// name, with the type each is held as; null when there are none, the usual case.</param>
+    ExpressionContext ExpressionContext(DateTime nowUtc, out IReadOnlyDictionary<string, AttributeDataType>? heldUnderAnotherDataType);
 
     /// <summary>The side an expression criterion reads on this object: <c>cs["..."]</c> or <c>mv["..."]</c>.</summary>
     ExpressionInputSource ExpressionSide { get; }

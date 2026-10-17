@@ -20,9 +20,6 @@ public class GeneratedValueBuiltValuesPanelTests : JimComponentTestContext
     private const string RowMarker = "[data-testid='generated-value-built-value-row']";
     private const string EmptyMarker = "[data-testid='generated-value-built-values-empty']";
 
-    [TearDown]
-    public async Task TearDownAsync() => await DisposeComponentsAsync();
-
     private static GeneratedValueBuiltValueDescription Value(int mappingId, string name, GeneratedValueBuiltValueKind kind = GeneratedValueBuiltValueKind.Form,
         bool keepUnique = true, string syncRuleName = "HR Import", IReadOnlyList<string>? probedIn = null, string? moveTo = null) => new()
     {

@@ -92,6 +92,29 @@ public class ScimPaginationTests
     }
 
     [Test]
+    public void BuildPageQuery_RequestedAttributes_AreSentInsteadOfExcludedAttributes()
+    {
+        // #2094: RFC 7644 section 3.9 makes the two mutually exclusive, and an attribute the provider returns only on
+        // request needs the inclusive form.
+        var query = ScimQueryBuilder.BuildPageQuery("/Groups", new ScimImportPosition(), pageSize: 10,
+            excludedAttributes: ["photos"], attributes: ["displayName", "members", "id"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(query, Does.Contain("attributes=displayName%2Cmembers%2Cid"));
+            Assert.That(query, Does.Not.Contain("excludedAttributes"));
+        }
+    }
+
+    [Test]
+    public void BuildPageQuery_NoRequestedAttributes_SendsNoAttributesParameter()
+    {
+        var query = ScimQueryBuilder.BuildPageQuery("/Users", new ScimImportPosition(), pageSize: 10, attributes: []);
+
+        Assert.That(query, Does.Not.Contain("attributes="));
+    }
+
+    [Test]
     public void BuildPageQuery_NoPageSize_OmitsCountAndLetsTheProviderDecide()
     {
         var query = ScimQueryBuilder.BuildPageQuery("/Users", new ScimImportPosition(), pageSize: 0);

@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Scim.Messages;
@@ -177,8 +178,8 @@ internal sealed class ScimConnectorExport
             if (operation.Method == HttpMethod.Delete)
                 return await DeleteAsync(operation, cancellationToken);
 
-            if (operation.Method == HttpMethod.Patch)
-                await _client.PatchAsync<JsonElement>(operation.Path, operation.Body!, cancellationToken, operation.EntityTag);
+            if (operation.Body is ScimPatchRequest patch)
+                await PatchAsync(operation.Path, patch.Operations, operation.EntityTag, cancellationToken);
             else
                 await _client.PutAsync<JsonElement>(operation.Path, operation.Body!, cancellationToken, operation.EntityTag);
 
@@ -212,11 +213,91 @@ internal sealed class ScimConnectorExport
         // updated or deleted later, and the confirming import would create a second Connected System
         // Object for the same resource.
         var externalId = ReadId(response);
+        if (externalId == null)
+            return ConnectedSystemExportResult.Failed("The service provider accepted the create but returned no id, so JIM has nothing to identify the new resource by.");
 
-        return externalId == null
-            ? ConnectedSystemExportResult.Failed("The service provider accepted the create but returned no id, so JIM has nothing to identify the new resource by.")
-            : ConnectedSystemExportResult.Succeeded(externalId);
+        if (operation.FollowUpOperations is { Count: > 0 } followUps)
+            await ApplyFollowUpsAsync($"{operation.Path}/{Uri.EscapeDataString(externalId)}", followUps, cancellationToken);
+
+        return ConnectedSystemExportResult.Succeeded(externalId);
     }
+
+    /// <summary>
+    /// Adds what the create left out, such as a new group's members (#2094), to the resource it created.
+    /// <para>
+    /// A failure here never fails the create. The resource exists and its id has to be recorded: reported as failed,
+    /// the create would be retried as a second POST, which Keycloak refuses on the group's name and a less strict
+    /// provider would answer with a duplicate. The values left out are recovered by the ordinary lifecycle instead: the
+    /// confirming import finds the resource without them, and JIM sends them again as an update.
+    /// </para>
+    /// </summary>
+    private async Task ApplyFollowUpsAsync(string path, IReadOnlyList<ScimPatchOperation> operations, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await PatchAsync(path, operations, entityTag: null, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.Warning("SCIM export: created {Path}, but the run was cancelled before the values it could not take on create were added. " +
+                            "The next export adds them once an import has confirmed the resource.", LogSanitiser.Sanitise(path));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warning(ex, "SCIM export: created {Path}, but the service provider did not accept the values it could not take on create, such as a group's members. " +
+                                "The create is recorded; the next export adds them once an import has confirmed the resource.", LogSanitiser.Sanitise(path));
+        }
+    }
+
+    /// <summary>
+    /// Sends PATCH operations in as many requests as the provider needs (#2094): at most
+    /// <see cref="ScimConnectorConstants.MaximumPatchOperationsPerRequest"/> at a time, and half as many again each time it
+    /// refuses a request as carrying too many, which it does before applying any of it.
+    /// <para>
+    /// The requests are separate, so a failure after earlier ones landed fails the change with those earlier operations
+    /// applied. That is left to the confirming import: it shows what the provider holds, and re-adding a value already
+    /// present changes nothing (RFC 7644 section 3.5.2.1). The entity tag guards only the first request, since that
+    /// request moves the resource's version on.
+    /// </para>
+    /// </summary>
+    private async Task PatchAsync(string path, IReadOnlyList<ScimPatchOperation> operations, string? entityTag, CancellationToken cancellationToken)
+    {
+        var size = ScimConnectorConstants.MaximumPatchOperationsPerRequest;
+        var sent = 0;
+        var tag = entityTag;
+
+        while (sent < operations.Count)
+        {
+            var request = new ScimPatchRequest { Operations = operations.Skip(sent).Take(size).ToList() };
+            try
+            {
+                await _client.PatchAsync<JsonElement>(path, request, cancellationToken, tag);
+            }
+            catch (ScimRequestException ex) when (IsTooMany(ex) && request.Operations.Count > 1)
+            {
+                size = request.Operations.Count / 2;
+                _logger.Warning("SCIM export: the service provider refused a PATCH of {OperationCount} operations as too many. Sending {Size} at a time instead.",
+                    request.Operations.Count, size);
+                continue;
+            }
+            catch (ScimRequestException) when (sent > 0)
+            {
+                _logger.Warning("SCIM export: a PATCH of {Path} failed after {Sent} of its {Total} operations had been applied in earlier requests.",
+                    LogSanitiser.Sanitise(path), sent, operations.Count);
+                throw;
+            }
+
+            sent += request.Operations.Count;
+            tag = null;
+        }
+
+        if (operations.Count > ScimConnectorConstants.MaximumPatchOperationsPerRequest)
+            _logger.Debug("SCIM export: sent {Total} PATCH operations to {Path} in several requests.", operations.Count, LogSanitiser.Sanitise(path));
+    }
+
+    private static bool IsTooMany(ScimRequestException exception) =>
+        exception.StatusCode == HttpStatusCode.BadRequest
+        && string.Equals(exception.ScimType, ScimErrorTypes.TooMany, StringComparison.OrdinalIgnoreCase);
 
     private async Task<ConnectedSystemExportResult> DeleteAsync(ScimExportOperation operation, CancellationToken cancellationToken)
     {
@@ -268,10 +349,25 @@ internal sealed class ScimConnectorExport
         }
     }
 
-    private static ScimPreparedExport PrepareCreate(PendingExport pendingExport, ScimExportTarget target)
+    /// <summary>
+    /// Posts the new resource. Where the provider takes PATCH, its multi-valued references (a group's members) are left
+    /// out of the POST and added to it afterwards (#2094): Keycloak refuses a Group create carrying members, every
+    /// provider accepts the two-step form, and a large membership then travels in requests sized to the provider's
+    /// limits rather than in one body. A provider without PATCH has no way to add them afterwards, so it is sent them in
+    /// the POST, as before. This mirrors how the LDAP Connector creates an entry and adds the members that overflow it.
+    /// </summary>
+    private ScimPreparedExport PrepareCreate(PendingExport pendingExport, ScimExportTarget target)
     {
-        var writes = pendingExport.AttributeValueChanges
+        var changes = pendingExport.AttributeValueChanges
             .Where(c => c.ChangeType != PendingExportAttributeChangeType.Remove)
+            .ToList();
+
+        var deferred = _discovery.Capabilities.SupportsPatch
+            ? changes.Where(c => ValueOf(c) != null && IsMultiValuedReference(c.Attribute.Name, target)).ToList()
+            : [];
+
+        var writes = changes
+            .Except(deferred)
             .GroupBy(c => c.Attribute.Name, StringComparer.OrdinalIgnoreCase)
             .Select(g => new ScimAttributeWrite(g.Key, g.Select(ValueOf).ToList()))
             .ToList();
@@ -282,9 +378,20 @@ internal sealed class ScimConnectorExport
         if (built.UnknownAttributes.Count > 0)
             return ScimPreparedExport.From(UnknownAttributesFailure(built.UnknownAttributes));
 
+        var followUps = ScimPatchBuilder.Build(
+            deferred.Select(c => new ScimAttributeChange(c.Attribute.Name, ScimPatchOperations.Add, ValueOf(c))).ToList(),
+            target.Attributes);
+
         return ScimPreparedExport.From(new ScimExportOperation(
-            HttpMethod.Post, ScimQueryBuilder.NormaliseEndpoint(target.Endpoint), built.Resource, EntityTag: null, ResourceId: null));
+            HttpMethod.Post, ScimQueryBuilder.NormaliseEndpoint(target.Endpoint), built.Resource, EntityTag: null, ResourceId: null,
+            followUps.Operations.Count > 0 ? followUps.Operations : null));
     }
+
+    private static bool IsMultiValuedReference(string attributeName, ScimExportTarget target) =>
+        target.Attributes.Any(a => string.Equals(a.Name, attributeName, StringComparison.OrdinalIgnoreCase)
+                                   && a.Access == ScimValueAccess.ComplexReference
+                                   && a.AttributePlurality == AttributePlurality.MultiValued
+                                   && a.Writability != AttributeWritability.ReadOnly);
 
     private static ScimPreparedExport PrepareDelete(PendingExport pendingExport, ScimExportTarget target)
     {
@@ -306,8 +413,11 @@ internal sealed class ScimConnectorExport
         if (resourceId == null)
             return ScimPreparedExport.From(MissingResourceIdFailure());
 
+        // A RemoveAll clears the attribute whatever value it carries, so the value is not sent: naming one would remove
+        // only that value, and a replace would add it (#2094).
         var changes = pendingExport.AttributeValueChanges
-            .Select(c => new ScimAttributeChange(c.Attribute.Name, PatchOperation(c), ValueOf(c)))
+            .Select(c => new ScimAttributeChange(c.Attribute.Name, PatchOperation(c),
+                c.ChangeType == PendingExportAttributeChangeType.RemoveAll ? null : ValueOf(c)))
             .ToList();
 
         var path = ResourcePath(target, resourceId);
@@ -401,7 +511,7 @@ internal sealed class ScimConnectorExport
     /// </summary>
     /// <remarks>
     /// A change carrying no value is a clear: an all-null Update, which is how export staging tells a
-    /// single-valued attribute it holds nothing (#2182), or a RemoveAll. RFC 7644 section 3.5.2.3 requires
+    /// single-valued attribute it holds nothing (#2182), or a RemoveAll whatever value it carries (#2094). RFC 7644 section 3.5.2.3 requires
     /// a replace to carry a value, and a null one is left out of the request altogether, so a clear is sent
     /// as a remove naming the attribute alone, which section 3.5.2.2 reads as removing every value it holds.
     /// </remarks>
@@ -413,7 +523,7 @@ internal sealed class ScimConnectorExport
         return change.ChangeType switch
         {
             PendingExportAttributeChangeType.Add => ScimPatchOperations.Add,
-            PendingExportAttributeChangeType.Remove => ScimPatchOperations.Remove,
+            PendingExportAttributeChangeType.Remove or PendingExportAttributeChangeType.RemoveAll => ScimPatchOperations.Remove,
             _ => ScimPatchOperations.Replace
         };
     }

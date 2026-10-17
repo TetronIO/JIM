@@ -197,7 +197,9 @@ nav:
           - Passwords: connectors/jim-ldap-connector-passwords.md
           - Service Account Permissions: connectors/jim-ldap-connector-permissions.md
           - Troubleshooting the LDAP Connector: connectors/jim-ldap-connector-troubleshooting.md
-      - JIM SCIM 2.0 Client Connector: connectors/jim-scim-connector.md
+      - JIM SCIM 2.0 Client Connector:
+          - connectors/jim-scim-connector.md
+          - Keycloak: connectors/jim-scim-connector-keycloak.md
       - JIM SQL Connector:
           - connectors/jim-sql-connector.md
           - "Delta Import: Change-Log Table": connectors/jim-sql-connector-delta-import-change-log.md
