@@ -552,6 +552,17 @@ public interface ISyncRepository
     Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId);
 
     /// <summary>
+    /// Flags the given Metaverse Objects <c>ScopeReviewPending</c>, so the export scope review at the end of the
+    /// synchronisation re-evaluates each one against every export rule (issue #2318). Set when a synchronisation
+    /// disconnects an object from a Connected System an export rule provisions to: the account was deleted in that
+    /// system, nothing else about the person changed, and only the review can stage the provisioning Create that puts
+    /// it back, once the departed object is gone. Already-flagged objects are left as they are.
+    /// </summary>
+    /// <param name="ids">The Metaverse Objects to flag; ids that match no object are ignored.</param>
+    /// <returns>How many objects were not already flagged.</returns>
+    Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Returns the reference attribute values held by OTHER Metaverse Objects that point at any of the given
     /// Metaverse Objects. Called before deleting the given objects so reference recall can stage
     /// membership-removal Pending Exports for the referencing objects (issue #908); the deletion path nulls

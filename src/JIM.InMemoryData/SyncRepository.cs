@@ -1705,6 +1705,17 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(toFlag.Count);
     }
 
+    public Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids)
+    {
+        var toFlag = ids.Distinct()
+            .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
+            .Where(mvo => mvo is { ScopeReviewPending: false })
+            .ToList();
+        foreach (var mvo in toFlag)
+            mvo!.ScopeReviewPending = true;
+        return Task.FromResult(toFlag.Count);
+    }
+
     public Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
         IReadOnlyCollection<Guid> referencedMetaverseObjectIds)
     {

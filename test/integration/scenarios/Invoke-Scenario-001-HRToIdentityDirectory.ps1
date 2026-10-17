@@ -39,7 +39,7 @@
     without one.
 
 .PARAMETER Step
-    Which test step to execute (Joiner, Leaver, Mover, Reconnection, All)
+    Which test step to execute (Joiner, Leaver, Mover, Reconnection, DeletedInTarget, All)
 
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
@@ -69,7 +69,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "WithdrawnBeforeExport", "WithdrawnAfterExport", "InitialExportOnly", "ImportOnly", "SyncOnly", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "DeletedInTarget", "WithdrawnBeforeExport", "WithdrawnAfterExport", "InitialExportOnly", "ImportOnly", "SyncOnly", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -606,7 +606,7 @@ try {
     # (not reset by database volume deletion) and the test.reconnect user is
     # created by the Reconnection test (Test 4).
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("test.reconnect")
+    $testUsers = @("test.reconnect", "test.redeleted")
     $deletedCount = 0
     $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
     foreach ($user in $testUsers) {
@@ -2082,6 +2082,139 @@ try {
             }
         }
         $stepTimings["4c. Withdrawn After Export"] = (Get-Date) - $stepWaeStart
+    }
+
+    # Test 4d: Deleted In Target (an account deleted in the directory is re-provisioned, #2318)
+    #
+    # JIM is authoritative for provisioning to the directory, so an account deleted there directly is drift from the
+    # desired state. The LDAP Delta Import marks its Connected System Object Obsolete; the LDAP Delta Synchronisation
+    # disconnects it and, because the person is still in the provisioning rule's scope, stages a provisioning Create in
+    # the same run; the LDAP Export recreates the account. Nothing changes in HR, so the change-driven export path never
+    # revisits the person: only the disconnection can put the account back.
+    if ($Step -eq "DeletedInTarget" -or $Step -eq "All") {
+        $stepDitStart = Get-Date
+        Write-TestSection "Test 4d: Deleted In Target (an account deleted in the directory is re-provisioned)"
+
+        $deletedInTargetSuccess = $true
+        $deletedInTargetErrorMessage = ""
+
+        try {
+            # A dedicated joiner, so the step stands alone and leaves every other account as it found it. Its Account
+            # Name is generated from its names, Test Redeleted, so it is "test.redeleted".
+            $redeletedAccountName = "test.redeleted"
+            $redeletedUser = New-TestUser -Index 8887
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
+            $csv = Import-Csv $csvPath
+            $csv = @($csv) + [PSCustomObject]@{
+                employeeId = "EMP888887"
+                firstName = "Test"
+                lastName = "Redeleted"
+                email = "$redeletedAccountName@$($DirectoryConfig.Domain)"
+                department = "IT"
+                title = "Developer"
+                company = $redeletedUser.Company
+                samAccountName = $redeletedAccountName
+                displayName = "Test Redeleted"
+                status = "Active"
+                userPrincipalName = "$redeletedAccountName@$($DirectoryConfig.Domain)"
+                employeeType = $redeletedUser.EmployeeType
+                employeeEndDate = ""
+            }
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+            Write-Host "  Provisioning the joiner:" -ForegroundColor Gray
+            Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+            if (-not (Test-LDAPUserExists -UserIdentifier $redeletedAccountName -DirectoryConfig $DirectoryConfig)) {
+                throw "$redeletedAccountName was not provisioned to the directory"
+            }
+            $redeletedMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" -AttributeValue $redeletedAccountName -ErrorAction SilentlyContinue) | Select-Object -First 1
+            if (-not $redeletedMvo) { throw "Could not find the Metaverse Object for $redeletedAccountName" }
+            Write-Host "  OK $redeletedAccountName provisioned (Metaverse Object $($redeletedMvo.id))" -ForegroundColor Green
+
+            # Delete the account in the directory, out of band, as an administrator there would.
+            Write-Host "  Deleting $redeletedAccountName directly in the directory..." -ForegroundColor Gray
+            $deleteResult = if (Test-IsRfcDirectory $DirectoryConfig) {
+                Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn "$($DirectoryConfig.UserRdnAttr)=$redeletedAccountName,$($DirectoryConfig.UserContainer)"
+            } else {
+                Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $redeletedAccountName
+            }
+            if ($deleteResult.Outcome -ne 'Deleted') { throw "Could not delete $redeletedAccountName in the directory: $($deleteResult.Output)" }
+            if (Test-LDAPUserExists -UserIdentifier $redeletedAccountName -DirectoryConfig $DirectoryConfig) {
+                throw "$redeletedAccountName still exists in the directory after deleting it"
+            }
+            Write-Host "  OK Account deleted in the directory" -ForegroundColor Green
+
+            # 1. The LDAP Delta Import reads the deletion and marks the Connected System Object Obsolete.
+            $ditImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ditImportResult.activityId -Name "LDAP Delta Import (Deleted In Target)"
+            Assert-ActivityOutcomeStats -ActivityId $ditImportResult.activityId -Name "LDAP Delta Import (Deleted In Target)" -ExpectedStats @{
+                totalCsoDeletes = 1
+            }
+            Write-Host "  OK LDAP Delta Import detected the deletion" -ForegroundColor Green
+
+            # 2. The LDAP Delta Synchronisation disconnects it and stages the provisioning Create, with nothing changed in HR.
+            $ditSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ditSyncResult.activityId -Name "LDAP Delta Sync (Deleted In Target)"
+            Assert-ActivityOutcomeStats -ActivityId $ditSyncResult.activityId -Name "LDAP Delta Sync (Deleted In Target)" -ExpectedStats @{
+                totalDisconnections = 1
+                totalProvisioned = 1
+            }
+            $redeletedCreates = @(Get-JIMPendingExport -ConnectedSystemId $config.LDAPSystemId -Search "Test Redeleted" -All -ErrorAction SilentlyContinue |
+                Where-Object { [string]$_.ChangeType -eq 'Create' })
+            if ($redeletedCreates.Count -ne 1) {
+                throw "Expected exactly one Create Pending Export for Test Redeleted on $($DirectoryConfig.ConnectedSystemName) after the LDAP Delta Synchronisation, found $($redeletedCreates.Count)"
+            }
+            Write-Host "  OK LDAP Delta Synchronisation staged the provisioning Create" -ForegroundColor Green
+
+            # 3. The LDAP Export recreates the account; its confirming import and synchronisation settle it.
+            if ($initialPasswordConfigured) {
+                $ditExportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+                Assert-ExportSuccess -ActivityId $ditExportResult.activityId -Name "LDAP Export (Deleted In Target)"
+                Wait-ForInitialPasswordDelivery -ConnectedSystemId $config.LDAPSystemId -ConnectedSystemName $DirectoryConfig.ConnectedSystemName
+                Start-Sleep -Seconds 5
+                $ditConfirmImport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $ditConfirmImport.activityId -Name "LDAP Delta Import (Deleted In Target confirm)"
+                $ditConfirmSync = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $ditConfirmSync.activityId -Name "LDAP Delta Sync (Deleted In Target confirm)"
+            }
+            else {
+                Invoke-InitialExportOnlyExportAndConfirm -Config $config -Label "Deleted In Target"
+            }
+
+            if (-not (Test-LDAPUserExists -UserIdentifier $redeletedAccountName -DirectoryConfig $DirectoryConfig)) {
+                throw "$redeletedAccountName was not recreated in the directory by the LDAP Export"
+            }
+            $redeletedMvoAfter = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" -AttributeValue $redeletedAccountName -ErrorAction SilentlyContinue) | Select-Object -First 1
+            if (-not $redeletedMvoAfter -or $redeletedMvoAfter.id -ne $redeletedMvo.id) {
+                throw "The recreated account is not joined to the original Metaverse Object $($redeletedMvo.id)"
+            }
+            $remainingLdapExports = @(Get-JIMPendingExport -ConnectedSystemId $config.LDAPSystemId -Search "Test Redeleted" -All -ErrorAction SilentlyContinue)
+            if ($remainingLdapExports.Count -gt 0) {
+                throw "Found $($remainingLdapExports.Count) Pending Export(s) still waiting for Test Redeleted after the confirming import"
+            }
+            $redeletedDirectoryUser = Get-LDAPUser -UserIdentifier $redeletedAccountName -DirectoryConfig $DirectoryConfig
+            Assert-DirectoryAttribute -DirectoryUser $redeletedDirectoryUser -AttributeName "sn" -ExpectedValue "Redeleted" -Label "Deleted In Target"
+            Write-Host "  OK Account recreated in the directory, joined to the same Metaverse Object, nothing left pending" -ForegroundColor Green
+        }
+        catch {
+            $deletedInTargetSuccess = $false
+            $deletedInTargetErrorMessage = $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+
+        if ($deletedInTargetSuccess) {
+            $testResults.Steps += @{ Name = "DeletedInTarget"; Success = $true }
+        }
+        else {
+            $testResults.Steps += @{ Name = "DeletedInTarget"; Success = $false; Error = $deletedInTargetErrorMessage }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        $stepTimings["4d. Deleted In Target"] = (Get-Date) - $stepDitStart
     }
 
     # Test 5: Initial Export Only Attribute Flows (#223)

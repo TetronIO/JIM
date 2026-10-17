@@ -165,6 +165,11 @@ public abstract class SyncTaskProcessorBase
     // is disconnected and a new CSO tries to join the same MVO within the same page.
     protected readonly List<Guid> _pendingDisconnectedMvoIds = [];
 
+    // Metaverse Objects this page disconnected from a system an export rule provisions to (#2318), flagged for the
+    // export scope review once the page's writes persist, so the review re-provisions them after the departed objects
+    // are deleted.
+    private readonly HashSet<Guid> _pendingReProvisioningReviewMvoIds = [];
+
     // Batch collection for quiet CSO deletions (pre-disconnected CSOs that don't need RPEIs)
     // These are CSOs that were already disconnected during synchronous MVO deletion and just need cleanup
     protected readonly List<ConnectedSystemObject> _quietCsosToDelete = [];
@@ -1682,6 +1687,8 @@ public abstract class SyncTaskProcessorBase
             _pendingExportEvaluations.Add((exportEvaluation.Mvo, exportEvaluation.ChangedAttributes, exportEvaluation.RemovedAttributes));
         if (result.DisconnectedMetaverseObjectId is { } disconnectedMvoId)
             _pendingDisconnectedMvoIds.Add(disconnectedMvoId);
+        if (result.ScopeReviewMetaverseObjectId is { } reviewMvoId)
+            _pendingReProvisioningReviewMvoIds.Add(reviewMvoId);
 
         return result.ExecutionItems;
     }
@@ -5309,6 +5316,18 @@ public abstract class SyncTaskProcessorBase
             await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
+        }
+
+        // Flag the disconnected Metaverse Objects an export rule provisions back (#2318) before their departed objects
+        // are deleted, so a failure between the two leaves the flag set and the next synchronisation still reviews
+        // them; a review that runs while the departed object remains simply finds it and stages nothing.
+        if (_pendingReProvisioningReviewMvoIds.Count > 0)
+        {
+            var flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
+            Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Count} Metaverse Object(s) for an export scope review, " +
+                "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); {Newly} newly flagged",
+                _pendingReProvisioningReviewMvoIds.Count, flagged);
+            _pendingReProvisioningReviewMvoIds.Clear();
         }
 
         // Then handle normal obsolete CSO deletions (with RPEI tracking)

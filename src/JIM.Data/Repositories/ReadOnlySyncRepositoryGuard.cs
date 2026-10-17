@@ -500,6 +500,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
         => throw new PreviewWriteAttemptedException(nameof(FlagMetaverseObjectsOfTypeForScopeReviewAsync));
 
+    public Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids)
+        => throw new PreviewWriteAttemptedException(nameof(FlagMetaverseObjectsForScopeReviewAsync));
+
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => throw new PreviewWriteAttemptedException(nameof(CreateMetaverseObjectsAsync));
 

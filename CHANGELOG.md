@@ -123,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 An account deleted directly in a Connected System that an export Synchronisation Rule provisions to is now recreated: the synchronisation that disconnects its obsolete Connected System Object stages a provisioning Create in the same run, while the Metaverse Object is still in the rule's scope and is not being deleted. It was left without an account until something else about the person changed. (#2318)
 - 🐛 The API's OpenAPI document now states which endpoints need an SSO access token or API key, and that health, version and sign-in configuration need neither; it declared no authentication at all, so tools generating clients from it sent none. (#2088)
 - 🐛 `Export-JIMCertificate` now works in a PowerShell session signed in with SSO; it previously sent only an API key, so the download was refused. (#2088)
 - 🐛 A Delta Import that reads a deletion and a re-insert of the same object on different pages now keeps the object, instead of rejecting the re-insert as a duplicate and leaving the object to be deleted at the next synchronisation. An object changed on both sides of a page boundary is no longer reported as a duplicate either. (#2074)
