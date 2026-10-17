@@ -169,6 +169,24 @@ public class AuxiliaryClassAttributeMergerTests
     }
 
     [Test]
+    public void Merge_WithASelectedAuxiliaryClass_CarriesTheDateTimeResolution()
+    {
+        // The directory holds the auxiliary class's dates to the same step on any class it is merged onto (#2153, D2).
+        var connectedSystem = BuildSystem();
+        var uidNumber = connectedSystem.ObjectTypes!.Single(ot => ot.Id == PosixAccountId).Attributes.Single(a => a.Name == "uidNumber");
+        uidNumber.DateTimeResolution = DateTimeResolution.Second;
+        Extend(connectedSystem, PersonId, PosixAccountId);
+
+        AuxiliaryClassAttributeMerger.Merge(connectedSystem);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Person(connectedSystem).Attributes!.Single(a => a.Name == "uidNumber").DateTimeResolution, Is.EqualTo(DateTimeResolution.Second));
+            Assert.That(Person(connectedSystem).Attributes!.Single(a => a.Name == "uid").DateTimeResolution, Is.Null);
+        }
+    }
+
+    [Test]
     public void Merge_WhereTheStructuralTypeAlreadyHasTheAttribute_LeavesTheStructuralOneAlone()
     {
         // posixAccount also declares cn. The structural type's own attribute must survive untouched: its Id is what

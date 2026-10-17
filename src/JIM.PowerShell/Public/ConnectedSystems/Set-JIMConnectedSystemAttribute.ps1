@@ -8,7 +8,8 @@ function Set-JIMConnectedSystemAttribute {
 
     .DESCRIPTION
         Changes one attribute, or in bulk several at once with -AttributeUpdates: whether JIM manages it, whether it
-        identifies objects, and where the Connector allows it, its data type.
+        identifies objects, whether its values are case-exact, the step of time a date is held to, and where the
+        Connector allows it, its data type.
 
     .PARAMETER ConnectedSystemId
         The ID of the Connected System.
@@ -21,7 +22,7 @@ function Set-JIMConnectedSystemAttribute {
 
     .PARAMETER AttributeUpdates
         The attributes to change, as a hashtable keyed by attribute ID whose values are hashtables of the settings
-        to change (selected, isExternalId, isSecondaryExternalId, caseExact); the examples show one.
+        to change (selected, isExternalId, isSecondaryExternalId, caseExact, dateTimeResolution); the examples show one.
 
     .PARAMETER Selected
         Whether JIM imports and exports the attribute.
@@ -45,6 +46,13 @@ function Set-JIMConnectedSystemAttribute {
         Whether the attribute's values are case-exact: $true when values differing only in case identify different
         things, $false when they are the same value. Only a Text attribute can be declared case-exact. Setting it
         makes the declaration the administrator's, so a schema refresh keeps it. Offered on every Connector.
+
+    .PARAMETER DateTimeResolution
+        The finest step of time the Connected System holds this DateTime attribute's values to. JIM sends each date
+        floored to it and compares at it, so a difference the Connected System cannot hold is never exported again and
+        again. Discovered by the Connector (Second for Active Directory and SCIM, a SQL column's own precision);
+        setting it makes the resolution the administrator's, so a schema refresh keeps it. Only a DateTime attribute
+        has one.
 
     .PARAMETER PassThru
         Returns the attribute as changed, or with -AttributeUpdates, the outcome of the change.
@@ -102,6 +110,12 @@ function Set-JIMConnectedSystemAttribute {
         Declares that an attribute's values are case-exact, so JBloggs and jbloggs are different values. A schema
         refresh keeps this declaration rather than restating what the Connected System's schema says.
 
+    .EXAMPLE
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 8 -AttributeId 41 -DateTimeResolution Millisecond
+
+        Tells JIM that a SCIM service provider keeps this date attribute's milliseconds, so JIM sends them rather than
+        the whole seconds SCIM discovery assumes.
+
     .LINK
         Get-JIMConnectedSystem
         Set-JIMConnectedSystemObjectType
@@ -140,6 +154,10 @@ function Set-JIMConnectedSystemAttribute {
 
         [Parameter(ParameterSetName = 'Single')]
         [bool]$CaseExact,
+
+        [Parameter(ParameterSetName = 'Single')]
+        [ValidateSet('Microsecond', 'TenMicroseconds', 'HundredMicroseconds', 'Millisecond', 'TenMilliseconds', 'HundredMilliseconds', 'Second', 'Minute', 'Day')]
+        [string]$DateTimeResolution,
 
         [switch]$PassThru
     )
@@ -216,6 +234,10 @@ function Set-JIMConnectedSystemAttribute {
 
             if ($PSBoundParameters.ContainsKey('CaseExact')) {
                 $body.caseExact = $CaseExact
+            }
+
+            if ($PSBoundParameters.ContainsKey('DateTimeResolution')) {
+                $body.dateTimeResolution = $DateTimeResolution
             }
 
             if ($body.Count -eq 0) {

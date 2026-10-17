@@ -69,7 +69,10 @@ public class ErrorTypeOrdinalTests
 
         // Before provisioning, matching found several existing accounts (#2052).
         [ActivityRunProfileExecutionItemErrorType.AmbiguousProvisioningMatch] = 31,
-        [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = 32
+        [ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed] = 32,
+
+        // Dates an export sends to a multi-valued attribute are one date at the Connected System's resolution (#2153).
+        [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = 33
     };
 
     [Test]

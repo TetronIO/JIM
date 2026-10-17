@@ -591,6 +591,20 @@ public class ConnectedSystemAttributeDto
     public bool CaseExactSetByAdministrator { get; set; }
 
     /// <summary>
+    /// For a DateTime attribute, the finest step of time the Connected System holds its values to: Microsecond,
+    /// TenMicroseconds, HundredMicroseconds, Millisecond, TenMilliseconds, HundredMilliseconds, Second, Minute or Day. JIM
+    /// sends each date floored to it, and compares at it. Null for any other type, and for a date attribute discovered
+    /// before resolutions were recorded, which JIM treats as Microsecond until the schema is refreshed.
+    /// </summary>
+    public string? DateTimeResolution { get; set; }
+
+    /// <summary>
+    /// Whether an administrator set the resolution, rather than it being discovered from the Connected System's schema.
+    /// A schema refresh keeps an administrator's resolution and restates a discovered one.
+    /// </summary>
+    public bool DateTimeResolutionSetByAdministrator { get; set; }
+
+    /// <summary>
     /// Whether JIM imports and exports the attribute.
     /// </summary>
     public bool Selected { get; set; }
@@ -668,6 +682,8 @@ public class ConnectedSystemAttributeDto
             AttributePlurality = entity.AttributePlurality.ToString(),
             CaseExact = entity.CaseExact,
             CaseExactSetByAdministrator = entity.CaseExactSetByAdministrator,
+            DateTimeResolution = entity.DateTimeResolution?.ToString(),
+            DateTimeResolutionSetByAdministrator = entity.DateTimeResolutionSetByAdministrator,
             Selected = entity.Selected,
             IsExternalId = entity.IsExternalId,
             IsSecondaryExternalId = entity.IsSecondaryExternalId,

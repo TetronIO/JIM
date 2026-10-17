@@ -675,6 +675,11 @@ public class ConfigurationSnapshotService
             if (attribute.CaseExact)
                 Add(children, "caseExact", Render(attribute.CaseExact), "Case-exact");
 
+            // Likewise a date's resolution (#2153, D2): recorded only when one is held, so an attribute discovered before
+            // resolutions existed reads the same before and after.
+            if (attribute.DateTimeResolution.HasValue)
+                AddEnum(children, "dateTimeResolution", attribute.DateTimeResolution.Value, "Date and time resolution");
+
             items.Add(ConfigurationSnapshotNode.ObjectNode("attribute", children, attribute.Name, attribute.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("attributes", items, "Attributes");

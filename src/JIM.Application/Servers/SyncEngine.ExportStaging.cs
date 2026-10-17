@@ -537,7 +537,13 @@ public partial class SyncEngine
                                mapping.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.MultiValued;
 
                 List<(MetaverseObjectAttributeValue? Value, PendingExportAttributeChangeType ChangeType)> stagedValues;
-                if (perValue)
+                if (perValue && source.MetaverseAttribute.Type == AttributeDataType.DateTime)
+                {
+                    // Dates into a multi-valued target are diffed as sets at the target's resolution (#2153, D2).
+                    stagedValues = StageDateSetAtTargetResolution(mvo, source.MetaverseAttribute, mapping.TargetConnectedSystemAttribute,
+                        changedAttributes, isCreateOperation, PerValueChangeType, flowErrors);
+                }
+                else if (perValue)
                 {
                     IEnumerable<MetaverseObjectAttributeValue> mvoValues;
                     if (isCreateOperation)
@@ -618,8 +624,10 @@ public partial class SyncEngine
                                 attributeChange.IntValue = mvoValue.IntValue;
                                 break;
                             case AttributeDataType.DateTime:
-                                // A Pending Export carries the date in the form JIM holds it (#2153).
-                                attributeChange.DateTimeValue = CanonicalDate(mvoValue.DateTimeValue);
+                                // A Pending Export carries the date as the target holds it (#2153): canonical, then
+                                // floored to the target's resolution, so the target is never sent a value it would
+                                // change on the way in.
+                                attributeChange.DateTimeValue = DateAtResolution(mvoValue.DateTimeValue, mapping.TargetConnectedSystemAttribute.DateTimeResolution);
                                 break;
                             case AttributeDataType.Boolean:
                                 attributeChange.BoolValue = mvoValue.BoolValue;
@@ -787,6 +795,103 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// The per-value changes a multi-valued date source stages for a multi-valued target (#2153, decision D2): deltas
+    /// computed on floored sets, never by flooring each delta. Every date is taken to the target's resolution first;
+    /// the target is then told to add each floored value the new set has and the old one lacked, and to remove each the
+    /// old set had and the new one lacks. So with {A, B} in one second, for a target that holds the second, removing A
+    /// stages nothing: B still needs that second. At the microsecond (no resolution) this is the ordinary set diff.
+    /// </summary>
+    /// <remarks>
+    /// The new set is what the Metaverse Object holds as this pass leaves it (its values, less those removed this pass,
+    /// plus those added); the old set is the new set less this pass's additions, plus its removals. Dates that are one
+    /// date at the resolution are sent as one, and that is reported (<see cref="AttributeFlowErrorKind.DatesCollapseAtTargetResolution"/>)
+    /// so the merging is never silent. An Update stages nothing for an attribute this pass did not change.
+    /// </remarks>
+    /// <returns>Transient values carrying the floored dates, each with its change type, in ascending date order.</returns>
+    private static List<(MetaverseObjectAttributeValue? Value, PendingExportAttributeChangeType ChangeType)> StageDateSetAtTargetResolution(
+        MetaverseObject mvo,
+        MetaverseAttribute sourceAttribute,
+        ConnectedSystemObjectTypeAttribute target,
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        bool isCreateOperation,
+        Func<MetaverseObjectAttributeValue, PendingExportAttributeChangeType> perValueChangeType,
+        List<AttributeFlowError>? flowErrors)
+    {
+        var sourceAttributeId = sourceAttribute.Id;
+        var resolution = target.DateTimeResolution;
+
+        // Asserted-null markers (#91) and value-less rows carry no date, so they are invisible here as an absent row.
+        var addedKeys = new HashSet<long>();
+        var removedKeys = new HashSet<long>();
+        var removedRows = new HashSet<MetaverseObjectAttributeValue>(ReferenceEqualityComparer.Instance);
+        foreach (var changed in changedAttributes.Where(av => av.AttributeId == sourceAttributeId && !av.NullValue && av.DateTimeValue.HasValue))
+        {
+            if (perValueChangeType(changed) == PendingExportAttributeChangeType.Remove)
+            {
+                removedKeys.Add(DateTimeAttributeValue.Key(changed.DateTimeValue!.Value));
+                removedRows.Add(changed);
+            }
+            else
+            {
+                addedKeys.Add(DateTimeAttributeValue.Key(changed.DateTimeValue!.Value));
+            }
+        }
+
+        if (!isCreateOperation && addedKeys.Count == 0 && removedKeys.Count == 0)
+            return [];
+
+        // The new set: what the Metaverse Object holds, less this pass's removals, plus its additions.
+        var newKeys = new HashSet<long>(addedKeys);
+        newKeys.UnionWith(mvo.AttributeValues
+            .Where(av => av.AttributeId == sourceAttributeId && !av.NullValue && av.DateTimeValue.HasValue &&
+                         !removedRows.Contains(av) && perValueChangeType(av) != PendingExportAttributeChangeType.Remove)
+            .Select(av => DateTimeAttributeValue.Key(av.DateTimeValue!.Value)));
+
+        // The old set: the new set less this pass's additions, plus its removals. A Create provisions from nothing.
+        var oldKeys = new HashSet<long>();
+        if (!isCreateOperation)
+        {
+            oldKeys.UnionWith(newKeys);
+            oldKeys.ExceptWith(addedKeys);
+            oldKeys.UnionWith(removedKeys);
+        }
+
+        var step = DateTimeAttributeValue.ResolutionTicks(resolution);
+        var newFloored = newKeys.Select(key => key - key % step).ToHashSet();
+        var oldFloored = oldKeys.Select(key => key - key % step).ToHashSet();
+
+        if (newFloored.Count < newKeys.Count)
+        {
+            Log.Warning("CreateAttributeValueChanges: {ValueCount} dates of '{SourceAttr}' are {TargetCount} at the {Resolution} resolution of " +
+                "target attribute '{TargetAttr}', so the target is sent {TargetCount}. MVO {MvoId}",
+                newKeys.Count, sourceAttribute.Name, newFloored.Count, resolution, target.Name, newFloored.Count, mvo.Id);
+            flowErrors?.Add(new AttributeFlowError
+            {
+                Kind = AttributeFlowErrorKind.DatesCollapseAtTargetResolution,
+                SourceAttributeName = sourceAttribute.Name,
+                TargetAttributeName = target.Name,
+                ValueCount = newKeys.Count,
+                TargetValueCount = newFloored.Count,
+                TargetDateTimeResolution = resolution
+            });
+        }
+
+        var staged = new List<(MetaverseObjectAttributeValue? Value, PendingExportAttributeChangeType ChangeType)>();
+        staged.AddRange(newFloored.Where(key => !oldFloored.Contains(key)).Order()
+            .Select(key => (TransientDate(key), PendingExportAttributeChangeType.Add)));
+        staged.AddRange(oldFloored.Where(key => !newFloored.Contains(key)).Order()
+            .Select(key => (TransientDate(key), PendingExportAttributeChangeType.Remove)));
+        return staged;
+
+        MetaverseObjectAttributeValue? TransientDate(long ticks) => new()
+        {
+            AttributeId = sourceAttributeId,
+            Attribute = sourceAttribute,
+            DateTimeValue = new DateTime(ticks, DateTimeKind.Utc)
+        };
+    }
+
+    /// <summary>
     /// The Pending Export changes an export Expression mapping stages for a Metaverse Object whose values are
     /// <paramref name="mvAttributeDictionary"/>: the evaluation pipeline (#2055), then what export staging does with its
     /// outcome. Missing Input Behaviour (#1361) and the expression's own exception mapping are shared with a generated
@@ -900,20 +1005,68 @@ public partial class SyncEngine
         // A list for a multi-valued target. Whether this becomes one whole-set change is the target-plurality rule
         // (#2182); until then each value is an Add, and each held value the result no longer has is a Remove, which
         // every Connector already applies to a multi-valued attribute.
-        var changes = resolution.Values
+        // Dates are taken to the target's resolution first (#2153, D2), so dates the target holds as one are sent once,
+        // and that merging is reported rather than silent.
+        var wantedValues = target.Type == AttributeDataType.DateTime
+            ? DatesAtTargetResolution(resolution.Values, source, target, flowErrors)
+            : resolution.Values;
+
+        var changes = wantedValues
             .Select(value => NewExpressionChange(mapping, exportRule, PendingExportAttributeChangeType.Add, value))
             .ToList();
 
         if (heldValues != null)
         {
-            var wantedKeys = resolution.Values.Select(ExpressionResultValues.Key).ToHashSet();
+            var wantedKeys = wantedValues.Select(value => TargetValueKey(value, target)).ToHashSet();
             changes.AddRange(heldValues
                 .Select(held => (Held: held, Value: HeldTypedValue(held, target.Type)))
-                .Where(held => held.Value != null && !wantedKeys.Contains(ExpressionResultValues.Key(held.Value)))
+                .Where(held => held.Value != null && !wantedKeys.Contains(TargetValueKey(held.Value, target)))
                 .Select(held => NewExpressionChange(mapping, exportRule, PendingExportAttributeChangeType.Remove, held.Value!)));
         }
 
         return changes;
+    }
+
+    /// <summary>
+    /// The key a value is compared by on the target: a date's at the target's resolution (#2153, D2), every other value's
+    /// as <see cref="ExpressionResultValues.Key"/> compares it.
+    /// </summary>
+    private static object TargetValueKey(object value, ConnectedSystemObjectTypeAttribute target) =>
+        value is DateTime date ? DateTimeAttributeValue.Key(date, target.DateTimeResolution) : ExpressionResultValues.Key(value);
+
+    /// <summary>
+    /// An expression's dates for a multi-valued target, taken to the target's resolution and made distinct there (#2153,
+    /// D2). Where two or more are one date at the resolution, the target is sent it once, and that is reported.
+    /// </summary>
+    private static List<object> DatesAtTargetResolution(
+        IReadOnlyList<object> values,
+        SyncRuleMappingSource source,
+        ConnectedSystemObjectTypeAttribute target,
+        List<AttributeFlowError>? flowErrors)
+    {
+        var canonicalCount = values.Select(ExpressionResultValues.Key).Distinct().Count();
+        var floored = values
+            .Select(value => value is DateTime date ? DateTimeAttributeValue.ToResolution(date, target.DateTimeResolution) : value)
+            .DistinctBy(value => TargetValueKey(value, target))
+            .ToList();
+
+        if (floored.Count < canonicalCount)
+        {
+            Log.Warning("CreateAttributeValueChanges: Expression returned {ValueCount} dates for attribute {AttrName}, which are {TargetCount} " +
+                "at its {Resolution} resolution; the target is sent {TargetCount}.",
+                canonicalCount, target.Name, floored.Count, target.DateTimeResolution, floored.Count);
+            flowErrors?.Add(new AttributeFlowError
+            {
+                Kind = AttributeFlowErrorKind.DatesCollapseAtTargetResolution,
+                TargetAttributeName = target.Name,
+                Expression = source.Expression,
+                ValueCount = canonicalCount,
+                TargetValueCount = floored.Count,
+                TargetDateTimeResolution = target.DateTimeResolution
+            });
+        }
+
+        return floored;
     }
 
     /// <summary>
@@ -958,7 +1111,8 @@ public partial class SyncEngine
             case int number: change.IntValue = number; break;
             case long longNumber: change.LongValue = longNumber; break;
             case decimal decimalNumber: change.DecimalValue = decimalNumber; break;
-            case DateTime date: change.DateTimeValue = DateTimeAttributeValue.ToCanonical(date); break;
+            // As the target holds it (#2153, D2): canonical, floored to the target's resolution.
+            case DateTime date: change.DateTimeValue = DateTimeAttributeValue.ToResolution(date, mapping.TargetConnectedSystemAttribute.DateTimeResolution); break;
             case bool flag: change.BoolValue = flag; break;
             case Guid guid: change.GuidValue = guid; break;
             case byte[] bytes: change.ByteValue = bytes; break;
@@ -1271,10 +1425,11 @@ public partial class SyncEngine
             return pendingChange.DecimalValue == existingValue.DecimalValue;
         }
 
-        // DateTime comparison, canonically (#2153): a value read from the database is Kind Local and to the microsecond
+        // DateTime comparison, canonically (#2153): a value read from the database is Kind Local and to the microsecond.
+        // At the target's resolution (D2), so a difference the target cannot hold is no difference.
         if (pendingChange.DateTimeValue.HasValue || existingValue.DateTimeValue.HasValue)
         {
-            return DateTimeAttributeValue.AreEqual(pendingChange.DateTimeValue, existingValue.DateTimeValue);
+            return DateTimeAttributeValue.AreEqual(pendingChange.DateTimeValue, existingValue.DateTimeValue, pendingChange.Attribute?.DateTimeResolution);
         }
 
         // Boolean comparison

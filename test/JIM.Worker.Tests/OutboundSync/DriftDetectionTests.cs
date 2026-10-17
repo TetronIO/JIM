@@ -469,6 +469,48 @@ public class DriftDetectionTests
     }
 
     /// <summary>
+    /// A target that holds dates to the second cannot hold the Metaverse Object's fraction of a second (#2153, D2), so
+    /// the date it holds in that second is not drift; a date in another second is, and its correction is sent floored.
+    /// </summary>
+    [TestCase(0, false)]
+    [TestCase(1, true)]
+    public void EvaluateDrift_DateAtTheTargetsResolution_IsDriftOnlyWhenTheSecondDiffers(int heldSecondsLater, bool expectDrift)
+    {
+        var mvDate = new MetaverseAttribute { Id = 9111, Name = "Review Dates", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.MultiValued };
+        var csDate = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9112, Name = "reviewDates", Type = AttributeDataType.DateTime, AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = TargetUserType, Selected = true, DateTimeResolution = DateTimeResolution.Second
+        };
+        TargetUserType.Attributes.Add(csDate);
+        var second = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), MetaverseObject = mvo, Attribute = mvDate, AttributeId = mvDate.Id, DateTimeValue = second.AddMilliseconds(100) });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), MetaverseObject = mvo, Attribute = mvDate, AttributeId = mvDate.Id, DateTimeValue = second.AddMilliseconds(700) });
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, Attribute = csDate, AttributeId = csDate.Id, DateTimeValue = second.AddSeconds(heldSecondsLater) });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+        var mapping = exportRule.AttributeFlowRules.Single();
+        mapping.TargetConnectedSystemAttribute = csDate;
+        mapping.TargetConnectedSystemAttributeId = csDate.Id;
+        mapping.Sources.Single().MetaverseAttribute = mvDate;
+        mapping.Sources.Single().MetaverseAttributeId = mvDate.Id;
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null);
+
+        Assert.That(result.HasDrift, Is.EqualTo(expectDrift));
+        if (expectDrift)
+        {
+            var added = result.CorrectiveExports.SelectMany(pe => pe.AttributeValueChanges)
+                .Single(c => c.ChangeType == PendingExportAttributeChangeType.Add);
+            Assert.That(added.DateTimeValue, Is.EqualTo(second), "The correction is sent at the target's resolution.");
+        }
+    }
+
+    /// <summary>
     /// The Enforce State half of #492's delta convergence: a corrective export whose drifted attribute is a
     /// merged auxiliary class's contribution must add the class in the same export, exactly as ordinary export
     /// staging does. Enforce State is on by default, so this drift path is the one that staged Scenario 019's

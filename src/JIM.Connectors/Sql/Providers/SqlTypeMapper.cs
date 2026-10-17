@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Staging;
 using System.Text;
 
 namespace JIM.Connectors.Sql.Providers;
@@ -155,6 +156,73 @@ internal static class SqlTypeMapper
         ArgumentNullException.ThrowIfNull(columnType);
 
         return OffsetCarryingTypes.Contains(Normalise(columnType.TypeName));
+    }
+
+    /// <summary>
+    /// The finest step of time a date and time column holds (#2153, decision D2), from its declared type: a fractional
+    /// seconds precision of n holds 10^-n seconds (JIM's microsecond at most), SQL Server's legacy <c>datetime</c> steps
+    /// of a three-hundredth of a second (taken as ten milliseconds, so a floored value never names a step the column
+    /// cannot hold), <c>smalldatetime</c> minutes, a SQL Server <c>date</c> days, and an Oracle <c>DATE</c> seconds.
+    /// Null for a column that is not a date.
+    /// </summary>
+    /// <remarks>
+    /// The precision is read from the catalogue's scale (SQL Server's <c>DATETIME_PRECISION</c>, Oracle's
+    /// <c>DATA_SCALE</c>), falling back to the digits in the type name (Oracle reports <c>TIMESTAMP(3)</c>) and then to
+    /// the type's default (seven digits for SQL Server, six for Oracle), both of which reach the microsecond.
+    /// </remarks>
+    internal static DateTimeResolution? DateTimeResolutionOf(SqlDatabaseType databaseType, SqlColumnType columnType)
+    {
+        ArgumentNullException.ThrowIfNull(columnType);
+
+        var normalisedTypeName = Normalise(columnType.TypeName);
+        switch (normalisedTypeName)
+        {
+            case "DATE":
+                return databaseType == SqlDatabaseType.Oracle ? DateTimeResolution.Second : DateTimeResolution.Day;
+            case "SMALLDATETIME":
+                return DateTimeResolution.Minute;
+            case "DATETIME" when databaseType == SqlDatabaseType.SqlServer:
+                return DateTimeResolution.TenMilliseconds;
+            case "DATETIME2":
+            case "DATETIMEOFFSET":
+            case "TIMESTAMP" when databaseType != SqlDatabaseType.SqlServer:
+            case "TIMESTAMP WITH TIME ZONE":
+            case "TIMESTAMP WITH LOCAL TIME ZONE":
+                return FractionalDigitsResolution(columnType.Scale ?? DigitsInTypeName(columnType.TypeName));
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// The resolution of a column holding <paramref name="fractionalDigits"/> digits of a second; none stated means the
+    /// type's default, which for every supported dialect reaches the microsecond.
+    /// </summary>
+    private static DateTimeResolution FractionalDigitsResolution(int? fractionalDigits) => fractionalDigits switch
+    {
+        null or >= 6 => DateTimeResolution.Microsecond,
+        5 => DateTimeResolution.TenMicroseconds,
+        4 => DateTimeResolution.HundredMicroseconds,
+        3 => DateTimeResolution.Millisecond,
+        2 => DateTimeResolution.TenMilliseconds,
+        1 => DateTimeResolution.HundredMilliseconds,
+        _ => DateTimeResolution.Second
+    };
+
+    /// <summary>
+    /// The first parenthesised number in a catalogue's type name (<c>TIMESTAMP(3) WITH TIME ZONE</c> gives 3), or null.
+    /// </summary>
+    private static int? DigitsInTypeName(string? typeName)
+    {
+        if (string.IsNullOrEmpty(typeName))
+            return null;
+
+        var open = typeName.IndexOf('(');
+        var close = open < 0 ? -1 : typeName.IndexOf(')', open + 1);
+        return close > open + 1 && int.TryParse(typeName.AsSpan(open + 1, close - open - 1), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var digits)
+            ? digits
+            : null;
     }
 
     /// <summary>

@@ -2830,6 +2830,17 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The resolution a schema refresh gives an attribute (#2153, decision D2): what the Connector discovered, for an
+    /// attribute whose effective type is a date; none for any other type, since a resolution only means something for a
+    /// date. An attribute an administrator retyped to a date takes the Connector's statement, which for a non-date
+    /// attribute is none, meaning the microsecond.
+    /// </summary>
+    private static DateTimeResolution? DiscoveredDateTimeResolution(ConnectorSchemaAttribute schemaAttribute, AttributeDataType effectiveType) =>
+        effectiveType == AttributeDataType.DateTime && schemaAttribute.Type == AttributeDataType.DateTime
+            ? schemaAttribute.DateTimeResolution
+            : null;
+
+    /// <summary>
     /// Merges a schema retrieved from a Connected System into that system's object types and attributes, and
     /// reports what changed. Object types and attributes are matched by name so that existing ids survive the
     /// refresh; this is what stops a Synchronisation Rule's mappings from being invalidated by one. Removal of
@@ -3008,6 +3019,10 @@ public partial class ConnectedSystemServer
                         if (!existingAttribute.CaseExactSetByAdministrator)
                             existingAttribute.CaseExact = schemaAttribute.CaseExact;
 
+                        // So does a date's resolution (#2153, D2): discovered, unless an administrator chose it.
+                        if (!existingAttribute.DateTimeResolutionSetByAdministrator)
+                            existingAttribute.DateTimeResolution = DiscoveredDateTimeResolution(schemaAttribute, existingAttribute.Type);
+
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
@@ -3030,6 +3045,7 @@ public partial class ConnectedSystemServer
                             Writability = schemaAttribute.Writability,
                             Required = schemaAttribute.Required,
                             CaseExact = schemaAttribute.CaseExact,
+                            DateTimeResolution = DiscoveredDateTimeResolution(schemaAttribute, schemaAttribute.Type),
                             IsOperational = schemaAttribute.IsOperational
                         });
                     }
@@ -3083,6 +3099,7 @@ public partial class ConnectedSystemServer
                         Writability = a.Writability,
                         Required = a.Required,
                         CaseExact = a.CaseExact,
+                        DateTimeResolution = DiscoveredDateTimeResolution(a, a.Type),
                         IsOperational = a.IsOperational
                     }).ToList()
                 };
@@ -5275,7 +5292,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     private static string? ApplyBulkAttributeUpdate(
         ConnectedSystemObjectTypeAttribute attribute,
-        (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact) updates)
+        (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact, DateTimeResolution? DateTimeResolution) updates)
     {
         // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
         if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
@@ -5292,6 +5309,11 @@ public partial class ConnectedSystemServer
         // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact (#2051).
         if (updates.CaseExact == true && attribute.Type != AttributeDataType.Text)
             return $"Attribute '{attribute.Name}' is not a Text attribute, so it cannot be declared case-exact.";
+
+        // Validate: only a date has a resolution (#2153).
+        if (updates.DateTimeResolution.HasValue &&
+            ValidateDateTimeResolution(attribute.Name, attribute.Type, updates.DateTimeResolution.Value) is { } resolutionError)
+            return resolutionError;
 
         if (updates.Selected.HasValue)
             attribute.Selected = updates.Selected.Value;
@@ -5319,7 +5341,29 @@ public partial class ConnectedSystemServer
             attribute.CaseExactSetByAdministrator = true;
         }
 
+        if (updates.DateTimeResolution.HasValue)
+        {
+            attribute.DateTimeResolution = updates.DateTimeResolution.Value;
+            // Likewise the administrator's resolution.
+            attribute.DateTimeResolutionSetByAdministrator = true;
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// Why an administrator cannot give an attribute of <paramref name="effectiveType"/> the resolution
+    /// <paramref name="resolution"/> (#2153, decision D2), or null when they can: only a DateTime attribute has one, and
+    /// it must be a resolution JIM knows. Shared by the single and bulk REST updates and the portal's Schema tab.
+    /// </summary>
+    public static string? ValidateDateTimeResolution(string attributeName, AttributeDataType effectiveType, DateTimeResolution resolution)
+    {
+        if (!Enum.IsDefined(resolution))
+            return $"'{resolution}' is not a date and time resolution. Use one of: {string.Join(", ", Enum.GetNames<DateTimeResolution>())}.";
+
+        return effectiveType == AttributeDataType.DateTime
+            ? null
+            : $"Attribute '{attributeName}' is not a DateTime attribute, so it has no date and time resolution.";
     }
 
     /// <summary>
@@ -5334,7 +5378,7 @@ public partial class ConnectedSystemServer
         BulkUpdateAttributesAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemObjectType objectType,
-            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> attributeUpdates,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact, DateTimeResolution? DateTimeResolution)> attributeUpdates,
             MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
@@ -5412,7 +5456,7 @@ public partial class ConnectedSystemServer
         BulkUpdateAttributesAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemObjectType objectType,
-            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact)> attributeUpdates,
+            Dictionary<int, (bool? Selected, bool? IsExternalId, bool? IsSecondaryExternalId, bool? CaseExact, DateTimeResolution? DateTimeResolution)> attributeUpdates,
             ApiKey initiatedByApiKey)
     {
         if (connectedSystem == null)

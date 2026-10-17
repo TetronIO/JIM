@@ -129,6 +129,12 @@
                                                     Add at least one run time
                                                 </MudAlert>
                                             }
+                                            else if (GetRunTimesMinuteError() is { } minuteError)
+                                            {
+                                                <MudAlert Severity="Severity.Error" Dense="true" data-testid="jim-run-times-minute-error">
+                                                    @minuteError
+                                                </MudAlert>
+                                            }
                                         }
                                         else if (_patternType == SchedulePatternType.Interval)
                                         {
@@ -649,6 +655,10 @@
             if (_runTimes.Count == 0)
                 return "0 6 * * *"; // Fallback
 
+            // Times at different minutes have no single expression; Save stays disabled until they share one.
+            if (GetRunTimesMinuteError() != null)
+                return string.Empty;
+
             return ScheduleCronExpression.BuildSpecificTimes(_selectedDays, _runTimes);
         }
 
@@ -764,6 +774,13 @@
         _runTimes.Remove(time);
     }
 
+    /// <summary>
+    /// Why the run times cannot be saved as one Schedule, or null when they can: a Schedule holds one cron expression,
+    /// which holds one minute past the hour (#2070). The wording is the REST API's, so both surfaces say the same.
+    /// </summary>
+    private string? GetRunTimesMinuteError() =>
+        ScheduleCronExpression.RunTimesShareAMinute(_runTimes, out var error) ? null : error;
+
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>
@@ -781,7 +798,7 @@
         {
             if (_patternType != SchedulePatternType.Custom && _selectedDays.Count == 0)
                 return false;
-            if (_patternType == SchedulePatternType.SpecificTimes && _runTimes.Count == 0)
+            if (_patternType == SchedulePatternType.SpecificTimes && (_runTimes.Count == 0 || GetRunTimesMinuteError() != null))
                 return false;
         }
 
@@ -807,6 +824,11 @@
             if (_patternType == SchedulePatternType.SpecificTimes && _runTimes.Count == 0)
             {
                 Snackbar.Add("Please add at least one run time.", Severity.Warning);
+                return;
+            }
+            if (_patternType == SchedulePatternType.SpecificTimes && GetRunTimesMinuteError() is { } minuteError)
+            {
+                Snackbar.Add(minuteError, Severity.Warning);
                 return;
             }
 

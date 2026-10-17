@@ -6860,6 +6860,17 @@ public abstract class SyncTaskProcessorBase
                     $"so {outcome}; the attribute keeps its current value and the object's other attributes were unaffected. Change the " +
                     $"Expression so it returns one value, or map it to a multi-valued attribute: '{error.Expression}'.");
 
+            case AttributeFlowErrorKind.DatesCollapseAtTargetResolution:
+                // Not a failure: the attribute still exports, at the Connected System's resolution (#2153, D2).
+                var collapsedSource = error.SourceAttributeName != null
+                    ? $"'{error.SourceAttributeName}' holds {error.ValueCount} dates"
+                    : $"The Expression for target attribute {target} returned {error.ValueCount} dates";
+                return (ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution,
+                    $"{collapsedSource}, but target attribute {target} holds dates to {DescribeDateTimeResolution(error.TargetDateTimeResolution)}, " +
+                    $"where some of them become the same date, so it is sent {error.TargetValueCount} distinct values. The attribute and the " +
+                    "object's other attributes still export. If the dates must stay apart, keep them further apart than the Connected " +
+                    "System's resolution, or check the attribute's Date Resolution on the Connected System's Schema tab.");
+
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:
                 var source = exporting
@@ -6870,6 +6881,22 @@ public abstract class SyncTaskProcessorBase
                     "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.");
         }
     }
+
+    /// <summary>
+    /// A date resolution in words, for an execution item's message: "the second", "the millisecond".
+    /// </summary>
+    private static string DescribeDateTimeResolution(DateTimeResolution? resolution) => resolution switch
+    {
+        DateTimeResolution.TenMicroseconds => "ten microseconds",
+        DateTimeResolution.HundredMicroseconds => "a hundred microseconds",
+        DateTimeResolution.Millisecond => "the millisecond",
+        DateTimeResolution.TenMilliseconds => "ten milliseconds",
+        DateTimeResolution.HundredMilliseconds => "a hundred milliseconds",
+        DateTimeResolution.Second => "the second",
+        DateTimeResolution.Minute => "the minute",
+        DateTimeResolution.Day => "the day",
+        _ => "the microsecond"
+    };
 
     /// <summary>
     /// Does not perform any delta processing. This is for MVO create scenarios where there are not MVO attribute values already.

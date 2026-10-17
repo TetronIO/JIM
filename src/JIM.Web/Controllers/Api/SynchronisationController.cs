@@ -327,6 +327,15 @@ public class SynchronisationController(
                 $"Attribute '{attribute.Name}' is not a Text attribute, so it cannot be declared case-exact. Only text values compare with or without regard to case."));
         }
 
+        // Validate: only a date has a resolution, so only a DateTime attribute can be given one (#2153). The type checked
+        // is the one the attribute will have, so a Type and a DateTimeResolution sent together agree.
+        if (request.DateTimeResolution.HasValue)
+        {
+            var resolutionError = JIM.Application.Servers.ConnectedSystemServer.ValidateDateTimeResolution(attribute.Name, request.Type ?? attribute.Type, request.DateTimeResolution.Value);
+            if (resolutionError != null)
+                return BadRequest(ApiErrorResponse.BadRequest(resolutionError));
+        }
+
         // Validate and apply a data type override through the one rule set the portal's Schema tab shares
         // (#1354): refused for NotSet, on a Connector whose schema states types definitively, and once the
         // attribute is referenced or holds values. An override to Boolean also makes the attribute
@@ -352,6 +361,14 @@ public class SynchronisationController(
             // Recorded, not inferred from the value differing, for the same reason as a type override: a schema
             // refresh must leave the administrator's declaration alone even where it matches what was discovered.
             attribute.CaseExactSetByAdministrator = true;
+        }
+
+        if (request.DateTimeResolution.HasValue)
+        {
+            attribute.DateTimeResolution = request.DateTimeResolution.Value;
+
+            // The administrator's resolution, which a schema refresh then leaves alone (#2153).
+            attribute.DateTimeResolutionSetByAdministrator = true;
         }
 
         // Get the current API key for Activity attribution if authenticated via API key
@@ -471,7 +488,7 @@ public class SynchronisationController(
         // Convert request DTOs to the format expected by the server
         var attributeUpdates = request.Attributes.ToDictionary(
             kvp => kvp.Key,
-            kvp => (kvp.Value.Selected, kvp.Value.IsExternalId, kvp.Value.IsSecondaryExternalId, kvp.Value.CaseExact)
+            kvp => (kvp.Value.Selected, kvp.Value.IsExternalId, kvp.Value.IsSecondaryExternalId, kvp.Value.CaseExact, kvp.Value.DateTimeResolution)
         );
 
         // Get the current API key for Activity attribution if authenticated via API key
