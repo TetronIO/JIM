@@ -31,7 +31,8 @@ function New-JIMRunProfile {
         every selected partition.
 
     .PARAMETER FilePath
-        The file to read or write, for a file-based Connector.
+        The file a Full Import reads, for a file-based Connector. Omit it to read the file the Connected System's
+        File Path setting names.
 
     .PARAMETER VerifyImportContentHashes
         Enables Verification Mode: the Full Import skips no object whose content looks unchanged, and raises an

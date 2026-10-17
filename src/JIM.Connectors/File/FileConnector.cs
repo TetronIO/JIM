@@ -492,12 +492,18 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     {
         logger.Verbose("ImportAsync() called");
 
-        if (string.IsNullOrEmpty(runProfile.FilePath))
-            throw new InvalidDataException($"ImportAsync: FilePath is missing or empty!");
+        // A Run Profile's own File Path wins, so one profile can read a different file; otherwise the import reads the
+        // file the Connected System names, the same one schema discovery read.
+        var filePath = !string.IsNullOrEmpty(runProfile.FilePath)
+            ? runProfile.FilePath
+            : connectedSystem.SettingValues.SingleOrDefault(q => q.Setting.Name == SettingFilePath)?.StringValue;
+
+        if (string.IsNullOrEmpty(filePath))
+            throw new InvalidSettingValuesException($"The File Connector has no file to import: set {SettingFilePath} on the Connected System, or on this Run Profile.");
 
         await progress.EnterPhaseAsync(FileConnectorPhases.Read);
 
-        var reader = GetCsvReader(runProfile.FilePath, connectedSystem.SettingValues, logger);
+        var reader = GetCsvReader(filePath, connectedSystem.SettingValues, logger);
         var objectTypeInfo = GetFileConnectorObjectTypeInfo(connectedSystem.SettingValues, logger);
         var stopOnFirstError = GetStopOnFirstErrorSetting(connectedSystem.SettingValues);
         var multiValueDelimiter = GetMultiValueDelimiterSetting(connectedSystem.SettingValues);
@@ -513,7 +519,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 // whole read. Counting them is a second pass, but a parse-only one over a file the
                 // read that follows is about to warm the page cache for.
                 await progress.ReportExpectedObjectCountAsync(
-                    await CountDataRecordsAsync(runProfile.FilePath, connectedSystem.SettingValues, logger, cancellationToken));
+                    await CountDataRecordsAsync(filePath, connectedSystem.SettingValues, logger, cancellationToken));
 
                 return await import.GetFullImportObjectsAsync();
             case ConnectedSystemRunType.DeltaImport:
