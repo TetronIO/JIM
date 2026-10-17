@@ -677,6 +677,7 @@ public class ExportMatchCandidateDatabaseTests
         var guid = Add("guid", AttributeDataType.Guid);
         var binary = Add("binary", AttributeDataType.Binary);
         var reference = Add("manager", AttributeDataType.Reference);
+        var unresolvedReference = Add("sponsor", AttributeDataType.Reference);
         await seed.SaveChangesAsync();
 
         var manager = CreateCso(system, type, text, "M1");
@@ -691,6 +692,7 @@ public class ExportMatchCandidateDatabaseTests
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = guid, GuidValue = objectGuid });
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = binary, ByteValue = [1, 2, 3] });
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = reference, ReferenceValue = manager });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = unresolvedReference, UnresolvedReferenceValue = "CN=Not Yet Imported" });
         seed.AddRange(manager, cso);
         await seed.SaveChangesAsync();
 
@@ -698,7 +700,7 @@ public class ExportMatchCandidateDatabaseTests
         var repository = new PostgresDataRepository(ctx);
         IReadOnlyList<ConnectedSystemObjectAttributeValue> values = [];
         await foreach (var (id, streamedValues) in repository.ConnectedSystems.StreamUnjoinedConnectedSystemObjectValues(
-                           system.Id, type.Id, [text.Id, number.Id, longNumber.Id, decimalNumber.Id, date.Id, flag.Id, guid.Id, binary.Id, reference.Id]))
+                           system.Id, type.Id, [text.Id, number.Id, longNumber.Id, decimalNumber.Id, date.Id, flag.Id, guid.Id, binary.Id, reference.Id, unresolvedReference.Id]))
         {
             if (id == cso.Id)
                 values = streamedValues;
@@ -716,6 +718,9 @@ public class ExportMatchCandidateDatabaseTests
             Assert.That(Of(guid).GuidValue, Is.EqualTo(objectGuid));
             Assert.That(Of(binary).ByteValue, Is.EqualTo(new byte[] { 1, 2, 3 }));
             Assert.That(Of(reference).ReferenceValue?.Id, Is.EqualTo(manager.Id), "a reference reads as the referenced object's id");
+            // #2330: a value held only as an unresolved reference is a held value to the held-object check (#2323) and
+            // the expression match index (#2052), not the absence of one.
+            Assert.That(Of(unresolvedReference).UnresolvedReferenceValue, Is.EqualTo("CN=Not Yet Imported"));
         }
     }
 

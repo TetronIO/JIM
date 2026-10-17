@@ -1109,28 +1109,9 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Whether a Connected System Object row holds a value of <paramref name="type"/> in that type's own field (#2153).
-    /// A row held under another type (#2128) or holding nothing does not. Internal so the provenance inspector (#399)
-    /// shows exactly the rows the engine would flow. Reference rows are always taken as holding a value: their writer
-    /// resolves them itself.
-    /// </summary>
-    internal static bool HoldsValueOfType(ConnectedSystemObjectAttributeValue value, AttributeDataType type) => type switch
-    {
-        AttributeDataType.Text => value.StringValue != null,
-        AttributeDataType.Number => value.IntValue.HasValue,
-        AttributeDataType.LongNumber => value.LongValue.HasValue,
-        AttributeDataType.Decimal => value.DecimalValue.HasValue,
-        AttributeDataType.DateTime => value.DateTimeValue.HasValue,
-        AttributeDataType.Boolean => value.BoolValue.HasValue,
-        AttributeDataType.Guid => value.GuidValue.HasValue,
-        AttributeDataType.Binary => value.ByteValue != null,
-        AttributeDataType.Reference => true,
-        _ => false
-    };
-
-    /// <summary>
-    /// The rows that hold a value of <paramref name="type"/>. When every row does, which is the usual case, the list
-    /// itself is returned and nothing is allocated (plain loops rather than predicates, which would allocate a closure
+    /// The rows that hold a value of <paramref name="type"/>, judged by the model's one rule
+    /// (<see cref="ConnectedSystemObjectAttributeValue.HoldsValueOfType"/>, #2330). When every row does, which is the usual
+    /// case, the list itself is returned and nothing is allocated (plain loops rather than predicates, which would allocate a closure
     /// over <paramref name="type"/> on this hot path).
     /// </summary>
     private static List<ConnectedSystemObjectAttributeValue> RowsHoldingValueOfType(
@@ -1139,7 +1120,7 @@ public partial class SyncEngine
         var firstWithout = -1;
         for (var i = 0; i < rows.Count; i++)
         {
-            if (!HoldsValueOfType(rows[i], type))
+            if (!rows[i].HoldsValueOfType(type))
             {
                 firstWithout = i;
                 break;
@@ -1152,7 +1133,7 @@ public partial class SyncEngine
         var typedRows = new List<ConnectedSystemObjectAttributeValue>(rows.Count - 1);
         for (var i = 0; i < rows.Count; i++)
         {
-            if (i != firstWithout && HoldsValueOfType(rows[i], type))
+            if (i != firstWithout && rows[i].HoldsValueOfType(type))
                 typedRows.Add(rows[i]);
         }
 
