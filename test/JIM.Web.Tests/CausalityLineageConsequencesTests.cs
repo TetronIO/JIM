@@ -295,10 +295,10 @@ public class CausalityLineageConsequencesTests
     }
 
     [Test]
-    public void Build_FailedExports_NeedAttentionRatherThanWaiting()
+    public void Build_ParkedExports_NeedAttentionRatherThanWaiting()
     {
         var synchronisation = SynchronisationCohort();
-        synchronisation.Consequences.Add(OutstandingCohort(PendingExportStatus.Failed, Guid.NewGuid()));
+        synchronisation.Consequences.Add(OutstandingCohort(PendingExportStatus.Parked, Guid.NewGuid()));
 
         var lineage = BuildImportLineage(Consequences(synchronisation));
 

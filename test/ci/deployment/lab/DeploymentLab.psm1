@@ -15,7 +15,7 @@
 
 Set-StrictMode -Version Latest
 
-$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase')
+$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase', 'Soak')
 $script:Runtimes = @('docker', 'podman')
 $script:Networks = @('airgap', 'online')
 $script:MinimumMemoryGiB = 4

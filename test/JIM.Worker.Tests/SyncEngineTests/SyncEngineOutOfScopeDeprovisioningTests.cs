@@ -92,7 +92,6 @@ public class SyncEngineOutOfScopeDeprovisioningTests
 
     [TestCase(PendingExportStatus.Pending)]
     [TestCase(PendingExportStatus.ExportNotConfirmed)]
-    [TestCase(PendingExportStatus.Failed)]
     [TestCase(PendingExportStatus.Parked)]
     public void DecideOutOfScopeDeprovisioning_RuleSaysDisconnectWithAnUnsentDeleteQueued_DisconnectsAndWithdrawsTheDelete(PendingExportStatus status)
     {

@@ -86,11 +86,11 @@ The same message names creates or updates when those are what the limit holds ba
 
 The SCIM Connector's messages begin `The service provider did not accept JIM's credentials (401)` or `... do not have permission to make it (403)`, and the SQL Connector's begin `The database refused the change because the account JIM connects as does not have permission ...`.
 
-**What it means.** The Connected System refused the export because the account JIM connects as may not make that change, or because it did not accept JIM's credentials at all. The message ends with the Connected System's own words. This is configuration in the Connected System, not a fault in JIM, so the run ends **Complete with warning**. The change is still waiting, as a Pending Export: JIM tries it again at each Export run after waiting 2, 4, 8 and then 16 minutes, and marks it Failed after the fifth refusal.
+**What it means.** The Connected System refused the export because the account JIM connects as may not make that change, or because it did not accept JIM's credentials at all. The message ends with the Connected System's own words. This is configuration in the Connected System, not a fault in JIM, so the run ends **Complete with warning**. The change waits as a Pending Export, which JIM attempts and reports again at every Export run until it succeeds; the Pending Exports list shows how long it has been failing.
 
 **How to fix.** For a directory, grant the bind account the rights to create, modify, move or delete the object and write the attributes the export carries; the [LDAP Connector](../connectors/jim-ldap-connector.md) page lists what each directory needs. For a SCIM service provider, a 401 means the Connected System's credentials are wrong, expired or revoked; a 403 means they lack a permission or scope the change needs. For a database, grant the account JIM connects as `INSERT`, `UPDATE` and `DELETE` on each table the export writes to, including related tables; [Database account permissions](../connectors/jim-sql-connector-security.md#database-account-permissions) lists what each database needs.
 
-**Check.** The next Export run writes the change: its Pending Export shows **Exported**, and clears once an import confirms it. A Pending Export already marked Failed is not attempted again; it clears when an import from the Connected System shows its values in place, for example once you make the change there yourself.
+**Check.** The next Export run writes the change, however many attempts failed before: its Pending Export shows **Exported**, and clears once an import confirms it. Nothing needs resetting by hand.
 
 ## **Export Rejected**: `Export failed: The directory refused the change (...): ...`
 
@@ -120,7 +120,7 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 
 ## **Export Pending**: `We exported a change, but did not get confirmation of it`
 
-**What it means.** JIM exported a change, but the confirming import read back a different value, or none. The Connected System changed the value as it stored it (often its case), or the import does not return that attribute. JIM exports the change again at the next Export run, and after five unconfirmed attempts records **Export Failed**: `Export confirmation failed after maximum retries`.
+**What it means.** JIM exported a change, but the confirming import read back a different value, or none. The Connected System changed the value as it stored it (often its case), or the import does not return that attribute. JIM exports the change again at every Export run, and reports it on every confirming import that does not see it.
 
 **How to fix.** Compare what JIM exported with what the Connected System holds. Where the system changes the case, see [When a target changes the case of a value](../concepts/case-sensitivity.md#when-a-target-changes-the-case-of-a-value); where the import cannot see the attribute, select it on the Connected System's schema.
 

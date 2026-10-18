@@ -343,7 +343,6 @@ internal sealed class CollisionRemediationRun
         // Never retried inside this run, which would send stale dependent values.
         export.Status = PendingExportStatus.Pending;
         export.LastAttemptedAt = DateTime.UtcNow;
-        export.NextRetryAt = null;
 
         var message = $"{_connectedSystem.Name} already holds the {attributeName} \"{rejectedValue}\" for another object, so JIM corrected it to \"{newValue}\".";
         Log.Warning("CollisionRemediation: {ConnectedSystem} rejected the {Attribute} \"{RejectedValue}\" on Pending Export {ExportId} as already in use; " +
@@ -371,11 +370,10 @@ internal sealed class CollisionRemediationRun
         var message = $"{_connectedSystem.Name} rejected the {attributeName} \"{rejectedValue}\" because another object there already holds it, " +
                       $"and JIM has not changed it: {why}. Allow the rename, retry once the conflict is resolved in {_connectedSystem.Name}, or leave it.";
 
-        // Parked under its own status (plan decision 12): never exported, never consumed by the Connected System's bulk
-        // "Retry failed exports", and not counted against its error count, until the decision releases it.
+        // Parked under its own status (plan decision 12): never exported, and not counted against its error count,
+        // until the decision releases it.
         export.Status = PendingExportStatus.Parked;
         export.LastAttemptedAt = DateTime.UtcNow;
-        export.NextRetryAt = null;
         export.LastErrorMessage = message;
 
         Log.Warning("CollisionRemediation: {ConnectedSystem} rejected the {Attribute} \"{RejectedValue}\" on Pending Export {ExportId} as already in use; " +

@@ -2029,9 +2029,9 @@ public class SyncImportTaskProcessor
 
     /// <summary>
     /// Applies the retry transition to one exported Create a Full Import did not see at all: the same
-    /// per-change retry accounting reconciliation applies to a change that fails to confirm
-    /// (<see cref="SyncEngine.ShouldMarkAsFailed"/>), applied here to every change still awaiting
-    /// confirmation, since none of them were confirmed - nothing was seen at all. The Pending Export's
+    /// transition reconciliation applies to a change that fails to confirm, applied here to every change
+    /// still awaiting confirmation, since none of them were confirmed - nothing was seen at all. Each is
+    /// sent again at the next export run, however many times it has been sent before (#2119). The Pending Export's
     /// ChangeType stays Create (unlike <see cref="SyncEngine.TransitionCreateToUpdateOnceObjectConfirmed"/>:
     /// there is nothing here to prove the object exists), so the retry correctly goes out as a Create.
     /// </summary>
@@ -2041,9 +2041,7 @@ public class SyncImportTaskProcessor
                      ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
                      ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
         {
-            attrChange.Status = SyncEngine.ShouldMarkAsFailed(attrChange)
-                ? PendingExportAttributeChangeStatus.Failed
-                : PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+            attrChange.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
         }
 
         SyncEngine.UpdatePendingExportStatus(pendingExport);
@@ -5364,7 +5362,6 @@ public class SyncImportTaskProcessor
 
         var totalConfirmed = 0;
         var totalRetry = 0;
-        var totalFailed = 0;
         var totalHeld = 0;
         var totalReleased = 0;
         var exportsDeleted = 0;
@@ -5445,7 +5442,6 @@ public class SyncImportTaskProcessor
                         {
                             Interlocked.Add(ref totalConfirmed, result.ConfirmedChanges.Count);
                             Interlocked.Add(ref totalRetry, result.RetryChanges.Count);
-                            Interlocked.Add(ref totalFailed, result.FailedChanges.Count);
                             // A release is persisted with the Pending Export below, but raises no item: the interim
                             // value was written on purpose, so it is not an unconfirmed export (#2039).
                             Interlocked.Add(ref totalReleased, result.ReleasedChanges.Count);
@@ -5510,56 +5506,7 @@ public class SyncImportTaskProcessor
                                 }
                             }
 
-                            // Add ExportFailed outcome for permanently failed exports
-                            if (result.FailedChanges.Count > 0)
-                            {
-                                var failedAttrNames = string.Join(", ", result.FailedChanges
-                                    .GroupBy(c => c.Attribute?.Name ?? "unknown")
-                                    .Select(g => g.Count() > 1 ? $"{g.Key} (x{g.Count()})" : g.Key));
-
-                                if (existingRpei != null)
-                                {
-                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                                    {
-                                        SyncOutcomeBuilder.AddRootOutcome(existingRpei,
-                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
-                                            detailCount: result.FailedChanges.Count);
-                                    }
-                                    // Set error fields only if the existing RPEI doesn't already have an error
-                                    if (existingRpei.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
-                                    {
-                                        existingRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed;
-                                        existingRpei.ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.";
-
-                                    }
-                                    modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
-                                }
-                                else
-                                {
-                                    var executionItem = new ActivityRunProfileExecutionItem
-                                    {
-                                        Activity = _activity,
-                                        ConnectedSystemObject = cso,
-                                        ConnectedSystemObjectId = cso.Id,
-                                        ObjectChangeType = ObjectChangeType.Updated,
-                                        ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
-                                        ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
-
-                                    };
-                                    executionItem.SnapshotCsoDisplayFields(cso);
-
-                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                                    {
-                                        SyncOutcomeBuilder.AddRootOutcome(executionItem,
-                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
-                                            detailCount: result.FailedChanges.Count);
-                                    }
-
-                                    pageExecutionItems.Add(executionItem);
-                                }
-                            }
-
-                            // Add ExportFailed outcome for retry exports (temporary failures)
+                            // Add ExportFailed outcome for changes not confirmed: reported at every import that misses them (#2119)
                             if (result.RetryChanges.Count > 0)
                             {
                                 var retryAttrNames = string.Join(", ", result.RetryChanges
@@ -5726,11 +5673,11 @@ public class SyncImportTaskProcessor
         // Store the confirmed count on the activity for stats reporting
         _activity.PendingExportsConfirmed = exportsDeleted;
 
-        if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0 || totalHeld > 0 || totalReleased > 0)
+        if (totalConfirmed > 0 || totalRetry > 0 || totalHeld > 0 || totalReleased > 0)
         {
-            Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, " +
+            Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, " +
                 "Held awaiting Initial Password: {Held}, Released (no Initial Password owed): {Released}, Exports deleted: {Deleted}",
-                totalConfirmed, totalRetry, totalFailed, totalHeld, totalReleased, exportsDeleted);
+                totalConfirmed, totalRetry, totalHeld, totalReleased, exportsDeleted);
         }
     }
 

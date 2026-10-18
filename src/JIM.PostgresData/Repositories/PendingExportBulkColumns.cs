@@ -19,7 +19,7 @@ internal static class PendingExportBulkColumns
     internal static readonly string[] PendingExports =
     [
         "Id", "ConnectedSystemId", "ConnectedSystemObjectId", "ChangeType", "Status",
-        "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt",
+        "ErrorCount", "FailingSince", "LastAttemptedAt",
         "LastErrorMessage", "LastErrorStackTrace", "SourceMetaverseObjectId",
         "HasUnresolvedReferences", "CreatedAt", "ProvisioningSyncRuleId",
         "QueuedByRunProfileExecutionItemId", "StagedByRunProfileExecutionItemIds"
@@ -27,12 +27,12 @@ internal static class PendingExportBulkColumns
 
     /// <summary>
     /// Update columns for the retry/reconciliation bulk update (SyncRepository.CsOperations.cs):
-    /// the status, retry and error fields mutated when Pending Exports are re-evaluated.
+    /// the status and failure fields mutated when Pending Exports are re-evaluated.
     /// </summary>
     internal static readonly string[] PendingExportsRetryUpdate =
     [
-        "Status", "ChangeType", "ErrorCount", "MaxRetries", "LastAttemptedAt",
-        "NextRetryAt", "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences"
+        "Status", "ChangeType", "ErrorCount", "FailingSince", "LastAttemptedAt",
+        "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences"
     ];
 
     /// <summary>
@@ -44,7 +44,7 @@ internal static class PendingExportBulkColumns
     /// </summary>
     internal static readonly string[] PendingExportsExportResultUpdate =
     [
-        "Status", "ChangeType", "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt",
+        "Status", "ChangeType", "ErrorCount", "FailingSince", "LastAttemptedAt",
         "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences", "ConnectedSystemObjectId"
     ];
 

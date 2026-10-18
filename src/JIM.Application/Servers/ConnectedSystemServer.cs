@@ -5878,7 +5878,7 @@ public partial class ConnectedSystemServer
     /// Resolves each row's connection state from the scalars the projection carries. In memory rather than in
     /// the query because <see cref="ConnectedSystemObjectConnectionStateResolver"/> cannot be translated into
     /// SQL, and it lives in this layer, which JIM.PostgresData sits below. The resolver reads only a Pending
-    /// Export's change type and status, so a lightweight instance built from the projected scalars is exactly
+    /// Export's change type, status and failure, so a lightweight instance built from the projected scalars is exactly
     /// what it expects; no Pending Export is loaded per row.
     /// </summary>
     private static void ResolveConnectionStates(List<ConnectedSystemObjectHeader> headers)
@@ -5889,7 +5889,8 @@ public partial class ConnectedSystemServer
                 ? new PendingExport
                 {
                     Status = header.PendingExportStatus ?? PendingExportStatus.Pending,
-                    ChangeType = header.PendingExportChangeType ?? PendingExportChangeType.Update
+                    ChangeType = header.PendingExportChangeType ?? PendingExportChangeType.Update,
+                    FailingSince = header.PendingExportFailingSince
                 }
                 : null;
 
@@ -9130,14 +9131,26 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="changeType">Optional change type to filter by (Create, Update, Delete).</param>
-    /// <param name="status">Optional status to filter by (Pending, Failed, etc.).</param>
+    /// <param name="status">Optional status to filter by (Pending, Exported, etc.).</param>
+    /// <param name="failingOnly">Whether to count only the Pending Exports whose last attempt failed.</param>
     /// <returns>The count of matching Pending Export objects.</returns>
     public async Task<int> GetPendingExportsFilteredCountAsync(
         int connectedSystemId,
         PendingExportChangeType? changeType = null,
-        PendingExportStatus? status = null)
+        PendingExportStatus? status = null,
+        bool failingOnly = false)
     {
-        return await Application.Repository.ConnectedSystems.GetPendingExportsFilteredCountAsync(connectedSystemId, changeType, status);
+        return await Application.Repository.ConnectedSystems.GetPendingExportsFilteredCountAsync(connectedSystemId, changeType, status, failingOnly);
+    }
+
+    /// <summary>
+    /// How many of a Connected System's Pending Exports are failing, and since when the longest-failing one has been.
+    /// Each is attempted again at every export run until it succeeds (#2119).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    public async Task<PendingExportFailureSummary> GetPendingExportFailureSummaryAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportFailureSummaryAsync(connectedSystemId);
     }
 
     /// <summary>
@@ -9184,6 +9197,7 @@ public partial class ConnectedSystemServer
     /// <param name="searchQuery">Optional search query to filter by target object identifier, source MVO display name, or error message.</param>
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
     public async Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
         int connectedSystemId,
         int page,
@@ -9191,10 +9205,11 @@ public partial class ConnectedSystemServer
         IEnumerable<PendingExportStatus>? statusFilters = null,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        bool failingOnly = false)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportHeadersAsync(
-            connectedSystemId, page, pageSize, statusFilters, searchQuery, sortBy, sortDescending);
+            connectedSystemId, page, pageSize, statusFilters, searchQuery, sortBy, sortDescending, failingOnly);
     }
 
     /// <summary>
@@ -9212,10 +9227,11 @@ public partial class ConnectedSystemServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        bool failingOnly = false)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportHeadersRangeAsync(
-            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount);
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount, failingOnly);
     }
 
     /// <summary>

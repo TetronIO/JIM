@@ -194,7 +194,6 @@ public class PendingExportReconciliationTests
         // Assert
         Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "One attribute change should be confirmed");
         Assert.That(result.RetryChanges.Count, Is.EqualTo(0), "No changes should need retry");
-        Assert.That(result.FailedChanges.Count, Is.EqualTo(0), "No changes should have failed");
         Assert.That(result.PendingExportDeleted, Is.True, "PendingExport should be deleted when all changes confirmed");
     }
 
@@ -220,7 +219,6 @@ public class PendingExportReconciliationTests
         // Assert
         Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "No attribute changes should be confirmed");
         Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "One change should need retry");
-        Assert.That(result.FailedChanges.Count, Is.EqualTo(0), "No changes should have failed yet");
         Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed),
             "Attribute change should be marked for retry");
         Assert.That(attrChange.LastImportedValue, Is.EqualTo("Jane Doe"),
@@ -228,17 +226,15 @@ public class PendingExportReconciliationTests
     }
 
     /// <summary>
-    /// Tests that a single attribute change is marked as Failed when max retries are exceeded.
+    /// A change unconfirmed on many imports is still sent again (#2119): JIM never gives up on it.
     /// </summary>
     [Test]
-    public async Task ReconcileAsync_SingleAttributeChange_MarksAsFailedWhenMaxRetriesExceededAsync()
+    public async Task ReconcileAsync_SingleAttributeChange_UnconfirmedOnManyImports_IsStillMarkedForRetryAsync()
     {
         // Arrange
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
-        var attrChange = CreateTestAttributeChange(
-            pendingExport, DisplayNameAttr, "John Doe",
-            exportAttemptCount: JIM.Application.Servers.SyncEngine.DefaultMaxRetries);
+        var attrChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe", exportAttemptCount: 40);
 
         // Import has a different value
         AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Value");
@@ -249,11 +245,9 @@ public class PendingExportReconciliationTests
         var result = await service.ReconcileAsync(cso);
 
         // Assert
-        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "No attribute changes should be confirmed");
-        Assert.That(result.RetryChanges.Count, Is.EqualTo(0), "No changes should be marked for retry");
-        Assert.That(result.FailedChanges.Count, Is.EqualTo(1), "One change should have failed");
-        Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed),
-            "Attribute change should be marked as Failed");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "The change should be sent again at the next export run");
+        Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
     }
 
     #endregion
@@ -573,39 +567,6 @@ public class PendingExportReconciliationTests
         // Assert
         Assert.That(result.HasChanges, Is.False);
         Assert.That(result.PendingExportDeleted, Is.False);
-    }
-
-    /// <summary>
-    /// Tests that PendingExport status is updated to Failed when all attribute changes fail.
-    /// </summary>
-    [Test]
-    public async Task ReconcileAsync_AllAttributeChangesFail_PendingExportStatusIsFailedAsync()
-    {
-        // Arrange
-        var cso = CreateTestCso();
-        var pendingExport = CreateTestPendingExport(cso);
-
-        // Both changes have hit max retries
-        var displayNameChange = CreateTestAttributeChange(
-            pendingExport, DisplayNameAttr, "John Doe",
-            exportAttemptCount: JIM.Application.Servers.SyncEngine.DefaultMaxRetries);
-        var mailChange = CreateTestAttributeChange(
-            pendingExport, MailAttr, "john@panoply.org",
-            exportAttemptCount: JIM.Application.Servers.SyncEngine.DefaultMaxRetries);
-
-        // Import has different values
-        AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
-        AddCsoAttributeValue(cso, MailAttr, "wrong@panoply.org");
-
-        var service = new PendingExportReconciliationService(SyncRepo, new JIM.Application.Servers.SyncEngine());
-
-        // Act
-        var result = await service.ReconcileAsync(cso);
-
-        // Assert
-        Assert.That(result.FailedChanges.Count, Is.EqualTo(2), "Both changes should have failed");
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Failed),
-            "PendingExport should be marked as Failed");
     }
 
     /// <summary>
@@ -1591,7 +1552,6 @@ public class PendingExportReconciliationTests
         Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
             "Export should be confirmed when the exported value exists among the CSO's multiple values");
         Assert.That(result.RetryChanges.Count, Is.EqualTo(0));
-        Assert.That(result.FailedChanges.Count, Is.EqualTo(0));
     }
 
     /// <summary>

@@ -63,7 +63,6 @@ public class SyncEngineAwaitingInitialPasswordReconciliationTests
         {
             Assert.That(result.HeldChanges, Does.Contain(change));
             Assert.That(result.RetryChanges, Is.Empty, "a held change must never be retried: Active Directory would refuse it");
-            Assert.That(result.FailedChanges, Is.Empty);
             Assert.That(result.ConfirmedChanges, Is.Empty);
             Assert.That(result.ReleasedChanges, Is.Empty);
             Assert.That(change.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
@@ -88,7 +87,6 @@ public class SyncEngineAwaitingInitialPasswordReconciliationTests
         {
             Assert.That(result.ReleasedChanges, Does.Contain(change));
             Assert.That(result.RetryChanges, Is.Empty, "a release is not a failed confirmation and is not reported as one");
-            Assert.That(result.FailedChanges, Is.Empty);
             Assert.That(result.HeldChanges, Is.Empty);
             Assert.That(change.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending),
                 "the next export writes the Synchronisation Rule's value as an ordinary Update");
@@ -238,7 +236,7 @@ public class SyncEngineAwaitingInitialPasswordReconciliationTests
             Assert.That(held.AwaitsInitialPassword, Is.False);
             Assert.That(unjudged.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
                 "the import did not read the account, so nothing else is confirmed or retried");
-            Assert.That(result.ConfirmedChanges.Concat(result.RetryChanges).Concat(result.FailedChanges), Is.Empty);
+            Assert.That(result.ConfirmedChanges.Concat(result.RetryChanges), Is.Empty);
             Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending), "the released change goes out on the next export");
             Assert.That(result.PendingExportToUpdate, Is.SameAs(pendingExport));
         }
@@ -284,7 +282,6 @@ public class SyncEngineAwaitingInitialPasswordReconciliationTests
 
     [TestCase(PendingExportStatus.Parked)]
     [TestCase(PendingExportStatus.Executing)]
-    [TestCase(PendingExportStatus.Failed)]
     public void JudgeChangesAwaitingInitialPasswordNotReconciled_ExportReconciliationLeavesAlone_IsLeftAlone(PendingExportStatus status)
     {
         var (cso, pendingExport, held) = Arrange(importedValue: Disabled);

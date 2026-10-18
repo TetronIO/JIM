@@ -122,7 +122,7 @@ Why case is ignored here:
 
 ## 🔠 When a target changes the case of a value
 
-Because JIM confirms an export of ordinary text by comparing values exactly, a Connected System that stores a value in a case of its own (lower-casing email addresses as it saves them, say) never hands back what JIM sent. JIM then cannot confirm the export: it retries the change on later exports, and once the retries are spent it reports the export as failed. Nothing is lost on the target, which holds the value in its own case; what fails is JIM's confirmation that its value arrived. An identifier is the exception; see [Identifiers a target reports in its own case](#identifiers-a-target-reports-in-its-own-case).
+Because JIM confirms an export of ordinary text by comparing values exactly, a Connected System that stores a value in a case of its own (lower-casing email addresses as it saves them, say) never hands back what JIM sent. JIM then cannot confirm the export: it sends the change again at every later export, and reports it as not confirmed on every import, for as long as the two disagree. Nothing is lost on the target, which holds the value in its own case; what fails is JIM's confirmation that its value arrived. An identifier is the exception; see [Identifiers a target reports in its own case](#identifiers-a-target-reports-in-its-own-case).
 
 Fold the case before the value reaches that system, so JIM sends what the system keeps:
 

@@ -232,7 +232,6 @@ public class SyncEngineExportEvaluationTests
     [TestCase(PendingExportStatus.Exported)]
     [TestCase(PendingExportStatus.ExportNotConfirmed)]
     [TestCase(PendingExportStatus.Executing)]
-    [TestCase(PendingExportStatus.Failed)]
     public void IsProvisioningNeverExported_TheCreateHasLeftPendingStatus_MayExistInTheTargetSoIsNotNeverExported(PendingExportStatus status)
     {
         // Once a Create has been handed to a Connector the object may exist in the target system, confirmed or

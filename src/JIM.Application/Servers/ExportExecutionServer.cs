@@ -427,12 +427,12 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Gets Pending Exports that are ready to be executed.
-    /// Uses database-level filtering for status, retry timing, and max retries (Q6 decision),
-    /// then applies in-memory checks for attribute-level eligibility that can't be expressed in SQL.
+    /// Uses database-level filtering for status, then applies in-memory checks for attribute-level eligibility that
+    /// can't be expressed in SQL. No count or age of failed attempts takes an export out of the queue (#2119).
     /// </summary>
     private async Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
-        // Database-level filtering handles: status, NextRetryAt, ErrorCount < MaxRetries, ordering
+        // Database-level filtering handles: status, ordering
         var eligibleExports = await SyncRepo.GetExecutableExportsAsync(connectedSystemId);
 
         // In-memory filtering for checks that require navigation property evaluation
@@ -444,8 +444,7 @@ public class ExportExecutionServer
     /// <summary>
     /// Determines if a Pending Export is ready for execution.
     /// Applies in-memory checks that require navigation property evaluation and can't be expressed
-    /// in SQL. Database-level checks (status, retry timing, max retries) are already applied by
-    /// GetExecutableExportsAsync.
+    /// in SQL. Database-level checks (status) are already applied by GetExecutableExportsAsync.
     /// </summary>
     private static bool IsReadyForExecution(PendingExport pendingExport)
     {
@@ -667,10 +666,6 @@ public class ExportExecutionServer
                 // nothing is ever re-read. The previous OFFSET implementation restarted its
                 // scan from zero for every batch and degraded to O(n²) page loads once
                 // thousands of deferred exports accumulated (issue #985).
-                //
-                // Known trade-off: an export whose NextRetryAt backoff elapses mid-run at a
-                // position already behind the cursor is not picked up until the next export
-                // run. The OFFSET implementation only ever caught those incidentally.
                 var deferredExports = new List<PendingExport>();
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
@@ -1864,16 +1859,17 @@ public class ExportExecutionServer
         if (mark != null)
         {
             var before = mark.StatesBefore;
+            var attemptedAt = DateTime.UtcNow;
             var failedAttempts = batch
                 .Where(pe => before.ContainsKey(pe.Id))
-                .ToDictionary(pe => pe.Id, pe => AfterFailedAttempt(before[pe.Id], pe.MaxRetries, exception.Message));
+                .ToDictionary(pe => pe.Id, pe => before[pe.Id].AfterFailedAttempt(exception.Message, stackTrace: null, attemptedAt));
             try
             {
                 failed = await repository.ReleaseExecutingPendingExportsAsync(failedAttempts.Values.ToList(), mark.MarkedAt);
                 foreach (var export in batch.Where(pe => failed.Contains(pe.Id)))
                 {
                     failedAttempts[export.Id].ApplyTo(export);
-                    LogFailedAttempt(failedAttempts[export.Id], export.MaxRetries);
+                    LogFailedAttempt(failedAttempts[export.Id]);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -2273,22 +2269,23 @@ public class ExportExecutionServer
             if (stillUnresolvedCount > 0)
             {
                 // Written in part (issue #1398): everything that could go has gone, and the export stays
-                // pending for the references it still owes, on the deferred cadence. The row now exists,
-                // so from here on it is an Update: sending it as a Create again would insert a second row.
+                // pending for the references it still owes, attempted again at the next export run. The row now
+                // exists, so from here on it is an Update: sending it as a Create again would insert a second row.
                 export.Status = PendingExportStatus.Pending;
                 export.HasUnresolvedReferences = true;
                 export.LastAttemptedAt = DateTime.UtcNow;
-                export.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
+                export.ClearFailure();
                 if (wasCreate)
                     export.ChangeType = PendingExportChangeType.Update;
                 result.PartiallyExportedCount++;
                 Log.Information("ProcessBatchSuccessAsync: Exported {ExportId} for CSO {CsoId} in part: {Written} change(s) written, " +
-                    "{Unresolved} reference change(s) still awaiting resolution. Next retry at {NextRetry}",
-                    export.Id, export.ConnectedSystemObjectId, writtenChanges.Count, stillUnresolvedCount, export.NextRetryAt);
+                    "{Unresolved} reference change(s) still awaiting resolution; attempted again at the next export run",
+                    export.Id, export.ConnectedSystemObjectId, writtenChanges.Count, stillUnresolvedCount);
             }
             else
             {
                 export.Status = PendingExportStatus.Exported;
+                export.ClearFailure();
             }
 
             // For Create exports, update the CSO with the system-assigned external ID and status
@@ -3370,49 +3367,23 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Marks an export as failed and applies retry logic (Q6 decision).
+    /// Records a failed attempt on an export (#2119): it stays Pending and is attempted again at the next export run.
     /// This is a synchronous version for batch processing - does not save to database.
     /// </summary>
     private static void MarkExportFailed(PendingExport export, string errorMessage, string? stackTrace = null)
     {
-        var failed = AfterFailedAttempt(PendingExportRetryState.Of(export), export.MaxRetries, errorMessage, stackTrace);
+        var failed = PendingExportRetryState.Of(export).AfterFailedAttempt(errorMessage, stackTrace, DateTime.UtcNow);
         failed.ApplyTo(export);
-        LogFailedAttempt(failed, export.MaxRetries);
+        LogFailedAttempt(failed);
     }
 
     /// <summary>
-    /// The retry state after one more failed attempt from <paramref name="before"/> (Q6 decision): Pending with an
-    /// exponential back-off while retries remain, Failed (requiring manual intervention) once they have run out.
+    /// Logs a failed attempt once it has been applied.
     /// </summary>
-    private static PendingExportRetryState AfterFailedAttempt(PendingExportRetryState before, int maxRetries, string errorMessage, string? stackTrace = null)
+    private static void LogFailedAttempt(PendingExportRetryState failed)
     {
-        var errorCount = before.ErrorCount + 1;
-        return before with
-        {
-            Status = errorCount >= maxRetries ? PendingExportStatus.Failed : PendingExportStatus.Pending,
-            ErrorCount = errorCount,
-            LastErrorMessage = errorMessage,
-            LastErrorStackTrace = stackTrace,
-            LastAttemptedAt = DateTime.UtcNow,
-            NextRetryAt = CalculateNextRetryTime(errorCount)
-        };
-    }
-
-    /// <summary>
-    /// Logs a failed attempt once it has been applied: as needing manual intervention once its retries have run out.
-    /// </summary>
-    private static void LogFailedAttempt(PendingExportRetryState failed, int maxRetries)
-    {
-        if (failed.Status == PendingExportStatus.Failed)
-        {
-            Log.Warning("MarkExportFailed: Export {ExportId} has exceeded max retries ({MaxRetries}). Requires manual intervention.",
-                failed.PendingExportId, maxRetries);
-        }
-        else
-        {
-            Log.Warning("MarkExportFailed: Export {ExportId} failed (attempt {Attempt}/{MaxRetries}). Next retry at {NextRetry}. Error: {Error}",
-                failed.PendingExportId, failed.ErrorCount, maxRetries, failed.NextRetryAt, LogSanitiser.Sanitise(failed.LastErrorMessage ?? string.Empty));
-        }
+        Log.Warning("MarkExportFailed: Export {ExportId} failed (attempt {Attempt}, failing since {FailingSince}); it is attempted again at the next export run. Error: {Error}",
+            failed.PendingExportId, failed.ErrorCount, failed.FailingSince, LogSanitiser.Sanitise(failed.LastErrorMessage ?? string.Empty));
     }
 
     /// <summary>
@@ -3458,97 +3429,6 @@ public class ExportExecutionServer
         Log.Warning("LeaveUnrecordedExportsUnconfirmedAsync: {Count} auto-confirmed exports to Connected System {ConnectedSystemId} were written, " +
             "but their values could not be recorded; they are left unconfirmed and will be sent again on the next export run",
             unrecordedExports.Count, unrecordedExports[0].ConnectedSystemId);
-    }
-
-    /// <summary>
-    /// Updates the CSO after a successful export.
-    /// For Create exports, transitions the CSO from PendingProvisioning to Normal status
-    /// and populates the external ID attribute with the system-assigned value.
-    /// </summary>
-    private async Task UpdateCsoAfterSuccessfulExportAsync(ConnectedSystemObject cso, ConnectedSystemExportResult? exportResult = null)
-    {
-        var needsUpdate = false;
-        var newAttributeValues = new List<ConnectedSystemObjectAttributeValue>();
-
-        // Note: We do NOT transition CSO status from PendingProvisioning to Normal here.
-        // The CSO should remain PendingProvisioning until the confirming import verifies
-        // that the object actually exists in the target system. This allows the confirming
-        // import to match the CSO by secondary external ID (e.g., distinguishedName) since
-        // the primary external ID (e.g., objectGUID) is typically system-assigned and not
-        // known until the confirming import.
-
-        // Populate external ID attribute if provided in the export result
-        if (exportResult != null && !string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
-        {
-            // Get the attribute definition to determine the correct data type
-            var externalIdAttribute = await SyncRepo.GetAttributeAsync(cso.ExternalIdAttributeId);
-
-            // Find or create the external ID attribute value
-            var externalIdAttrValue = cso.AttributeValues
-                .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-
-            if (externalIdAttrValue == null)
-            {
-                // Create new attribute value for external ID
-                externalIdAttrValue = new ConnectedSystemObjectAttributeValue
-                {
-                    ConnectedSystemObject = cso,
-                    AttributeId = cso.ExternalIdAttributeId
-                };
-                cso.AttributeValues.Add(externalIdAttrValue);
-                newAttributeValues.Add(externalIdAttrValue);
-            }
-
-            // Set the external ID value based on the attribute's data type
-            // This ensures consistency with how import stores values
-            if (externalIdAttribute?.Type == AttributeDataType.Guid && Guid.TryParse(exportResult.ExternalId, out var guidValue))
-            {
-                externalIdAttrValue.GuidValue = guidValue;
-                externalIdAttrValue.StringValue = null;
-            }
-            else
-            {
-                // For Text or other types, or if attribute type is unknown, store as string
-                externalIdAttrValue.StringValue = exportResult.ExternalId;
-                externalIdAttrValue.GuidValue = null;
-            }
-
-            needsUpdate = true;
-            Log.Information("UpdateCsoAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
-                cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttribute?.Type.ToString() ?? "Unknown");
-        }
-
-        // Update secondary external ID if provided
-        if (exportResult != null && !string.IsNullOrEmpty(exportResult.SecondaryExternalId) && cso.SecondaryExternalIdAttributeId.HasValue)
-        {
-            var secondaryExternalIdAttrValue = cso.AttributeValues
-                .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
-
-            if (secondaryExternalIdAttrValue == null)
-            {
-                secondaryExternalIdAttrValue = new ConnectedSystemObjectAttributeValue
-                {
-                    ConnectedSystemObject = cso,
-                    AttributeId = cso.SecondaryExternalIdAttributeId.Value
-                };
-                cso.AttributeValues.Add(secondaryExternalIdAttrValue);
-                newAttributeValues.Add(secondaryExternalIdAttrValue);
-            }
-
-            secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
-            needsUpdate = true;
-            Log.Debug("UpdateCsoAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
-                cso.Id, LogSanitiser.Sanitise(exportResult.SecondaryExternalId));
-        }
-
-        if (needsUpdate)
-        {
-            // Explicitly add new attribute values to ensure they are tracked by EF Core
-            // This handles the case where the CSO was loaded without attribute values (PendingProvisioning)
-            // and we're adding new values that need to be persisted
-            await SyncRepo.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(cso, newAttributeValues);
-            Log.Information("UpdateCsoAfterSuccessfulExportAsync: Updated CSO {CsoId}", cso.Id);
-        }
     }
 
     /// <summary>
@@ -3749,6 +3629,7 @@ public class ExportExecutionServer
                     // Standard behaviour: mark as exported, will be confirmed on next import
                     export.Status = PendingExportStatus.Exported;
                     export.LastAttemptedAt = DateTime.UtcNow;
+                    export.ClearFailure();
                     exportsToUpdate.Add(export);
                 }
                 result.SuccessCount++;
@@ -3813,15 +3694,11 @@ public class ExportExecutionServer
         {
             Log.Error(ex, "ExecuteUsingFilesWithBatchingAsync: Failed to export to file for {SystemName}", connectedSystem.Name);
 
-            // Mark all as failed using batch update
+            // Mark all as failed using batch update; each is attempted again at the next export run (#2119)
             var now = DateTime.UtcNow;
             foreach (var export in pendingExports)
             {
-                export.ErrorCount++;
-                export.LastErrorMessage = ex.Message;
-                export.LastErrorStackTrace = ex.StackTrace;
-                export.LastAttemptedAt = now;
-                export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
+                PendingExportRetryState.Of(export).AfterFailedAttempt(ex.Message, ex.StackTrace, now).ApplyTo(export);
                 export.Status = PendingExportStatus.ExportNotConfirmed;
 
                 // Create ProcessedExportItem so the RPEI pipeline can record the failure.
@@ -3899,9 +3776,8 @@ public class ExportExecutionServer
         ChangeType = pendingExport.ChangeType,
         Status = pendingExport.Status,
         ErrorCount = pendingExport.ErrorCount,
-        MaxRetries = pendingExport.MaxRetries,
+        FailingSince = pendingExport.FailingSince,
         LastAttemptedAt = pendingExport.LastAttemptedAt,
-        NextRetryAt = pendingExport.NextRetryAt,
         LastErrorMessage = pendingExport.LastErrorMessage,
         LastErrorStackTrace = pendingExport.LastErrorStackTrace,
         SourceMetaverseObject = pendingExport.SourceMetaverseObject,
@@ -4119,76 +3995,6 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Processes a successful export execution with ConnectedSystemExportResult data.
-    /// </summary>
-    private async Task ProcessExportSuccessAsync(PendingExport export, ConnectedSystemExportResult exportResult, ExportExecutionResult result)
-    {
-        if (!exportResult.Success)
-        {
-            await MarkExportFailedAsync(export, exportResult.ErrorMessage ?? "Export failed");
-            result.FailedCount++;
-
-            // Capture export data for activity tracking (before any state changes)
-            result.ProcessedExportItems.Add(new ProcessedExportItem
-            {
-                ChangeType = export.ChangeType,
-                ConnectedSystemObject = export.ConnectedSystemObject,
-                AttributeChangeCount = export.AttributeValueChanges.Count,
-                AttributeValueChanges = export.AttributeValueChanges.ToList(),
-                Succeeded = false,
-                ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
-                ErrorCount = export.ErrorCount,
-                ErrorType = exportResult.ErrorType,
-                RejectedAttributeName = exportResult.RejectedAttributeName
-            }.WithCauseFrom(export));
-            return;
-        }
-
-        // A Delete that just succeeded against a CSO whose provisioning was never
-        // confirmed by an import is the terminal step in that object's life; see
-        // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
-        var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
-
-        // Capture export data for activity tracking (before deletion)
-        result.ProcessedExportItems.Add(new ProcessedExportItem
-        {
-            ChangeType = export.ChangeType,
-            ConnectedSystemObject = export.ConnectedSystemObject,
-            AttributeChangeCount = export.AttributeValueChanges.Count,
-            AttributeValueChanges = export.AttributeValueChanges.ToList(),
-            Succeeded = true,
-            ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
-        }.WithCauseFrom(export));
-
-        if (isUnconfirmedProvisioningDelete)
-        {
-            // Remove the CSO and this Pending Export now, rather than leaving the export Exported.
-            await RemoveUnconfirmedProvisioningCsosAsync([export], SyncRepo);
-            result.SuccessCount++;
-            Log.Debug("ProcessExportSuccessAsync: Export {ExportId} deleted CSO {CsoId} whose provisioning was never confirmed by an import; " +
-                "the Connected System Object was removed", export.Id, export.ConnectedSystemObjectId);
-            return;
-        }
-
-        export.Status = PendingExportStatus.Exported;
-
-        // For Create exports, update the CSO with external ID and status
-        if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
-        {
-            await UpdateCsoAfterSuccessfulExportAsync(export.ConnectedSystemObject, exportResult);
-        }
-
-        // Update attribute change statuses to ExportedPendingConfirmation
-        // They will be confirmed (and deleted) or marked for retry during the next import
-        UpdateAttributeChangeStatusesAfterExport(export);
-
-        await SyncRepo.UpdatePendingExportAsync(export);
-
-        result.SuccessCount++;
-        Log.Debug("ProcessExportSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
-    }
-
-    /// <summary>
     /// Marks an export as deferred (has unresolved references).
     /// Does not increment error count since this is expected behaviour.
     /// </summary>
@@ -4197,8 +4003,6 @@ public class ExportExecutionServer
         export.Status = PendingExportStatus.Pending;
         export.HasUnresolvedReferences = true;
         export.LastAttemptedAt = DateTime.UtcNow;
-        // Use a shorter retry interval for deferred references
-        export.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
 
         var unresolvedRefCount = export.AttributeValueChanges
             .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
@@ -4206,81 +4010,8 @@ public class ExportExecutionServer
 
         await SyncRepo.UpdatePendingExportAsync(export);
         Log.Information("MarkExportDeferredAsync: Export {ExportId} for CSO {CsoId} deferred - " +
-            "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references. Next retry at {NextRetry}",
-            export.Id, export.ConnectedSystemObjectId, unresolvedRefCount, totalChanges, export.NextRetryAt);
-    }
-
-    /// <summary>
-    /// Marks an export as failed and applies retry logic (Q6 decision).
-    /// </summary>
-    private async Task MarkExportFailedAsync(PendingExport export, string errorMessage, string? stackTrace = null)
-    {
-        export.ErrorCount++;
-        export.LastErrorMessage = errorMessage;
-        export.LastErrorStackTrace = stackTrace;
-        export.LastAttemptedAt = DateTime.UtcNow;
-        export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
-
-        // If max retries exceeded, mark as Failed (Q6 decision - requires manual intervention)
-        if (export.ErrorCount >= export.MaxRetries)
-        {
-            export.Status = PendingExportStatus.Failed;
-            Log.Warning("MarkExportFailedAsync: Export {ExportId} has exceeded max retries ({MaxRetries}). Requires manual intervention.",
-                export.Id, export.MaxRetries);
-        }
-        else
-        {
-            // Keep as Pending while we're still retrying
-            // ExportNotConfirmed is for when export succeeded but some values didn't persist
-            export.Status = PendingExportStatus.Pending;
-            Log.Warning("MarkExportFailedAsync: Export {ExportId} failed (attempt {Attempt}/{MaxRetries}). Next retry at {NextRetry}. Error: {Error}",
-                export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, LogSanitiser.Sanitise(errorMessage));
-        }
-
-        await SyncRepo.UpdatePendingExportAsync(export);
-    }
-
-    /// <summary>
-    /// Calculates the next retry time using exponential backoff (Q6 decision).
-    /// Uses 2^n minutes where n is the error count, capped at 1 hour.
-    /// </summary>
-    private static DateTime CalculateNextRetryTime(int errorCount)
-    {
-        // Exponential backoff: 2, 4, 8, 16, 32, 60 (max) minutes
-        var minutes = Math.Min(Math.Pow(2, errorCount), 60);
-        return DateTime.UtcNow.AddMinutes(minutes);
-    }
-
-    /// <summary>
-    /// Gets the count of Pending Exports that require manual intervention (exceeded max retries).
-    /// </summary>
-    public async Task<int> GetFailedExportsCountAsync(int connectedSystemId)
-    {
-        var pendingExports = await SyncRepo.GetPendingExportsAsync(connectedSystemId);
-        return pendingExports.Count(pe => pe.Status == PendingExportStatus.Failed);
-    }
-
-    /// <summary>
-    /// Retries all failed exports for a Connected System (manual intervention).
-    /// Resets error count and status.
-    /// </summary>
-    public async Task RetryFailedExportsAsync(int connectedSystemId)
-    {
-        var pendingExports = await SyncRepo.GetPendingExportsAsync(connectedSystemId);
-        var failedExports = pendingExports.Where(pe => pe.Status == PendingExportStatus.Failed).ToList();
-
-        foreach (var export in failedExports)
-        {
-            export.ErrorCount = 0;
-            export.Status = PendingExportStatus.Pending;
-            export.NextRetryAt = null;
-            export.LastErrorMessage = null;
-            export.LastErrorStackTrace = null;
-            await SyncRepo.UpdatePendingExportAsync(export);
-        }
-
-        Log.Information("RetryFailedExportsAsync: Reset {Count} failed exports for system {SystemId}",
-            failedExports.Count, connectedSystemId);
+            "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references; attempted again at the next export run",
+            export.Id, export.ConnectedSystemObjectId, unresolvedRefCount, totalChanges);
     }
 
     /// <summary>

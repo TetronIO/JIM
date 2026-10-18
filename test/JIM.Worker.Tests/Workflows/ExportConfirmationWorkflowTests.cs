@@ -399,10 +399,11 @@ public class ExportConfirmationWorkflowTests
     #region Failure Workflows
 
     /// <summary>
-    /// Workflow: Attribute change never confirms and eventually fails after max retries.
+    /// Workflow: an attribute change that never confirms is sent again after every import that misses it, however many
+    /// times (#2119). JIM never abandons it as Failed.
     /// </summary>
     [Test]
-    public async Task Workflow_AttributeChange_ExceedsMaxRetriesAndFailsAsync()
+    public async Task Workflow_AttributeChange_NeverConfirms_IsRetriedAfterEveryImportAsync()
     {
         // Arrange
         var cso = CreateTestCso();
@@ -418,8 +419,8 @@ public class ExportConfirmationWorkflowTests
         };
         pendingExport.AttributeValueChanges.Add(attrChange);
 
-        // Simulate max retries of exports
-        for (int attempt = 1; attempt <= JIM.Application.Servers.SyncEngine.DefaultMaxRetries; attempt++)
+        // Many more attempts than the five after which JIM used to give up
+        for (int attempt = 1; attempt <= 10; attempt++)
         {
             await SimulateExportAsync(pendingExport);
 
@@ -428,21 +429,9 @@ public class ExportConfirmationWorkflowTests
             SetCsoAttributeValue(cso, DisplayNameAttr, $"Wrong Name {attempt}");
             var result = await SimulateImportAndReconcileAsync(cso);
 
-            if (attempt < JIM.Application.Servers.SyncEngine.DefaultMaxRetries)
-            {
-                // Should be marked for retry
-                Assert.That(result.RetryChanges.Count, Is.EqualTo(1),
-                    $"Attempt {attempt}: Should be marked for retry");
-                Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
-            }
-            else
-            {
-                // Final attempt - should fail
-                Assert.That(result.FailedChanges.Count, Is.EqualTo(1),
-                    $"Attempt {attempt}: Should have failed");
-                Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed));
-                Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Failed));
-            }
+            Assert.That(result.RetryChanges.Count, Is.EqualTo(1), $"Attempt {attempt}: Should be marked for retry");
+            Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
         }
     }
 

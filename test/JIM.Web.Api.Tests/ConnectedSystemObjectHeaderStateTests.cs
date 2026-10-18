@@ -42,20 +42,23 @@ public class ConnectedSystemObjectHeaderStateTests
     private static ConnectedSystemObjectHeader CreateHeader(
         ConnectedSystemObjectStatus status,
         PendingExportStatus? pendingExportStatus = null,
-        PendingExportChangeType? pendingExportChangeType = null) => new()
+        PendingExportChangeType? pendingExportChangeType = null,
+        DateTime? pendingExportFailingSince = null) => new()
     {
         Id = Guid.NewGuid(),
         ConnectedSystemId = 1,
         Status = status,
         HasPendingExport = pendingExportStatus != null,
         PendingExportStatus = pendingExportStatus,
-        PendingExportChangeType = pendingExportChangeType
+        PendingExportChangeType = pendingExportChangeType,
+        PendingExportFailingSince = pendingExportFailingSince
     };
 
     [Test]
-    public async Task GetConnectedSystemObjectHeadersAsync_FailedPendingExport_RowStateIsExportFailedAsync()
+    public async Task GetConnectedSystemObjectHeadersAsync_FailingPendingExport_RowStateIsExportFailedAsync()
     {
-        var header = CreateHeader(ConnectedSystemObjectStatus.Normal, PendingExportStatus.Failed, PendingExportChangeType.Update);
+        var header = CreateHeader(ConnectedSystemObjectStatus.Normal, PendingExportStatus.Pending, PendingExportChangeType.Update,
+            pendingExportFailingSince: DateTime.UtcNow.AddDays(-2));
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectHeadersAsync(
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
                 It.IsAny<IEnumerable<ConnectedSystemObjectStatus>?>(), It.IsAny<IEnumerable<int>?>(), It.IsAny<IEnumerable<ConnectedSystemObjectJoinType>?>()))

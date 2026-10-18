@@ -7,6 +7,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
+@using JIM.Models.Transactional.DTOs
 @using JIM.Web.Pages.Admin.Components
 @using JIM.Web.Models
 @using JIM.Web.Shared
@@ -46,6 +47,28 @@
                 Pending Exports
                 <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>
             </MudButton>
+            @* Failing Pending Exports (#2119), shown only while there are some. JIM never gives up on a Pending Export: each
+               is attempted again at every export run, so a failing one is reported on every run until its cause is
+               fixed, and this says how many there are and how long the longest has been failing. Red, because the
+               cause is nearly always something to fix in the Connected System: a permission, a schema rule. *@
+            @if (_pendingExportFailures is { FailingCount: > 0 } failures)
+            {
+                var oldestText = failures.OldestFailingSince is { } oldest
+                    ? $" The longest began failing {oldest.ToLocalTime().ToRelativeTime()}."
+                    : string.Empty;
+                var failingText = failures.FailingCount == 1 ? "1 Pending Export is failing." : $"{failures.FailingCount:N0} Pending Exports are failing.";
+                <MudTooltip Arrow="true" Placement="Placement.Top"
+                            Text="@($"{failingText}{oldestText} JIM attempts each again at every export run; open them to see what the Connected System refused.")">
+                    <MudButton Variant="Variant.Outlined"
+                               StartIcon="@Icons.Material.Filled.ErrorOutline"
+                               DropShadow="false"
+                               Size="Size.Small"
+                               Href="@($"/admin/connected-systems/{_connectedSystem.Id}/pending-exports?failing=true")">
+                        Failing Exports
+                        <span class="jim-nav-count jim-nav-count-error">@failures.FailingCount.ToString("N0")</span>
+                    </MudButton>
+                </MudTooltip>
+            }
             @* The Connector Space's unresolved references (#959), shown only while there are some. A button among the
                data views rather than a notice: unresolved references are chronic rather than urgent, and an
                always-on notice would become wallpaper and override an administrator who chose Ignore. Amber where
@@ -388,6 +411,7 @@ else if (_drift is { TrackingDisabled: true })
     private string? _partitionsAndHierarchiesText;
     private string? _partitionAndHierarchyText;
     private int _pendingExportCount;
+    private PendingExportFailureSummary? _pendingExportFailures;
     private int _connectedSystemObjectCount;
     private ConnectedSystemUnresolvedReferenceTotals? _unresolvedReferenceTotals;
     private int _obsoleteConnectedSystemObjectCount;
@@ -484,6 +508,7 @@ else if (_drift is { TrackingDisabled: true })
             : null;
 
         _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
+        _pendingExportFailures = _pendingExportCount > 0 ? await jim.ConnectedSystems.GetPendingExportFailureSummaryAsync(Id) : null;
         _connectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(Id);
         _unresolvedReferenceTotals = await jim.ConnectedSystems.GetUnresolvedReferenceTotalsAsync(Id);
         _latestExportActivity = await jim.Activities.GetLatestCompletedExportActivityAsync(Id);

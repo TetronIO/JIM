@@ -4859,6 +4859,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ErrorCount")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("FailingSince")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("HasUnresolvedReferences")
                         .HasColumnType("boolean");
 
@@ -4870,12 +4873,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("LastErrorStackTrace")
                         .HasColumnType("text");
-
-                    b.Property<int>("MaxRetries")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("NextRetryAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("ProvisioningSyncRuleId")
                         .HasColumnType("integer");

@@ -164,4 +164,103 @@ Write-CellLog "$stopped"
 Copy-LabFile -Source "${vm}:/root/setup-interrupted.log" -Destination (Join-Path $OutputPath 'setup-interrupted.log')
 Test-UnchangedCheck 'Ctrl+C at a question put every file and container back' $before
 Add-Check 'after Ctrl+C, JIM starts as documented' ((Invoke-DocumentedStart) -eq 0 -and (Wait-Ready) -ge 0)
+
+# 7. Looking after the certificate, as TLS and Reverse Proxy says: renewed from the same certificate authority, created
+# again for new names (a new authority), and replaced by an organisation's own certificate, which the installer then
+# refuses to renew. Last in the cell, as from here the authority the cell's checks trust changes.
+$tlsPage = 'tls-and-reverse-proxy.md'
+
+function Get-ServedNames {
+    $names = $null | & bash -c 'openssl s_client -connect "$1:443" -servername "$2" < /dev/null 2>/dev/null | openssl x509 -noout -ext subjectAltName' `
+        names $address $hostName
+    "$($names | Select-Object -Skip 1)".Trim()
+}
+
+function Test-TrustedBy {
+    # Whether a TLS client trusting only this authority accepts the certificate JIM serves.
+    param([string]$Authority)
+    $null | & curl -sS -o /dev/null --max-time 10 --noproxy $hostName --cacert $Authority --resolve "${hostName}:443:$address" `
+        "https://$hostName/api/v1/health/ready" 2>$null
+    $LASTEXITCODE -eq 0
+}
+
+# 7a. Renewed, as the page says for a certificate the installer created.
+$servedBefore = Get-ServedCertificate
+$caBefore = Invoke-LabVm -Name $vm -Command @('sha256sum', "$installPath/tls/ca.crt")
+$namesBefore = Invoke-LabVm -Name $vm -Command @('cat', "$installPath/tls/names")
+$renew = Get-DocumentedCommand -Page $tlsPage -Heading 'Renewing the Certificate' -Block 2
+if ($renew -notmatch '--renew-certificate') {
+    throw "Renewing the Certificate no longer gives setup.sh --renew-certificate:`n$renew"
+}
+Add-Check '--renew-certificate, as documented, works' ((Invoke-Documented -Command $renew -Title 'the certificate renewal' -Rootful) -eq 0)
+if (Test-ReadyCheck 'renewed') {
+    $installedCertificate = Get-InstalledCertificate
+    $served = Get-ServedCertificate
+    Add-Check 'renewed: JIM serves the new certificate' ($served -eq $installedCertificate -and $served -ne $servedBefore) `
+        "served $served, installed $installedCertificate, before $servedBefore"
+    $caAfter = Invoke-LabVm -Name $vm -Command @('sha256sum', "$installPath/tls/ca.crt")
+    $namesAfter = Invoke-LabVm -Name $vm -Command @('cat', "$installPath/tls/names")
+    Add-Check 'renewed: from the same certificate authority, for the same names' ("$caAfter" -eq "$caBefore" -and "$namesAfter" -eq "$namesBefore") `
+        "names '$namesAfter', before '$namesBefore'"
+    Invoke-LabVm -Name $vm -AllowFailure -Command @('openssl', 'x509', '-in', "$installPath/tls/tls.crt", '-noout', '-checkend', "$(360 * 86400)") | Out-Null
+    Add-Check 'renewed: the new certificate lasts a year' ($LASTEXITCODE -eq 0)
+}
+
+# 7b. Created again for one more name: a new certificate authority, which the installer says to distribute again.
+$extraName = "alt.$($lab.HostName -replace '^[^.]+\.', '')"
+$oldAuthority = Join-Path $OutputPath 'ca-before-new-names.crt'
+Copy-Item $caPath $oldAuthority
+$renamed = Invoke-Setup -Folder $installPath -Argument '--certificate' -Log 'setup-certificate-names.log' `
+    -Settings @{ JIM_SETUP_TLS_MODE = 'generate'; JIM_SETUP_TLS_NAMES = "$hostName,$address,$extraName" }
+$distribute = Get-LabSetupMessage -Line $renamed.Output -Level WARN | Where-Object { $_ -match 'ca\.crt' } | Select-Object -First 1
+Add-Check "--certificate for new names works, and says to distribute the new certificate authority" ($renamed.ExitCode -eq 0 -and $distribute) `
+    "exit $($renamed.ExitCode); $distribute"
+Copy-LabFile -Source "${vm}:$installPath/tls/ca.crt" -Destination $caPath
+if (Test-ReadyCheck 'with new names') {
+    $names = Get-ServedNames
+    Add-Check "with new names: JIM serves a certificate for $extraName too" ($names -match "DNS:$([regex]::Escape($extraName))\b") "$names"
+    Add-Check 'with new names: the old certificate authority no longer vouches for JIM' (-not (Test-TrustedBy $oldAuthority))
+}
+
+# 7c. Replaced by an organisation's certificate: a root, an issuing CA under it, and a server certificate the issuing
+# CA signs, given as the certificate followed by the issuing CA's, as the installer asks. The cell trusts the root
+# alone from here, so a ready JIM proves it serves the whole chain.
+$organisation = Join-Path $OutputPath 'organisation'
+New-Item -ItemType Directory -Path $organisation -Force | Out-Null
+$issue = @'
+set -euo pipefail
+cd "$1"
+openssl req -x509 -newkey rsa:3072 -nodes -keyout root.key -out root.crt -days 30 -subj '/CN=JIM lab organisation root' \
+    -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign'
+openssl req -newkey rsa:3072 -nodes -keyout issuing.key -out issuing.csr -subj '/CN=JIM lab organisation issuing CA'
+openssl x509 -req -in issuing.csr -CA root.crt -CAkey root.key -CAcreateserial -out issuing.crt -days 30 \
+    -extfile <(printf 'basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\n')
+openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=$2"
+openssl x509 -req -in server.csr -CA issuing.crt -CAkey issuing.key -CAcreateserial -out server.crt -days 90 \
+    -extfile <(printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:%s,IP:%s\n' "$2" "$3")
+cat server.crt issuing.crt > chain.crt
+openssl x509 -in server.crt -noout -serial
+'@
+$organisationSerial = "$($null | & bash -c $issue 'issue' $organisation $hostName $address 2>$null | Select-Object -Last 1)".Trim()
+Invoke-LabVm -Name $vm -Command @('mkdir', '-p', '/root/organisation') | Out-Null
+Copy-LabFile -Source (Join-Path $organisation 'chain.crt') -Destination "${vm}:/root/organisation/jim.crt"
+Copy-LabFile -Source (Join-Path $organisation 'server.key') -Destination "${vm}:/root/organisation/jim.key"
+$replaced = Invoke-Setup -Folder $installPath -Argument '--certificate' -Log 'setup-certificate-provided.log' -Settings @{
+    JIM_SETUP_TLS_MODE = 'provided'; JIM_SETUP_TLS_CERT_FILE = '/root/organisation/jim.crt'; JIM_SETUP_TLS_KEY_FILE = '/root/organisation/jim.key'
+}
+Add-Check "--certificate with the organisation's certificate works" ($replaced.ExitCode -eq 0) "exit $($replaced.ExitCode)"
+Copy-Item (Join-Path $organisation 'root.crt') $caPath -Force
+if (Test-ReadyCheck "with the organisation's certificate" -Trusting "the organisation's root CA") {
+    $served = Get-ServedCertificate
+    Add-Check "JIM serves the organisation's certificate, with its issuing CA" ($served -eq $organisationSerial) "served $served, issued $organisationSerial"
+}
+
+# 7d. Asked to renew the organisation's certificate, the installer refuses, points to --certificate, and changes nothing.
+$before = Get-Fingerprint
+$refusedRenewal = Invoke-Setup -Folder $installPath -Argument '--renew-certificate' -Log 'setup-renew-provided.log'
+$pointer = Get-LabSetupMessage -Line $refusedRenewal.Output -Level ERR | Select-Object -First 1
+Add-Check "--renew-certificate refused for the organisation's certificate, pointing to --certificate" `
+    ($refusedRenewal.ExitCode -ne 0 -and $pointer -match '--certificate') "exit $($refusedRenewal.ExitCode); $pointer"
+Test-UnchangedCheck 'the refused renewal left every file and container as it was' $before
+
 Test-SignInCheck 'at the end'

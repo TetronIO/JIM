@@ -66,12 +66,14 @@
             </MudChip>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudText Typo="Typo.button" Class="mud-text-secondary">Retry Count</MudText>
+            <MudText Typo="Typo.button" Class="mud-text-secondary">Failed Attempts</MudText>
             <MudText>
-                @PendingExport.ErrorCount / @PendingExport.MaxRetries
-                @if (PendingExport.ErrorCount >= PendingExport.MaxRetries)
+                @PendingExport.ErrorCount
+                @if (PendingExport.FailingSince is { } failingSince)
                 {
-                    <MudChip T="string" Color="Color.Error" Class="ml-2">Max Reached</MudChip>
+                    <MudTooltip Text="@($"Failing since {failingSince.ToLocalTime().ToFriendlyDate()}. JIM attempts it again at every export run.")" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Color="Color.Error" Class="ml-2">Failing</MudChip>
+                    </MudTooltip>
                 }
             </MudText>
         </MudItem>
@@ -184,7 +186,6 @@
             PendingExportStatus.Executing => Color.Info,
             PendingExportStatus.Exported => Color.Success,
             PendingExportStatus.ExportNotConfirmed => Color.Warning,
-            PendingExportStatus.Failed => Color.Error,
             PendingExportStatus.Parked => Color.Warning,
             _ => Color.Default,
         };
@@ -209,7 +210,6 @@
             PendingExportAttributeChangeStatus.Pending => Color.Default,
             PendingExportAttributeChangeStatus.ExportedPendingConfirmation => Color.Info,
             PendingExportAttributeChangeStatus.ExportedNotConfirmed => Color.Warning,
-            PendingExportAttributeChangeStatus.Failed => Color.Error,
             _ => Color.Default,
         };
     }

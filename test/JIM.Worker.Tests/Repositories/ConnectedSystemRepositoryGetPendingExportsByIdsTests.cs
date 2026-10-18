@@ -236,8 +236,7 @@ public class ConnectedSystemRepositoryGetPendingExportsByIdsTests
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.Pending,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>(),
-            MaxRetries = 5
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
     }
 

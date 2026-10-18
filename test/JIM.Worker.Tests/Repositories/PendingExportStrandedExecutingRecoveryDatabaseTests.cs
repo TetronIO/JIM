@@ -65,7 +65,6 @@ public class PendingExportStrandedExecutingRecoveryDatabaseTests
         Guid PendingId,
         Guid ExportedId,
         Guid ExportNotConfirmedId,
-        Guid FailedId,
         Guid ParkedId);
 
     /// <summary>
@@ -124,12 +123,11 @@ public class PendingExportStrandedExecutingRecoveryDatabaseTests
         var pending = MakePendingExport(PendingExportStatus.Pending, PendingExportAttributeChangeStatus.Pending);
         var exported = MakePendingExport(PendingExportStatus.Exported, PendingExportAttributeChangeStatus.ExportedPendingConfirmation);
         var exportNotConfirmed = MakePendingExport(PendingExportStatus.ExportNotConfirmed, PendingExportAttributeChangeStatus.ExportedNotConfirmed);
-        var failed = MakePendingExport(PendingExportStatus.Failed, PendingExportAttributeChangeStatus.Failed);
         var parked = MakePendingExport(PendingExportStatus.Parked, PendingExportAttributeChangeStatus.ExportedNotConfirmed);
 
         await seed.SaveChangesAsync();
 
-        return new RecoverySeed(sentChangeExecuting.Id, pendingOnlyExecuting.Id, pending.Id, exported.Id, exportNotConfirmed.Id, failed.Id, parked.Id);
+        return new RecoverySeed(sentChangeExecuting.Id, pendingOnlyExecuting.Id, pending.Id, exported.Id, exportNotConfirmed.Id, parked.Id);
     }
 
     [Test]
@@ -157,7 +155,6 @@ public class PendingExportStrandedExecutingRecoveryDatabaseTests
             Assert.That(all[recoverySeed.PendingId].Status, Is.EqualTo(PendingExportStatus.Pending), "A Pending export must be left alone.");
             Assert.That(all[recoverySeed.ExportedId].Status, Is.EqualTo(PendingExportStatus.Exported), "An Exported export must be left alone.");
             Assert.That(all[recoverySeed.ExportNotConfirmedId].Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed), "An ExportNotConfirmed export must be left alone.");
-            Assert.That(all[recoverySeed.FailedId].Status, Is.EqualTo(PendingExportStatus.Failed), "A Failed export must be left alone.");
             Assert.That(all[recoverySeed.ParkedId].Status, Is.EqualTo(PendingExportStatus.Parked), "A Parked export must be left alone.");
 
             // ErrorCount is never touched by this recovery, recovered or not.

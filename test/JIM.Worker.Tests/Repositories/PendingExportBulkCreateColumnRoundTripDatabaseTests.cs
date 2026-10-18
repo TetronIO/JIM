@@ -122,7 +122,7 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
         // so an untruncated DateTime.UtcNow occasionally carries a sub-microsecond remainder that a
         // round-trip through the database silently drops. Truncate so the comparison is exact.
         var lastAttemptedAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-10));
-        var nextRetryAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(5));
+        var failingSince = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-30));
         var createdAt = TruncateToMicroseconds(DateTime.UtcNow.AddHours(-1));
         var lastExportedAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-2));
         var sourceMvoId = s.SourceMvoId;
@@ -141,9 +141,8 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.ExportNotConfirmed,
             ErrorCount = 2,
-            MaxRetries = 5,
             LastAttemptedAt = lastAttemptedAt,
-            NextRetryAt = nextRetryAt,
+            FailingSince = failingSince,
             LastErrorMessage = "the connector rejected the change",
             LastErrorStackTrace = "at Foo.Bar()",
             SourceMetaverseObjectId = sourceMvoId,
@@ -203,9 +202,8 @@ public class PendingExportBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
             Assert.That(storedExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
             Assert.That(storedExport.ErrorCount, Is.EqualTo(2));
-            Assert.That(storedExport.MaxRetries, Is.EqualTo(5));
+            Assert.That(storedExport.FailingSince, Is.EqualTo(failingSince));
             Assert.That(storedExport.LastAttemptedAt, Is.EqualTo(lastAttemptedAt));
-            Assert.That(storedExport.NextRetryAt, Is.EqualTo(nextRetryAt));
             Assert.That(storedExport.LastErrorMessage, Is.EqualTo("the connector rejected the change"));
             Assert.That(storedExport.LastErrorStackTrace, Is.EqualTo("at Foo.Bar()"));
             Assert.That(storedExport.SourceMetaverseObjectId, Is.EqualTo(sourceMvoId));

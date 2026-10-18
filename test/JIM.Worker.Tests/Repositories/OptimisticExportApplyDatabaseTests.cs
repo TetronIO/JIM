@@ -334,7 +334,6 @@ public class OptimisticExportApplyDatabaseTests
             ConnectedSystemObjectId = sourceCso.Id,
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.Pending,
-            MaxRetries = 3,
             CreatedAt = DateTime.UtcNow
         };
         var change = new PendingExportAttributeValueChange
@@ -396,7 +395,6 @@ public class OptimisticExportApplyDatabaseTests
             ConnectedSystemObjectId = sourceCso.Id,
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.Pending,
-            MaxRetries = 3,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = [change]
         };

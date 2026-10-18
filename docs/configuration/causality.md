@@ -62,7 +62,7 @@ Every branch says why it stops, so an object with nothing after this run never h
 - **Nothing followed**: a Synchronisation has run since the import and changed nothing as a result. This is a complete answer.
 - **Waiting for the next Export**: the change is queued as a Pending Export, which the card links.
 - **Waiting for a retry**: an export was not confirmed and will be retried on the next Export of its Connected System.
-- **Needs attention**: a Pending Export failed or was parked. Nothing more happens until someone acts on it, so it is not counted as waiting.
+- **Needs attention**: a Pending Export was parked. Nothing more happens until someone acts on it, so it is not counted as waiting. A Pending Export that is failing is **Waiting for the next Export**, since the next export run attempts it again; its own page says it is failing.
 - **Waiting for the next import**: the change was exported and is waiting for an import to confirm it.
 - **Deletion scheduled**: the Metaverse Object's grace period is running, with the date it ends.
 - **This goes further than shown**: the walk stopped at its depth bound or at the number of objects it reads. Open the last item in the branch to carry on from there.

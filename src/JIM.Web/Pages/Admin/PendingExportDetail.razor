@@ -182,23 +182,29 @@
                     <MudSimpleTable Hover="true" Dense="true" Elevation="0" Style="background: transparent;">
                         <tbody>
                             <tr>
-                                <td style="width: 200px;"><strong>Error Count</strong></td>
+                                <td style="width: 200px;"><strong>Failed Attempts</strong></td>
                                 <td>
                                     <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
-                                        @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
+                                        @_pendingExport.ErrorCount
                                     </MudChip>
+                                    <span class="mud-text-secondary">JIM attempts it again at every export run.</span>
                                 </td>
                             </tr>
+                            @if (_pendingExport.FailingSince is { } failingSince)
+                            {
+                                <tr>
+                                    <td><strong>Failing Since</strong></td>
+                                    <td>
+                                        <MudTooltip Text="@failingSince.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                            <span>@failingSince.ToLocalTime().ToRelativeTime()</span>
+                                        </MudTooltip>
+                                    </td>
+                                </tr>
+                            }
                             <tr>
                                 <td><strong>Last Attempted</strong></td>
                                 <td>@(_pendingExport.LastAttemptedAt?.ToFriendlyDate() ?? "-")</td>
                             </tr>
-                            @* Next Retry is hidden until event-based sync is implemented
-                            <tr>
-                                <td><strong>Next Retry</strong></td>
-                                <td>@(_pendingExport.NextRetryAt?.ToFriendlyDate() ?? "-")</td>
-                            </tr>
-                            *@
                             @if (!string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
                             {
                                 <tr>
@@ -610,7 +616,6 @@ else
             PendingExportAttributeChangeStatus.Pending => MudBlazor.Color.Default,
             PendingExportAttributeChangeStatus.ExportedPendingConfirmation => MudBlazor.Color.Info,
             PendingExportAttributeChangeStatus.ExportedNotConfirmed => MudBlazor.Color.Warning,
-            PendingExportAttributeChangeStatus.Failed => MudBlazor.Color.Error,
             _ => MudBlazor.Color.Default,
         };
     }

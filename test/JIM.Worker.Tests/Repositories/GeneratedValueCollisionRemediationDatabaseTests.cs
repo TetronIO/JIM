@@ -373,7 +373,6 @@ public class GeneratedValueCollisionRemediationDatabaseTests
         {
             Assert.That(released, Is.EqualTo(1));
             Assert.That(export.Status, Is.EqualTo(PendingExportStatus.Pending));
-            Assert.That(export.NextRetryAt, Is.Null);
         }
     }
 
@@ -708,8 +707,7 @@ public class GeneratedValueCollisionRemediationDatabaseTests
         var export = new PendingExport
         {
             Id = Guid.NewGuid(), ConnectedSystemId = estate.ConnectedSystemId, ConnectedSystemObjectId = estate.CsoId,
-            ChangeType = PendingExportChangeType.Update, Status = status, SourceMetaverseObjectId = estate.MvoId,
-            NextRetryAt = status == PendingExportStatus.Parked ? DateTime.UtcNow.AddHours(1) : null
+            ChangeType = PendingExportChangeType.Update, Status = status, SourceMetaverseObjectId = estate.MvoId
         };
         export.AttributeValueChanges.Add(change);
         ctx.PendingExports.Add(export);

@@ -160,7 +160,7 @@ public static class CausalityConsequenceTestData
     {
         var cohort = Cohort(CausalConsequenceHopKind.OutstandingPendingExport, representative: null, memberCount: 1,
             systemId: Glitterband, systemName: "Glitterband EMEA", pendingExportStatus: status,
-            ending: status is PendingExportStatus.Failed or PendingExportStatus.Parked
+            ending: status is PendingExportStatus.Parked
                 ? CausalConsequenceEnding.NeedsAttention
                 : CausalConsequenceEnding.WaitingForExport);
         cohort.Members.Add(new CausalConsequenceMember { PendingExportId = pendingExportId, DisplayName = "Tina Adams", Occurred = T0.AddHours(1) });

@@ -73,7 +73,7 @@ Describe 'Test-LabMatrix' {
 
         $errors | Should -Contain "u24-docker-ag: runtime 'containerd' is not docker or podman"
         $errors | Should -Contain "u24-docker-ag: network 'lan' is not airgap or online"
-        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase"
+        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase, Soak"
     }
 
     It 'refuses a cell given less memory than JIM needs' {

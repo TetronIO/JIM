@@ -138,6 +138,12 @@ public class ConnectedSystemObjectHeader
     public PendingExportChangeType? PendingExportChangeType { get; set; }
 
     /// <summary>
+    /// When the queued Pending Export's current run of failed attempts began (UTC); null when there is none, or when
+    /// its last attempt did not fail.
+    /// </summary>
+    public DateTime? PendingExportFailingSince { get; set; }
+
+    /// <summary>
     /// The object's state, combining its status with any queued Pending Export: InSync, UpdatePending,
     /// ProvisioningExportPending, ProvisioningAwaitingConfirmation, ExportNotConfirmed, ExportFailed, DeletePending
     /// or Obsolete.

@@ -228,7 +228,6 @@ public class PartialExportUnresolvedReferencesTests
             Assert.That(export.HasUnresolvedReferences, Is.True);
             Assert.That(export.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
                 "The row exists now, so anything sent later must be an Update, never a second insert.");
-            Assert.That(export.NextRetryAt, Is.Not.Null, "Retried on the deferred cadence.");
             Assert.That(export.ErrorCount, Is.Zero, "Nothing failed.");
             Assert.That(nameChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
             Assert.That(managerChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending));
@@ -451,9 +450,8 @@ public class PartialExportUnresolvedReferencesTests
         await RunExportAsync(connector.Object);
         Assume.That(export.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
 
-        // The manager is provisioned and confirmed between runs; the deferred cadence has elapsed.
+        // The manager is provisioned and confirmed between runs; the next export run attempts the export again.
         var managerCso = SeedTargetCso(manager, withAnchor: true);
-        export.NextRetryAt = DateTime.UtcNow.AddMinutes(-1);
 
         await RunExportAsync(connector.Object);
 
