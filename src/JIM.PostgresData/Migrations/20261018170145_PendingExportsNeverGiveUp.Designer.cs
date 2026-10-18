@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261018150113_PendingExportsNeverGiveUp")]
+    [Migration("20261018170145_PendingExportsNeverGiveUp")]
     partial class PendingExportsNeverGiveUp
     {
         /// <inheritdoc />
@@ -2778,6 +2778,12 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("IgnoredAttributes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
 
                     b.Property<DateTime>("Occurred")
                         .HasColumnType("timestamp with time zone");
