@@ -118,6 +118,16 @@ installation (by checksum) and every JIM container running (by ID and image).
    on a reinstall, changing nothing and setting nothing aside (#1994), and JIM starts as documented afterwards.
 6. **Ctrl+C at a question**: the installer, waiting at a question, is sent SIGINT as a terminal sends it; everything is
    put back, and JIM starts as documented afterwards.
+7. **Looking after the certificate**, as TLS and Reverse Proxy says, last because from here the certificate authority
+   the cell trusts changes:
+   1. `--renew-certificate`, run as the page gives it: JIM serves a new certificate for a year, from the same
+      certificate authority and for the same names.
+   2. `--certificate` for one more name: the installer creates a new certificate authority and says to distribute it;
+      JIM serves the new name, and the old authority no longer vouches for it.
+   3. `--certificate` with an organisation's certificate: the lab issues one from a root and an issuing CA of its own,
+      given as the certificate followed by the issuing CA's. Trusting the root alone, the cell finds JIM ready and
+      serving exactly that certificate, which proves the whole chain is served.
+   4. `--renew-certificate` over the organisation's certificate: refused, pointing to `--certificate`, changing nothing.
 
 As every cell does, it ends by checking that nothing crashed quietly.
 
