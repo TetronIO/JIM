@@ -227,109 +227,6 @@ public class ExportExecutionTests
     }
 
     /// <summary>
-    /// Tests the Q6 decision: exports with NextRetryAt in the future are not executed.
-    /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_ExportNotDueForRetry_SkipsExportAsync()
-    {
-        // Arrange
-        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-
-        var cso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            Type = targetUserType,
-            TypeId = targetUserType.Id
-        };
-        ConnectedSystemObjectsData.Add(cso);
-
-        // Create a Pending Export that's not due for retry yet
-        var pendingExport = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            ConnectedSystem = targetSystem,
-            ConnectedSystemObject = cso,
-            ConnectedSystemObjectId = cso.Id,
-            Status = PendingExportStatus.ExportNotConfirmed, // Failed status
-            ChangeType = PendingExportChangeType.Update,
-            CreatedAt = DateTime.UtcNow.AddMinutes(-30),
-            NextRetryAt = DateTime.UtcNow.AddMinutes(30), // Not due yet
-            ErrorCount = 1,
-            MaxRetries = 3,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
-        };
-        PendingExportsData.Add(pendingExport);
-        SyncRepo.SeedPendingExport(pendingExport);
-
-        var mockConnector = new Mock<IConnector>();
-        mockConnector.Setup(c => c.Name).Returns("Test Connector");
-
-        // Act
-        var result = await Jim.ExportExecution.ExecuteExportsAsync(
-            targetSystem,
-            mockConnector.Object,
-            SyncRunMode.PreviewOnly);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.TotalPendingExports, Is.EqualTo(0), "Export not due for retry should be skipped");
-    }
-
-    /// <summary>
-    /// Tests the Q6 decision: exports that have exceeded max retries are not executed.
-    /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_MaxRetriesExceeded_SkipsExportAsync()
-    {
-        // Arrange
-        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-
-        var cso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            Type = targetUserType,
-            TypeId = targetUserType.Id
-        };
-        ConnectedSystemObjectsData.Add(cso);
-
-        // Create a Pending Export that has exceeded max retries
-        var pendingExport = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            ConnectedSystem = targetSystem,
-            ConnectedSystemObject = cso,
-            ConnectedSystemObjectId = cso.Id,
-            Status = PendingExportStatus.ExportNotConfirmed,
-            ChangeType = PendingExportChangeType.Update,
-            CreatedAt = DateTime.UtcNow.AddHours(-1),
-            ErrorCount = 3,
-            MaxRetries = 3, // Max reached
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
-        };
-        PendingExportsData.Add(pendingExport);
-        SyncRepo.SeedPendingExport(pendingExport);
-
-        var mockConnector = new Mock<IConnector>();
-        mockConnector.Setup(c => c.Name).Returns("Test Connector");
-
-        // Act
-        var result = await Jim.ExportExecution.ExecuteExportsAsync(
-            targetSystem,
-            mockConnector.Object,
-            SyncRunMode.PreviewOnly);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.TotalPendingExports, Is.EqualTo(0), "Export that exceeded max retries should be skipped");
-    }
-
-    /// <summary>
     /// Tests that progress callback is invoked during export execution.
     /// </summary>
     [Test]
@@ -1225,7 +1122,6 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             ErrorCount = 0, // Starting at 0 - this is the first attempt
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -1282,6 +1178,116 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// JIM never gives up on a Pending Export (#2119): an export the Connected System keeps refusing is attempted at every
+    /// export run, including one started straight after the last, however many attempts have failed before. It stays
+    /// Pending throughout, never becoming Failed and dropping out of the queue.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExportFailsOnEveryRun_IsAttemptedAtEveryRunAndStaysPendingAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var pendingExport = SeedFailingUpdateExport(targetSystem, errorCount: 0);
+
+        var exportCalls = 0;
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync(() =>
+            {
+                exportCalls++;
+                return new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Failed("Access denied") };
+            });
+
+        const int runs = 8;
+        for (var run = 1; run <= runs; run++)
+        {
+            var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, mockConnector.Object, SyncRunMode.PreviewAndSync);
+            Assert.That(result.FailedCount, Is.EqualTo(1), $"Run {run} should attempt the export, and report it failed");
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportCalls, Is.EqualTo(runs), "The Connector should be asked to write the export at every run");
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending), "A failing export stays queued");
+            Assert.That(pendingExport.ErrorCount, Is.EqualTo(runs), "Every failed attempt is counted");
+        }
+    }
+
+    /// <summary>
+    /// An export that failed many times on earlier runs is still attempted (#2119): no count of failures takes it out of
+    /// the queue.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExportFailedManyTimesBefore_IsStillAttemptedAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        SeedFailingUpdateExport(targetSystem, errorCount: 50);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, mockConnector.Object, SyncRunMode.PreviewOnly);
+
+        Assert.That(result.TotalPendingExports, Is.EqualTo(1), "An export that has failed before is still due at every run");
+    }
+
+    /// <summary>
+    /// Seeds an Update Pending Export with one change to send, as left by <paramref name="errorCount"/> failed attempts.
+    /// </summary>
+    private PendingExport SeedFailingUpdateExport(ConnectedSystem targetSystem, int errorCount)
+    {
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ErrorCount = errorCount,
+            LastAttemptedAt = errorCount > 0 ? DateTime.UtcNow.AddMinutes(-1) : null,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Updated Name"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+        return pendingExport;
+    }
+
+    /// <summary>
     /// A rejection the Connector classified as a value already in use (Unique Value Generation, #242, release 4)
     /// must reach the execution item with its classification and the attribute the Connected System named, not be
     /// flattened to a general failure: Collision Remediation and the recorded export error both read it from there.
@@ -1321,7 +1327,6 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -1402,8 +1407,6 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow.AddHours(-1),
             ErrorCount = 1, // Already failed once
-            MaxRetries = 5,
-            NextRetryAt = null, // Due for retry
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -2381,7 +2384,6 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
             ErrorCount = 0,
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -2407,7 +2409,6 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             ErrorCount = 0,
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -2505,7 +2506,6 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             ErrorCount = 0,
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -3493,9 +3493,8 @@ public class ExportExecutionTests
                 ChangeType = source.ChangeType,
                 CreatedAt = source.CreatedAt,
                 HasUnresolvedReferences = source.HasUnresolvedReferences,
-                MaxRetries = source.MaxRetries,
                 ErrorCount = source.ErrorCount,
-                NextRetryAt = source.NextRetryAt,
+                FailingSince = source.FailingSince,
                 LastAttemptedAt = source.LastAttemptedAt,
                 AttributeValueChanges = source.AttributeValueChanges.Select(avc => new PendingExportAttributeValueChange
                 {
@@ -3550,7 +3549,6 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = createdAt,
             HasUnresolvedReferences = hasUnresolvedReferences,
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
@@ -4322,7 +4320,6 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
@@ -4531,7 +4528,6 @@ public class ExportExecutionTests
                 Status = PendingExportStatus.Pending,
                 ChangeType = PendingExportChangeType.Update,
                 CreatedAt = DateTime.UtcNow,
-                MaxRetries = 3,
                 AttributeValueChanges = [.. changes.Select(change => new PendingExportAttributeValueChange
                 {
                     Id = Guid.NewGuid(),

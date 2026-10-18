@@ -24,17 +24,22 @@
 @if (_connectedSystemHeader != null)
 {
     <MudPaper Elevation="0" Class="pa-4 mt-2" Outlined="true">
-        <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
-                   SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
-                   MultiSelectionTextFunc="@GetStatusFilterText"
-                   Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
-            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
-            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
-            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
-            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Failed">Failed</MudSelectItem>
-            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
-            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Parked">Parked</MudSelectItem>
-        </MudSelect>
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="4" Wrap="Wrap.Wrap">
+            <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
+                       SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
+                       MultiSelectionTextFunc="@GetStatusFilterText"
+                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Parked">Parked</MudSelectItem>
+            </MudSelect>
+            @* A failing Pending Export is one whose last attempt failed (#2119). JIM attempts it again at every export
+               run, so it stays Pending; this is how an administrator finds the ones to investigate. *@
+            <MudSwitch T="bool" Value="_failingOnly" ValueChanged="OnFailingOnlyChanged" Color="Color.Error"
+                       Label="Failing only" />
+        </MudStack>
     </MudPaper>
 
     @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, density, the
@@ -138,13 +143,13 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Errors" Name="errors" />
+                    <VirtualisedSortHeader Title="Failed Attempts" Name="errors" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.ErrorCount > 0)
                     {
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
-                            @context.Item.ErrorCount / @context.Item.MaxRetries
+                            @context.Item.ErrorCount
                         </MudChip>
                     }
                     else
@@ -177,13 +182,15 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Next Retry" Name="nextretry" />
+                    <VirtualisedSortHeader Title="Failing Since" Name="failingsince" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    @if (context.Item.NextRetryAt.HasValue)
+                    @if (context.Item.FailingSince.HasValue)
                     {
-                        var nextRetryAt = context.Item.NextRetryAt.Value;
-                        @nextRetryAt.ToFriendlyDate()
+                        var failingSince = context.Item.FailingSince.Value;
+                        <MudTooltip Text="@($"{failingSince.ToLocalTime().ToFriendlyDate()}. JIM attempts it again at every export run.")" Arrow="true" Placement="Placement.Top">
+                            <span class="mud-error-text">@failingSince.ToLocalTime().ToRelativeTime()</span>
+                        </MudTooltip>
                     }
                     else
                     {
@@ -204,13 +211,21 @@
                                  ActionText="Clear Search"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
-            else if (_statusFilters.Any())
+            else if (_failingOnly && !_statusFilters.Any())
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.TaskAlt"
+                                 PrimaryText="No Pending Exports are failing"
+                                 SecondaryText="Every Pending Export's last attempt succeeded, or it has not been attempted yet."
+                                 ActionText="Show All"
+                                 OnAction="@(() => OnFailingOnlyChanged(false))" />
+            }
+            else if (_statusFilters.Any() || _failingOnly)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                                 PrimaryText="No Pending Exports match the Status filter"
-                                 SecondaryText="Try different statuses, or clear the filter."
-                                 ActionText="Clear Filter"
-                                 OnAction="@(() => OnStatusFiltersChanged(new HashSet<PendingExportStatus>()))" />
+                                 PrimaryText="No Pending Exports match the filters"
+                                 SecondaryText="Try different statuses, or clear the filters."
+                                 ActionText="Clear Filters"
+                                 OnAction="ClearFiltersAsync" />
             }
             else
             {
@@ -230,13 +245,22 @@ else
     [Parameter]
     public int Id { get; set; }
 
+    /// <summary>
+    /// Opens the list showing only failing Pending Exports, as the Connected System page's Failing Exports link does.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "failing")]
+    public bool? FailingQuery { get; set; }
+
     private VirtualisedDataGrid<PendingExportHeader>? _grid;
+    private bool _failingOnly;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private IReadOnlyCollection<PendingExportStatus> _statusFilters = new HashSet<PendingExportStatus>();
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
+        _failingOnly = FailingQuery == true;
+
         using var jim = JimFactory.Create();
         _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
         if (_connectedSystemHeader == null)
@@ -266,7 +290,8 @@ else
             request.SearchText,
             request.SortBy,
             request.SortDescending,
-            includeTotalCount: request.IncludeTotalCount);
+            includeTotalCount: request.IncludeTotalCount,
+            failingOnly: _failingOnly);
 
         return new VirtualisedWindow<PendingExportHeader>(result.Results, result.TotalResults);
     }
@@ -296,6 +321,27 @@ else
             await _grid.ResetScrollAsync();
             await _grid.RefreshAsync(invalidateTotals: true);
         }
+    }
+
+    /// <summary>
+    /// Shows only failing Pending Exports, or all of them again, and reloads the grid; re-counted and returned to the
+    /// top for the same reason as a Status filter change.
+    /// </summary>
+    private async Task OnFailingOnlyChanged(bool failingOnly)
+    {
+        _failingOnly = failingOnly;
+
+        if (_grid != null)
+        {
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _failingOnly = false;
+        await OnStatusFiltersChanged(new HashSet<PendingExportStatus>());
     }
 
     private void HandleRowClicked(PendingExportHeader item)

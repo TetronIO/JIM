@@ -129,7 +129,7 @@ public partial class ActivityRepository
             SELECT fi.item_id, fi.parent, @hop_pending_export,
                    NULL, @reason_not_set, pe."ConnectedSystemId", pcs."Name", NULL, NULL,
                    NULL, NULL, NULL, NULL, pe."Status",
-                   NULL, pe."Id", NULL, fi.display_name, pe."CreatedAt", pe."NextRetryAt", FALSE
+                   NULL, pe."Id", NULL, fi.display_name, pe."CreatedAt", NULL::timestamptz, FALSE
             FROM fi
             JOIN "ActivityRunProfileExecutionItemSyncOutcomes" o ON o."ActivityRunProfileExecutionItemId" = fi.item_id
                 AND o."OutcomeType" = ANY(@pending_export_outcome_types)
@@ -144,7 +144,7 @@ public partial class ActivityRepository
             SELECT fi.item_id, fi.parent, @hop_pending_export,
                    NULL, @reason_not_set, pe."ConnectedSystemId", pcs."Name", NULL, NULL,
                    NULL, NULL, NULL, NULL, pe."Status",
-                   NULL, pe."Id", NULL, fi.display_name, pe."CreatedAt", pe."NextRetryAt", FALSE
+                   NULL, pe."Id", NULL, fi.display_name, pe."CreatedAt", NULL::timestamptz, FALSE
             FROM fi
             JOIN "CausalEdges" q ON q."EffectRunProfileExecutionItemId" = fi.item_id AND q."EdgeType" = @queueing_edge
             JOIN "PendingExports" pe ON pe."Id" = q."CausePendingExportId"

@@ -28,7 +28,6 @@ public class ActivityItemPendingExportPanelTests : JimComponentTestContext
             ChangeType = changeType,
             Status = PendingExportStatus.Pending,
             ConnectedSystemId = 4,
-            MaxRetries = 5,
             CreatedAt = new DateTime(2026, 8, 1, 9, 0, 0, DateTimeKind.Utc)
         };
     }
@@ -141,14 +140,27 @@ public class ActivityItemPendingExportPanelTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// A failing export (#2119) is attempted again at every export run, however many attempts have failed, so the panel
+    /// says it is failing rather than leaving the reader to infer it from a count.
+    /// </summary>
     [Test]
-    public void Render_RetriesExhausted_SaysSoRatherThanLeavingTheReaderToCompareTwoNumbers()
+    public void Render_Failing_SaysSoRatherThanLeavingTheReaderToInferItFromTheCount()
     {
         var export = Export();
-        export.ErrorCount = 5;
+        export.ErrorCount = 12;
+        export.FailingSince = new DateTime(2026, 8, 1, 10, 0, 0, DateTimeKind.Utc);
 
-        var cut = RenderPanel(export, ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed);
+        var cut = RenderPanel(export);
 
-        Assert.That(cut.Markup, Does.Contain("Max Reached"));
+        Assert.That(cut.Markup, Does.Contain("Failing"));
+    }
+
+    [Test]
+    public void Render_NotFailing_DoesNotSayItIsFailing()
+    {
+        var cut = RenderPanel(Export());
+
+        Assert.That(cut.Markup, Does.Not.Contain("Failing"));
     }
 }

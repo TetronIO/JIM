@@ -61,7 +61,6 @@ public class SyncEngineDeferredDeleteReconciliationTests
     [TestCase(PendingExportStatus.Exported)]
     [TestCase(PendingExportStatus.Executing)]
     [TestCase(PendingExportStatus.ExportNotConfirmed)]
-    [TestCase(PendingExportStatus.Failed)]
     public void ReconcileDeferredExportsAgainstPersistedDeletes_DeleteNotPending_PairsNothing(PendingExportStatus deleteStatus)
     {
         // Only a Delete that has not been attempted is safe to cancel or rely on.

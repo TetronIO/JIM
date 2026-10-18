@@ -305,8 +305,7 @@ public class CausalConsequenceReadDatabaseTests
         var sync = await SeedActivityAsync(null, ConnectedSystemRunType.NotSet, T0);
         var item = await SeedItemAsync(sync, ObjectChangeType.AttributeFlow, "Tina Adams", "User");
         var waiting = await SeedPendingExportAsync(target.SystemId, PendingExportStatus.Pending);
-        var retryAt = T0.AddHours(3);
-        var retrying = await SeedPendingExportAsync(target.SystemId, PendingExportStatus.ExportNotConfirmed, retryAt);
+        var retrying = await SeedPendingExportAsync(target.SystemId, PendingExportStatus.ExportNotConfirmed);
         var executed = await SeedPendingExportAsync(target.SystemId, PendingExportStatus.Exported);
         foreach (var pendingExportId in new[] { waiting, retrying, executed })
             await SeedOutcomeAsync(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, pendingExportId);
@@ -326,7 +325,7 @@ public class CausalConsequenceReadDatabaseTests
                 Is.EquivalentTo(new[] { PendingExportStatus.Pending, PendingExportStatus.ExportNotConfirmed }));
             Assert.That(outstanding.All(c => c.Tuple.ConnectedSystemId == target.SystemId), Is.True);
             Assert.That(outstanding.Single(c => c.Tuple.PendingExportStatus == PendingExportStatus.ExportNotConfirmed).DueAt,
-                Is.EqualTo(retryAt));
+                Is.Null, "an export has no due time of its own: it is attempted at the next export run (#2119)");
             Assert.That(outstanding.SelectMany(c => c.Members).Select(m => m.PendingExportId),
                 Is.EquivalentTo(new[] { waiting, retrying }));
             Assert.That(outstanding.All(c => c.ContinuingItemIds.Count == 0), Is.True);
@@ -653,7 +652,7 @@ public class CausalConsequenceReadDatabaseTests
         await ctx.SaveChangesAsync();
     }
 
-    private async Task<Guid> SeedPendingExportAsync(int connectedSystemId, PendingExportStatus status, DateTime? nextRetryAt = null)
+    private async Task<Guid> SeedPendingExportAsync(int connectedSystemId, PendingExportStatus status)
     {
         await using var ctx = NewContext();
         var pendingExport = new PendingExport
@@ -662,7 +661,6 @@ public class CausalConsequenceReadDatabaseTests
             ConnectedSystemId = connectedSystemId,
             ChangeType = PendingExportChangeType.Update,
             Status = status,
-            NextRetryAt = nextRetryAt,
             CreatedAt = T0.AddMinutes(1)
         };
         ctx.PendingExports.Add(pendingExport);

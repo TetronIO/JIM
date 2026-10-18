@@ -120,6 +120,47 @@ Describe 'Get-JIMPendingExport' {
         }
     }
 
+    Context 'Failing' {
+
+        It 'Asks the list for failing Pending Exports only' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @() } }
+
+                Get-JIMPendingExport -ConnectedSystemId 2 -Failing | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/2/pending-exports?page=1&pageSize=50&failing=true'
+                }
+            }
+        }
+
+        It 'Counts failing Pending Exports only' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { 3 }
+
+                $count = Get-JIMPendingExport -ConnectedSystemId 2 -Count -Failing
+
+                $count | Should -Be 3
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/2/pending-exports/count?failing=true'
+                }
+            }
+        }
+
+        It 'Leaves the filter off unless -Failing is given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @() } }
+
+                Get-JIMPendingExport -ConnectedSystemId 2 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -notlike '*failing*' }
+            }
+        }
+    }
+
     Context 'Queued by' {
 
         It 'Has a QueuedBy parameter set' {

@@ -51,11 +51,16 @@ function Get-JIMPendingExport {
     .PARAMETER Count
         Returns how many Pending Exports there are, rather than the Pending Exports.
 
+    .PARAMETER Failing
+        Returns, or with -Count counts, only the Pending Exports whose last attempt failed. JIM attempts each again at
+        every export run until it succeeds; its FailingSince says since when it has been failing.
+
     .PARAMETER ChangeType
         With -Count, counts only the Pending Exports that make this kind of change.
 
     .PARAMETER Status
-        With -Count, counts only the Pending Exports with this status.
+        With -Count, counts only the Pending Exports with this status. A failing Pending Export is Pending; use
+        -Failing to count those.
 
     .OUTPUTS
         The Pending Exports, the one Pending Export, its value changes for -AttributeName, or with -Count how many
@@ -115,9 +120,14 @@ function Get-JIMPendingExport {
         Gets the count of pending Create exports for Connected System 2.
 
     .EXAMPLE
-        Get-JIMPendingExport -ConnectedSystemId 2 -Count -Status Failed
+        Get-JIMPendingExport -ConnectedSystemId 2 -Count -Failing
 
-        Gets the count of failed pending exports for Connected System 2.
+        Gets how many of Connected System 2's pending exports are failing.
+
+    .EXAMPLE
+        Get-JIMPendingExport -ConnectedSystemId 2 -Failing -All | Sort-Object FailingSince | Select-Object -First 10
+
+        Lists the ten longest-failing pending exports for Connected System 2.
 
     .LINK
         Get-JIMConnectedSystem
@@ -179,12 +189,17 @@ function Get-JIMPendingExport {
         [Parameter(Mandatory, ParameterSetName = 'Count')]
         [switch]$Count,
 
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [Parameter(ParameterSetName = 'Count')]
+        [switch]$Failing,
+
         [Parameter(ParameterSetName = 'Count')]
         [ValidateSet('Create', 'Update', 'Delete')]
         [string]$ChangeType,
 
         [Parameter(ParameterSetName = 'Count')]
-        [ValidateSet('Pending', 'ExportNotConfirmed', 'Executing', 'Failed', 'Exported', 'Parked')]
+        [ValidateSet('Pending', 'ExportNotConfirmed', 'Executing', 'Exported', 'Parked')]
         [string]$Status
     )
 
@@ -207,6 +222,10 @@ function Get-JIMPendingExport {
 
                 if ($Status) {
                     $queryParams += "status=$Status"
+                }
+
+                if ($Failing) {
+                    $queryParams += "failing=true"
                 }
 
                 $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/pending-exports/count"
@@ -249,6 +268,9 @@ function Get-JIMPendingExport {
                 if ($Search) {
                     $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                 }
+                if ($Failing) {
+                    $endpoint += "&failing=true"
+                }
 
                 $response = Invoke-JIMApi -Endpoint $endpoint
                 foreach ($item in $response.items) {
@@ -263,6 +285,9 @@ function Get-JIMPendingExport {
                     $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/pending-exports?page=$p&pageSize=$PageSize"
                     if ($Search) {
                         $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
+                    }
+                    if ($Failing) {
+                        $endpoint += "&failing=true"
                     }
                     Invoke-JIMApi -Endpoint $endpoint
                 }

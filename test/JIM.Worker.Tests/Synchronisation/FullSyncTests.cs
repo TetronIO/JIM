@@ -272,21 +272,19 @@ public class FullSyncTests
     }
 
     /// <summary>
-    /// A Failed Pending Export requires manual intervention. A Full Sync must leave it completely alone
-    /// when its values still do not match the CSO: no status change, no ErrorCount change, no attribute
-    /// mutation. Before this fix, the synchronisation-side confirmation check re-evaluated every
-    /// non-Pending/non-Exported Pending Export on every sync, which could reopen a Failed export by
-    /// flipping it to ExportNotConfirmed and incrementing ErrorCount, silently pulling it back into the
-    /// export queue with the very value the target had already rejected enough times to fail it.
+    /// A failing Pending Export (#2119: its attempts keep failing, and it is attempted again at every export run) is the
+    /// export run's to account for, not a synchronisation's. A Full Sync must leave its failure record alone when its
+    /// values still do not match the CSO: no status change, no ErrorCount or FailingSince change, no attribute mutation.
     /// </summary>
     [Test]
-    public async Task FailedPendingExportWithMismatchedValues_LeftFailedWithErrorCountUnchangedTestAsync()
+    public async Task FailingPendingExportWithMismatchedValues_LeftWithFailureRecordUnchangedTestAsync()
     {
         var cso = ConnectedSystemObjectsData[0];
         var connectedSystem = ConnectedSystemsData[0];
 
         var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
         var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
+        var failingSince = DateTime.UtcNow.AddDays(-3);
 
         var pendingExport = new PendingExport
         {
@@ -295,9 +293,11 @@ public class FullSyncTests
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
             ConnectedSystemObjectId = cso.Id,
-            Status = PendingExportStatus.Failed,
+            Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
-            ErrorCount = SyncEngine.DefaultMaxRetries,
+            ErrorCount = 12,
+            FailingSince = failingSince,
+            LastAttemptedAt = failingSince.AddDays(2),
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -307,8 +307,7 @@ public class FullSyncTests
                     AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
                     Attribute = roleAttr,
                     StringValue = "Senior Manager",
-                    Status = PendingExportAttributeChangeStatus.Failed,
-                    ExportAttemptCount = SyncEngine.DefaultMaxRetries
+                    Status = PendingExportAttributeChangeStatus.Pending
                 }
             }
         };
@@ -327,16 +326,17 @@ public class FullSyncTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "A Failed Pending Export must not be deleted by a sync.");
-            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Failed), "A sync must not change a Failed Pending Export's status.");
-            Assert.That(pendingExport.ErrorCount, Is.EqualTo(SyncEngine.DefaultMaxRetries), "A sync must not touch ErrorCount on a Failed Pending Export.");
-            Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1), "A sync must not remove attribute changes from a Failed Pending Export.");
+            Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "A failing Pending Export must not be deleted by a sync.");
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending), "A sync must not change a failing Pending Export's status.");
+            Assert.That(pendingExport.ErrorCount, Is.EqualTo(12), "A sync must not touch ErrorCount on a failing Pending Export.");
+            Assert.That(pendingExport.FailingSince, Is.EqualTo(failingSince), "A sync must not touch FailingSince on a failing Pending Export.");
+            Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1), "A sync must not remove attribute changes from a failing Pending Export.");
         }
     }
 
     /// <summary>
     /// A Parked Pending Export is held for an administrator's Unique Value Generation decision. A Full
-    /// Sync must never touch it, exactly as for a Failed export.
+    /// Sync must never touch it, exactly as for a failing export.
     /// </summary>
     [Test]
     public async Task ParkedPendingExportWithMismatchedValues_LeftUntouchedTestAsync()

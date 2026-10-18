@@ -107,7 +107,6 @@ public class SyncEngineQueuedChangeAuthorityTests
     }
 
     [TestCase(PendingExportAttributeChangeStatus.ExportedPendingConfirmation)]
-    [TestCase(PendingExportAttributeChangeStatus.Failed)]
     public void SelectQueuedChangesWithoutAuthority_ChangeNotAwaitingSend_IsNeverSelected(PendingExportAttributeChangeStatus status)
     {
         // A change already sent awaits its confirming import; a failed one is not resent. Neither is queued.

@@ -160,7 +160,7 @@ public class CausalConsequenceWalkTests
         var sync = Guid.NewGuid();
         AddHop(sync, OutstandingTuple(PendingExportStatus.Pending), Pseudo("Tina Adams"));
         AddHop(sync, OutstandingTuple(PendingExportStatus.ExportNotConfirmed), Pseudo("Tina Adams", due: T0.AddHours(2)));
-        AddHop(sync, OutstandingTuple(PendingExportStatus.Failed), Pseudo("Tina Adams"));
+        AddHop(sync, OutstandingTuple(PendingExportStatus.Parked), Pseudo("Tina Adams"));
 
         var consequences = await _application.Activities.GetCausalConsequencesAsync(sync);
 

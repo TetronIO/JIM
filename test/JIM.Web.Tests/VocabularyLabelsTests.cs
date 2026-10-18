@@ -76,7 +76,7 @@ public class VocabularyLabelsTests : JimComponentTestContext
             .Setup(r => r.GetPendingExportHeadersRangeAsync(
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<IEnumerable<PendingExportStatus>?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<bool>(), It.IsAny<bool>()))
+                It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<bool>()))
             .ReturnsAsync(new RangeResultSet<PendingExportHeader> { Results = [], TotalResults = 0 });
 
         _connectedSystems

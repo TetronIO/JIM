@@ -34,8 +34,9 @@ namespace JIM.Application.Utilities;
 /// assuming the impossible case cannot reach it.
 /// </para>
 /// <para>
-/// <b>Priority when several facts could apply:</b> a Failed Pending Export is the single most
-/// actionable fact or reads first (<see cref="ConnectedSystemObjectConnectionState.ExportFailed"/>);
+/// <b>Priority when several facts could apply:</b> a failing Pending Export (its last attempt failed; it
+/// is attempted again at every export run, #2119) is the single most actionable fact and reads first
+/// (<see cref="ConnectedSystemObjectConnectionState.ExportFailed"/>);
 /// Obsolete is checked next, because the object's own status says it is gone from the Connected
 /// System, ahead of a Pending Export that will not export anywhere. The rest follow the export's
 /// change type.
@@ -48,8 +49,9 @@ public static class ConnectedSystemObjectConnectionStateResolver
     /// </summary>
     /// <param name="status">The object's current status.</param>
     /// <param name="pendingExport">
-    /// The object's Pending Export, or null when none is queued. Only <see cref="PendingExport.ChangeType"/>
-    /// and <see cref="PendingExport.Status"/> are read; callers may pass a lightweight instance.
+    /// The object's Pending Export, or null when none is queued. Only <see cref="PendingExport.ChangeType"/>,
+    /// <see cref="PendingExport.Status"/> and <see cref="PendingExport.FailingSince"/> are read; callers may pass a
+    /// lightweight instance.
     /// </param>
     public static ConnectedSystemObjectConnectionState Resolve(ConnectedSystemObjectStatus status, PendingExport? pendingExport)
     {
@@ -67,9 +69,9 @@ public static class ConnectedSystemObjectConnectionStateResolver
             };
         }
 
-        // A Failed Pending Export needs manual intervention regardless of anything else about the
-        // object; that fact must never be masked by a status check further down.
-        if (pendingExport.Status == PendingExportStatus.Failed)
+        // A failing Pending Export is the fact an administrator most needs to see, regardless of anything else
+        // about the object; it must never be masked by a status check further down.
+        if (pendingExport.FailingSince.HasValue)
             return ConnectedSystemObjectConnectionState.ExportFailed;
 
         // The object's own status says it is gone from the Connected System; a leftover Pending Export

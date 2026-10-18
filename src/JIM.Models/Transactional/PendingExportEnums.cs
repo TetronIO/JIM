@@ -56,14 +56,12 @@ public enum PendingExportAttributeChangeStatus
 
     /// <summary>
     /// The attribute change was exported, but the confirming import returned a different value.
-    /// Will be retried on the next export run.
+    /// Will be retried on the next export run, however many times it has been sent before.
     /// </summary>
-    ExportedNotConfirmed = 2,
+    ExportedNotConfirmed = 2
 
-    /// <summary>
-    /// The attribute change failed after maximum retry attempts and requires manual intervention.
-    /// </summary>
-    Failed = 3
+    // 3 was Failed, given to a change still unconfirmed after five attempts. JIM no longer gives up on a change
+    // (#2119); the value is retired and must not be reused, since it is persisted by ordinal.
 }
 
 public enum PendingExportStatus
@@ -81,10 +79,9 @@ public enum PendingExportStatus
     /// The Pending Export is currently being processed by a connector.
     /// </summary>
     Executing = 2,
-    /// <summary>
-    /// The Pending Export failed after maximum retry attempts and requires manual intervention.
-    /// </summary>
-    Failed = 3,
+    // 3 was Failed, given to an export after five failed attempts and never attempted again. JIM no longer gives up
+    // on a Pending Export (#2119): one whose attempt failed stays Pending, with its failure recorded in
+    // PendingExport.FailingSince. The value is retired and must not be reused, since it is persisted by ordinal.
     /// <summary>
     /// The Pending Export was successfully applied to the Connected System.
     /// </summary>
@@ -92,8 +89,8 @@ public enum PendingExportStatus
     /// <summary>
     /// The Pending Export is held back because its generated value needs an administrator's decision:
     /// the target rejected the value and another Connected System already holds it (Unique Value
-    /// Generation release 4). The Connected System's "Retry failed exports" skips a Parked export, and
-    /// it is not counted as a failure; it clears once the decision is made.
+    /// Generation release 4). A Parked export is not attempted, and not counted as a failure; it clears once
+    /// the decision is made.
     /// </summary>
     Parked = 5
 }

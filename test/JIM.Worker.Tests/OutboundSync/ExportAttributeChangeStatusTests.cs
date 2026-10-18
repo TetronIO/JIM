@@ -229,15 +229,14 @@ public class ExportAttributeChangeStatusTests
     }
 
     /// <summary>
-    /// Tests that exports with only Failed attribute changes are NOT included.
-    /// These require manual intervention.
+    /// Tests that an Update whose only changes are awaiting a confirming import is NOT included: nothing is left to send.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_WithOnlyFailedChanges_ExcludedAsync()
+    public async Task ExecuteExportsAsync_WithOnlyChangesAwaitingConfirmation_ExcludedAsync()
     {
         // Arrange
         var cso = CreateTestCso();
-        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.Failed);
+        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.Exported);
         pendingExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -245,7 +244,7 @@ public class ExportAttributeChangeStatusTests
             Attribute = DisplayNameAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
             StringValue = "John Doe",
-            Status = PendingExportAttributeChangeStatus.Failed
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
         });
 
         var mockConnector = new Mock<IConnector>();
@@ -259,11 +258,11 @@ public class ExportAttributeChangeStatusTests
 
         // Assert
         Assert.That(result.TotalPendingExports, Is.EqualTo(0),
-            "Export with only Failed changes should NOT be included");
+            "Export with only changes awaiting confirmation should NOT be included");
     }
 
     /// <summary>
-    /// Tests that exports with mixed status attribute changes (some Pending, some Failed) are included
+    /// Tests that exports with mixed status attribute changes (some Pending, some awaiting confirmation) are included
     /// because there are Pending changes to export.
     /// </summary>
     [Test]
@@ -284,7 +283,7 @@ public class ExportAttributeChangeStatusTests
             Status = PendingExportAttributeChangeStatus.Pending
         });
 
-        // Add one failed change
+        // Add one change already sent and awaiting confirmation
         var mailAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Mail.ToString());
         pendingExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
         {
@@ -293,7 +292,7 @@ public class ExportAttributeChangeStatusTests
             Attribute = mailAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
             StringValue = "john@panoply.org",
-            Status = PendingExportAttributeChangeStatus.Failed
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
         });
 
         var mockConnector = new Mock<IConnector>();

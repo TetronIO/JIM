@@ -146,21 +146,6 @@ public class ConnectedSystemRepositoryExportOptimisationTests
     }
 
     [Test]
-    public async Task GetExecutableExportsAsync_WithFailedStatus_ExcludesItAsync()
-    {
-        // Arrange
-        var pe = CreatePendingExport(PendingExportStatus.Failed);
-        _pendingExportsData.Add(pe);
-        SetUpMockContext();
-
-        // Act
-        var result = await _repository.ConnectedSystems.GetExecutableExportsAsync(_connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Is.Empty);
-    }
-
-    [Test]
     public async Task GetExecutableExportsAsync_WithExecutingStatus_ExcludesItAsync()
     {
         // Arrange
@@ -175,63 +160,19 @@ public class ConnectedSystemRepositoryExportOptimisationTests
         Assert.That(result, Is.Empty);
     }
 
-    [Test]
-    public async Task GetExecutableExportsAsync_WithFutureRetryTime_ExcludesItAsync()
+    /// <summary>
+    /// JIM never gives up on a Pending Export (#2119): one whose attempts have failed, however many and however
+    /// recently, is still due at the next export run.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(50)]
+    public async Task GetExecutableExportsAsync_WithFailedAttempts_ReturnsItAsync(int errorCount)
     {
         // Arrange
         var pe = CreatePendingExport(PendingExportStatus.Pending);
-        pe.NextRetryAt = DateTime.UtcNow.AddMinutes(30);
-        _pendingExportsData.Add(pe);
-        SetUpMockContext();
-
-        // Act
-        var result = await _repository.ConnectedSystems.GetExecutableExportsAsync(_connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Is.Empty);
-    }
-
-    [Test]
-    public async Task GetExecutableExportsAsync_WithPastRetryTime_ReturnsItAsync()
-    {
-        // Arrange
-        var pe = CreatePendingExport(PendingExportStatus.Pending);
-        pe.NextRetryAt = DateTime.UtcNow.AddMinutes(-5);
-        pe.ErrorCount = 1;
-        _pendingExportsData.Add(pe);
-        SetUpMockContext();
-
-        // Act
-        var result = await _repository.ConnectedSystems.GetExecutableExportsAsync(_connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-    }
-
-    [Test]
-    public async Task GetExecutableExportsAsync_WithMaxRetriesExceeded_ExcludesItAsync()
-    {
-        // Arrange
-        var pe = CreatePendingExport(PendingExportStatus.Pending);
-        pe.ErrorCount = 3;
-        pe.MaxRetries = 3;
-        _pendingExportsData.Add(pe);
-        SetUpMockContext();
-
-        // Act
-        var result = await _repository.ConnectedSystems.GetExecutableExportsAsync(_connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Is.Empty);
-    }
-
-    [Test]
-    public async Task GetExecutableExportsAsync_WithErrorCountBelowMaxRetries_ReturnsItAsync()
-    {
-        // Arrange
-        var pe = CreatePendingExport(PendingExportStatus.Pending);
-        pe.ErrorCount = 2;
-        pe.MaxRetries = 3;
+        pe.ErrorCount = errorCount;
+        pe.FailingSince = DateTime.UtcNow.AddDays(-2);
+        pe.LastAttemptedAt = DateTime.UtcNow.AddSeconds(-5);
         _pendingExportsData.Add(pe);
         SetUpMockContext();
 
@@ -294,24 +235,22 @@ public class ConnectedSystemRepositoryExportOptimisationTests
         // Arrange
         var eligible = CreatePendingExport(PendingExportStatus.Pending);
 
-        var failed = CreatePendingExport(PendingExportStatus.Failed);
+        var executing = CreatePendingExport(PendingExportStatus.Executing);
 
-        var futureRetry = CreatePendingExport(PendingExportStatus.Pending);
-        futureRetry.NextRetryAt = DateTime.UtcNow.AddHours(1);
+        var parked = CreatePendingExport(PendingExportStatus.Parked);
 
-        var maxRetries = CreatePendingExport(PendingExportStatus.Pending);
-        maxRetries.ErrorCount = 5;
-        maxRetries.MaxRetries = 5;
+        var failing = CreatePendingExport(PendingExportStatus.Pending);
+        failing.ErrorCount = 5;
+        failing.FailingSince = DateTime.UtcNow.AddHours(-1);
 
-        _pendingExportsData.AddRange([eligible, failed, futureRetry, maxRetries]);
+        _pendingExportsData.AddRange([eligible, executing, parked, failing]);
         SetUpMockContext();
 
         // Act
         var result = await _repository.ConnectedSystems.GetExecutableExportsAsync(_connectedSystem.Id);
 
         // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result[0].Id, Is.EqualTo(eligible.Id));
+        Assert.That(result.Select(pe => pe.Id), Is.EquivalentTo(new[] { eligible.Id, failing.Id }));
     }
 
     #endregion
@@ -509,8 +448,7 @@ public class ConnectedSystemRepositoryExportOptimisationTests
             ChangeType = PendingExportChangeType.Update,
             Status = status,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>(),
-            MaxRetries = 5
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
     }
 

@@ -32,11 +32,17 @@
     [Parameter]
     public PendingExportStatus? Status { get; set; }
 
-    private string TooltipText => Status switch
+    /// <summary>
+    /// Whether the last attempt to write the Pending Export failed (#2119). It is attempted again at the next export
+    /// run, so its status stays Pending, but the tooltip must not imply the value is simply on its way.
+    /// </summary>
+    [Parameter]
+    public bool Failing { get; set; }
+
+    private string TooltipText => Failing ? FailedTooltip : Status switch
     {
         PendingExportStatus.Pending or PendingExportStatus.Executing => NotYetSentTooltip,
         PendingExportStatus.Exported or PendingExportStatus.ExportNotConfirmed => AwaitingConfirmationTooltip,
-        PendingExportStatus.Failed => FailedTooltip,
         PendingExportStatus.Parked => ParkedTooltip,
         _ => UnknownStateTooltip
     };

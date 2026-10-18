@@ -98,7 +98,8 @@ public class PendingExportHeaderRangeDatabaseTests
 
     /// <summary>
     /// Seeds a Connected System whose Pending Exports vary by status, so the status filter has something to
-    /// include and something to exclude: "Export A" (Pending), "Export B" (Failed) and "Export C" (Exported).
+    /// include and something to exclude: "Export A" (Pending, and failing: its last attempt failed), "Export B" (Parked)
+    /// and "Export C" (Exported).
     /// Returns the Connected System's id.
     /// </summary>
     private async Task<int> SeedMixedStatusesAsync()
@@ -116,6 +117,8 @@ public class PendingExportHeaderRangeDatabaseTests
                 ChangeType = PendingExportChangeType.Create,
                 Status = PendingExportStatus.Pending,
                 CreatedAt = baseTime.AddSeconds(1),
+                ErrorCount = 3,
+                FailingSince = baseTime.AddMinutes(5),
                 LastErrorMessage = "Export A"
             },
             new PendingExport
@@ -123,7 +126,7 @@ public class PendingExportHeaderRangeDatabaseTests
                 Id = Guid.NewGuid(),
                 ConnectedSystem = connectedSystem,
                 ChangeType = PendingExportChangeType.Update,
-                Status = PendingExportStatus.Failed,
+                Status = PendingExportStatus.Parked,
                 CreatedAt = baseTime.AddSeconds(2),
                 LastErrorMessage = "Export B"
             },
@@ -284,13 +287,91 @@ public class PendingExportHeaderRangeDatabaseTests
         var jim = NewJim();
 
         var result = await jim.ConnectedSystems.GetPendingExportHeadersRangeAsync(
-            systemId, offset: 0, count: 10, statusFilters: [PendingExportStatus.Failed],
+            systemId, offset: 0, count: 10, statusFilters: [PendingExportStatus.Parked],
             sortBy: CreatedSortKey, sortDescending: false);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.TotalResults, Is.EqualTo(1));
             Assert.That(result.Results.Select(r => r.LastErrorMessage), Is.EqualTo(new[] { "Export B" }));
+        }
+    }
+
+    /// <summary>
+    /// A failing Pending Export stays Pending (#2119), so the failing filter is its own predicate rather than a status.
+    /// </summary>
+    [Test]
+    public async Task Range_FailingOnly_RestrictsWindowAndTotalToFailingExportsAsync()
+    {
+        var systemId = await SeedMixedStatusesAsync();
+        var jim = NewJim();
+
+        var result = await jim.ConnectedSystems.GetPendingExportHeadersRangeAsync(
+            systemId, offset: 0, count: 10, sortBy: CreatedSortKey, sortDescending: false, failingOnly: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.TotalResults, Is.EqualTo(1));
+            Assert.That(result.Results.Select(r => r.LastErrorMessage), Is.EqualTo(new[] { "Export A" }));
+            Assert.That(result.Results.Single().FailingSince, Is.Not.Null);
+        }
+    }
+
+    [Test]
+    public async Task FilteredCount_FailingOnly_CountsOnlyFailingExportsAsync()
+    {
+        var systemId = await SeedMixedStatusesAsync();
+
+        var failing = await NewJim().ConnectedSystems.GetPendingExportsFilteredCountAsync(systemId, failingOnly: true);
+        var all = await NewJim().ConnectedSystems.GetPendingExportsFilteredCountAsync(systemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failing, Is.EqualTo(1));
+            Assert.That(all, Is.EqualTo(3));
+        }
+    }
+
+    [Test]
+    public async Task FailureSummary_CountsFailingExportsAndGivesTheOldestFailingSinceAsync()
+    {
+        var oldest = new DateTime(2026, 3, 1, 8, 0, 0, DateTimeKind.Utc);
+        int systemId;
+        await using (var ctx = NewContext())
+        {
+            var connectedSystem = BuildSystem(ctx);
+            await ctx.SaveChangesAsync();
+            systemId = connectedSystem.Id;
+            ctx.AddRange(
+                new PendingExport { Id = Guid.NewGuid(), ConnectedSystem = connectedSystem, ChangeType = PendingExportChangeType.Update,
+                    Status = PendingExportStatus.Pending, CreatedAt = oldest, ErrorCount = 9, FailingSince = oldest.AddDays(2) },
+                new PendingExport { Id = Guid.NewGuid(), ConnectedSystem = connectedSystem, ChangeType = PendingExportChangeType.Create,
+                    Status = PendingExportStatus.Pending, CreatedAt = oldest, ErrorCount = 30, FailingSince = oldest },
+                new PendingExport { Id = Guid.NewGuid(), ConnectedSystem = connectedSystem, ChangeType = PendingExportChangeType.Update,
+                    Status = PendingExportStatus.Exported, CreatedAt = oldest.AddDays(-1) });
+            await ctx.SaveChangesAsync();
+        }
+
+        var summary = await NewJim().ConnectedSystems.GetPendingExportFailureSummaryAsync(systemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.FailingCount, Is.EqualTo(2));
+            Assert.That(summary.OldestFailingSince, Is.EqualTo(oldest));
+        }
+    }
+
+    [Test]
+    public async Task FailureSummary_NothingFailing_IsZeroWithNoOldestAsync()
+    {
+        var systemId = await SeedAsync(3);
+
+        var summary = await NewJim().ConnectedSystems.GetPendingExportFailureSummaryAsync(systemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.FailingCount, Is.Zero);
+            Assert.That(summary.OldestFailingSince, Is.Null);
         }
     }
 

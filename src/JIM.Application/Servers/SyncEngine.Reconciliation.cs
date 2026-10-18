@@ -20,11 +20,6 @@ namespace JIM.Application.Servers;
 public partial class SyncEngine
 {
     /// <summary>
-    /// Default maximum number of export attempts before marking an attribute change as Failed.
-    /// </summary>
-    public const int DefaultMaxRetries = 5;
-
-    /// <summary>
     /// Reconciles a Connected System Object against a pre-loaded Pending Export.
     /// This method does NOT perform any database operations — the caller is responsible for persistence.
     /// </summary>
@@ -62,42 +57,6 @@ public partial class SyncEngine
         {
             Log.Debug("ReconcileCsoAgainstPendingExport: PendingExport {ExportId} status is {Status}; excluded from reconciliation.",
                 pendingExport.Id, pendingExport.Status);
-            return;
-        }
-
-        // A Failed Pending Export has already exhausted its retries and requires manual intervention,
-        // so it is deliberately excluded from the retry-and-confirm pipeline below: re-entering that
-        // pipeline would restart error accounting on an export an administrator must act on, and could
-        // resurrect it into the export queue on a false partial match. The one thing reconciliation
-        // still does for it: if every attribute change it asserts is now visible on the CSO (the
-        // administrator fixed the target by hand, or reissued the value out of band), the Pending
-        // Export is cleared, exactly as a fully confirmed Exported one would be. Anything less than
-        // full confirmation leaves it completely untouched: no status change, no attribute mutation,
-        // no ErrorCount or attempt accounting.
-        if (pendingExport.Status == PendingExportStatus.Failed)
-        {
-            // The same per-attribute value index the general path below builds (#988), so a large Failed
-            // group export is checked in linear time rather than rebuilding a lookup per change.
-            var failedIndexByAttrId = BuildAttributeValueIndexByAttributeId(connectedSystemObject);
-            if (pendingExport.AttributeValueChanges.Count > 0 &&
-                pendingExport.AttributeValueChanges.All(ac => IsAttributeChangeConfirmedFast(failedIndexByAttrId, ac)))
-            {
-                Log.Information("ReconcileCsoAgainstPendingExport: All {Count} attribute change(s) on Failed Pending Export {PeId} " +
-                    "are now confirmed on CSO {CsoId} (administrator intervention); clearing it.",
-                    pendingExport.AttributeValueChanges.Count, pendingExport.Id, connectedSystemObject.Id);
-                result.ConfirmedChanges.AddRange(pendingExport.AttributeValueChanges);
-                // Mirrors the general confirmation path below, which always empties AttributeValueChanges
-                // of everything it just confirmed; here that is all of them, since the export is deleted.
-                pendingExport.AttributeValueChanges.Clear();
-                result.PendingExportDeleted = true;
-                result.PendingExportToDelete = pendingExport;
-            }
-            else
-            {
-                Log.Debug("ReconcileCsoAgainstPendingExport: Failed Pending Export {PeId} is not fully confirmed on CSO {CsoId}; " +
-                    "leaving untouched pending manual intervention.", pendingExport.Id, connectedSystemObject.Id);
-            }
-
             return;
         }
 
@@ -169,29 +128,15 @@ public partial class SyncEngine
             }
             else
             {
-                attrChange.Status = ShouldMarkAsFailed(attrChange)
-                    ? PendingExportAttributeChangeStatus.Failed
-                    : PendingExportAttributeChangeStatus.ExportedNotConfirmed;
-
+                // Never given up on (#2119): however many imports have not seen it, the change is sent again at the
+                // next export run, and the caller reports it as not confirmed on every import that misses it.
+                attrChange.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
                 attrChange.LastImportedValue = GetImportedValueAsString(attrValuesByAttrId, attrChange);
-                var expectedValue = GetExpectedValueAsString(attrChange);
-
-                if (attrChange.Status == PendingExportAttributeChangeStatus.Failed)
-                {
-                    result.FailedChanges.Add(attrChange);
-                    Log.Warning("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) failed after {Attempts} attempts. " +
-                        "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
-                        attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
-                        LogSanitiser.Sanitise(expectedValue), LogSanitiser.Sanitise(attrChange.LastImportedValue));
-                }
-                else
-                {
-                    result.RetryChanges.Add(attrChange);
-                    Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
-                        "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
-                        attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
-                        LogSanitiser.Sanitise(expectedValue), LogSanitiser.Sanitise(attrChange.LastImportedValue));
-                }
+                result.RetryChanges.Add(attrChange);
+                Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
+                    "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
+                    attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
+                    LogSanitiser.Sanitise(GetExpectedValueAsString(attrChange)), LogSanitiser.Sanitise(attrChange.LastImportedValue));
             }
         }
 
@@ -209,8 +154,7 @@ public partial class SyncEngine
         var hasRemainingChanges = pendingExport.AttributeValueChanges.Any(ac =>
             ac.Status == PendingExportAttributeChangeStatus.Pending ||
             ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
-            ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed ||
-            ac.Status == PendingExportAttributeChangeStatus.Failed);
+            ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
 
         // Reconciliation only ever runs for a Connected System Object an import actually returned and
         // matched, so a Create Pending Export reaching this point already proves the object exists on
@@ -326,7 +270,7 @@ public partial class SyncEngine
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(metaverseObjectIdsOwedPassword);
 
-        if (pendingExport.Status is PendingExportStatus.Parked or PendingExportStatus.Executing or PendingExportStatus.Failed)
+        if (pendingExport.Status is PendingExportStatus.Parked or PendingExportStatus.Executing)
         {
             Log.Debug("JudgeChangesAwaitingInitialPasswordNotReconciled: Pending Export {ExportId} status is {Status}; its held change(s) are left as they are",
                 pendingExport.Id, pendingExport.Status);
@@ -729,14 +673,6 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Builds the per-attribute value index for a Connected System Object's attribute values.
-    /// </summary>
-    private static Dictionary<int, AttributeValueIndex> BuildAttributeValueIndexByAttributeId(ConnectedSystemObject connectedSystemObject)
-        => BuildAttributeValueIndexByAttributeId(connectedSystemObject.AttributeValues
-            .GroupBy(av => av.AttributeId)
-            .ToDictionary(g => g.Key, g => g.ToList()));
-
-    /// <summary>
     /// Set-based equivalent of <see cref="IsAttributeChangeConfirmed(Dictionary{int, List{ConnectedSystemObjectAttributeValue}}, PendingExportAttributeValueChange)"/>
     /// (#988): determines if an attribute change has been confirmed using a pre-built per-attribute
     /// value index instead of per-attribute value lists, so that <see cref="ReconcileCsoAgainstPendingExport"/>
@@ -809,14 +745,6 @@ public partial class SyncEngine
         change.Attribute?.AttributePlurality == AttributePlurality.MultiValued;
 
     /// <summary>
-    /// Determines if an attribute change should be marked as Failed based on retry count.
-    /// </summary>
-    public static bool ShouldMarkAsFailed(PendingExportAttributeValueChange attrChange)
-    {
-        return attrChange.ExportAttemptCount >= DefaultMaxRetries;
-    }
-
-    /// <summary>
     /// Transitions a Create Pending Export to an Update once reconciliation proves the object it targets
     /// already exists on the target. <see cref="ReconcileCsoAgainstPendingExport"/> is only ever invoked
     /// for a Connected System Object an import actually returned and matched, so reaching this method
@@ -860,16 +788,10 @@ public partial class SyncEngine
     /// </summary>
     public static void UpdatePendingExportStatus(PendingExport pendingExport)
     {
-        var allFailed = pendingExport.AttributeValueChanges.All(ac => ac.Status == PendingExportAttributeChangeStatus.Failed);
-        var anyFailed = pendingExport.AttributeValueChanges.Any(ac => ac.Status == PendingExportAttributeChangeStatus.Failed);
         var anyRetry = pendingExport.AttributeValueChanges.Any(ac => ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
         var anyPending = pendingExport.AttributeValueChanges.Any(ac => ac.Status == PendingExportAttributeChangeStatus.Pending);
 
-        if (allFailed)
-        {
-            pendingExport.Status = PendingExportStatus.Failed;
-        }
-        else if (anyRetry)
+        if (anyRetry)
         {
             pendingExport.Status = PendingExportStatus.ExportNotConfirmed;
         }
@@ -879,10 +801,6 @@ public partial class SyncEngine
             // still owed after a partial write, issue #1398, or a change merged in since the last
             // export). ExportNotConfirmed would claim a write that did not stick.
             pendingExport.Status = PendingExportStatus.Pending;
-        }
-        else if (anyFailed)
-        {
-            pendingExport.Status = PendingExportStatus.Exported;
         }
     }
 

@@ -142,12 +142,12 @@ public class PendingExportUnresolvedReferencesDatabaseTests
         var matching = BuildPendingExport(systemAId, PendingExportStatus.Pending, hasUnresolvedReferences: true, attributeAId);
         var resolvedPending = BuildPendingExport(systemAId, PendingExportStatus.Pending, hasUnresolvedReferences: false, attributeAId);
         var exportedUnresolved = BuildPendingExport(systemAId, PendingExportStatus.Exported, hasUnresolvedReferences: true, attributeAId);
-        var failedUnresolved = BuildPendingExport(systemAId, PendingExportStatus.Failed, hasUnresolvedReferences: true, attributeAId);
+        var parkedUnresolved = BuildPendingExport(systemAId, PendingExportStatus.Parked, hasUnresolvedReferences: true, attributeAId);
         var otherSystemUnresolved = BuildPendingExport(systemBId, PendingExportStatus.Pending, hasUnresolvedReferences: true, attributeAId);
 
         await using (var seed = NewContext())
         {
-            seed.PendingExports.AddRange(matching, resolvedPending, exportedUnresolved, failedUnresolved, otherSystemUnresolved);
+            seed.PendingExports.AddRange(matching, resolvedPending, exportedUnresolved, parkedUnresolved, otherSystemUnresolved);
             await seed.SaveChangesAsync();
         }
 
