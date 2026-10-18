@@ -42,6 +42,22 @@ Describe 'Test-LabMatrix' {
         Test-LabMatrix -Matrix $matrix | Should -Be @("u24-docker-ag: image 'u22-docker' is not one of the matrix's images (alma9-podman, u24-docker)")
     }
 
+    It 'accepts a Soak cell run on request, with a tag of its own' {
+        $matrix = New-TestMatrix
+        $matrix.Cells += @{ Name = 'alma-podrf-soak'; Image = 'alma9-podman'; Runtime = 'podman'; Network = 'airgap'; Scenario = 'Soak'
+            MemoryGiB = 6; OnRequest = $true; Tags = @('podman', 'soak') }
+
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'refuses a cell run on request with no tag of its own, which no -Tag could then select' {
+        $matrix = New-TestMatrix
+        $matrix.Cells += @{ Name = 'alma-podrf-soak'; Image = 'alma9-podman'; Runtime = 'podman'; Network = 'airgap'; Scenario = 'Soak'
+            MemoryGiB = 6; OnRequest = $true; Tags = @('podman', 'rhel') }
+
+        Test-LabMatrix -Matrix $matrix | Should -Be @("alma-podrf-soak: a cell run on request needs a tag no every-run cell carries, for -Tag to select it by")
+    }
+
     It 'refuses two cells of the same name' {
         $matrix = New-TestMatrix
         $matrix.Cells[1].Name = 'u24-docker-ag'
@@ -73,7 +89,7 @@ Describe 'Test-LabMatrix' {
 
         $errors | Should -Contain "u24-docker-ag: runtime 'containerd' is not docker or podman"
         $errors | Should -Contain "u24-docker-ag: network 'lan' is not airgap or online"
-        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase"
+        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase, Soak"
     }
 
     It 'refuses a cell given less memory than JIM needs' {
@@ -159,6 +175,29 @@ Describe 'Select-LabCell' {
 
     It 'applies a name and a tag together' {
         Select-LabCell -Cell $cells -Name 'u24-*' -Tag 'rhel' | Should -BeNullOrEmpty
+    }
+
+    Context 'a cell run on request only' {
+        BeforeAll {
+            $script:withSoak = $cells + @(@{ Name = 'alma-podrf-soak'; Image = 'alma9-podman'; Runtime = 'podman'; Network = 'airgap'
+                    Scenario = 'Soak'; MemoryGiB = 6; OnRequest = $true; Tags = @('podman', 'soak', 'rhel') })
+        }
+
+        It 'is left out of a run with no filter' {
+            (Select-LabCell -Cell $withSoak).Name | Should -Be @('u24-docker-ag', 'alma-podrl-ag')
+        }
+
+        It 'is left out when only a tag every-run cells share selects it' {
+            (Select-LabCell -Cell $withSoak -Tag 'rhel').Name | Should -Be @('alma-podrl-ag')
+        }
+
+        It 'is taken when a tag only on-request cells carry is asked for' {
+            (Select-LabCell -Cell $withSoak -Tag 'soak').Name | Should -Be @('alma-podrf-soak')
+        }
+
+        It 'is taken when its name is given' {
+            (Select-LabCell -Cell $withSoak -Name '*-soak').Name | Should -Be @('alma-podrf-soak')
+        }
     }
 }
 

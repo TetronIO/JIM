@@ -29,7 +29,8 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 
 All cells are air-gapped: their VMs sit on a bridge with no route out, and each cell proves it cannot reach
 `github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`);
-some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`).
+some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`). One more, the Soak cell
+`alma9-podrf-soak`, runs only when asked for (see What a Soak cell checks).
 
 | Cells | Operating system | Runtime |
 |-------|------------------|---------|
@@ -145,6 +146,25 @@ As every cell does, it ends by checking that nothing crashed quietly.
 
 The database server is a second VM, `jl-<cell>-db`, given the cell's `DatabaseMemoryGiB`, and deleted with the cell's.
 
+## What a Soak cell checks
+
+A fault that strikes one restart in a few passes a single restart most of the time: #2009 (NetworkManager unplugging
+rootful Podman pods from their bridge) failed 6 of 20 restarts, so a cell that restarts JIM once passed about two runs
+in three. Such a fault need not come from JIM: an operating system's update to NetworkManager, Podman or systemd can
+bring one back. The Soak cell, on AlmaLinux with rootful Podman where #2009 was found, repeats what the other cells do
+once:
+
+1. **Installed** with `setup.sh`, ready, and the administrator signs in.
+2. **Restarted 20 times** as Operating JIM says (`systemctl restart jim.service`): ready again within 300 s every
+   time, then the data kept and a sign-in.
+3. **The host rebooted 5 times**: JIM starts by itself every time, with its data, then a sign-in.
+4. **Nothing crashed quietly**, as every cell checks.
+
+A round that fails saves the VM's journal and container list beside `cell.log`; after three failed rounds a loop stops, as its check has failed. The cell takes about 5 minutes when JIM is healthy (each failed round adds 300 s), so it
+runs on request only (`OnRequest` in `Cells.psd1`): a run with no `-Name` or `-Tag` leaves it out, and so does a tag
+every-run cells share, such as `rhel`. Run it with `-Tag soak` after the lab's images are rebuilt (when operating
+system updates arrive) and on a release candidate.
+
 ## Running it
 
 On the lab host, from a clone of this repository, with PowerShell 7 (the runner fetches the same version of PowerShell
@@ -166,6 +186,9 @@ pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -Tag upgrade
 # Several names or tags: through -Command, as -File passes a list as one string
 pwsh -Command "& ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -Name '*-cases','*-extdb'"
 
+# The soak, which runs only when asked for
+pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -Tag soak
+
 # What would run
 pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -List
 ```
@@ -183,7 +206,8 @@ host's memory less `ReserveGiB` (Lab.psd1). `-BudgetGiB` and
 
 ## Adding a cell
 
-Add a line to `Cells.psd1`. A new image must also be built on the lab host (`build-lab-images.sh` in
+Add a line to `Cells.psd1`; `OnRequest = $true` keeps a long cell out of every run, and it then needs a tag no
+every-run cell carries, for `-Tag` to select it by. A new image must also be built on the lab host (`build-lab-images.sh` in
 `TetronIO/ci-runners`) and added to the matrix's `Images`. The Pester tests check that every cell is valid, so a
 mistake fails CI rather than a lab run.
 

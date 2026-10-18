@@ -15,7 +15,7 @@
 
 Set-StrictMode -Version Latest
 
-$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase')
+$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase', 'Soak')
 $script:Runtimes = @('docker', 'podman')
 $script:Networks = @('airgap', 'online')
 $script:MinimumMemoryGiB = 4
@@ -35,6 +35,7 @@ function Test-LabMatrix {
     )
 
     $imageNames = @($Matrix.Images.Keys | Sort-Object)
+    $everyRunTags = @($Matrix.Cells | Where-Object { -not (Test-LabOnRequest $_) } | ForEach-Object { $_.Tags })
     $seen = @{}
     foreach ($cell in $Matrix.Cells) {
         $name = $cell.Name
@@ -46,6 +47,9 @@ function Test-LabMatrix {
         # LXD takes letters, digits and hyphens, up to 63 characters; the runner prefixes the name, so keep it short.
         if ($name -cnotmatch '^[a-z][a-z0-9-]{0,39}$') {
             "${name}: a cell's name must be lower-case letters, digits and hyphens, starting with a letter, and at most 40 characters"
+        }
+        if ((Test-LabOnRequest $cell) -and -not (@($cell.Tags) | Where-Object { $_ -notin $everyRunTags })) {
+            "${name}: a cell run on request needs a tag no every-run cell carries, for -Tag to select it by"
         }
         if ($cell.Image -notin $imageNames) {
             "${name}: image '$($cell.Image)' is not one of the matrix's images ($($imageNames -join ', '))"
@@ -90,11 +94,18 @@ function Get-LabCellMemory {
     [int](Get-LabValue $Cell 'MemoryGiB') + [int](Get-LabValue $Cell 'DatabaseMemoryGiB')
 }
 
+function Test-LabOnRequest {
+    # Whether a cell runs only when asked for (OnRequest = $true), such as a soak cell too long for every run.
+    param([hashtable]$Cell)
+    $Cell.ContainsKey('OnRequest') -and $Cell.OnRequest
+}
+
 function Select-LabCell {
     <#
     .SYNOPSIS
         Returns the cells a run takes: those matching any of the names given (wildcards allowed) and carrying every
-        tag given, in the matrix's order.
+        tag given, in the matrix's order. A cell run on request (OnRequest) is taken only when a name given matches
+        it, or a tag given is one that no every-run cell carries, so that a broad tag such as rhel does not add it.
     #>
     [CmdletBinding()]
     param(
@@ -107,11 +118,16 @@ function Select-LabCell {
         [string[]]$Tag
     )
 
+    $everyRunTags = @($Cell | Where-Object { -not (Test-LabOnRequest $_) } | ForEach-Object { $_.Tags })
     foreach ($candidate in $Cell) {
-        if ($Name -and -not ($Name | Where-Object { $candidate.Name -like $_ })) {
+        $named = $Name -and ($Name | Where-Object { $candidate.Name -like $_ })
+        if ($Name -and -not $named) {
             continue
         }
         if ($Tag -and ($Tag | Where-Object { $_ -notin @($candidate.Tags) })) {
+            continue
+        }
+        if ((Test-LabOnRequest $candidate) -and -not $named -and -not ($Tag | Where-Object { $_ -notin $everyRunTags })) {
             continue
         }
         $candidate
