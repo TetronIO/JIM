@@ -457,6 +457,44 @@ public class MetaverseProvenanceDatabaseTests
         }
     }
 
+    [Test]
+    public async Task GetMetaverseAttributeCurrentValuesAsync_ReferenceValue_CarriesTheReferencedTypesPluralNameAsync()
+    {
+        // The inspector links a reference to /t/{plural}/v/{id}; it was given only the singular name (#2151).
+        var (_, _, _, mvType, mvAttribute, _, _) = await SeedSchemaAsync();
+
+        Guid mvoId;
+        Guid referencedId;
+        await using (var ctx = NewContext())
+        {
+            mvoId = await SeedMetaverseObjectAsync(ctx, mvType);
+            referencedId = await SeedMetaverseObjectAsync(ctx, mvType);
+        }
+
+        await using (var ctx = NewContext())
+        {
+            ctx.Attach(mvAttribute);
+            ctx.MetaverseObjectAttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                MetaverseObject = AttachMvoStub(ctx, mvoId),
+                Attribute = mvAttribute,
+                AttributeId = mvAttribute.Id,
+                ReferenceValueId = referencedId
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var readCtx = NewContext();
+        var repository = new PostgresDataRepository(readCtx);
+        var (values, _) = await repository.Metaverse.GetMetaverseAttributeCurrentValuesAsync(mvoId, mvAttribute.Id, cap: 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(values.Single().ReferenceMetaverseObjectId, Is.EqualTo(referencedId));
+            Assert.That(values.Single().ReferenceTypePluralName, Is.EqualTo("People"));
+        }
+    }
+
     #endregion
 
     #region GetLastAttributeSetChangeAsync / GetAttributeHistoryRawEntriesAsync

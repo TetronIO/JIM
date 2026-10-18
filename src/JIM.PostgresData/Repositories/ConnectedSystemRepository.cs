@@ -5545,6 +5545,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.SourceMetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
+            .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.Type)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId);
 
         // Apply status filter (supports multiple statuses)

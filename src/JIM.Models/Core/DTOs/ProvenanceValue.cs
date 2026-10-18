@@ -14,7 +14,14 @@ public class ProvenanceValue
     /// <summary>For a reference value, the referenced Metaverse Object.</summary>
     public Guid? ReferenceMetaverseObjectId { get; set; }
 
+    /// <summary>For a reference value, the name of the referenced Metaverse Object's Metaverse Object Type.</summary>
     public string? ReferenceTypeName { get; set; }
+
+    /// <summary>
+    /// For a reference value, the plural name of the referenced Metaverse Object's Metaverse Object Type, which its
+    /// page's address is built from.
+    /// </summary>
+    public string? ReferenceTypePluralName { get; set; }
 
     public ValueOrigin Origin { get; set; } = ValueOrigin.NotRecorded;
 }

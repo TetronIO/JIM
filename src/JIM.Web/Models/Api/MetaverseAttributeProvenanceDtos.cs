@@ -113,6 +113,8 @@ public class ProvenanceValueDto
 
     public string? ReferenceTypeName { get; set; }
 
+    public string? ReferenceTypePluralName { get; set; }
+
     public ValueOriginDto Origin { get; set; } = null!;
 
     public static ProvenanceValueDto FromModel(ProvenanceValue model)
@@ -122,6 +124,7 @@ public class ProvenanceValueDto
             DisplayValue = model.DisplayValue,
             ReferenceMetaverseObjectId = model.ReferenceMetaverseObjectId,
             ReferenceTypeName = model.ReferenceTypeName,
+            ReferenceTypePluralName = model.ReferenceTypePluralName,
             Origin = ValueOriginDto.FromModel(model.Origin)
         };
     }

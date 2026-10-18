@@ -2748,6 +2748,228 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ScheduleSteps");
                 });
 
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreJournalEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid?>("ApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiKeyName")
+                        .HasColumnType("text");
+
+                    b.Property<long>("ChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.PrimitiveCollection<List<string>>("ChangedAttributes")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("ClientAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Occurred")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Operation")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResourceTypeName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId");
+
+                    b.HasIndex("Occurred");
+
+                    b.HasIndex("ConnectedSystemId", "ResourceId", "ChangeSequence");
+
+                    b.ToTable("ScimStoreJournalEntries");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreReference", b =>
+                {
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Attribute")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("SourceId", "Attribute", "TargetId");
+
+                    b.HasIndex("TargetId");
+
+                    b.ToTable("ScimStoreReferences");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreResource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastModified")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("ResourceTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId", "ResourceTypeId", "ChangeSequence")
+                        .HasDatabaseName("IX_ScimStoreResources_ChangeSequence");
+
+                    b.HasIndex("ConnectedSystemId", "ResourceTypeId", "Id")
+                        .HasDatabaseName("IX_ScimStoreResources_Live")
+                        .HasFilter("\"DeletedAt\" IS NULL");
+
+                    b.ToTable("ScimStoreResources");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreResourceType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId", "Endpoint")
+                        .IsUnique();
+
+                    b.HasIndex("ConnectedSystemId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ScimStoreResourceTypes");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreSchema", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Urn")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId", "Urn")
+                        .IsUnique();
+
+                    b.ToTable("ScimStoreSchemas");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreState", b =>
+                {
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("LastChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("TombstonePurgeFloor")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ConnectedSystemId");
+
+                    b.ToTable("ScimStoreStates");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreUniqueValue", b =>
+                {
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ResourceTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Attribute")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)");
+
+                    b.Property<byte[]>("ValueHash")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("ConnectedSystemId", "ResourceTypeId", "Attribute", "ValueHash");
+
+                    b.HasIndex("ResourceId");
+
+                    b.ToTable("ScimStoreUniqueValues");
+                });
+
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>
                 {
                     b.Property<int>("Id")
@@ -5838,6 +6060,87 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
 
                     b.Navigation("Schedule");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreJournalEntry", b =>
+                {
+                    b.HasOne("JIM.Models.Security.ApiKey", null)
+                        .WithMany()
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreReference", b =>
+                {
+                    b.HasOne("JIM.Models.Scim.ScimStoreResource", null)
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Scim.ScimStoreResource", null)
+                        .WithMany()
+                        .HasForeignKey("TargetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreResource", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Scim.ScimStoreResourceType", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId", "ResourceTypeId")
+                        .HasPrincipalKey("ConnectedSystemId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreResourceType", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreSchema", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreState", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithOne()
+                        .HasForeignKey("JIM.Models.Scim.ScimStoreState", "ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Scim.ScimStoreUniqueValue", b =>
+                {
+                    b.HasOne("JIM.Models.Scim.ScimStoreResource", null)
+                        .WithMany()
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>

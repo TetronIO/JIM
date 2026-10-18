@@ -25,6 +25,7 @@ public class ChangeHistoryRetentionServerTests
     private Mock<IServiceSettingsRepository> _settingsRepo = null!;
     private Mock<IChangeHistoryRepository> _changeHistoryRepo = null!;
     private Mock<ISyncRepository> _syncRepo = null!;
+    private Mock<IScimStoreRepository> _scimStoreRepo = null!;
     private JimApplication _jim = null!;
 
     [SetUp]
@@ -37,9 +38,11 @@ public class ChangeHistoryRetentionServerTests
         _settingsRepo = new Mock<IServiceSettingsRepository>();
         _changeHistoryRepo = new Mock<IChangeHistoryRepository>();
         _syncRepo = new Mock<ISyncRepository>();
+        _scimStoreRepo = new Mock<IScimStoreRepository>();
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repo.Setup(r => r.ServiceSettings).Returns(_settingsRepo.Object);
         _repo.Setup(r => r.ChangeHistory).Returns(_changeHistoryRepo.Object);
+        _repo.Setup(r => r.ScimStore).Returns(_scimStoreRepo.Object);
 
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
@@ -63,6 +66,7 @@ public class ChangeHistoryRetentionServerTests
         _changeHistoryRepo.Setup(r => r.DeleteExpiredSecurityEventActivitiesAsync(cutoffs.SecurityEvent, 100)).ReturnsAsync(7);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredPasswordEventActivitiesAsync(cutoffs.PasswordEvent, 100)).ReturnsAsync(11);
         _syncRepo.Setup(r => r.DeleteTerminalPasswordChangesAsync(cutoffs.PasswordEvent, 100)).ReturnsAsync(13);
+        _scimStoreRepo.Setup(r => r.DeleteJournalEntriesOlderThanAsync(cutoffs.General, 100, It.IsAny<CancellationToken>())).ReturnsAsync(17);
 
         var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs);
 
@@ -73,7 +77,11 @@ public class ChangeHistoryRetentionServerTests
             Assert.That(result.SecurityEventActivitiesDeleted, Is.EqualTo(7));
             Assert.That(result.PasswordEventActivitiesDeleted, Is.EqualTo(11));
             Assert.That(result.PasswordQueueRecordsDeleted, Is.EqualTo(13));
+            Assert.That(result.ScimJournalEntriesDeleted, Is.EqualTo(17));
         }
+
+        _scimStoreRepo.Verify(r => r.DeleteJournalEntriesOlderThanAsync(cutoffs.General, 100, It.IsAny<CancellationToken>()), Times.Once,
+            "the SCIM store's journal is change history, so it goes at the general retention cutoff");
 
         _changeHistoryRepo.Verify(r => r.DeleteExpiredActivitiesAsync(cutoffs.General, 100), Times.Once,
             "general Activities are flushed at the general retention cutoff");

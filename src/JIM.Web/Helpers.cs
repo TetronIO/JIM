@@ -886,15 +886,17 @@ public static class Helpers
     /// <summary>
     /// Gets the in-app link to a security principal that initiated an activity, or null when the principal cannot be
     /// linked (no id, or a System / unattributed initiator). Used to make initiator names clickable in change history.
+    /// A person is linked under the built-in User type without being looked up, so the link is dead if their Metaverse
+    /// Object has since been deleted; a call site that can afford the lookup should resolve the object instead.
     /// </summary>
     public static string? GetInitiatorHref(ActivityInitiatorType initiatorType, Guid? initiatedById)
     {
-        if (initiatedById == null)
+        if (initiatedById is not { } principalId)
             return null;
 
         return initiatorType switch
         {
-            ActivityInitiatorType.User => $"/t/users/v/{initiatedById}",
+            ActivityInitiatorType.User => Utilities.Utilities.GetMetaverseObjectHref(principalId, Constants.BuiltInObjectTypes.UserPluralName),
             ActivityInitiatorType.ApiKey => $"/admin/apikeys/{initiatedById}",
             _ => null
         };

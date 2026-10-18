@@ -182,7 +182,7 @@ internal class SeedingServer
         var userObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, true, withChangeTracking: true);
         if (userObjectType == null)
         {
-            userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = "Users", BuiltIn = true, Icon = "Person" };
+            userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = Constants.BuiltInObjectTypes.UserPluralName, BuiltIn = true, Icon = "Person" };
             AuditHelper.SetCreatedBySystem(userObjectType);
             objectTypesToCreate.Add(userObjectType);
             Log.Information("SeedAsync: Preparing MetaverseObjectType User");
@@ -273,7 +273,7 @@ internal class SeedingServer
         var groupObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, true, withChangeTracking: true);
         if (groupObjectType == null)
         {
-            groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, PluralName = "Groups", BuiltIn = true, Icon = "Groups" };
+            groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, PluralName = Constants.BuiltInObjectTypes.GroupPluralName, BuiltIn = true, Icon = "Groups" };
             AuditHelper.SetCreatedBySystem(groupObjectType);
             objectTypesToCreate.Add(groupObjectType);
             Log.Information("SeedAsync: Preparing MetaverseObjectType Group");
