@@ -61,12 +61,16 @@ public partial class ConnectedSystemServer
 
     /// <summary>
     /// Resolves the Connector implementation for a Connected System's Connector Definition, configuring it with
-    /// credential protection and certificate validation when it supports them.
+    /// credential protection and certificate validation when it supports them, and with the Connected System's SCIM
+    /// store when it reads one.
     /// </summary>
     /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
     internal IConnector CreateConnector(ConnectedSystem connectedSystem)
     {
-        return ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
+        var connector = ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
+        if (connector is IConnectorScimResourceStoreAware storeAware)
+            storeAware.SetScimResourceStore(new ScimResourceStoreService(Application, connectedSystem.Id));
+        return connector;
     }
 
     // -----------------------------------------------------------------------------------------------------------------

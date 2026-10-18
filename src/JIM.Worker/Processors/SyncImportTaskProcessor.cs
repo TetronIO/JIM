@@ -402,6 +402,10 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
+                // Hand the SCIM 2.0 Service Provider Connector its Connected System's store
+                if (callBasedImportConnector is IConnectorScimResourceStoreAware storeAwareConnector)
+                    storeAwareConnector.SetScimResourceStore(new ScimResourceStoreService(_jim, _connectedSystem.Id));
+
                 // Tracks whether the import phase below completed without throwing. Read from the
                 // finally block to decide whether a failure while persisting CloseImportConnection's
                 // return value may safely propagate on its own, or must be logged and swallowed so it
