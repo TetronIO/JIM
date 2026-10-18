@@ -119,7 +119,7 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 | `AttributeId` | `int` | The ID of the Connected System attribute the change writes. |
 | `AttributeName` | `string` | The name of that attribute. |
 | `ChangeType` | `string` | What the change does to the attribute: Add a value, Update it, Remove a value, or RemoveAll values. One of `Add`, `Update`, `Remove` or `RemoveAll`. |
-| `Status` | `string` | Where the change has got to: Pending, ExportedPendingConfirmation (exported, awaiting a confirming import), ExportedNotConfirmed (to be retried), or Failed. One of `Pending`, `ExportedPendingConfirmation` or `ExportedNotConfirmed`. |
+| `Status` | `string` | Where the change has got to: Pending, ExportedPendingConfirmation (exported, awaiting a confirming import) or ExportedNotConfirmed (to be sent again at the next export run). One of `Pending`, `ExportedPendingConfirmation` or `ExportedNotConfirmed`. |
 | `StringValue` | `string` | The value of a Text attribute; empty otherwise. |
 | `DateTimeValue` | `datetime` | The value of a DateTime attribute (UTC); empty otherwise. |
 | `IntValue` | `int` | The value of a Number attribute; empty otherwise. |

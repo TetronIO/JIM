@@ -267,8 +267,8 @@ public class PendingExportAttributeValueChangeDto
     public PendingExportAttributeChangeType ChangeType { get; set; }
 
     /// <summary>
-    /// Where the change has got to: Pending, ExportedPendingConfirmation (exported, awaiting a confirming import),
-    /// ExportedNotConfirmed (to be retried), or Failed.
+    /// Where the change has got to: Pending, ExportedPendingConfirmation (exported, awaiting a confirming import) or
+    /// ExportedNotConfirmed (to be sent again at the next export run).
     /// </summary>
     public PendingExportAttributeChangeStatus Status { get; set; }
 
