@@ -274,6 +274,11 @@ SCIM client ◀── 201 Created · id · ETag W/"1" · Location
 - **Full Import** walks live resources by id at a horizon captured when it starts, and returns that horizon as its watermark. **Delta Import** reads `(watermark, horizon]`, returning the latest state of each changed resource and each tombstone as `ObjectChangeType.Deleted`.
 - Reads are untracked, so a large store never enters the run's change tracker. The import loop reuses the client's `ScimResourceReader`, so the Connected System Objects look the same whether JIM pulled them or was pushed them.
 - The connector watermark is recorded only after staging succeeds (the existing rule).
+- **Decided 18 October 2026, for Phase 3:**
+  - **The reader is bound to one Connected System** when it is handed to the Connector, at the import and at the schema refresh alike, since `GetSchemaAsync` is given settings and not the Connected System. Creating a Connected System with this Connector seeds its core definitions.
+  - **The watermark is the store's last committed change sequence.** A Full Import captures it before reading and walks every live resource by id (it must not stop at that sequence, or a resource changed during the walk would look absent and be marked Obsolete). A Delta Import reads every row whose sequence is after the previous watermark and at or below a new one, paging by id within that range. A Delta Import with no watermark yet falls back to a Full Import with a warning, as the other Connectors do; one whose watermark is below the purge floor fails, asking for a Full Import.
+  - **The tombstone purge runs in the Connector, at the start of each import,** removing tombstones at or below the previous recorded watermark (which only a successful import records) and older than seven days (a margin for a watermark set back by hand). It needs no schedule or worker task, and cannot remove anything an import has not read.
+  - **Every import records the watermark it started from and the one it reached on its Activity,** in two generic columns filled for every Connector, not SCIM-specific ones: the journal lookup (D17) reads its range from them, and every Connector's Delta Import becomes diagnosable.
 
 ### Request pipeline for `/scim`
 
