@@ -378,6 +378,10 @@ public class SyncImportTaskProcessor
         // staged are already imported, and that run would silently skip them. Null means there is nothing to record.
         string? watermarkToRecord = null;
 
+        // The watermark the run reached, recorded on its Activity once it completes. Unlike watermarkToRecord it is kept
+        // when it equals the one the run started from: the run still reached it.
+        string? watermarkReached = null;
+
         // The fetching step is entered by each branch below, once the work it names is about to
         // start: a call-based import connects first, and entering the later step here would close
         // connecting out before it began.
@@ -552,6 +556,7 @@ public class SyncImportTaskProcessor
 
                     // Every page has been read, but nothing has been staged yet, so the new watermark is only
                     // remembered here; it is recorded at the end of the run, once staging has succeeded (#1868).
+                    watermarkReached = newPersistedData;
                     if (newPersistedData != null && newPersistedData != originalPersistedData)
                         watermarkToRecord = newPersistedData;
 
@@ -590,6 +595,7 @@ public class SyncImportTaskProcessor
                     if (closeReturn != null)
                     {
                         watermarkToRecord = null;
+                        watermarkReached = null;
 
                         try
                         {
@@ -679,6 +685,7 @@ public class SyncImportTaskProcessor
             && await WithholdConnectorReportedDeletesOverTheLimitsAsync(connectedSystemObjectsToBeUpdated))
         {
             watermarkToRecord = null;
+            watermarkReached = null;
         }
 
         // process deletions
@@ -1130,8 +1137,10 @@ public class SyncImportTaskProcessor
             Log.Debug("PerformImportAsync: Recording the Connector's new watermark for Connected System {ConnectedSystemId} now that the run has staged everything it read. Old value: '{OldWatermark}', new value: '{NewWatermark}'",
                 _connectedSystem.Id, LogSanitiser.Sanitise(_connectedSystem.PersistedConnectorData), LogSanitiser.Sanitise(watermarkToRecord));
             await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, watermarkToRecord);
-            _activity.ImportWatermarkTo = watermarkToRecord;
         }
+
+        if (watermarkReached != null)
+            _activity.ImportWatermarkTo = watermarkReached;
 
         // The run is done: leave the Activity describing the whole of it, not its last internal phase. Every
         // phase above set the counters to its own work (the flush just now to the handful of items it had

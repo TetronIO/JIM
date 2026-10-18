@@ -285,6 +285,24 @@ public class ImportPersistedConnectorDataTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task Import_CompletesNormallyWithNothingNew_RecordsTheSameWatermarkReachedAsync()
+    {
+        // Nothing changed since the last import, so the Connector returns the watermark it started from. The run still
+        // reached it: an empty To would read as a run that recorded nothing.
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync(ConnectedSystemRunType.DeltaImport, "same-watermark");
+        var connector = new MockCallConnector();
+        QueueTwoPages(connector, csoType, firstPageWatermark: "same-watermark");
+
+        await NewProcessor(connector, connectedSystem, runProfile, activity).PerformImportAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ImportWatermarkFrom, Is.EqualTo("same-watermark"));
+            Assert.That(activity.ImportWatermarkTo, Is.EqualTo("same-watermark"));
+        }
+    }
+
+    [Test]
     public async Task Import_FirstImport_RecordsNoStartingWatermarkAsync()
     {
         var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync(ConnectedSystemRunType.FullImport, persistedConnectorData: null);

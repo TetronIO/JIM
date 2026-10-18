@@ -290,8 +290,9 @@ public class Activity
     public string? ImportWatermarkFrom { get; set; }
 
     /// <summary>
-    /// For an import, the watermark it recorded for the next import to start from. Null when it recorded none: it failed
-    /// or was cancelled before staging everything it read, or its Connector keeps no watermark.
+    /// For an import, the watermark it reached, which the next import starts from; the same as
+    /// <see cref="ImportWatermarkFrom"/> when nothing had changed. Null when the run recorded none: it failed or was
+    /// cancelled before staging everything it read, it withheld detected deletions, or its Connector keeps no watermark.
     /// </summary>
     public string? ImportWatermarkTo { get; set; }
 

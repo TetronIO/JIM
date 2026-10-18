@@ -2204,7 +2204,9 @@ public partial class ConnectedSystemServer
         if (connectedSystem.ConnectorDefinition == null)
             throw new ArgumentException("The supplied ConnectedSystem doesn't have a valid ConnectorDefinition.", nameof(connectedSystem));
 
-        if (connectedSystem.SettingValues == null || connectedSystem.SettingValues.Count == 0)
+        // No setting values is right only for a Connector that declares no settings; for any other it means they were
+        // never loaded.
+        if ((connectedSystem.SettingValues == null || connectedSystem.SettingValues.Count == 0) && !DeclaresNoSettings(connectedSystem.ConnectorDefinition.Name))
             throw new ArgumentException("The supplied ConnectedSystem doesn't have any valid SettingValues.", nameof(connectedSystem));
     }
 

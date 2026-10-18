@@ -138,6 +138,28 @@ public class ScimServiceProviderConnectedSystemDatabaseTests
     }
 
     [Test]
+    public async Task ImportConnectedSystemSchemaAsync_NoSettings_ImportsTheStoresResourceTypesAnchoredOnIdAsync()
+    {
+        await EnableFlagAsync();
+        var definitionId = await ServiceProviderDefinitionIdAsync();
+        var created = new ConnectedSystem { Name = "Entra provisioning", ConnectorDefinitionId = definitionId };
+        await WithJimAsync(jim => jim.ConnectedSystems.CreateConnectedSystemAsync(created, _key));
+
+        await WithJimAsync(async jim =>
+        {
+            var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(created.Id);
+            return await jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem!, _key);
+        });
+
+        var objectTypes = await WithJimAsync(async jim => (await jim.ConnectedSystems.GetConnectedSystemAsync(created.Id))!.ObjectTypes!.ToList());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objectTypes.Select(t => t.Name), Is.EquivalentTo(new[] { "User", "Group" }));
+            Assert.That(objectTypes.Select(t => t.Attributes.Single(a => a.IsExternalId).Name), Has.All.EqualTo("id"));
+        }
+    }
+
+    [Test]
     public async Task CreateConnectedSystemAsync_OtherConnectorDefinitionWithItsSettingsMissing_RefusedAsync()
     {
         // A definition with no settings is right only for a Connector that declares none; for any other it means the
