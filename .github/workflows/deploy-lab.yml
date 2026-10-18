@@ -48,8 +48,9 @@ on:
   schedule:
     - cron: '0 1 * * *'
   push:
-    branches: [ "main" ]
-    paths: [ "VERSION" ]
+    # TEMPORARY, reverted before merging: workflow_dispatch needs the file on main, so a push to this branch is how
+    # the first run is started from the branch.
+    branches: [ "feature/deployment-lab-ci" ]
   workflow_dispatch:
     inputs:
       cells:
