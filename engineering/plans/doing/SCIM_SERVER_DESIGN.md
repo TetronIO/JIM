@@ -1,6 +1,6 @@
 # SCIM 2.0 Service Provider Design
 
-- **Status:** Doing (Phase 1 complete; Phase 2a, the SCIM store, and 2b, the server's writes and Get, complete)
+- **Status:** Doing (Phases 1 and 2 complete: the SCIM store, and the server's writes, Get and list)
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
 - **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
@@ -263,8 +263,8 @@ SCIM client ◀── 201 Created · id · ETag W/"1" · Location
 ### Read path
 
 - `GET /Users/{id}` and `/Groups/{id}` read the live row; tombstoned resources return `404`.
-- **Filtering (day one):** `eq`, `co`, `sw`, `gt`, `and`, `or` over `userName`, `externalId`, `emails.value`, `displayName` and `meta.lastModified` (second precision); attribute names and operators case-insensitive; `userName` matched case-insensitively.
-- **Paging:** index paging (`startIndex`/`count`) over a deterministic order with an accurate `totalResults`, plus RFC 9865 keyset cursors. `nextCursor` is returned even when the request used `startIndex`, so the client's Auto mode switches to cursors; without that, deletes during a walk shift index pages and the client's absence-based Full Import would wrongly mark live resources Obsolete.
+- **Filtering (day one):** data-driven from the resource type's definitions, so a custom type's attributes filter the same way. `eq`, `co` and `sw` on string attributes (`userName`, `externalId`, `displayName`, `emails.value`, an extension's), `eq` on Booleans (`active`), `id eq`, and `eq`, `gt`, `ge`, `lt`, `le` on `meta.lastModified`, joined by `and` and `or`; attribute names and operators case-insensitive, string comparison by each attribute's `caseExact`. Everything else (other operators, `not`, value paths, reference, read-only and write-only attributes, other types) is `400` `invalidFilter`.
+- **Paging:** index paging (`startIndex`/`count`) by default, over id order with an accurate `totalResults`, plus RFC 9865 keyset cursors. `nextCursor` is returned on every page that has a successor, even when the request used `startIndex`, so the client's Auto mode switches to cursors; without that, deletes during a walk shift index pages and the client's absence-based Full Import would wrongly mark live resources Obsolete. `count` defaults to 100 and is capped at 1,000 (what discovery publishes as `filter.maxResults`); a negative `count` reads as 0, which returns only the total. When a request gives both `startIndex` and `cursor`, the cursor wins.
 - `attributes` and `excludedAttributes` are honoured.
 
 ### Import path
@@ -339,7 +339,7 @@ The other sub-issues ([#2092](https://github.com/TetronIO/JIM/issues/2092), [#20
 
 PATCH applier, shared filter grammar, server-mode reader and writer, ETag helpers, discovery emitters and the schema composer move (D6), with round-trip identity tests against the builder and the core schemas.
 
-### Phase 2: SCIM store and service
+### Phase 2: SCIM store and service ✅
 
 Three PRs:
 
@@ -349,7 +349,7 @@ Three PRs:
   - **A write that changes nothing writes nothing:** no version, no journal entry, nothing for the next import. References compare as sets, so members re-sent in another order are not a change.
   - **A listed reference is matched by its `value` alone** when a remove names it: identity providers echo `display` and `$ref` back, which the stored entry never carries.
   - **A membership PATCH's response** reads the Group's members after the write lock is released, so a large Group is never read while other writes wait. The response can therefore include a later write's members; its version is this write's.
-- **2c List, and ignored attributes in the journal.** The journal's ignored attribute names (D17): a column on `ScimStoreJournalEntries`, filled from intake's and the applier's reports of undeclared attributes. Filtering and paging. The day-one filter subset becomes a small predicate model in JIM.Models, which the repository renders as parameterised SQL, so JIM.Data never depends on JIM.Scim; anything outside the subset is `400` `invalidFilter`. Equality on a unique attribute (`userName`, `externalId`) reads `ScimStoreUniqueValues`; other attributes (`displayName`, `emails.value`) are matched in the JSONB payload, measured before any index is added. Index paging and cursors both order by `Id`; a cursor is the last id seen, encoded, and a malformed one is `400` `invalidCursor`.
+- **2c ✅ List, and ignored attributes in the journal.** The journal's ignored attribute names (D17): a column on `ScimStoreJournalEntries`, filled from intake's and the applier's reports of undeclared attributes. Filtering and paging. The day-one filter subset becomes a small predicate model in JIM.Models, which the repository renders as parameterised SQL, so JIM.Data never depends on JIM.Scim; anything outside the subset is `400` `invalidFilter`. Equality on a unique attribute (`userName`, `externalId`) reads `ScimStoreUniqueValues`; other attributes (`displayName`, `emails.value`) are matched in the JSONB payload, measured before any index is added. Index paging and cursors both order by `Id`; a cursor is the last id seen, encoded, and a malformed one is `400` `invalidCursor`. As built: every value, JSON path and member name in the rendered SQL is a parameter; a cursor is the last id as 22 base64url characters (unreserved URL characters, as RFC 9865 requires); a page's references are read in one query. A write that changes nothing is not journalled, so ignored attributes are recorded on the writes that change something.
 
 ### Phase 3: Service Provider Connector
 
