@@ -222,6 +222,12 @@ Describe 'Update-TourAssetFolder' {
 # A release publishes the refresh with no one looking first, so the site must build with it before anything is
 # committed. npm is replaced with a recorder here.
 Describe 'Invoke-TourSiteBuild' {
+    BeforeAll {
+        # Pester can only mock a command that exists, and the self-hosted runners have no npm. This stand-in gives
+        # every Mock below something to replace, so the tests behave the same with or without npm installed.
+        function npm { throw 'npm must be mocked in these tests' }
+    }
+
     BeforeEach {
         $script:npmCalls = [System.Collections.Generic.List[string]]::new()
         $script:site = Join-Path $TestDrive "site-$([guid]::NewGuid().ToString('N'))"
