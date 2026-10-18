@@ -29,8 +29,8 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 
 All cells are air-gapped: their VMs sit on a bridge with no route out, and each cell proves it cannot reach
 `github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`);
-some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`). One more, the Soak cell
-`alma9-podrf-soak`, runs only when asked for (see What a Soak cell checks).
+some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`), and one is the Soak cell
+(`alma9-podrf-soak`).
 
 | Cells | Operating system | Runtime |
 |-------|------------------|---------|
@@ -38,7 +38,7 @@ some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-e
 | `u24-docker-classic-ag`, `-up` | Ubuntu 24.04 | Docker, classic overlay2 image store |
 | `u24-podrf-ag`, `-up`, `-cases` | Ubuntu 24.04 | Podman, rootful |
 | `u24-podrl-ag`, `-up` | Ubuntu 24.04 | Podman, rootless |
-| `alma9-podrf-ag`, `-up`, `-cases`, `-extdb` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `alma9-podrf-ag`, `-up`, `-cases`, `-extdb`, `-soak` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
 | `alma9-podrl-ag`, `-up`, `-cases` | AlmaLinux 9 | Podman, rootless |
 
 AlmaLinux stands in for Red Hat Enterprise Linux 9. The images are each distribution's cloud image with only the
@@ -160,10 +160,9 @@ once:
 3. **The host rebooted 5 times**: JIM starts by itself every time, with its data, then a sign-in.
 4. **Nothing crashed quietly**, as every cell checks.
 
-A round that fails saves the VM's journal and container list beside `cell.log`; after three failed rounds a loop stops, as its check has failed. The cell takes about 5 minutes when JIM is healthy (each failed round adds 300 s), so it
-runs on request only (`OnRequest` in `Cells.psd1`): a run with no `-Name` or `-Tag` leaves it out, and so does a tag
-every-run cells share, such as `rhel`. Run it with `-Tag soak` after the lab's images are rebuilt (when operating
-system updates arrive) and on a release candidate.
+A round that fails saves the VM's journal and container list beside `cell.log`; after three failed rounds a loop stops,
+as its check has failed. The cell takes about 7 minutes when JIM is healthy (each failed round adds 300 s), alongside
+the others.
 
 ## Running it
 
@@ -186,9 +185,6 @@ pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -Tag upgrade
 # Several names or tags: through -Command, as -File passes a list as one string
 pwsh -Command "& ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -Name '*-cases','*-extdb'"
 
-# The soak, which runs only when asked for
-pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -Tag soak
-
 # What would run
 pwsh ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 -Commit HEAD -List
 ```
@@ -206,8 +202,7 @@ host's memory less `ReserveGiB` (Lab.psd1). `-BudgetGiB` and
 
 ## Adding a cell
 
-Add a line to `Cells.psd1`; `OnRequest = $true` keeps a long cell out of every run, and it then needs a tag no
-every-run cell carries, for `-Tag` to select it by. A new image must also be built on the lab host (`build-lab-images.sh` in
+Add a line to `Cells.psd1`. A new image must also be built on the lab host (`build-lab-images.sh` in
 `TetronIO/ci-runners`) and added to the matrix's `Images`. The Pester tests check that every cell is valid, so a
 mistake fails CI rather than a lab run.
 
