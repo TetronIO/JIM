@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Data.Common;
+using System.Security.Cryptography;
 using System.Text.Json;
 using JIM.Models.Activities;
 using Serilog;
@@ -110,7 +111,7 @@ public class ConfigurationChangeCaptureService
             // filtering history by class.
             activity.ConfigurationChangeClass = ConfigurationChangeClass.Destructive;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException or CryptographicException)
         {
             // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
             Log.Warning(ex, "CaptureDeletionAsync: failed to capture deletion snapshot for {Target}; the deletion proceeded but its history snapshot was not recorded.", targetDescription);
@@ -167,7 +168,7 @@ public class ConfigurationChangeCaptureService
             activity.ConfigurationChangeVersion = await getNextVersionAsync();
             activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException or CryptographicException)
         {
             // Configuration change capture is best-effort secondary metadata recorded after the entity has already
             // been persisted; it must never fail or roll back the configuration operation that succeeded. On failure

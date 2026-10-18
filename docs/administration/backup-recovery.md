@@ -185,6 +185,8 @@ If you have a valid database backup but no matching keys, the non-secret data is
 
 The SSO secret needs nothing: JIM reads it from `JIM_SSO_SECRET` each time it starts, and encrypts it with the keys it has. There is no way to recover the original secret values without the keys; this is by design.
 
+Configuration History carries on. The first change recorded for each Connected System after the key loss shows its secrets as changed, because JIM cannot compare them with values it can no longer read; the log records a warning when this happens.
+
 ## ✅ Checklist
 
 - [ ] Database backup scheduled and tested.

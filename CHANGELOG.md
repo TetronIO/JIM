@@ -128,6 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 After the encryption keys are lost, JIM.Worker starts and configuration changes save again, so the Connected System secrets the recovery asks for can be re-entered. JIM previously failed both on a key that records secret changes in Configuration History; it now replaces that key with a warning in the log. (#2124)
 - 🐛 SSO access tokens are now accepted by the REST API and `Connect-JIM` when `JIM_SSO_API_SCOPE` is a bare identifier such as AD FS's `api://{client-identifier}` or Okta's `api://default`. JIM previously expected the audience `api:/`, which no token carries, so every such token was refused. (#2353)
 - 🐛 Synchronisation no longer removes a Metaverse Object's references when a schema refresh has changed the source attribute to Reference and no import has read it since. The value the Connected System Object still holds under its old type is left as held, as it already was for every other data type, with a warning, until an import reads the attribute again. (#2330)
 - 🐛 A Connected System Object attribute holding only an unresolved reference, left behind when a schema refresh changed the attribute away from Reference, is now treated as a held value by an Object Matching Rule, which waits for an import to read the attribute again rather than provisioning a second account beside that object. The attribute value inspector also no longer offers a Reference source's leftover text value as a candidate, since synchronisation does not flow it. (#2330)

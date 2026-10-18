@@ -193,28 +193,32 @@ namespace JIM.Application.Servers
         /// Returns the server-held key used to compute keyed hashes of secret configuration values in change snapshots,
         /// generating and persisting it (encrypted at rest) on first use. The key never leaves the server; it lets a
         /// secret change be detected without the change history becoming an offline brute-force oracle for weak secrets.
+        /// A stored key that can no longer be decrypted (the encryption keys were lost) is replaced with a new one.
         /// </summary>
         public async Task<byte[]> GetOrCreateConfigurationChangeHashKeyAsync()
         {
-            var existing = await GetSettingValueAsync<string>(Constants.SettingKeys.ConfigurationChangeHashKey);
+            string? existing;
+            try
+            {
+                existing = await GetSettingValueAsync<string>(Constants.SettingKeys.ConfigurationChangeHashKey);
+            }
+            catch (CryptographicException ex)
+            {
+                // The keys that encrypted the stored hash key are gone (#2124). Rethrowing would fail every
+                // configuration save while change tracking is on, including re-entering the credentials the key-loss
+                // recovery asks for, and the key would never heal because the stored value is not empty. Replace it:
+                // the only loss is that a secret cannot be compared across the key loss, which is unavoidable anyway.
+                Log.Warning(ex, "GetOrCreateConfigurationChangeHashKeyAsync: the stored configuration change hash key could not be decrypted, so the encryption keys have probably been lost or replaced. Generating a new hash key; secret changes in configuration change history are compared afresh from this point.");
+                return await RegenerateConfigurationChangeHashKeyAsync();
+            }
+
             if (!string.IsNullOrEmpty(existing))
                 return DecodeHashKey(existing);
 
             // Generate a 256-bit key and persist it encrypted at rest. GetOrCreateSettingAsync is race-safe, so a
             // concurrent first use returns the persisted winner rather than throwing.
             var keyBase64 = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-            var protectedValue = Application.CredentialProtection?.Protect(keyBase64) ?? keyBase64;
-
-            var setting = new ServiceSetting
-            {
-                Key = Constants.SettingKeys.ConfigurationChangeHashKey,
-                DisplayName = "Configuration change hash key",
-                Description = "Server-held key used to detect changes to secret configuration values in change history without storing the values. Generated automatically; never displayed or edited.",
-                Category = ServiceSettingCategory.Security,
-                ValueType = ServiceSettingValueType.StringEncrypted,
-                Value = protectedValue,
-                IsReadOnly = true
-            };
+            var setting = BuildConfigurationChangeHashKeySetting(ProtectHashKey(keyBase64));
 
             var persisted = await Application.Repository.ServiceSettings.GetOrCreateSettingAsync(setting);
 
@@ -228,6 +232,34 @@ namespace JIM.Application.Servers
 
             return DecodeHashKey(effectiveValue);
         }
+
+        /// <summary>
+        /// Overwrites an undecryptable configuration change hash key with a newly generated one and returns it. Two
+        /// instances regenerating at once each persist their own key and the last write wins; the loser's snapshot then
+        /// differs once from the next, which records a secret as changed when it was not. That is the same, unavoidable
+        /// loss the key loss itself causes, so no coordination is attempted.
+        /// </summary>
+        private async Task<byte[]> RegenerateConfigurationChangeHashKeyAsync()
+        {
+            var keyBytes = RandomNumberGenerator.GetBytes(32);
+            var setting = BuildConfigurationChangeHashKeySetting(ProtectHashKey(Convert.ToBase64String(keyBytes)));
+            await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            return keyBytes;
+        }
+
+        private string ProtectHashKey(string keyBase64) =>
+            Application.CredentialProtection?.Protect(keyBase64) ?? keyBase64;
+
+        private static ServiceSetting BuildConfigurationChangeHashKeySetting(string storedValue) => new()
+        {
+            Key = Constants.SettingKeys.ConfigurationChangeHashKey,
+            DisplayName = "Configuration change hash key",
+            Description = "Server-held key used to detect changes to secret configuration values in change history without storing the values. Generated automatically; never displayed or edited.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.StringEncrypted,
+            Value = storedValue,
+            IsReadOnly = true
+        };
 
         /// <summary>
         /// Decodes the base64 configuration change hash key, translating the cryptic <see cref="FormatException"/> that

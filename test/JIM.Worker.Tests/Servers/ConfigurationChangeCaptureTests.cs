@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Security.Cryptography;
 using System.Text;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -206,6 +207,44 @@ public class ConfigurationChangeCaptureTests
         Assert.That(ex.InnerException, Is.TypeOf<FormatException>(), "the cryptic base64 decode failure is preserved as the inner cause");
     }
 
+    [Test]
+    public async Task GetOrCreateConfigurationChangeHashKeyAsync_WhenStoredKeyCannotBeDecrypted_RegeneratesAndPersistsNewKeyAsync()
+    {
+        // #2124: after the encryption keys are lost, the stored hash key is ciphertext nothing can decrypt. It must be
+        // replaced, not rethrown: otherwise no configuration change can be saved, including the credential re-entry
+        // the recovery procedure asks for, and the key never heals because it is not empty.
+        SetupUndecryptableHashKeySetting();
+        ServiceSetting? updated = null;
+        _settingsRepo.Setup(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>()))
+            .Callback<ServiceSetting>(s => updated = s)
+            .Returns(Task.CompletedTask);
+
+        var key = await _jim.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+
+        Assert.That(key, Has.Length.EqualTo(32), "a new 256-bit key is generated");
+        Assert.That(updated, Is.Not.Null, "the regenerated key is persisted over the undecryptable one");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated!.Key, Is.EqualTo(Constants.SettingKeys.ConfigurationChangeHashKey));
+            Assert.That(_protection.IsProtected(updated.Value), Is.True, "the regenerated key is stored encrypted at rest");
+            Assert.That(_protection.Unprotect(updated.Value), Is.EqualTo(Convert.ToBase64String(key)), "the persisted key is the one returned");
+        }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WhenStoredHashKeyCannotBeDecrypted_SavesAndCapturesSnapshotAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupUndecryptableHashKeySetting();
+        _settingsRepo.Setup(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>())).Returns(Task.CompletedTask);
+
+        var result = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(BuildExportRule(), NewApiKey());
+
+        Assert.That(result, Is.True);
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null, "history keeps working with the regenerated key");
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private void SetupTrackingSetting(bool enabled) =>
@@ -228,6 +267,18 @@ public class ConfigurationChangeCaptureTests
                 Value = _protection.Protect(Convert.ToBase64String(new byte[32]))
             });
 
+    private void SetupUndecryptableHashKeySetting() =>
+        _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ConfigurationChangeHashKey))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ConfigurationChangeHashKey,
+                DisplayName = "Configuration change hash key",
+                Category = ServiceSettingCategory.Security,
+                ValueType = ServiceSettingValueType.StringEncrypted,
+                Value = FakeProtection.UndecryptableValue,
+                IsReadOnly = true
+            });
+
     private static SyncRule BuildExportRule() => new()
     {
         Id = 55,
@@ -248,13 +299,21 @@ public class ConfigurationChangeCaptureTests
     {
         private const string Prefix = "$JIM$v1$";
 
+        /// <summary>A protected value whose key has been lost: decrypting it throws, as the real service does.</summary>
+        public const string UndecryptableValue = Prefix + "encrypted-with-lost-keys";
+
         public string? Protect(string? plainText) =>
             string.IsNullOrEmpty(plainText) ? plainText : Prefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(plainText));
 
-        public string? Unprotect(string? protectedData) =>
-            string.IsNullOrEmpty(protectedData) || !IsProtected(protectedData)
+        public string? Unprotect(string? protectedData)
+        {
+            if (protectedData == UndecryptableValue)
+                throw new CryptographicException("The key {00000000-0000-0000-0000-000000000000} was not found in the key ring.");
+
+            return string.IsNullOrEmpty(protectedData) || !IsProtected(protectedData)
                 ? protectedData
                 : Encoding.UTF8.GetString(Convert.FromBase64String(protectedData[Prefix.Length..]));
+        }
 
         public bool IsProtected(string? value) =>
             !string.IsNullOrEmpty(value) && value.StartsWith(Prefix, StringComparison.Ordinal);
