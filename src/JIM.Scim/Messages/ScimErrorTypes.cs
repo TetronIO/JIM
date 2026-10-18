@@ -12,6 +12,9 @@ public static class ScimErrorTypes
     /// <summary>The specified filter syntax was invalid, or the attribute and filter comparison combination is not supported.</summary>
     public const string InvalidFilter = "invalidFilter";
 
+    /// <summary>A list request's cursor is not one the service provider issued (RFC 9865 section 2.1).</summary>
+    public const string InvalidCursor = "invalidCursor";
+
     /// <summary>The specified filter yields many more results than the server is willing to process.</summary>
     public const string TooMany = "tooMany";
 

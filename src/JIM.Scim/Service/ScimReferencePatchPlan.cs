@@ -68,6 +68,6 @@ public sealed class ScimReferencePatchPlan
                 changes.Add(new ScimReferenceChange(attribute, ReplaceAll: false, add, remove));
         }
 
-        return new ScimReferencePatchOutcome { Changes = changes, Coercions = applied.Coercions };
+        return new ScimReferencePatchOutcome { Changes = changes, Coercions = applied.Coercions, IgnoredAttributes = applied.IgnoredAttributes };
     }
 }

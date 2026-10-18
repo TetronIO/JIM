@@ -193,6 +193,38 @@ public class ScimServerResourceTests
     }
 
     [Test]
+    public void Read_UndeclaredAttributes_AreNamedAsIgnored()
+    {
+        // D17: what JIM does not keep is never silent. Read-only attributes (groups) are the server's to state, so they
+        // are not reported; attributes the definitions do not declare are, each by its full name.
+        var result = ScimResourceIntake.Read(Json($$$"""
+            {
+              "userName": "alice",
+              "favouriteColour": "green",
+              "groups": [ { "value": "g1" } ],
+              "name": { "givenName": "Alice", "nickname2": "Al" },
+              "{{{ScimUrns.EnterpriseUser}}}": { "department": "R&D", "shoeSize": "5" },
+              "urn:example:params:scim:schemas:extension:undeclared:2.0:User": { "badge": "B-1", "floor": "3" }
+            }
+            """), User());
+
+        Assert.That(result.IgnoredAttributes, Is.EquivalentTo(new[]
+        {
+            "favouriteColour",
+            "name.nickname2",
+            $"{ScimUrns.EnterpriseUser}:shoeSize",
+            "urn:example:params:scim:schemas:extension:undeclared:2.0:User:badge",
+            "urn:example:params:scim:schemas:extension:undeclared:2.0:User:floor"
+        }));
+    }
+
+    [Test]
+    public void Read_NothingUndeclared_IgnoresNothing()
+    {
+        Assert.That(ScimResourceIntake.Read(Json("""{ "userName": "alice", "groups": [] }"""), User()).IgnoredAttributes, Is.Empty);
+    }
+
+    [Test]
     public void Read_ABooleanSentAsAString_IsStoredAsABoolean()
     {
         var result = ScimResourceIntake.Read(Json("""{ "userName": "alice", "active": "False" }"""), User());
