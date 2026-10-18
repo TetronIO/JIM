@@ -695,6 +695,181 @@ public class ScimServerDatabaseTests
         Assert.That(result.Error?.StatusCode, Is.EqualTo(404));
     }
 
+    // ─── List ───
+
+    [Test]
+    public async Task ListAsync_All_ReturnsEveryLiveResourceProjectedWithItsMetaAsync()
+    {
+        var ada = await CreateUserAsync("ada");
+        var grace = await CreateUserAsync("grace");
+        var gone = await CreateUserAsync("gone");
+        await WithServerAsync(server => server.DeleteAsync(Context(), Users, gone.ToString(), ifMatch: null));
+        await CreateGroupAsync("Staff");
+
+        var result = await ListAsync(Users, new ScimListRequest());
+
+        var body = result.Resource!;
+        var resources = body["Resources"]!.AsArray().Select(r => r!.AsObject()).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.StatusCode, Is.EqualTo(200));
+            Assert.That(body["schemas"]!.AsArray().Single()!.GetValue<string>(), Is.EqualTo(ScimUrns.ListResponse));
+            Assert.That(body["totalResults"]!.GetValue<long>(), Is.EqualTo(2));
+            Assert.That(body["itemsPerPage"]!.GetValue<int>(), Is.EqualTo(2));
+            Assert.That(body["startIndex"]!.GetValue<int>(), Is.EqualTo(1));
+            Assert.That(body.ContainsKey("nextCursor"), Is.False, "the last page carries no cursor");
+            Assert.That(resources.Select(r => Guid.Parse(r["id"]!.GetValue<string>())), Is.EquivalentTo(new[] { ada, grace }));
+            Assert.That(resources.All(r => r["meta"]!["location"]!.GetValue<string>().StartsWith($"{BaseUrl}/Users/", StringComparison.Ordinal)), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task ListAsync_UserNameFilterInAnotherCase_FindsTheUserAsync()
+    {
+        var ada = await CreateUserAsync("Ada.Lovelace");
+        await CreateUserAsync("grace");
+
+        var result = await ListAsync(Users, new ScimListRequest(Filter: """userName eq "ada.lovelace" """));
+
+        Assert.That(Ids(result), Is.EqualTo(new[] { ada }));
+    }
+
+    [Test]
+    public async Task ListAsync_UnknownUserNameProbe_IsAnEmptyListNotAnErrorAsync()
+    {
+        // Some identity providers check their credentials every cycle with a random userName.
+        var result = await ListAsync(Users, new ScimListRequest(Filter: """userName eq "9b0c-random" """));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.StatusCode, Is.EqualTo(200));
+            Assert.That(result.Resource!["totalResults"]!.GetValue<long>(), Is.Zero);
+            Assert.That(result.Resource["Resources"]!.AsArray(), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task ListAsync_FilterOutsideTheSubset_Returns400InvalidFilterAsync()
+    {
+        var result = await ListAsync(Users, new ScimListRequest(Filter: """userName ew "a" """));
+
+        Assert.That(result.Error?.ScimType, Is.EqualTo(ScimErrorTypes.InvalidFilter));
+    }
+
+    [Test]
+    public async Task ListAsync_IndexPaging_OffersACursorThatContinuesTheWalkAsync()
+    {
+        var ids = new List<Guid>();
+        for (var i = 0; i < 5; i++)
+            ids.Add(await CreateUserAsync($"user{i}"));
+
+        var first = await ListAsync(Users, new ScimListRequest(Count: 2));
+        var cursor = first.Resource!["nextCursor"]!.GetValue<string>();
+        var second = await ListAsync(Users, new ScimListRequest(Count: 2, Cursor: cursor));
+        var third = await ListAsync(Users, new ScimListRequest(Count: 2, Cursor: second.Resource!["nextCursor"]!.GetValue<string>()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cursor, Does.Match("^[A-Za-z0-9_-]+$"), "a cursor uses only unreserved URL characters (RFC 9865)");
+            Assert.That(second.Resource.ContainsKey("startIndex"), Is.False, "a cursor page has no index");
+            Assert.That(third.Resource!.ContainsKey("nextCursor"), Is.False);
+            Assert.That(Ids(first).Concat(Ids(second)).Concat(Ids(third)), Is.EquivalentTo(ids));
+        }
+    }
+
+    [Test]
+    public async Task ListAsync_EmptyCursor_StartsACursorWalkAsync()
+    {
+        await CreateUserAsync("ada");
+        await CreateUserAsync("grace");
+
+        var result = await ListAsync(Users, new ScimListRequest(Count: 1, Cursor: ""));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Ids(result), Has.Count.EqualTo(1));
+            Assert.That(result.Resource!.ContainsKey("nextCursor"), Is.True);
+            Assert.That(result.Resource.ContainsKey("startIndex"), Is.False);
+        }
+    }
+
+    [TestCase("not a cursor")]
+    [TestCase("AAAA")]
+    public async Task ListAsync_MalformedCursor_Returns400InvalidCursorAsync(string cursor)
+    {
+        var result = await ListAsync(Users, new ScimListRequest(Cursor: cursor));
+
+        Assert.That(result.Error?.ScimType, Is.EqualTo(ScimErrorTypes.InvalidCursor));
+    }
+
+    [TestCase(0)]
+    [TestCase(-5)]
+    public async Task ListAsync_CountZeroOrNegative_ReturnsOnlyTheTotalAsync(int count)
+    {
+        await CreateUserAsync("ada");
+
+        var result = await ListAsync(Users, new ScimListRequest(Count: count));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Resource!["totalResults"]!.GetValue<long>(), Is.EqualTo(1));
+            Assert.That(result.Resource["Resources"]!.AsArray(), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task ListAsync_StartIndexBelowOne_IsReadAsOneAsync()
+    {
+        var ada = await CreateUserAsync("ada");
+
+        var result = await ListAsync(Users, new ScimListRequest(StartIndex: -3));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Ids(result), Is.EqualTo(new[] { ada }));
+            Assert.That(result.Resource!["startIndex"]!.GetValue<int>(), Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task ListAsync_Groups_CarryTheirMembersUnlessExcludedAsync()
+    {
+        var ada = await CreateUserAsync("ada");
+        await CreateGroupAsync("Staff", ada);
+        await CreateGroupAsync("Empty");
+
+        var full = await ListAsync(Groups, new ScimListRequest());
+        var lean = await ListAsync(Groups, new ScimListRequest(Selection: new ScimAttributeSelection(ExcludedAttributes: ["members"])));
+
+        var staff = full.Resource!["Resources"]!.AsArray().Single(r => r!["displayName"]!.GetValue<string>() == "Staff")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(staff["members"]!.AsArray().Single()!["value"]!.GetValue<string>(), Is.EqualTo(ada.ToString()));
+            Assert.That(lean.Resource!["Resources"]!.AsArray().Any(r => r!.AsObject().ContainsKey("members")), Is.False);
+        }
+    }
+
+    [Test]
+    public async Task ListAsync_Attributes_ProjectEachResourceAsync()
+    {
+        await CreateAsync(Users, UserBody("ada", externalId: "E-1"));
+
+        var result = await ListAsync(Users, new ScimListRequest(Selection: new ScimAttributeSelection(Attributes: ["userName"])));
+
+        var only = result.Resource!["Resources"]!.AsArray().Single()!.AsObject();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(only.Select(m => m.Key), Does.Contain("id").And.Contain("userName"));
+            Assert.That(only.Select(m => m.Key), Does.Not.Contain("displayName").And.Not.Contain("externalId"));
+        }
+    }
+
+    [Test]
+    public async Task ListAsync_UnknownEndpoint_Returns404Async()
+    {
+        Assert.That((await ListAsync("/Devices", new ScimListRequest())).Error?.StatusCode, Is.EqualTo(404));
+    }
+
     // ─── Helpers ───
 
     private ScimRequestContext Context(int? systemId = null) =>
@@ -726,6 +901,12 @@ public class ScimServerDatabaseTests
         Assert.That(result.StatusCode, Is.EqualTo(201), result.Error?.Detail);
         return Id(result);
     }
+
+    private Task<ScimServiceResult> ListAsync(string endpoint, ScimListRequest request) =>
+        WithServerAsync(server => server.ListAsync(Context(), endpoint, request));
+
+    private static List<Guid> Ids(ScimServiceResult result) =>
+        result.Resource!["Resources"]!.AsArray().Select(r => Guid.Parse(r!["id"]!.GetValue<string>())).ToList();
 
     private static Guid Id(ScimServiceResult result) => Guid.Parse(result.Resource!["id"]!.GetValue<string>());
 

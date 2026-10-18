@@ -4,6 +4,7 @@
 using System.Text.Json.Nodes;
 using JIM.Data.Repositories;
 using JIM.Models.Scim;
+using JIM.Scim;
 using JIM.Scim.Messages;
 using JIM.Scim.Resources;
 using JIM.Scim.Schema;
@@ -39,6 +40,17 @@ public class ScimServer
     /// The most ignored attribute names one journal entry keeps.
     /// </summary>
     public const int MaxIgnoredAttributesJournalled = 50;
+
+    /// <summary>
+    /// The page size of a list request that gives no <c>count</c>.
+    /// </summary>
+    public const int DefaultPageSize = 100;
+
+    /// <summary>
+    /// The most resources one page of a list returns, whatever <c>count</c> asks for; what discovery publishes as
+    /// <c>filter.maxResults</c>.
+    /// </summary>
+    public const int MaxPageSize = 1000;
 
     private readonly ILogger _logger = Log.ForContext<ScimServer>();
 
@@ -154,6 +166,84 @@ public class ScimServer
             ? Held(await Store.GetReferencesAsync(resourceId), definitions)
             : new Dictionary<string, IReadOnlyList<ScimHeldReference>>();
         return ScimServiceResult.Ok(Respond(context, definitions, type, resource, Payload(resource), held, selection), resource.Version);
+    }
+    #endregion
+
+    #region list
+    /// <summary>
+    /// GET of a resource type's endpoint (and, in Phase 4, <c>.search</c>): one page of the live resources the filter
+    /// selects, in id order. Index paging is the default; every page that has a successor carries a <c>nextCursor</c>,
+    /// whichever paging the request used, so a client can switch to cursors, which a deletion mid-walk cannot make skip
+    /// a resource.
+    /// </summary>
+    public async Task<ScimServiceResult> ListAsync(ScimRequestContext context, string endpoint, ScimListRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var definitions = await GetDefinitionsAsync(context.ConnectedSystemId);
+        var type = definitions.FindByEndpoint(endpoint);
+        if (type == null)
+            return NoSuchEndpoint();
+
+        ScimStoreFilter? filter = null;
+        if (!string.IsNullOrWhiteSpace(request.Filter))
+        {
+            var translation = ScimStoreFilterTranslator.Translate(request.Filter, type);
+            if (translation.Error != null)
+                return ScimServiceResult.Failed(translation.Error);
+            filter = translation.Filter;
+        }
+
+        Guid? after = null;
+        var useCursor = request.Cursor != null;
+        if (!string.IsNullOrEmpty(request.Cursor))
+        {
+            if (!ScimCursor.TryDecode(request.Cursor, out var lastId))
+            {
+                return ScimServiceResult.Failed(ScimError.ForStatus(400,
+                    "The cursor is not one this service provider issued; send an empty cursor to start again.", ScimErrorTypes.InvalidCursor));
+            }
+
+            after = lastId;
+        }
+
+        var count = Math.Clamp(request.Count ?? DefaultPageSize, 0, MaxPageSize);
+        var startIndex = Math.Max(request.StartIndex ?? 1, 1);
+        var page = await Store.ListLiveResourcesAsync(context.ConnectedSystemId, new ScimStoreQuery
+        {
+            ResourceTypeId = type.Id,
+            Filter = filter,
+            Count = count,
+            StartIndex = useCursor ? 1 : startIndex,
+            After = after
+        });
+
+        var references = page.Resources.Count > 0 && ReferencesWanted(type, request.Selection)
+            ? await Store.GetReferencesAsync(page.Resources.Select(r => r.Id).ToList())
+            : new Dictionary<Guid, IReadOnlyList<ScimStoreReferenceTarget>>();
+
+        var resources = new JsonArray();
+        foreach (var resource in page.Resources)
+        {
+            var held = references.TryGetValue(resource.Id, out var targets)
+                ? Held(targets, definitions)
+                : new Dictionary<string, IReadOnlyList<ScimHeldReference>>();
+            resources.Add(Respond(context, definitions, type, resource, Payload(resource), held, request.Selection));
+        }
+
+        var body = new JsonObject
+        {
+            ["schemas"] = new JsonArray(ScimUrns.ListResponse),
+            ["totalResults"] = page.TotalResults,
+            ["itemsPerPage"] = page.Resources.Count
+        };
+        if (!useCursor)
+            body["startIndex"] = startIndex;
+        if (page.HasMore)
+            body["nextCursor"] = ScimCursor.Encode(page.Resources[^1].Id);
+        body["Resources"] = resources;
+        return ScimServiceResult.List(body);
     }
     #endregion
 
