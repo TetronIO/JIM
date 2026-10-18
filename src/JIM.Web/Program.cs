@@ -1,7 +1,6 @@
 ﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Text.Json;
 using JIM.Application;
 using JIM.Application.Hosting;
 using JIM.Application.Diagnostics;
@@ -413,6 +412,12 @@ try
             });
         });
 
+    // Both handlers reach the identity provider through one back-channel, which also accepts a chain the JIM certificate
+    // store vouches for when a certificate there is trusted for sign-in (#2363): an identity provider whose certificate
+    // comes from an internal certificate authority (AD FS, an on-premises Keycloak) then works without an image
+    // rebuild, and trusting its authority takes effect on the next sign-in.
+    builder.Services.AddIdentityProviderBackchannel();
+
     // setup authorisation policies
     builder.Services.AddAuthorization();
 
@@ -450,29 +455,24 @@ try
     // Configure API versioning with URL path segment (e.g., /api/v1/...)
     builder.Services.AddJimApiVersioning();
 
-    // Fetch OIDC discovery document to get IDP-agnostic authorization endpoints.
-    // In OpenAPI generation mode, use constructed placeholder URLs to avoid requiring a live IdP.
-    // These only affect Scalar's "Try It" auth flow, not the documentation content.
-    OidcDiscoveryDocument oidcConfig;
-    if (isOpenApiGenerateMode)
-    {
-        var authorityBase = (authority ?? "https://idp.example.com/realms/jim").TrimEnd('/');
-        oidcConfig = new OidcDiscoveryDocument
-        {
-            AuthorizationEndpoint = $"{authorityBase}/protocol/openid-connect/auth",
-            TokenEndpoint = $"{authorityBase}/protocol/openid-connect/token"
-        };
-    }
-    else
-    {
-        oidcConfig = await FetchOidcDiscoveryDocumentAsync(authority!);
-    }
+    // The OAuth endpoints for Scalar's "Try It" flow (they do not affect the documentation's content). Read from the
+    // identity provider's own configuration when the document is generated at runtime, through the same back-channel
+    // as sign-in; never at start-up, where an identity provider that is down or not yet trusted would stop JIM starting
+    // at all (#2363). Placeholders built from the authority stand in when it cannot be read, and always in OpenAPI
+    // generation mode, which has no identity provider.
+    var authorityBase = (authority ?? "https://idp.example.com/realms/jim").TrimEnd('/');
+    var placeholderAuthorizationEndpoint = $"{authorityBase}/protocol/openid-connect/auth";
+    var placeholderTokenEndpoint = $"{authorityBase}/protocol/openid-connect/token";
 
     // Setup OpenAPI with OAuth2 + API Key security schemes for API documentation
     builder.Services.AddOpenApi("v1", options =>
     {
-        options.AddDocumentTransformer((document, _, _) =>
+        options.AddDocumentTransformer(async (document, context, cancellationToken) =>
         {
+            var (authorizationEndpoint, tokenEndpoint) = isOpenApiGenerateMode
+                ? (placeholderAuthorizationEndpoint, placeholderTokenEndpoint)
+                : await ReadOAuthEndpointsAsync(context.ApplicationServices, placeholderAuthorizationEndpoint, placeholderTokenEndpoint, cancellationToken);
+
             document.Info = new OpenApiInfo
             {
                 Title = "JIM API",
@@ -485,10 +485,7 @@ try
                 }
             };
 
-            OpenApiSecurityConfiguration.Apply(document, new Uri(oidcConfig.AuthorizationEndpoint),
-                new Uri(oidcConfig.TokenEndpoint), apiScope!);
-
-            return Task.CompletedTask;
+            OpenApiSecurityConfiguration.Apply(document, new Uri(authorizationEndpoint), new Uri(tokenEndpoint), apiScope!);
         });
 
         // Anonymous endpoints (health probes, version, auth configuration) opt out of the document-wide requirement,
@@ -1107,48 +1104,33 @@ static string CategoriseOidcFailure(Exception? exception)
 }
 
 /// <summary>
-/// Fetches the OIDC discovery document from the authority's well-known endpoint.
-/// This provides IDP-agnostic endpoint discovery for any OIDC-compliant provider.
-/// Retries with exponential backoff to handle slow-starting identity providers (e.g. Keycloak).
+/// Reads the authorisation and token endpoints for the runtime OpenAPI document from the identity provider's
+/// configuration, as the OpenID Connect handler holds it (so through the sign-in back-channel and its trust), falling
+/// back to placeholders when the identity provider cannot be reached or is not trusted yet. Only Scalar's "Try It"
+/// sign-in uses them, so a fallback never blocks the document.
 /// </summary>
-static async Task<OidcDiscoveryDocument> FetchOidcDiscoveryDocumentAsync(string authority)
+static async Task<(string AuthorizationEndpoint, string TokenEndpoint)> ReadOAuthEndpointsAsync(
+    IServiceProvider services, string placeholderAuthorizationEndpoint, string placeholderTokenEndpoint, CancellationToken cancellationToken)
 {
-    const int maxRetries = 5;
-    const int baseDelayMs = 2000;
+    var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<OpenIdConnectOptions>>()
+        .Get(OpenIdConnectDefaults.AuthenticationScheme);
 
-    using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-    var discoveryUrl = $"{authority.TrimEnd('/')}/.well-known/openid-configuration";
-
-    Log.Information("Fetching OIDC discovery document from {Url}", discoveryUrl);
-
-    var attempt = 0;
-    while (true)
+    try
     {
-        try
-        {
-            var response = await httpClient.GetAsync(discoveryUrl);
-            response.EnsureSuccessStatusCode();
-            var content = await response.Content.ReadAsStringAsync();
-            var doc = JsonSerializer.Deserialize<OidcDiscoveryDocument>(content)
-                ?? throw new ApplicationException("Failed to parse OIDC discovery document");
+        var configuration = options.ConfigurationManager == null
+            ? null
+            : await options.ConfigurationManager.GetConfigurationAsync(cancellationToken);
 
-            Log.Information("OIDC discovery complete. Authorisation endpoint: {AuthEndpoint}", doc.AuthorizationEndpoint);
-            return doc;
-        }
-        catch (Exception ex) when (IsTransientHttpError(ex) && attempt < maxRetries)
-        {
-            attempt++;
-            var delay = baseDelayMs * (int)Math.Pow(2, attempt - 1);
-            Log.Warning(
-                "OIDC discovery attempt {Attempt}/{MaxRetries} failed: {Message}. Retrying in {Delay}ms...",
-                attempt, maxRetries, ex.Message, delay);
-            await Task.Delay(delay);
-        }
+        if (!string.IsNullOrEmpty(configuration?.AuthorizationEndpoint) && !string.IsNullOrEmpty(configuration.TokenEndpoint))
+            return (configuration.AuthorizationEndpoint, configuration.TokenEndpoint);
     }
-}
+    catch (InvalidOperationException ex)
+    {
+        Log.Warning(ex, "Could not read the identity provider's configuration for the API reference; its sign-in uses placeholder endpoints");
+    }
 
-static bool IsTransientHttpError(Exception ex) =>
-    ex is HttpRequestException or TaskCanceledException;
+    return (placeholderAuthorizationEndpoint, placeholderTokenEndpoint);
+}
 
 /// <summary>
 /// Gets the valid token issuers for JWT validation.
@@ -1252,16 +1234,4 @@ static void EnsureDirectoryExists(string path)
         Log.Error(ex, "Failed to create encryption key directory: {Path}", path);
         throw;
     }
-}
-
-/// <summary>
-/// Represents the relevant fields from an OIDC discovery document.
-/// </summary>
-internal class OidcDiscoveryDocument
-{
-    [System.Text.Json.Serialization.JsonPropertyName("authorization_endpoint")]
-    public string AuthorizationEndpoint { get; set; } = string.Empty;
-
-    [System.Text.Json.Serialization.JsonPropertyName("token_endpoint")]
-    public string TokenEndpoint { get; set; } = string.Empty;
 }

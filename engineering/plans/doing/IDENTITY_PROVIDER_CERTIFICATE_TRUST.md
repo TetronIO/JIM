@@ -1,6 +1,6 @@
 # Identity Provider Certificate Trust - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-2 complete)
 - **Created:** 2026-10-18
 - **Issue:** [#2363](https://github.com/TetronIO/JIM/issues/2363)
 - **Related Issues:** #2362 (parent: easiest identity provider setup and maintenance), #2355 (AD FS lab), #1914 (certificate chain trust for Connectors), #2361 (AD FS troubleshooting)
@@ -79,6 +79,7 @@ Rejected (recorded on the walkthrough): a "Trust" button on the unauthenticated 
 - An outer `DelegatingHandler` refreshes the SignIn-certificate snapshot asynchronously before each request (cheap query; back-channel requests are rare: metadata refresh, signing keys, one token redemption per sign-in). A short (5 s) micro-cache bounds repeated loads. A database failure keeps the previous snapshot (empty before the first successful load), so the operating system's trust still applies.
 - The inner `SocketsHttpHandler` validation callback reads the snapshot synchronously and calls `CertificateStoreTrust.Evaluate`. It also records the presented chain for diagnostics.
 - No cache invalidation plumbing is needed: every back-channel request sees the store as it is within 5 s, which is what makes "no restart" and the auto-refreshing page work.
+- No custom configuration manager either. IdentityModel's `ConfigurationManager` (8.19.2) retries on every call while it holds no configuration, so a certificate trusted after a refusal counts on the very next sign-in. `IdentityProviderConfigurationRecoveryTests` pins that, so an upgrade that starts backing off there fails the build.
 
 **Start-up.** Remove the fatal pre-build discovery fetch. The runtime OpenAPI document's OAuth endpoints are resolved lazily inside the document transformer through the OpenID Connect handler's own `ConfigurationManager` (same back-channel, same trust), falling back to the authority-based placeholders when unreachable. The monitor's first probe after the database is ready logs the actionable warning shown in the walkthrough (step A1). `ValidateSsoConfiguration` (environment variables present) stays fail-fast.
 
@@ -118,7 +119,7 @@ Each phase is test-first (red, green, refactor) and builds and tests green befor
 1. **Shared trust rule and purpose.** ✅
    - Move `JimCertificateStoreTrust` to `JIM.Utilities/Security/CertificateStoreTrust.cs`; update `CertificateChainAssembler` and `SqlConnector`. Add `Evaluate` with unit tests (OS-trusted; vouched by root, intermediate, self-signed leaf; name mismatch refused despite store; expired refused; empty store; certificate not in store).
    - `CertificateTrustPurpose`, `TrustedCertificate.TrustedFor`, migration (default Connectors), repository `UpdateAsync` copies it, `RequiresPostgres` NoTracking round-trip test, snapshot field, `GetTrustedCertificatesAsync` filters Connectors, `GetSignInTrustedCertificatesAsync`. Add/update overloads accept `trustedFor` (default Connectors).
-2. **Back-channel and start-up.**
+2. **Back-channel and start-up.** ✅
    - `IdentityProviderBackchannel` (snapshot handler + validator), wired into OpenID Connect and JWT bearer options. Tests against an in-process TLS server presenting a certificate from a private CA generated in the test (pattern: the Connector TLS tests): refused with an empty store, accepted once the CA is in the SignIn snapshot, refused when the CA is Connectors only, refused on name mismatch.
    - Remove the fatal discovery fetch; lazy OAuth endpoints in the runtime OpenAPI transformer.
 3. **Probe, status and trusting.**
