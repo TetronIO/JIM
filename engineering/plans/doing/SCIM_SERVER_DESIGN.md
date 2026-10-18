@@ -193,6 +193,7 @@ Decided 17 October 2026. An import sees each resource only as it stands when the
 
 - **The journal (Phase 2).** One row per resource per accepted write, written in the same transaction as the write: change sequence, resource id and type, operation, the changed attributes by SCIM name, the API key (id and name) and the client address. It cannot disagree with the store, and costs one insert per write.
 - **Names, not values.** The values are in the store and, once imported, in the Connected System Object's change history; a second copy of personal data in the journal would buy nothing (data minimisation). `password` cannot appear in any case (D5).
+- **Ignored attributes are journalled too** (decided 18 October 2026). An attribute the store's definitions do not declare (a custom extension an administrator has mapped at the identity provider, before custom extensions can be defined in JIM) is ignored, as RFC 7643 section 2 allows and the leniency below requires, because refusing it would fail every create from that provider. Ignored is never silent: each entry also names the attributes the write ignored, and the summary Activity (Phase 5) counts them, so an administrator sees what JIM is not keeping. Refusing them was considered and rejected for that reason.
 - **Retention:** the journal is change history, so the History Retention Period and its cleanup govern it; no new setting.
 - **Attribution:** the store's write methods take the actor (key and address). Phase 4 supplies it from the authenticated scoped key.
 - **A summary Activity (Phase 5).** Per Connected System, key and 15-minute window, counts of creates, updates, deletes and rejections, aggregated as the security audit aggregates failed sign-ins, linking into the journal. One Activity per write was rejected: an initial load of 100,000 Users would be 100,000 Activities, swamping the operational view.
@@ -304,7 +305,7 @@ Accepted on input, each coercion logged without values:
 - booleans sent as strings (`"False"`) on `active` and on `primary`;
 - single-element arrays for single-valued attributes, and `""` treated as absent;
 - `remove` on an unfiltered multi-valued path **with** a `value` array removes only the listed values (`remove` with no value still removes all). Strict RFC handling here would wipe a group's whole membership when the identity provider meant to remove one member;
-- unknown and read-only attributes ignored (`groups`, `roles` on input, custom URNs not declared);
+- unknown and read-only attributes ignored (`groups`, `roles` on input, custom URNs not declared), undeclared ones named in the journal (D17);
 - base URL with or without a trailing slash; unknown query parameters ignored;
 - the credential probe some providers send on every cycle (`GET /Users?filter=userName eq "<random>"`) returns `200` with an empty list.
 
@@ -348,7 +349,7 @@ Three PRs:
   - **A write that changes nothing writes nothing:** no version, no journal entry, nothing for the next import. References compare as sets, so members re-sent in another order are not a change.
   - **A listed reference is matched by its `value` alone** when a remove names it: identity providers echo `display` and `$ref` back, which the stored entry never carries.
   - **A membership PATCH's response** reads the Group's members after the write lock is released, so a large Group is never read while other writes wait. The response can therefore include a later write's members; its version is this write's.
-- **2c List.** Filtering and paging. The day-one filter subset becomes a small predicate model in JIM.Models, which the repository renders as parameterised SQL, so JIM.Data never depends on JIM.Scim; anything outside the subset is `400` `invalidFilter`. Equality on a unique attribute (`userName`, `externalId`) reads `ScimStoreUniqueValues`; other attributes (`displayName`, `emails.value`) are matched in the JSONB payload, measured before any index is added. Index paging and cursors both order by `Id`; a cursor is the last id seen, encoded, and a malformed one is `400` `invalidCursor`.
+- **2c List, and ignored attributes in the journal.** The journal's ignored attribute names (D17): a column on `ScimStoreJournalEntries`, filled from intake's and the applier's reports of undeclared attributes. Filtering and paging. The day-one filter subset becomes a small predicate model in JIM.Models, which the repository renders as parameterised SQL, so JIM.Data never depends on JIM.Scim; anything outside the subset is `400` `invalidFilter`. Equality on a unique attribute (`userName`, `externalId`) reads `ScimStoreUniqueValues`; other attributes (`displayName`, `emails.value`) are matched in the JSONB payload, measured before any index is added. Index paging and cursors both order by `Id`; a cursor is the last id seen, encoded, and a malformed one is `400` `invalidCursor`.
 
 ### Phase 3: Service Provider Connector
 
