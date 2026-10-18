@@ -5,9 +5,8 @@
 # times as Operating JIM says, then the host rebooted several times, JIM coming back by itself each time with its data.
 # A fault that strikes one restart in a few passes a single restart most of the time: #2009 (NetworkManager unplugging
 # rootful Podman pods from their bridge) failed 6 of 20 restarts, and so passed a one-restart check about two runs in
-# three. A soak cell runs on request (OnRequest in Cells.psd1): after the lab's images
-# are rebuilt, when operating system updates arrive, and on a release candidate. See README.md, "What a Soak cell
-# checks".
+# three, and such a fault can return with an operating system update and no JIM change at all. See README.md, "What a
+# Soak cell checks".
 
 if ($cell.Runtime -ne 'podman') {
     throw "a Soak cell restarts JIM as Operating JIM says for Podman; a $($cell.Runtime) soak needs that runtime's own restart"
