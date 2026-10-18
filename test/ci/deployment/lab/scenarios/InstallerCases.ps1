@@ -58,7 +58,7 @@ Add-Check 'the database password is generated, not left as the template''s place
     "$($password.Length) characters"
 
 $status = $null | & curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --noproxy $hostName --cacert $caPath `
-    --resolve "${hostName}:443:$address" -H "X-API-Key: $apiKey" "https://$hostName/api/v1/connected-systems" 2>$null
+    --resolve "${hostName}:443:$address" -H "Authorization: Bearer $apiKey" "https://$hostName/api/v1/connected-systems" 2>$null
 Add-Check 'JIM accepts the infrastructure API key given to the installer' ("$status" -eq '200') "HTTP $status"
 $module = Get-BundleModule $BundlePath
 $trust = Join-Path $OutputPath 'trust.pem'
