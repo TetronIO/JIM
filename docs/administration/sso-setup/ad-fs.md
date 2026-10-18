@@ -64,7 +64,7 @@ The confidential web application is now configured. If you do not need interacti
 
 ## Step 7: Configure PowerShell Module Authentication (Optional but recommended)
 
-Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module.
+Configuring the PowerShell module now means administrators can connect to JIM interactively with their SSO account. Unattended scripts cannot sign in interactively, so they use a JIM API key; see [API Authentication](../../api/authentication.md). You can skip this step if you don't plan to use the PowerShell module.
 
 The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. This is a **public client**, so it must be a separate **Native application** (a native/public application in AD FS cannot hold a shared secret). Add it to the same Application Group:
 
@@ -137,9 +137,8 @@ To check sign-out and API access too, see [Testing Your Configuration](../sso-se
 
 ## AD FS Troubleshooting
 
-- **Token signing certificate**: Ensure your AD FS token signing certificate is trusted by the JIM server
+- **TLS certificate**: The JIM server must trust the TLS certificate of your AD FS federation service, because JIM fetches AD FS's discovery document and signing keys over HTTPS. The token-signing certificate needs no trust configuration: JIM reads its public keys from AD FS's published key set.
 - **Claim rules**: AD FS may need claim rules to emit standard OIDC claims (see above)
-- **CORS**: If JIM and AD FS are on different domains, configure CORS in AD FS
 - **PKCE / PowerShell sign-in fails**: Confirm AD FS is Windows Server 2019 or later; earlier versions do not support PKCE and cannot authenticate the PowerShell module's public client
 
 ## Next steps

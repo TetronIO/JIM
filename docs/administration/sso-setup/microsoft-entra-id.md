@@ -88,7 +88,7 @@ To enable OAuth authentication in the Scalar API reference:
 
 ## Step 5b: Configure PowerShell Module Authentication (Optional but recommended)
 
-Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
+Configuring the PowerShell module now means administrators can connect to JIM interactively with their SSO account. Unattended scripts cannot sign in interactively, so they use a JIM API key; see [API Authentication](../../api/authentication.md). You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
 
 Entra ID allows a single app registration to serve both the JIM web application (confidential client with a secret) and the PowerShell module (public client using PKCE with a loopback redirect). You can reuse the same app registration from Step 1; just add a new platform for the PowerShell flow:
 
