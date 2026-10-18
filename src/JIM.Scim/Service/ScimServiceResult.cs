@@ -56,6 +56,11 @@ public sealed class ScimServiceResult
 
     public static ScimServiceResult Ok(JsonObject resource, long version) => new(200, resource, null, version, null);
 
+    /// <summary>
+    /// A list response: <c>200</c> with no entity tag, since it is not one resource.
+    /// </summary>
+    public static ScimServiceResult List(JsonObject listResponse) => new(200, listResponse, null, null, null);
+
     public static ScimServiceResult NoContent() => new(204, null, null, null, null);
 
     public static ScimServiceResult Failed(ScimError error) => new(error.StatusCode ?? 500, null, error, null, null);

@@ -28,4 +28,11 @@ public sealed class ScimPatchResult
     /// string, a read-only attribute ignored), for the caller to log. They name attributes, never values.
     /// </summary>
     public IReadOnlyList<string> Coercions { get; init; } = [];
+
+    /// <summary>
+    /// The attributes the request named that the resource type does not declare, by full name (an extension's
+    /// qualified by its URN, a sub-attribute after a dot), each once. Read-only attributes are not among them: those are
+    /// the server's to state. Empty where the request failed.
+    /// </summary>
+    public IReadOnlyList<string> IgnoredAttributes { get; init; } = [];
 }

@@ -49,6 +49,36 @@ public class ScimPatchApplierTests
     private static ScimPatchOperation Op(string op, string? path, string? json = null) =>
         new() { Op = op, Path = path, Value = json == null ? null : JsonNode.Parse(json) };
 
+    [Test]
+    public void Apply_PathOnAnUndeclaredSchema_IsNamedAsIgnored()
+    {
+        var result = ScimPatchApplier.Apply(Alice(),
+            [Op("replace", "urn:example:params:scim:schemas:extension:undeclared:2.0:User:badge", "\"B-1\"")], User());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Error, Is.Null);
+            Assert.That(result.IgnoredAttributes, Is.EqualTo(new[] { "urn:example:params:scim:schemas:extension:undeclared:2.0:User:badge" }));
+        }
+    }
+
+    [Test]
+    public void Apply_NoPathValueNamingAnUndeclaredSchema_NamesItsBareValueByTheUrn()
+    {
+        var result = ScimPatchApplier.Apply(Alice(),
+            [Op("replace", null, """{ "urn:example:params:scim:schemas:extension:undeclared:2.0:User": "x" }""")], User());
+
+        Assert.That(result.IgnoredAttributes, Is.EqualTo(new[] { "urn:example:params:scim:schemas:extension:undeclared:2.0:User" }));
+    }
+
+    [Test]
+    public void Apply_ReadOnlyAttribute_IsNotReportedAsIgnored()
+    {
+        var result = ScimPatchApplier.Apply(Alice(), [Op("add", "groups", """[ { "value": "g1" } ]""")], User());
+
+        Assert.That(result.IgnoredAttributes, Is.Empty);
+    }
+
     private static JsonObject Applied(ScimPatchResult result)
     {
         Assert.That(result.Error, Is.Null, () => $"{result.Error?.ScimType}: {result.Error?.Detail}");

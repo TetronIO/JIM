@@ -57,7 +57,7 @@ public static class ScimPatchApplier
             return new ScimPatchResult { Error = refusal.ToError(), Coercions = patch.Coercions };
         }
 
-        return new ScimPatchResult { Resource = working, Coercions = patch.Coercions };
+        return new ScimPatchResult { Resource = working, Coercions = patch.Coercions, IgnoredAttributes = patch.Ignored };
     }
 
     /// <summary>
@@ -66,6 +66,17 @@ public static class ScimPatchApplier
     private sealed class Patch(ScimResourceSchema schema)
     {
         public List<string> Coercions { get; } = [];
+
+        /// <summary>
+        /// The attributes the request named that the resource type does not declare, by full name, each once.
+        /// </summary>
+        public List<string> Ignored { get; } = [];
+
+        private void Ignore(string name)
+        {
+            if (!Ignored.Contains(name, StringComparer.OrdinalIgnoreCase))
+                Ignored.Add(name);
+        }
 
         public void Apply(JsonObject resource, ScimPatchOperation operation)
         {
@@ -152,6 +163,16 @@ public static class ScimPatchApplier
                 if (name.StartsWith("urn:", StringComparison.OrdinalIgnoreCase))
                 {
                     Coercions.Add("A member of a schema this resource type does not declare was ignored.");
+                    if (value is JsonObject undeclared && undeclared.Count > 0)
+                    {
+                        foreach (var memberName in undeclared.Select(member => member.Key))
+                            Ignore($"{name}:{memberName}");
+                    }
+                    else
+                    {
+                        Ignore(name);
+                    }
+
                     continue;
                 }
 
@@ -169,6 +190,7 @@ public static class ScimPatchApplier
             if (attribute == null)
             {
                 Coercions.Add($"The attribute '{name}' is not defined for this resource type and was ignored.");
+                Ignore(schemaUrn == null ? name : $"{schemaUrn}:{name}");
                 return;
             }
 
@@ -192,6 +214,8 @@ public static class ScimPatchApplier
             if (schemaUrn != null && !schema.Declares(schemaUrn))
             {
                 Coercions.Add("An operation on a schema this resource type does not declare was ignored.");
+                var ignoredSub = path.Attribute.SubAttributeName == null ? "" : $".{path.Attribute.SubAttributeName}";
+                Ignore($"{schemaUrn}:{path.Attribute.AttributeName}{ignoredSub}");
                 return;
             }
 
@@ -531,6 +555,7 @@ public static class ScimPatchApplier
                 if (sub == null)
                 {
                     Coercions.Add($"The sub-attribute '{attribute.Name}.{name}' is not defined and was ignored.");
+                    Ignore($"{attribute.Name}.{name}");
                     continue;
                 }
 

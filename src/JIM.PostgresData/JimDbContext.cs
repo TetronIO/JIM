@@ -1861,6 +1861,8 @@ public class JimDbContext : DbContext
             entry.HasOne<ConnectedSystem>().WithMany().HasForeignKey(e => e.ConnectedSystemId)
                 .OnDelete(DeleteBehavior.Cascade);
             entry.HasOne<ApiKey>().WithMany().HasForeignKey(e => e.ApiKeyId).OnDelete(DeleteBehavior.SetNull);
+            // Entries journalled before ignored attributes were recorded ignored none that anyone can now name.
+            entry.Property(e => e.IgnoredAttributes).HasDefaultValueSql("'{}'::text[]");
             entry.HasIndex(e => new { e.ConnectedSystemId, e.ResourceId, e.ChangeSequence });
             // The history retention cleanup deletes by age.
             entry.HasIndex(e => e.Occurred);
