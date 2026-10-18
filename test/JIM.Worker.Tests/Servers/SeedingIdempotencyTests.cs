@@ -196,8 +196,10 @@ public class SeedingIdempotencyTests
         Assert.That(_harness.CreatedConnectorDefinitions.Select(d => d.Name), Is.EquivalentTo(expectedNames),
             "every built-in Connector missing a definition must be created");
         Assert.That(_harness.CreatedConnectorDefinitions.All(d => d.BuiltIn), Is.True);
-        Assert.That(_harness.CreatedConnectorDefinitions.All(d => d.Settings.Count > 0), Is.True,
+        var declaredSettingCounts = SeedingServer.BuiltInConnectors().ToDictionary(c => c.Name, c => ((IConnectorSettings)c).GetSettings().Count);
+        Assert.That(_harness.CreatedConnectorDefinitions.All(d => d.Settings.Count == declaredSettingCounts[d.Name]), Is.True,
             "a created definition must carry the Connector's declared settings");
+        Assert.That(declaredSettingCounts.Values.Count(c => c > 0), Is.GreaterThan(0), "at least one built-in Connector declares settings to carry");
 
         var parent = _harness.CreatedActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.SystemInitialisation);
         Assert.That(parent, Is.Not.Null, "the creations must be grouped under one System Initialisation Activity");

@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.PostgresData;
+using JIM.TestSupport;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
@@ -40,15 +41,13 @@ public class SynchronisationControllerMatchingRuleUpdateDatabaseTests
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
-        var dbName = Environment.GetEnvironmentVariable("JIM_TEST_RESET_DB");
-        if (string.IsNullOrEmpty(dbName))
+        // A database of this assembly's own: the Worker suite runs at the same time in the database-tests job, and
+        // migrating or emptying a shared database under these tests broke them.
+        var connectionString = PostgresTestDatabase.ConnectionStringFromEnvironment(databaseSuffix: "_web_api");
+        if (connectionString == null)
             Assert.Ignore("JIM_TEST_RESET_DB not set; skipping real-PostgreSQL matching-rule endpoint tests.");
-
-        var host = Environment.GetEnvironmentVariable("JIM_TEST_RESET_HOST") ?? "localhost";
-        var user = Environment.GetEnvironmentVariable("JIM_TEST_RESET_USER") ?? "postgres";
-        var pass = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PASSWORD") ?? "postgres";
-        var port = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PORT") ?? "5432";
-        _connectionString = $"Host={host};Port={port};Database={dbName};Username={user};Password={pass}";
+        _connectionString = connectionString!;
+        PostgresTestDatabase.CreateDatabaseIfMissing(_connectionString);
 
         using var ctx = NewContext();
         ctx.Database.Migrate();
