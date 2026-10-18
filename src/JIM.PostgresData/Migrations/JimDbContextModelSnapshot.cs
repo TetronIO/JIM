@@ -2776,6 +2776,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
+                    b.PrimitiveCollection<List<string>>("IgnoredAttributes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
                     b.Property<DateTime>("Occurred")
                         .HasColumnType("timestamp with time zone");
 

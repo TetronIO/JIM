@@ -52,3 +52,34 @@ public enum ScimStoreWriteOutcome
     /// </summary>
     UniquenessConflict = 2
 }
+
+/// <summary>
+/// How two SCIM store filters are joined.
+/// </summary>
+public enum ScimStoreLogicalOperator
+{
+    And = 1,
+    Or = 2
+}
+
+/// <summary>
+/// How a stored instant compares to a filter's.
+/// </summary>
+public enum ScimStoreComparison
+{
+    Equal = 1,
+    GreaterThan = 2,
+    GreaterOrEqual = 3,
+    LessThan = 4,
+    LessOrEqual = 5
+}
+
+/// <summary>
+/// How a stored string matches a filter's.
+/// </summary>
+public enum ScimStoreTextMatch
+{
+    Equal = 1,
+    Contains = 2,
+    StartsWith = 3
+}
