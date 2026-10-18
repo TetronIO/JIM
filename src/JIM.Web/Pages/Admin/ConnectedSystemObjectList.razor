@@ -191,7 +191,7 @@
                     <div class="jim-one-line" title="@externalId">
                         @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
                         {
-                            <PendingValue Value="@context.Item.PendingExternalId" Status="@context.Item.PendingExportStatus" />
+                            <PendingValue Value="@context.Item.PendingExternalId" Status="@context.Item.PendingExportStatus" Failing="@context.Item.PendingExportFailingSince.HasValue" />
                         }
                         else
                         {
@@ -221,7 +221,7 @@
                         }
                         else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
                         {
-                            <PendingValue Value="@context.Item.PendingSecondaryExternalId" Status="@context.Item.PendingExportStatus" />
+                            <PendingValue Value="@context.Item.PendingSecondaryExternalId" Status="@context.Item.PendingExportStatus" Failing="@context.Item.PendingExportFailingSince.HasValue" />
                         }
                     </div>
                 </CellTemplate>
@@ -237,7 +237,7 @@
                     }
                     else if (!string.IsNullOrEmpty(context.Item.PendingDisplayName))
                     {
-                        <PendingValue Value="@context.Item.PendingDisplayName" Status="@context.Item.PendingExportStatus" />
+                        <PendingValue Value="@context.Item.PendingDisplayName" Status="@context.Item.PendingExportStatus" Failing="@context.Item.PendingExportFailingSince.HasValue" />
                     }
                     else
                     {

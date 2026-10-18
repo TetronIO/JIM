@@ -244,7 +244,9 @@ public partial class ActivityServer
         return status switch
         {
             PendingExportStatus.ExportNotConfirmed => CausalConsequenceEnding.WaitingForRetry,
-            PendingExportStatus.Failed or PendingExportStatus.Parked => CausalConsequenceEnding.NeedsAttention,
+            // A failing export is waiting for its next export run, which attempts it again (#2119); only a Parked one
+            // waits on an administrator.
+            PendingExportStatus.Parked => CausalConsequenceEnding.NeedsAttention,
             PendingExportStatus.Exported => CausalConsequenceEnding.WaitingForConfirmingImport,
             _ => CausalConsequenceEnding.WaitingForExport
         };

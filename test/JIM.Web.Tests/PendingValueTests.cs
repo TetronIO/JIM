@@ -50,12 +50,18 @@ public class PendingValueTests : JimComponentTestContext
         Assert.That(cut.FindComponent<MudTooltip>().Instance.Text, Is.EqualTo(PendingValue.AwaitingConfirmationTooltip));
     }
 
-    [Test]
-    public void PendingValue_ExportFailed_SaysSoRatherThanImplyingItIsStillOnItsWay()
+    /// <summary>
+    /// A failing export (#2119) is Pending, since it is attempted again at the next export run, but its last attempt
+    /// failed: the tooltip must say so rather than imply the value is simply on its way.
+    /// </summary>
+    [TestCase(PendingExportStatus.Pending)]
+    [TestCase(PendingExportStatus.ExportNotConfirmed)]
+    public void PendingValue_ExportFailing_SaysSoRatherThanImplyingItIsStillOnItsWay(PendingExportStatus status)
     {
         var cut = Render<PendingValue>(p => p
             .Add(c => c.Value, "oscar.harper18")
-            .Add(c => c.Status, PendingExportStatus.Failed));
+            .Add(c => c.Status, status)
+            .Add(c => c.Failing, true));
 
         Assert.That(cut.FindComponent<MudTooltip>().Instance.Text, Is.EqualTo(PendingValue.FailedTooltip));
     }

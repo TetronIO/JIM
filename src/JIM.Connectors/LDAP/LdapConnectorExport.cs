@@ -254,10 +254,7 @@ internal class LdapConnectorExport
 
         var scopeFailure = CheckTargetIsWithinManagedScope(GetExportDestinationDistinguishedName(pendingExport));
         if (scopeFailure != null)
-        {
-            pendingExport.Status = PendingExportStatus.Failed;
             return scopeFailure;
-        }
 
         ConnectedSystemExportResult result;
         switch (pendingExport.ChangeType)
@@ -764,10 +761,7 @@ internal class LdapConnectorExport
 
         var scopeFailure = CheckTargetIsWithinManagedScope(GetExportDestinationDistinguishedName(pendingExport));
         if (scopeFailure != null)
-        {
-            pendingExport.Status = PendingExportStatus.Failed;
             return scopeFailure;
-        }
 
         var result = pendingExport.ChangeType switch
         {

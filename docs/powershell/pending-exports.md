@@ -20,13 +20,13 @@ Gets the Pending Exports queued for a Connected System, and pages through the va
 
 ```powershell
 # List (default)
-Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] [-Page <int>] [-PageSize <int>]
+Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] [-Page <int>] [-PageSize <int>] [-Failing]
 
 # Count
-Get-JIMPendingExport -ConnectedSystemId <int> -Count [-ChangeType <string>] [-Status <string>]
+Get-JIMPendingExport -ConnectedSystemId <int> -Count [-Failing] [-ChangeType <string>] [-Status <string>]
 
 # ListAll
-Get-JIMPendingExport -ConnectedSystemId <int> -All [-Search <string>] [-PageSize <int>] [-Force]
+Get-JIMPendingExport -ConnectedSystemId <int> -All [-Search <string>] [-PageSize <int>] [-Force] [-Failing]
 
 # QueuedBy
 Get-JIMPendingExport -Id <guid> -QueuedBy
@@ -55,8 +55,9 @@ Get-JIMPendingExport -Id <guid>
 | `All` | `switch` | Yes (ListAll, AttributeChangesAll) |  | Fetches every page instead of one. Stops after 1000 pages with a warning; `-Force` fetches the rest. |
 | `Force` | `switch` | No (ListAll, AttributeChangesAll) |  | With `-All`, fetches every page, past the 1000-page limit. |
 | `Count` | `switch` | Yes (Count) |  | Returns how many Pending Exports there are, rather than the Pending Exports. |
+| `Failing` | `switch` | No (List, Count, ListAll) |  | Returns, or with `-Count` counts, only the Pending Exports whose last attempt failed. JIM attempts each again at every export run until it succeeds; its FailingSince says since when it has been failing. |
 | `ChangeType` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports that make this kind of change. One of `Create`, `Update` or `Delete`. |
-| `Status` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports with this status. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Failed`, `Exported` or `Parked`. |
+| `Status` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports with this status. A failing Pending Export is Pending; use `-Failing` to count those. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
 
 ### Output
 
@@ -69,12 +70,11 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 | `Id` | `guid` | The ID of the Pending Export. |
 | `ConnectedSystemId` | `int` | The ID of the Connected System the change is for. |
 | `ChangeType` | `string` | Whether the Pending Export creates, updates or deletes the object. One of `Create`, `Update` or `Delete`. |
-| `Status` | `string` | Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import), ExportNotConfirmed (to be retried), Failed (out of retries), or Parked (waiting on a decision about a generated value). One of `Pending`, `ExportNotConfirmed`, `Executing`, `Failed`, `Exported` or `Parked`. |
+| `Status` | `string` | Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import), ExportNotConfirmed (to be retried), or Parked (waiting on a decision about a generated value). A Pending Export whose last attempt failed is Pending, with FailingSince set. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
 | `CreatedAt` | `datetime` | When this Pending Export was created. |
 | `LastAttemptedAt` | `datetime` | When the last export attempt was made (UTC); empty before the first. |
-| `NextRetryAt` | `datetime` | When the next export attempt is due (UTC); empty when none is. |
-| `ErrorCount` | `int` | How many export attempts have failed. |
-| `MaxRetries` | `int` | How many failed attempts are allowed before the Pending Export is marked Failed. |
+| `ErrorCount` | `int` | How many export attempts in a row have failed; zero once an attempt succeeds. A failing Pending Export is attempted again at every export run, however many attempts have failed. |
+| `FailingSince` | `datetime` | When the first of the current run of failed attempts was made (UTC); empty when the last attempt did not fail. |
 | `LastErrorMessage` | `string` | The error from the last failed attempt; empty when none has failed. |
 | `HasUnresolvedReferences` | `bool` | Whether any reference change cannot be written yet, because its target has no object in the Connected System. |
 | `UnresolvedReferenceCount` | `int` | How many of the attribute changes are references still owed to the Connected System: their targets have no object there yet, so they were not written with the rest of the export. |
@@ -93,12 +93,11 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 | `ConnectedSystemId` | `int` | The ID of the Connected System the change is for. |
 | `ConnectedSystemName` | `string` | The name of that Connected System. |
 | `ChangeType` | `string` | Whether the Pending Export creates, updates or deletes the object. One of `Create`, `Update` or `Delete`. |
-| `Status` | `string` | Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import), ExportNotConfirmed (to be retried), Failed (out of retries), or Parked (waiting on a decision about a generated value). One of `Pending`, `ExportNotConfirmed`, `Executing`, `Failed`, `Exported` or `Parked`. |
+| `Status` | `string` | Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import), ExportNotConfirmed (to be retried), or Parked (waiting on a decision about a generated value). A Pending Export whose last attempt failed is Pending, with FailingSince set. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
 | `CreatedAt` | `datetime` | When the Pending Export was created (UTC). |
-| `ErrorCount` | `int` | How many export attempts have failed. |
-| `MaxRetries` | `int` | How many failed attempts are allowed before the Pending Export is marked Failed. |
+| `ErrorCount` | `int` | How many export attempts in a row have failed; zero once an attempt succeeds. A failing Pending Export is attempted again at every export run, however many attempts have failed. |
+| `FailingSince` | `datetime` | When the first of the current run of failed attempts was made (UTC); empty when the last attempt did not fail. |
 | `LastAttemptedAt` | `datetime` | When the last export attempt was made (UTC); empty before the first. |
-| `NextRetryAt` | `datetime` | When the next export attempt is due (UTC); empty when none is. |
 | `LastErrorMessage` | `string` | The error from the last failed attempt; empty when none has failed. |
 | `HasUnresolvedReferences` | `bool` | Whether any reference change cannot be written yet, because its target has no object in the Connected System. |
 | `ConnectedSystemObjectId` | `guid` | The target Connected System Object, if one exists. |
@@ -120,7 +119,7 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 | `AttributeId` | `int` | The ID of the Connected System attribute the change writes. |
 | `AttributeName` | `string` | The name of that attribute. |
 | `ChangeType` | `string` | What the change does to the attribute: Add a value, Update it, Remove a value, or RemoveAll values. One of `Add`, `Update`, `Remove` or `RemoveAll`. |
-| `Status` | `string` | Where the change has got to: Pending, ExportedPendingConfirmation (exported, awaiting a confirming import), ExportedNotConfirmed (to be retried), or Failed. One of `Pending`, `ExportedPendingConfirmation`, `ExportedNotConfirmed` or `Failed`. |
+| `Status` | `string` | Where the change has got to: Pending, ExportedPendingConfirmation (exported, awaiting a confirming import), ExportedNotConfirmed (to be retried), or Failed. One of `Pending`, `ExportedPendingConfirmation` or `ExportedNotConfirmed`. |
 | `StringValue` | `string` | The value of a Text attribute; empty otherwise. |
 | `DateTimeValue` | `datetime` | The value of a DateTime attribute (UTC); empty otherwise. |
 | `IntValue` | `int` | The value of a Number attribute; empty otherwise. |

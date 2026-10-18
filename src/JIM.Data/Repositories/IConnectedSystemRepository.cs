@@ -302,12 +302,20 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="changeType">Optional change type to filter by (Create, Update, Delete).</param>
-    /// <param name="status">Optional status to filter by (Pending, Failed, etc.).</param>
+    /// <param name="status">Optional status to filter by (Pending, Exported, etc.).</param>
+    /// <param name="failingOnly">Whether to count only the Pending Exports whose last attempt failed.</param>
     /// <returns>The count of matching Pending Export objects.</returns>
     public Task<int> GetPendingExportsFilteredCountAsync(
         int connectedSystemId,
         PendingExportChangeType? changeType = null,
-        PendingExportStatus? status = null);
+        PendingExportStatus? status = null,
+        bool failingOnly = false);
+
+    /// <summary>
+    /// How many of a Connected System's Pending Exports are failing, and since when the longest-failing one has been.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    public Task<PendingExportFailureSummary> GetPendingExportFailureSummaryAsync(int connectedSystemId);
 
     /// <summary>
     /// Deletes a Pending Export object.
@@ -413,6 +421,7 @@ public interface IConnectedSystemRepository
     /// <param name="searchQuery">Optional search query to filter by target object identifier, source MVO display name, or error message.</param>
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
     public Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
         int connectedSystemId,
         int page,
@@ -420,7 +429,8 @@ public interface IConnectedSystemRepository
         IEnumerable<PendingExportStatus>? statusFilters = null,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true);
+        bool sortDescending = true,
+        bool failingOnly = false);
 
     /// <summary>
     /// Retrieves a window of Pending Export headers addressed by absolute offset and count, for virtualised
@@ -437,6 +447,7 @@ public interface IConnectedSystemRepository
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order.</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
     public Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
         int connectedSystemId,
         int offset,
@@ -445,7 +456,8 @@ public interface IConnectedSystemRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool includeTotalCount = true);
+        bool includeTotalCount = true,
+        bool failingOnly = false);
 
     /// <summary>
     /// Retrieves a single Pending Export by ID.

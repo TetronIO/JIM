@@ -37,8 +37,8 @@ public class PendingExportDetailDto
 
     /// <summary>
     /// Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import),
-    /// ExportNotConfirmed (to be retried), Failed (out of retries), or Parked (waiting on a decision about a
-    /// generated value).
+    /// ExportNotConfirmed (to be retried), or Parked (waiting on a decision about a generated value). A Pending
+    /// Export whose last attempt failed is Pending, with FailingSince set.
     /// </summary>
     public PendingExportStatus Status { get; set; }
 
@@ -48,24 +48,20 @@ public class PendingExportDetailDto
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
-    /// How many export attempts have failed.
+    /// How many export attempts in a row have failed; zero once an attempt succeeds. A failing Pending Export is
+    /// attempted again at every export run, however many attempts have failed.
     /// </summary>
     public int ErrorCount { get; set; }
 
     /// <summary>
-    /// How many failed attempts are allowed before the Pending Export is marked Failed.
+    /// When the first of the current run of failed attempts was made (UTC); null when the last attempt did not fail.
     /// </summary>
-    public int MaxRetries { get; set; }
+    public DateTime? FailingSince { get; set; }
 
     /// <summary>
     /// When the last export attempt was made (UTC); null before the first.
     /// </summary>
     public DateTime? LastAttemptedAt { get; set; }
-
-    /// <summary>
-    /// When the next export attempt is due (UTC); null when none is.
-    /// </summary>
-    public DateTime? NextRetryAt { get; set; }
 
     /// <summary>
     /// The error from the last failed attempt; null when none has failed.
@@ -147,9 +143,8 @@ public class PendingExportDetailDto
             Status = pe.Status,
             CreatedAt = pe.CreatedAt,
             ErrorCount = pe.ErrorCount,
-            MaxRetries = pe.MaxRetries,
+            FailingSince = pe.FailingSince,
             LastAttemptedAt = pe.LastAttemptedAt,
-            NextRetryAt = pe.NextRetryAt,
             LastErrorMessage = pe.LastErrorMessage,
             HasUnresolvedReferences = pe.HasUnresolvedReferences,
             ConnectedSystemObjectId = pe.ConnectedSystemObjectId,

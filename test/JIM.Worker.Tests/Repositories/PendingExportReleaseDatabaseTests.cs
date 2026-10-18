@@ -87,7 +87,7 @@ public class PendingExportReleaseDatabaseTests
                 Status = status,
                 ErrorCount = 4,
                 LastAttemptedAt = MarkedAt,
-                NextRetryAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(30)),
+                FailingSince = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-30)),
                 LastErrorMessage = "written when the batch was marked",
                 LastErrorStackTrace = "at Marked()",
                 CreatedAt = TruncateToMicroseconds(DateTime.UtcNow.AddHours(-1))
@@ -105,11 +105,11 @@ public class PendingExportReleaseDatabaseTests
     {
         var ids = await SeedPendingExportsAsync(PendingExportStatus.Executing, PendingExportStatus.Executing);
         var lastAttemptedAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-10));
-        var nextRetryAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(4));
+        var failingSince = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-40));
 
         // One state with every nullable column set, one with every nullable column null, so the write is proven not to
         // confuse "no value" with a default.
-        var populated = new PendingExportRetryState(ids[0], PendingExportStatus.Pending, 2, lastAttemptedAt, nextRetryAt, "an earlier failure", "at Earlier()");
+        var populated = new PendingExportRetryState(ids[0], PendingExportStatus.Pending, 2, failingSince, lastAttemptedAt, "an earlier failure", "at Earlier()");
         var empty = new PendingExportRetryState(ids[1], PendingExportStatus.ExportNotConfirmed, 0, null, null, null, null);
 
         IReadOnlySet<Guid> released;

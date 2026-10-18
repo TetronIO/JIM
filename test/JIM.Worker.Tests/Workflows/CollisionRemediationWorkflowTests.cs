@@ -542,26 +542,6 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task RetryFailedExports_ParkedExport_IsLeftParkedAsync()
-    {
-        var ctx = await SetUpAsync();
-        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
-        await RunFullSyncAsync(ctx.Hr);
-        SeedContractorAccount(ctx, Mvo().Id, "joe.bloggs");
-        await RunExportAsync(ctx.Directory, RejectAll("sAMAccountName"));
-        var export = DirectoryExport(ctx);
-
-        await Jim.ExportExecution.RetryFailedExportsAsync(ctx.Directory.Id);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(SyncRepo.PendingExports[export.Id].Status, Is.EqualTo(PendingExportStatus.Parked),
-                "the bulk retry is for failed exports; a parked one waits on its decision");
-            Assert.That(await SyncRepo.GetExecutableExportCountAsync(ctx.Directory.Id), Is.Zero, "a parked export is never exported");
-        }
-    }
-
-    [Test]
     public async Task Retry_NeedsDecision_TheNextExportTriesTheSameValueAgainAsync()
     {
         var ctx = await SetUpAsync();

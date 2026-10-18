@@ -144,7 +144,6 @@ public class ExportChangeLimitTests
             ChangeType = changeType,
             CreatedAt = createdAt,
             HasUnresolvedReferences = hasUnresolvedReferences,
-            MaxRetries = 3,
             AttributeValueChanges = attributeValueChanges ?? new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);

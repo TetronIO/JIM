@@ -54,18 +54,22 @@ public class PendingExport
 
     public PendingExportStatus Status { get; set; } = PendingExportStatus.Pending;
 
+    #region Failure Tracking
+
+    // JIM never gives up on a Pending Export (#2119): one whose attempt failed stays queued and is attempted again at
+    // every export run, and is reported on every run, until it is written or no longer needed. These fields describe
+    // the current run of failed attempts, for reporting only; none of them decides whether the export is attempted.
+
     /// <summary>
-    /// How many times have we encountered an error whilst trying to export this change?
+    /// How many attempts in a row have failed. Reset to zero when an attempt succeeds.
     /// </summary>
     public int ErrorCount { get; set; }
 
-    #region Retry Tracking (Q6 Decision)
-
     /// <summary>
-    /// Maximum number of retry attempts before marking as Failed.
-    /// Default is 5 as per Q6 decision.
+    /// When the first of the current run of failed attempts was made, or null when the last attempt did not fail.
+    /// Shows an administrator how long an export has been failing.
     /// </summary>
-    public int MaxRetries { get; set; } = 5;
+    public DateTime? FailingSince { get; set; }
 
     /// <summary>
     /// When was the last export attempt made?
@@ -73,12 +77,7 @@ public class PendingExport
     public DateTime? LastAttemptedAt { get; set; }
 
     /// <summary>
-    /// When should the next retry be attempted? Calculated using exponential backoff.
-    /// </summary>
-    public DateTime? NextRetryAt { get; set; }
-
-    /// <summary>
-    /// The error message from the last failed attempt.
+    /// The error message from the last failed attempt, or null when the last attempt did not fail.
     /// </summary>
     public string? LastErrorMessage { get; set; }
 
@@ -86,6 +85,17 @@ public class PendingExport
     /// The stack trace from the last failed attempt, if available.
     /// </summary>
     public string? LastErrorStackTrace { get; set; }
+
+    /// <summary>
+    /// Clears the failure record once an attempt has written the export, so it no longer reads as failing.
+    /// </summary>
+    public void ClearFailure()
+    {
+        ErrorCount = 0;
+        FailingSince = null;
+        LastErrorMessage = null;
+        LastErrorStackTrace = null;
+    }
 
     #endregion
 

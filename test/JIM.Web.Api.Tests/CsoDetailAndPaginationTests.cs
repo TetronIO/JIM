@@ -19,6 +19,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -461,7 +462,7 @@ public class CsoDetailAndPaginationTests
     [Test]
     public async Task GetPendingExportsCountAsync_ReturnsOkWithIntAsync()
     {
-        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(1, null, null))
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(1, null, null, false))
             .ReturnsAsync(100);
 
         var result = await _controller.GetPendingExportsCountAsync(1);
@@ -475,33 +476,62 @@ public class CsoDetailAndPaginationTests
     public async Task GetPendingExportsCountAsync_WithChangeTypeFilter_PassesToRepositoryAsync()
     {
         _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(
-                1, PendingExportChangeType.Create, It.IsAny<PendingExportStatus?>()))
+                1, PendingExportChangeType.Create, It.IsAny<PendingExportStatus?>(), It.IsAny<bool>()))
             .ReturnsAsync(30);
 
         await _controller.GetPendingExportsCountAsync(1, changeType: PendingExportChangeType.Create);
 
         _mockConnectedSystemRepo.Verify(r => r.GetPendingExportsFilteredCountAsync(
-            1, PendingExportChangeType.Create, It.IsAny<PendingExportStatus?>()), Times.Once);
+            1, PendingExportChangeType.Create, It.IsAny<PendingExportStatus?>(), It.IsAny<bool>()), Times.Once);
     }
 
     [Test]
     public async Task GetPendingExportsCountAsync_WithStatusFilter_PassesToRepositoryAsync()
     {
         _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(
-                1, It.IsAny<PendingExportChangeType?>(), PendingExportStatus.Failed))
+                1, It.IsAny<PendingExportChangeType?>(), PendingExportStatus.Parked, It.IsAny<bool>()))
             .ReturnsAsync(5);
 
-        await _controller.GetPendingExportsCountAsync(1, status: PendingExportStatus.Failed);
+        await _controller.GetPendingExportsCountAsync(1, status: PendingExportStatus.Parked);
 
         _mockConnectedSystemRepo.Verify(r => r.GetPendingExportsFilteredCountAsync(
-            1, It.IsAny<PendingExportChangeType?>(), PendingExportStatus.Failed), Times.Once);
+            1, It.IsAny<PendingExportChangeType?>(), PendingExportStatus.Parked, It.IsAny<bool>()), Times.Once);
+    }
+
+    /// <summary>
+    /// A failing Pending Export (#2119) stays Pending, so the failing filter is its own flag rather than a status.
+    /// </summary>
+    [Test]
+    public async Task GetPendingExportsCountAsync_WithFailingFilter_PassesToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(1, null, null, true))
+            .ReturnsAsync(7);
+
+        var result = await _controller.GetPendingExportsCountAsync(1, failing: true) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Value, Is.EqualTo(7));
+        _mockConnectedSystemRepo.Verify(r => r.GetPendingExportsFilteredCountAsync(1, null, null, true), Times.Once);
+    }
+
+    [Test]
+    public async Task GetPendingExportsAsync_WithFailingFilter_PassesToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportHeadersAsync(
+                1, 1, 50, null, null, null, true, true))
+            .ReturnsAsync(new PagedResultSet<PendingExportHeader> { Results = [], TotalResults = 0, CurrentPage = 1, PageSize = 50 });
+
+        await _controller.GetPendingExportsAsync(1, failing: true);
+
+        _mockConnectedSystemRepo.Verify(r => r.GetPendingExportHeadersAsync(
+            1, 1, 50, null, null, null, true, true), Times.Once);
     }
 
     [Test]
     public async Task GetPendingExportsCountAsync_WithAllFilters_PassesAllToRepositoryAsync()
     {
         _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(
-                1, PendingExportChangeType.Update, PendingExportStatus.Pending))
+                1, PendingExportChangeType.Update, PendingExportStatus.Pending, false))
             .ReturnsAsync(12);
 
         var result = await _controller.GetPendingExportsCountAsync(

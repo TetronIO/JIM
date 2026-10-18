@@ -218,10 +218,10 @@ public class RawSqlConnectionDisciplineDatabaseTests
         await using (var other = NewContext())
         {
             await other.PendingExports.Where(pe => pe.Id == bystander.PeId).ExecuteUpdateAsync(s => s
-                .SetProperty(pe => pe.Status, PendingExportStatus.Failed)
+                .SetProperty(pe => pe.Status, PendingExportStatus.Parked)
                 .SetProperty(pe => pe.ErrorCount, 3));
             await other.PendingExportAttributeValueChanges.Where(avc => avc.Id == bystander.AvcId).ExecuteUpdateAsync(s => s
-                .SetProperty(avc => avc.Status, PendingExportAttributeChangeStatus.Failed)
+                .SetProperty(avc => avc.Status, PendingExportAttributeChangeStatus.ExportedNotConfirmed)
                 .SetProperty(avc => avc.ExportAttemptCount, 3));
         }
 
@@ -238,11 +238,11 @@ public class RawSqlConnectionDisciplineDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(targetPe.Status, Is.EqualTo(PendingExportStatus.Exported), "The current call's own update must apply.");
-            Assert.That(bystanderPe.Status, Is.EqualTo(PendingExportStatus.Failed),
+            Assert.That(bystanderPe.Status, Is.EqualTo(PendingExportStatus.Parked),
                 "A leftover row from the failed call reverted an unrelated Pending Export's Status.");
             Assert.That(bystanderPe.ErrorCount, Is.EqualTo(3),
                 "A leftover row from the failed call reverted an unrelated Pending Export's ErrorCount.");
-            Assert.That(bystanderAvc.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed),
+            Assert.That(bystanderAvc.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed),
                 "A leftover row from the failed call reverted an unrelated attribute change's Status.");
             Assert.That(bystanderAvc.ExportAttemptCount, Is.EqualTo(3),
                 "A leftover row from the failed call reverted an unrelated attribute change's ExportAttemptCount.");

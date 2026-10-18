@@ -60,7 +60,8 @@ public enum ConnectedSystemObjectConnectionState
     ExportNotConfirmed = 4,
 
     /// <summary>
-    /// The Pending Export failed after its maximum retry attempts and needs manual intervention.
+    /// The Pending Export's last attempt failed. It is attempted again at every export run until it succeeds (#2119),
+    /// so this is the state to investigate: the cause is usually configuration in the Connected System.
     /// </summary>
     ExportFailed = 5,
 

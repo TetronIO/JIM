@@ -3247,15 +3247,11 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     private IEnumerable<PendingExport> GetExecutableExportsForSystem(int connectedSystemId)
     {
-        var now = DateTime.UtcNow;
         return GetPendingExportsForSystem(connectedSystemId)
             .Where(pe => pe.Status == PendingExportStatus.Pending
                       || pe.Status == PendingExportStatus.Exported
                       || pe.Status == PendingExportStatus.ExportNotConfirmed)
-            // Exclude exports not yet due for retry
-            .Where(pe => !pe.NextRetryAt.HasValue || pe.NextRetryAt <= now)
-            // Exclude exports that have exceeded max retries
-            .Where(pe => pe.ErrorCount < pe.MaxRetries)
+            // No count or age of failed attempts takes an export out of the queue (#2119)
             // Update exports must have at least one exportable attribute change
             .Where(pe => pe.ChangeType != PendingExportChangeType.Update
                       || pe.AttributeValueChanges.Any(ac =>
@@ -5096,7 +5092,6 @@ public class SyncRepository : ISyncRepository
                      pe.Status == PendingExportStatus.Parked && pe.ConnectedSystemObjectId.HasValue && idSet.Contains(pe.ConnectedSystemObjectId.Value)))
         {
             pendingExport.Status = PendingExportStatus.Pending;
-            pendingExport.NextRetryAt = null;
             released++;
         }
 

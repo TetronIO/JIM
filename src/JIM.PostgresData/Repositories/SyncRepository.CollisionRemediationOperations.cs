@@ -241,7 +241,7 @@ public partial class SyncRepository
 
         var ids = connectedSystemObjectIds.ToArray();
         var released = await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""PendingExports"" SET ""Status"" = {0}, ""NextRetryAt"" = NULL
+            @"UPDATE ""PendingExports"" SET ""Status"" = {0}
               WHERE ""Status"" = {1} AND ""ConnectedSystemObjectId"" = ANY({2})",
             (int)PendingExportStatus.Pending, (int)PendingExportStatus.Parked, ids);
 

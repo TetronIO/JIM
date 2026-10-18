@@ -371,31 +371,6 @@ public class SyncEngineReconciliationTests
 
     #endregion
 
-    #region ShouldMarkAsFailed
-
-    [Test]
-    public void ShouldMarkAsFailed_BelowMaxRetries_ReturnsFalse()
-    {
-        var change = new PendingExportAttributeValueChange { ExportAttemptCount = 1 };
-        Assert.That(SyncEngine.ShouldMarkAsFailed(change), Is.False);
-    }
-
-    [Test]
-    public void ShouldMarkAsFailed_AtMaxRetries_ReturnsTrue()
-    {
-        var change = new PendingExportAttributeValueChange { ExportAttemptCount = SyncEngine.DefaultMaxRetries };
-        Assert.That(SyncEngine.ShouldMarkAsFailed(change), Is.True);
-    }
-
-    [Test]
-    public void ShouldMarkAsFailed_AboveMaxRetries_ReturnsTrue()
-    {
-        var change = new PendingExportAttributeValueChange { ExportAttemptCount = SyncEngine.DefaultMaxRetries + 1 };
-        Assert.That(SyncEngine.ShouldMarkAsFailed(change), Is.True);
-    }
-
-    #endregion
-
     #region TransitionCreateToUpdateOnceObjectConfirmed
 
     [Test]
@@ -534,25 +509,6 @@ public class SyncEngineReconciliationTests
     #region UpdatePendingExportStatus
 
     [Test]
-    public void UpdatePendingExportStatus_AllFailed_SetsFailed()
-    {
-        var pe = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            Status = PendingExportStatus.Exported,
-            AttributeValueChanges =
-            [
-                new PendingExportAttributeValueChange { Status = PendingExportAttributeChangeStatus.Failed },
-                new PendingExportAttributeValueChange { Status = PendingExportAttributeChangeStatus.Failed }
-            ]
-        };
-
-        SyncEngine.UpdatePendingExportStatus(pe);
-
-        Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Failed));
-    }
-
-    [Test]
     public void UpdatePendingExportStatus_SomePendingRetry_SetsExportNotConfirmed()
     {
         var pe = new PendingExport
@@ -562,7 +518,7 @@ public class SyncEngineReconciliationTests
             AttributeValueChanges =
             [
                 new PendingExportAttributeValueChange { Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed },
-                new PendingExportAttributeValueChange { Status = PendingExportAttributeChangeStatus.Failed }
+                new PendingExportAttributeValueChange { Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation }
             ]
         };
 
@@ -589,27 +545,6 @@ public class SyncEngineReconciliationTests
         SyncEngine.UpdatePendingExportStatus(pe);
 
         Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Pending));
-    }
-
-    [Test]
-    public void UpdatePendingExportStatus_SomeFailedNoPending_SetsExported()
-    {
-        var pe = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            Status = PendingExportStatus.ExportNotConfirmed,
-            AttributeValueChanges =
-            [
-                new PendingExportAttributeValueChange { Status = PendingExportAttributeChangeStatus.Failed },
-                new PendingExportAttributeValueChange { Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation }
-            ]
-        };
-
-        SyncEngine.UpdatePendingExportStatus(pe);
-
-        // ExportedPendingConfirmation is not Pending or ExportedNotConfirmed, so anyPendingOrRetry is false
-        // But anyFailed is true and not allFailed, so Exported
-        Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Exported));
     }
 
     #endregion
@@ -747,12 +682,14 @@ public class SyncEngineReconciliationTests
     }
 
     [Test]
-    public void ReconcileCsoAgainstPendingExport_ExceedsMaxRetries_MarksFailed()
+    public void ReconcileCsoAgainstPendingExport_UnconfirmedOnManyImports_StillMarksForRetry()
     {
+        // JIM never gives up on a change (#2119): however many confirming imports have failed to see it, it is sent
+        // again at the next export run, and reported each time, rather than abandoned as Failed.
         var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "wrong");
         var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
         attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
-        attrChange.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
+        attrChange.ExportAttemptCount = 50;
 
         var pe = new PendingExport
         {
@@ -764,8 +701,12 @@ public class SyncEngineReconciliationTests
 
         _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
 
-        Assert.That(result.FailedChanges, Has.Count.EqualTo(1));
-        Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RetryChanges, Is.EquivalentTo(new[] { attrChange }));
+            Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
+            Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
+        }
     }
 
     [Test]
@@ -786,97 +727,6 @@ public class SyncEngineReconciliationTests
         _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
 
         Assert.That(result.PendingExportDeleted, Is.True, "Boolean attribute should be confirmed — this was a bug in the old AttributeValuesMatch");
-    }
-
-    [Test]
-    public void ReconcileCsoAgainstPendingExport_FailedStatus_AllChangesConfirmed_MarksForDeletion()
-    {
-        // The synchronisation-side confirmation check used to reopen a Failed export outright on every
-        // sync run; now only import reconciliation clears one, and only when every attribute change it
-        // asserts is now visible on the CSO (an administrator fixed the target by hand).
-        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "expected");
-        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
-        attrChange.Status = PendingExportAttributeChangeStatus.Failed;
-        attrChange.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
-
-        var pe = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            Status = PendingExportStatus.Failed,
-            ErrorCount = SyncEngine.DefaultMaxRetries,
-            AttributeValueChanges = [attrChange]
-        };
-        var result = new PendingExportReconciliationResult();
-
-        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.PendingExportDeleted, Is.True);
-            Assert.That(result.PendingExportToDelete, Is.SameAs(pe));
-            Assert.That(result.ConfirmedChanges, Is.EquivalentTo(new[] { attrChange }));
-        }
-    }
-
-    [Test]
-    public void ReconcileCsoAgainstPendingExport_FailedStatus_PartiallyConfirmed_LeftCompletelyUntouched()
-    {
-        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "expected");
-        var confirmable = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
-        confirmable.Status = PendingExportAttributeChangeStatus.Failed;
-        confirmable.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
-        var stillWrong = CreateAttrChange(2, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "still-wrong");
-        stillWrong.Status = PendingExportAttributeChangeStatus.Failed;
-        stillWrong.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
-
-        var pe = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            Status = PendingExportStatus.Failed,
-            ErrorCount = SyncEngine.DefaultMaxRetries,
-            AttributeValueChanges = [confirmable, stillWrong]
-        };
-        var result = new PendingExportReconciliationResult();
-
-        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.HasChanges, Is.False, "A partially confirmed Failed export must not be touched at all.");
-            Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Failed));
-            Assert.That(pe.ErrorCount, Is.EqualTo(SyncEngine.DefaultMaxRetries), "No attempt/error accounting on a Failed export outside full confirmation.");
-            Assert.That(pe.AttributeValueChanges, Has.Count.EqualTo(2), "No changes are removed from a partially confirmed Failed export.");
-            Assert.That(confirmable.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed));
-            Assert.That(stillWrong.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed));
-        }
-    }
-
-    [Test]
-    public void ReconcileCsoAgainstPendingExport_FailedStatus_NoneConfirmed_LeftCompletelyUntouched()
-    {
-        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "wrong");
-        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
-        attrChange.Status = PendingExportAttributeChangeStatus.Failed;
-        attrChange.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
-
-        var pe = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            Status = PendingExportStatus.Failed,
-            ErrorCount = SyncEngine.DefaultMaxRetries,
-            AttributeValueChanges = [attrChange]
-        };
-        var result = new PendingExportReconciliationResult();
-
-        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.HasChanges, Is.False);
-            Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Failed));
-            Assert.That(pe.ErrorCount, Is.EqualTo(SyncEngine.DefaultMaxRetries));
-            Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed));
-        }
     }
 
     [Test]

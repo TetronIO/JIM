@@ -17,14 +17,10 @@ public class PendingExportReconciliationResult
     public List<PendingExportAttributeValueChange> ConfirmedChanges { get; } = new();
 
     /// <summary>
-    /// Attribute changes that were not confirmed and will be retried.
+    /// Attribute changes that were not confirmed and will be sent again at the next export run, however many times
+    /// they have been sent before (#2119).
     /// </summary>
     public List<PendingExportAttributeValueChange> RetryChanges { get; } = new();
-
-    /// <summary>
-    /// Attribute changes that exceeded max retries and are now Failed.
-    /// </summary>
-    public List<PendingExportAttributeValueChange> FailedChanges { get; } = new();
 
     /// <summary>
     /// Attribute changes written with an interim value until an Initial Password is delivered
@@ -65,5 +61,5 @@ public class PendingExportReconciliationResult
     /// True if reconciliation changed anything that must be persisted. A hold changes nothing, so
     /// <see cref="HeldChanges"/> alone does not count; a release does.
     /// </summary>
-    public bool HasChanges => ConfirmedChanges.Count > 0 || RetryChanges.Count > 0 || FailedChanges.Count > 0 || ReleasedChanges.Count > 0;
+    public bool HasChanges => ConfirmedChanges.Count > 0 || RetryChanges.Count > 0 || ReleasedChanges.Count > 0;
 }

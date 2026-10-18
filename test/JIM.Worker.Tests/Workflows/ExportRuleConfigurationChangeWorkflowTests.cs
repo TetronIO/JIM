@@ -187,7 +187,6 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
 
     [TestCase(PendingExportStatus.Pending)]
     [TestCase(PendingExportStatus.ExportNotConfirmed)]
-    [TestCase(PendingExportStatus.Failed)]
     [TestCase(PendingExportStatus.Parked)]
     public async Task FullSync_AfterTheDeprovisioningActionSwitchesToDisconnect_WithdrawsTheQueuedDeleteAndDisconnectsAsync(PendingExportStatus deleteStatus)
     {

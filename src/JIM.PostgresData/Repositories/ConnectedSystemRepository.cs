@@ -1477,6 +1477,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                     .Select(pe => (PendingExportChangeType?)pe.ChangeType)
                     .FirstOrDefault(),
+                PendingExportFailingSince = Repository.Database.PendingExports
+                    .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+                    .Select(pe => pe.FailingSince)
+                    .FirstOrDefault(),
                 // Only surfaced when the object has no name yet; the naming tiers already cover cn, so
                 // no ad-hoc attribute-name match is needed here.
                 PendingDisplayName = cso.AttributeValues.Any(av => allNameAttributeIds.Contains(av.AttributeId))
@@ -4841,13 +4845,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Retrieves Pending Exports that are ready for execution, filtering at the database level.
-    /// Excludes exports that have exceeded max retries or are not yet due for retry.
+    /// An export whose earlier attempts failed is included, however many have failed (#2119).
     /// Results are ordered by CreatedAt (oldest first).
     /// </summary>
     public async Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
-        var now = DateTime.UtcNow;
-
         // CSO.Type is intentionally not included here: the file connector (the only consumer
         // of this query) never reads it. The calls-path sibling query, GetExecutableExportBatchAsync,
         // does include Type because LdapConnectorExport requires it.
@@ -4864,10 +4866,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(pe => pe.Status == PendingExportStatus.Pending
                       || pe.Status == PendingExportStatus.Exported
                       || pe.Status == PendingExportStatus.ExportNotConfirmed)
-            // Exclude exports not yet due for retry
-            .Where(pe => !pe.NextRetryAt.HasValue || pe.NextRetryAt <= now)
-            // Exclude exports that have exceeded max retries
-            .Where(pe => pe.ErrorCount < pe.MaxRetries)
+            // No count or age of failed attempts takes an export out of the queue (#2119)
             .OrderBy(pe => pe.CreatedAt)
             .ToListAsync();
     }
@@ -5006,18 +5005,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private IQueryable<PendingExport> ExecutableExportsQuery(int connectedSystemId)
     {
-        var now = DateTime.UtcNow;
-
         return Repository.Database.PendingExports
             .Where(pe => pe.ConnectedSystemId == connectedSystemId)
             // Filter by eligible statuses
             .Where(pe => pe.Status == PendingExportStatus.Pending
                       || pe.Status == PendingExportStatus.Exported
                       || pe.Status == PendingExportStatus.ExportNotConfirmed)
-            // Exclude exports not yet due for retry
-            .Where(pe => !pe.NextRetryAt.HasValue || pe.NextRetryAt <= now)
-            // Exclude exports that have exceeded max retries
-            .Where(pe => pe.ErrorCount < pe.MaxRetries)
+            // No count or age of failed attempts takes an export out of the queue (#2119)
             // Exclude Update exports with no exportable attribute changes (was IsReadyForExecution in-memory check)
             .Where(pe => pe.ChangeType != PendingExportChangeType.Update
                       || pe.AttributeValueChanges.Any(ac =>
@@ -5086,10 +5080,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<int> GetPendingExportsFilteredCountAsync(
         int connectedSystemId,
         PendingExportChangeType? changeType = null,
-        PendingExportStatus? status = null)
+        PendingExportStatus? status = null,
+        bool failingOnly = false)
     {
         var query = Repository.Database.PendingExports
             .Where(pe => pe.ConnectedSystemId == connectedSystemId);
+
+        if (failingOnly)
+            query = query.Where(pe => pe.FailingSince != null);
 
         if (changeType.HasValue)
         {
@@ -5104,6 +5102,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         return await query.CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<PendingExportFailureSummary> GetPendingExportFailureSummaryAsync(int connectedSystemId)
+    {
+        var failing = Repository.Database.PendingExports
+            .AsNoTracking()
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.FailingSince != null);
+
+        var count = await failing.CountAsync();
+        var oldest = count == 0 ? null : await failing.MinAsync(pe => pe.FailingSince);
+        return new PendingExportFailureSummary(count, oldest);
     }
 
     /// <summary>
@@ -5254,12 +5264,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             UPDATE "PendingExports" AS t
             SET "Status" = v."Status",
                 "ErrorCount" = v."ErrorCount",
+                "FailingSince" = v."FailingSince",
                 "LastAttemptedAt" = v."LastAttemptedAt",
-                "NextRetryAt" = v."NextRetryAt",
                 "LastErrorMessage" = v."LastErrorMessage",
                 "LastErrorStackTrace" = v."LastErrorStackTrace"
-            FROM unnest(@ids, @statuses, @errorCounts, @lastAttemptedAts, @nextRetryAts, @lastErrorMessages, @lastErrorStackTraces)
-                AS v("Id", "Status", "ErrorCount", "LastAttemptedAt", "NextRetryAt", "LastErrorMessage", "LastErrorStackTrace")
+            FROM unnest(@ids, @statuses, @errorCounts, @failingSinces, @lastAttemptedAts, @lastErrorMessages, @lastErrorStackTraces)
+                AS v("Id", "Status", "ErrorCount", "FailingSince", "LastAttemptedAt", "LastErrorMessage", "LastErrorStackTrace")
             WHERE t."Id" = v."Id"
               AND t."Status" = @executing
               AND t."LastAttemptedAt" = @markedAt
@@ -5277,10 +5287,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             { Value = states.Select(s => (int)s.Status).ToArray() });
         command.Parameters.Add(new NpgsqlParameter("errorCounts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
             { Value = states.Select(s => s.ErrorCount).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("failingSinces", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.TimestampTz)
+            { Value = states.Select(s => s.FailingSince).ToArray() });
         command.Parameters.Add(new NpgsqlParameter("lastAttemptedAts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.TimestampTz)
             { Value = states.Select(s => s.LastAttemptedAt).ToArray() });
-        command.Parameters.Add(new NpgsqlParameter("nextRetryAts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.TimestampTz)
-            { Value = states.Select(s => s.NextRetryAt).ToArray() });
         command.Parameters.Add(new NpgsqlParameter("lastErrorMessages", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
             { Value = states.Select(s => s.LastErrorMessage).ToArray() });
         command.Parameters.Add(new NpgsqlParameter("lastErrorStackTraces", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
@@ -5459,7 +5469,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IEnumerable<PendingExportStatus>? statusFilters = null,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        bool failingOnly = false)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -5473,7 +5484,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var offset = (page - 1) * pageSize;
         var (headers, grossCount) = await QueryPendingExportHeadersByRangeAsync(
-            connectedSystemId, offset, pageSize, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount: true);
+            connectedSystemId, offset, pageSize, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount: true, failingOnly);
 
         return new PagedResultSet<PendingExportHeader>
         {
@@ -5497,7 +5508,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        bool failingOnly = false)
     {
         if (count < 1)
             throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
@@ -5511,7 +5523,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             count = MaxHeaderWindowSize;
 
         var (headers, grossCount) = await QueryPendingExportHeadersByRangeAsync(
-            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount);
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount, failingOnly);
 
         return new RangeResultSet<PendingExportHeader>
         {
@@ -5534,7 +5546,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchQuery,
         string? sortBy,
         bool sortDescending,
-        bool includeTotalCount)
+        bool includeTotalCount,
+        bool failingOnly)
     {
         var query = Repository.Database.PendingExports
             .AsSplitQuery()
@@ -5553,6 +5566,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var statusList = statusFilters?.ToList();
         if (statusList != null && statusList.Count > 0)
             query = query.Where(pe => statusList.Contains(pe.Status));
+
+        // A failing Pending Export is one whose last attempt failed (#2119); it is attempted again at every export run.
+        if (failingOnly)
+            query = query.Where(pe => pe.FailingSince != null);
 
         // Apply search filter - search on target identifier, source Metaverse Object name, or error
         // message. Search is case-insensitive for user convenience.
@@ -5614,9 +5631,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             "references" => sortDescending
                 ? query.OrderByDescending(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != ""))
                 : query.OrderBy(pe => pe.AttributeValueChanges.Count(ac => ac.UnresolvedReferenceValue != null && ac.UnresolvedReferenceValue != "")),
-            "nextretry" => sortDescending
-                ? query.OrderByDescending(pe => pe.NextRetryAt ?? DateTime.MaxValue)
-                : query.OrderBy(pe => pe.NextRetryAt ?? DateTime.MaxValue),
+            "failingsince" => sortDescending
+                ? query.OrderByDescending(pe => pe.FailingSince ?? DateTime.MinValue)
+                : query.OrderBy(pe => pe.FailingSince ?? DateTime.MaxValue),
             _ => sortDescending
                 ? query.OrderByDescending(pe => pe.CreatedAt)
                 : query.OrderBy(pe => pe.CreatedAt) // Default: sort by Created
@@ -9175,7 +9192,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Batch updates PendingExport rows using UPDATE ... FROM (VALUES ...) pattern.
-    /// Updates: Status, ChangeType, ErrorCount, MaxRetries, LastAttemptedAt, NextRetryAt,
+    /// Updates: Status, ChangeType, ErrorCount, FailingSince, LastAttemptedAt,
     /// LastErrorMessage, LastErrorStackTrace, HasUnresolvedReferences, ConnectedSystemObjectId.
     /// </summary>
     private async Task BulkUpdatePendingExportsRawAsync(List<PendingExport> exports)
@@ -9199,7 +9216,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // re-evaluation.
         await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
 
-        const int columnsPerRow = 11; // Id + 10 mutable columns
+        const int columnsPerRow = 10; // Id + 9 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
@@ -9215,16 +9232,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::timestamp with time zone, {{{offset + 7}}}::text, {{{offset + 8}}}::text, {{{offset + 9}}}::boolean, {{{offset + 10}}}::uuid)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::timestamp with time zone, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::text, {{{offset + 7}}}::text, {{{offset + 8}}}::boolean, {{{offset + 9}}}::uuid)");
 
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
                 parameters.Add((int)pe.Status);
                 parameters.Add((int)pe.ChangeType);
                 parameters.Add(pe.ErrorCount);
-                parameters.Add(pe.MaxRetries);
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.FailingSince, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(pe.HasUnresolvedReferences);
