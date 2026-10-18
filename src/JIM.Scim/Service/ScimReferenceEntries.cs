@@ -52,11 +52,12 @@ public static class ScimReferenceEntries
         ArgumentNullException.ThrowIfNull(references);
 
         var resource = (JsonObject)payload.DeepClone();
-        foreach (var attribute in type.ReferenceAttributes)
+        var holding = type.ReferenceAttributes
+            .Select(attribute => (Attribute: attribute, Held: references.GetValueOrDefault(attribute.Name)))
+            .Where(pair => pair.Held is { Count: > 0 })
+            .Select(pair => (pair.Attribute, Held: pair.Held!));
+        foreach (var (attribute, held) in holding)
         {
-            if (!references.TryGetValue(attribute.Name, out var held) || held.Count == 0)
-                continue;
-
             var container = Container(resource, attribute.SchemaUrn);
             container[attribute.AttributeName] = attribute.MultiValued
                 ? new JsonArray(held.Select(r => (JsonNode)Entry(r, location)).ToArray())
