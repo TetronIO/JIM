@@ -12,6 +12,7 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Web.Authentication;
 using JIM.Web.Controllers.Api;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -46,7 +47,7 @@ public class CertificateDownloadApiTests
         _certificateRepo = new Mock<ITrustedCertificateRepository>();
         _repo.Setup(r => r.TrustedCertificates).Returns(_certificateRepo.Object);
         _application = new JimApplication(_repo.Object);
-        _controller = new CertificatesController(new Mock<ILogger<CertificatesController>>().Object, _application)
+        _controller = new CertificatesController(new Mock<ILogger<CertificatesController>>().Object, _application, NotCheckedMonitor())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -189,5 +190,12 @@ public class CertificateDownloadApiTests
         await executingContext.Result.ExecuteResultAsync(actionContext);
 
         return (httpContext.Response.StatusCode, httpContext.Response.ContentType, Encoding.UTF8.GetString(responseBody.ToArray()));
+    }
+
+    private static IIdentityProviderTrustMonitor NotCheckedMonitor()
+    {
+        var monitor = new Mock<IIdentityProviderTrustMonitor>();
+        monitor.Setup(m => m.Current).Returns(new JIM.Models.Security.IdentityProviderTrustStatus());
+        return monitor.Object;
     }
 }

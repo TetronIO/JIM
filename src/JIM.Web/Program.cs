@@ -416,7 +416,7 @@ try
     // store vouches for when a certificate there is trusted for sign-in (#2363): an identity provider whose certificate
     // comes from an internal certificate authority (AD FS, an on-premises Keycloak) then works without an image
     // rebuild, and trusting its authority takes effect on the next sign-in.
-    builder.Services.AddIdentityProviderBackchannel();
+    builder.Services.AddIdentityProviderTrust();
 
     // setup authorisation policies
     builder.Services.AddAuthorization();

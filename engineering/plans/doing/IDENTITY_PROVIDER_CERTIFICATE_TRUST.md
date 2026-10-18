@@ -1,6 +1,6 @@
 # Identity Provider Certificate Trust - Implementation Plan
 
-- **Status:** Doing (Phases 1-2 complete)
+- **Status:** Doing (Phases 1-3 complete)
 - **Created:** 2026-10-18
 - **Issue:** [#2363](https://github.com/TetronIO/JIM/issues/2363)
 - **Related Issues:** #2362 (parent: easiest identity provider setup and maintenance), #2355 (AD FS lab), #1914 (certificate chain trust for Connectors), #2361 (AD FS troubleshooting)
@@ -122,7 +122,7 @@ Each phase is test-first (red, green, refactor) and builds and tests green befor
 2. **Back-channel and start-up.** ✅
    - `IdentityProviderBackchannel` (snapshot handler + validator), wired into OpenID Connect and JWT bearer options. Tests against an in-process TLS server presenting a certificate from a private CA generated in the test (pattern: the Connector TLS tests): refused with an empty store, accepted once the CA is in the SignIn snapshot, refused when the CA is Connectors only, refused on name mismatch.
    - Remove the fatal discovery fetch; lazy OAuth endpoints in the runtime OpenAPI transformer.
-3. **Probe, status and trusting.**
+3. **Probe, status and trusting.** ✅
    - Models, `IdentityProviderTrustServer` with probe seam, `TrustPresentedCertificateAsync` (add, widen, thumbprint not presented, mismatch, Activity attribution for user and API key).
    - `IdentityProviderTrustMonitor` hosted service with on-demand floor; start-up warning log.
    - `GET /api/v1/auth/identity-provider-trust` (anonymous) and `POST /api/v1/certificates/identity-provider` (Administrator); DTO changes (`trustedFor`, `inUseBySignIn`). Controller tests, including attribute checks for anonymous/Administrator.

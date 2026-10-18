@@ -12,6 +12,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
+using JIM.Web.Authentication;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
@@ -47,7 +48,7 @@ public class CertificateChangeHistoryApiTests
         _activityRepo = new Mock<IActivityRepository>();
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _application = new JimApplication(_repo.Object);
-        _controller = new CertificatesController(new Mock<ILogger<CertificatesController>>().Object, _application)
+        _controller = new CertificatesController(new Mock<ILogger<CertificatesController>>().Object, _application, NotCheckedMonitor())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -166,4 +167,11 @@ public class CertificateChangeHistoryApiTests
         When = When,
         SnapshotJson = snapshotJson
     };
+
+    private static IIdentityProviderTrustMonitor NotCheckedMonitor()
+    {
+        var monitor = new Mock<IIdentityProviderTrustMonitor>();
+        monitor.Setup(m => m.Current).Returns(new JIM.Models.Security.IdentityProviderTrustStatus());
+        return monitor.Object;
+    }
 }

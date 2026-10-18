@@ -21,6 +21,22 @@ public class TrustedCertificateHeader
     public bool IsExpiringSoon { get; set; }
     public int DaysUntilExpiry { get; set; }
 
+    /// <summary>
+    /// What the certificate is trusted for: Connectors, sign-in (the identity provider), or both.
+    /// </summary>
+    public CertificateTrustPurpose TrustedFor { get; set; }
+
+    /// <summary>
+    /// Whether the certificate vouches for the identity provider now, as of JIM's last check of it.
+    /// </summary>
+    public bool UsedBySignIn { get; set; }
+
+    /// <summary>
+    /// Whether it is the only certificate that vouches for the identity provider, so disabling it, deleting it, or no
+    /// longer trusting it for sign-in would stop everyone signing in.
+    /// </summary>
+    public bool SignInDependsOnIt { get; set; }
+
     public static TrustedCertificateHeader FromEntity(TrustedCertificate cert)
     {
         return new TrustedCertificateHeader
@@ -36,7 +52,8 @@ public class TrustedCertificateHeader
             IsEnabled = cert.IsEnabled,
             IsExpired = cert.IsExpired,
             IsExpiringSoon = cert.IsExpiringSoon,
-            DaysUntilExpiry = cert.DaysUntilExpiry
+            DaysUntilExpiry = cert.DaysUntilExpiry,
+            TrustedFor = cert.TrustedFor
         };
     }
 }

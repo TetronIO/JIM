@@ -28,6 +28,12 @@ public class UpdateCertificateRequest
     public bool? IsEnabled { get; set; }
 
     /// <summary>
+    /// What the certificate is trusted for: <c>Connectors</c>, <c>SignIn</c> (the identity provider), or both
+    /// (<c>"Connectors, SignIn"</c>). Null to keep current.
+    /// </summary>
+    public CertificateTrustPurpose? TrustedFor { get; set; }
+
+    /// <summary>
     /// Optional reason for the change, recorded on the audit Activity and configuration change history.
     /// </summary>
     [StringLength(1000, ErrorMessage = "Change reason must not exceed 1000 characters.")]
