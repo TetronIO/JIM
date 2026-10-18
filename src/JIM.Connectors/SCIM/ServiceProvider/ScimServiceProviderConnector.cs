@@ -175,12 +175,9 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
 
         var result = new ConnectedSystemImportResult();
         var overflows = new List<string>();
-        foreach (var resource in page.Resources)
-        {
-            var importObject = ToImportObject(resource, page.References, overflows);
-            if (importObject != null)
-                result.ImportObjects.Add(importObject);
-        }
+        result.ImportObjects.AddRange(page.Resources
+            .Select(resource => ToImportObject(resource, page.References, overflows))
+            .OfType<ConnectedSystemImportObject>());
 
         if (page.HasMore && page.Resources.Count > 0)
             result.PaginationTokens.Add(new ConnectedSystemPaginationToken(AfterToken, ScimReferenceEntries.Format(page.Resources[^1].Id)));
@@ -262,11 +259,9 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
     private static Dictionary<string, List<ScimFlattenedAttribute>> SelectedAttributes(ConnectedSystem connectedSystem, ScimServiceProviderDefinitions definitions)
     {
         var selected = new Dictionary<string, List<ScimFlattenedAttribute>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var objectType in connectedSystem.ObjectTypes?.Where(o => o.Selected) ?? [])
+        foreach (var objectType in connectedSystem.ObjectTypes?.Where(o => o.Selected && definitions.Attributes.ContainsKey(o.Name)) ?? [])
         {
-            if (!definitions.Attributes.TryGetValue(objectType.Name, out var attributes))
-                continue;
-
+            var attributes = definitions.Attributes[objectType.Name];
             if (objectType.Attributes.Count == 0)
             {
                 selected[objectType.Name] = attributes;

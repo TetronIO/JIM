@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261018182739_AddActivityImportWatermarks")]
+    [Migration("20261018193618_AddActivityImportWatermarks")]
     partial class AddActivityImportWatermarks
     {
         /// <inheritdoc />
@@ -4862,6 +4862,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ErrorCount")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("FailingSince")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("HasUnresolvedReferences")
                         .HasColumnType("boolean");
 
@@ -4873,12 +4876,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("LastErrorStackTrace")
                         .HasColumnType("text");
-
-                    b.Property<int>("MaxRetries")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("NextRetryAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("ProvisioningSyncRuleId")
                         .HasColumnType("integer");

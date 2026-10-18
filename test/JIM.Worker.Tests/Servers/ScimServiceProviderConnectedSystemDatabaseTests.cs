@@ -72,12 +72,13 @@ public class ScimServiceProviderConnectedSystemDatabaseTests
         var definition = await WithJimAsync(jim => jim.ConnectedSystems.GetConnectorDefinitionAsync(ConnectorConstants.ScimServiceProviderConnectorName));
 
         Assert.That(definition, Is.Not.Null);
+        var seeded = definition!;
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(definition!.Settings, Is.Empty);
-            Assert.That(definition.SupportsFullImport, Is.True);
-            Assert.That(definition.SupportsDeltaImport, Is.True);
-            Assert.That(definition.SupportsExport, Is.False);
+            Assert.That(seeded.Settings, Is.Empty);
+            Assert.That(seeded.SupportsFullImport, Is.True);
+            Assert.That(seeded.SupportsDeltaImport, Is.True);
+            Assert.That(seeded.SupportsExport, Is.False);
         }
     }
 
