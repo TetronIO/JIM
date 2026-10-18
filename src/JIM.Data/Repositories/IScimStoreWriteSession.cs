@@ -54,9 +54,11 @@ public interface IScimStoreWriteSession : IAsyncDisposable
     Task<IReadOnlyDictionary<Guid, int>> GetLiveResourceTypeIdsAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
-    /// The resources a resource refers to through one reference attribute (a Group's <c>members</c>).
+    /// The references a resource holds, through every attribute, with the type of each resource referred to; or, given
+    /// <paramref name="amongTargetIds"/>, only the references to those resources, so a request naming three members of a
+    /// large Group reads three rows.
     /// </summary>
-    Task<IReadOnlyList<Guid>> GetReferenceTargetIdsAsync(Guid sourceId, string attribute);
+    Task<IReadOnlyList<ScimStoreReferenceTarget>> GetReferencesAsync(Guid sourceId, IReadOnlyCollection<Guid>? amongTargetIds = null);
 
     /// <summary>
     /// Inserts a new resource at version 1, holding <paramref name="uniqueValues"/>. The caller supplies the id, type,
@@ -78,10 +80,10 @@ public interface IScimStoreWriteSession : IAsyncDisposable
     /// <summary>
     /// Deletes a live resource, leaving a tombstone: payload cleared, unique values and its own references removed,
     /// version raised. References to it from other resources are removed too, and every resource that lost one has its
-    /// version raised and is returned, so the caller can journal the change. Returns null when the resource is not
-    /// live.
+    /// version raised and is returned with its type and the attribute, so the caller can journal the change. Returns
+    /// null when the resource is not live.
     /// </summary>
-    Task<IReadOnlyList<Guid>?> TombstoneResourceAsync(int resourceTypeId, Guid id);
+    Task<IReadOnlyList<ScimStoreReferrer>?> TombstoneResourceAsync(int resourceTypeId, Guid id);
 
     /// <summary>
     /// Adds references from a resource; ones it already holds are ignored. Returns the source's version.

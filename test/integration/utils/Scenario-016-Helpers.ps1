@@ -53,7 +53,7 @@ function Invoke-Scenario16Query {
     $localPath = Join-Path ([System.IO.Path]::GetTempPath()) $probeName
     $script = "SET HEADING OFF`nSET FEEDBACK OFF`nSET PAGESIZE 0`nSET LINESIZE 4000`n$Query`nEXIT`n"
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($localPath, $script, $utf8NoBom)
+    [System.IO.File]::WriteAllText($localPath, (ConvertTo-ContainerSqlScript -Config $Config -ScriptText $script), $utf8NoBom)
 
     try {
         docker cp $localPath "$($Config.ContainerName):/tmp/$probeName" 2>&1 | Out-Null
@@ -99,7 +99,7 @@ function Invoke-Scenario16NonQuery {
     $localPath = Join-Path ([System.IO.Path]::GetTempPath()) $scriptName
     $script = "WHENEVER SQLERROR EXIT FAILURE`nSET DEFINE OFF`nSET FEEDBACK OFF`n$Statement`nCOMMIT;`nEXIT SUCCESS`n"
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($localPath, $script, $utf8NoBom)
+    [System.IO.File]::WriteAllText($localPath, (ConvertTo-ContainerSqlScript -Config $Config -ScriptText $script), $utf8NoBom)
 
     try {
         docker cp $localPath "$($Config.ContainerName):/tmp/$scriptName" 2>&1 | Out-Null

@@ -96,6 +96,7 @@ public class JimApplication : IDisposable
     public MetaverseServer Metaverse { get; }
     public ObjectMatchingServer ObjectMatching { get; }
     public SchedulerServer Scheduler { get; }
+    public ScimServer Scim { get; }
     public SearchServer Search { get; }
     public SecurityServer Security { get; }
     public SecurityAuditServer SecurityAudit { get; }
@@ -163,6 +164,7 @@ public class JimApplication : IDisposable
         ConfigurationDrift = new ConfigurationDriftService(this);
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);
         ConnectedSystems = new ConnectedSystemServer(this, connectorFactory);
+        Scim = new ScimServer(this);
         ExampleData = new ExampleDataServer(this);
         DriftDetection = new DriftDetectionService(this);
         SyncRepo = syncRepository!; // All DI registrations pass PostgresData.SyncRepository explicitly.

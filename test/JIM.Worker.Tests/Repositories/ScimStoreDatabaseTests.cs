@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Scim;
@@ -507,7 +508,7 @@ public class ScimStoreDatabaseTests
             await s.AddReferencesAsync(staff.Resource.Id, Members, [ada.Resource.Id]);
         });
 
-        IReadOnlyList<Guid>? affected = null;
+        IReadOnlyList<ScimStoreReferrer>? affected = null;
         long sequence = 0;
         await WriteCommittedAsync(system, async s =>
         {
@@ -519,7 +520,11 @@ public class ScimStoreDatabaseTests
         var tombstone = rows[ada.Resource.Id];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(affected, Is.EquivalentTo(new[] { admins.Resource.Id, staff.Resource.Id }));
+            Assert.That(affected, Is.EquivalentTo(new[]
+            {
+                new ScimStoreReferrer(admins.Resource.Id, system.GroupTypeId, Members),
+                new ScimStoreReferrer(staff.Resource.Id, system.GroupTypeId, Members)
+            }), "each resource that lost a reference, with its type and the attribute, so the caller can journal it");
             Assert.That(tombstone.DeletedAt, Is.Not.Null);
             Assert.That(tombstone.Payload, Is.Null, "a tombstone keeps nothing identifying");
             Assert.That(await UniqueValuesAsync(ada.Resource.Id), Is.Empty, "its unique values are free for reuse");
@@ -605,7 +610,7 @@ public class ScimStoreDatabaseTests
 
         await using var ctx = NewContext();
         await using var session = (await new PostgresDataRepository(ctx).ScimStore.BeginWriteAsync(system.Id))!;
-        Assert.That(await session.GetReferenceTargetIdsAsync(admins.Resource.Id, Members),
+        Assert.That((await session.GetReferencesAsync(admins.Resource.Id)).Select(r => r.TargetId),
             Is.EquivalentTo(new[] { grace.Resource.Id, alan.Resource.Id }));
     }
 
@@ -628,9 +633,92 @@ public class ScimStoreDatabaseTests
         await using var session = (await new PostgresDataRepository(ctx).ScimStore.BeginWriteAsync(system.Id))!;
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(await session.GetReferenceTargetIdsAsync(ada.Resource.Id, "reports"), Is.EqualTo(new[] { grace.Resource.Id }));
-            Assert.That(await session.GetReferenceTargetIdsAsync(ada.Resource.Id, "delegates"), Is.Empty);
+            Assert.That(await session.GetReferencesAsync(ada.Resource.Id),
+                Is.EqualTo(new[] { new ScimStoreReferenceTarget("reports", grace.Resource.Id, system.UserTypeId) }));
         }
+    }
+
+    [Test]
+    public async Task GetReferencesAsync_AmongTargets_ReturnsOnlyThoseHeldWithTheirTypesAsync()
+    {
+        var system = await SeedSystemAsync("references-among");
+        var ada = User(system, "ada");
+        var grace = User(system, "grace");
+        var staff = Group(system, "Staff");
+        var admins = Group(system, "Admins");
+        await InsertCommittedAsync(system, ada, grace, staff, admins);
+        await WriteCommittedAsync(system, async s => await s.AddReferencesAsync(admins.Resource.Id, Members,
+            [ada.Resource.Id, grace.Resource.Id, staff.Resource.Id]));
+
+        await using var ctx = NewContext();
+        await using var session = (await new PostgresDataRepository(ctx).ScimStore.BeginWriteAsync(system.Id))!;
+        var held = await session.GetReferencesAsync(admins.Resource.Id, [ada.Resource.Id, staff.Resource.Id, Guid.NewGuid()]);
+
+        Assert.That(held, Is.EquivalentTo(new[]
+        {
+            new ScimStoreReferenceTarget(Members, ada.Resource.Id, system.UserTypeId),
+            new ScimStoreReferenceTarget(Members, staff.Resource.Id, system.GroupTypeId)
+        }), "a Group's held members are looked up by the ids a request names, never read whole");
+    }
+
+    [Test]
+    public async Task Repository_GetLiveResourceAsync_ReadsOnlyALiveResourceOfThatTypeAndSystemAsync()
+    {
+        var system = await SeedSystemAsync("read-live");
+        var other = await SeedSystemAsync("read-live-other");
+        var ada = User(system, "ada");
+        var grace = User(system, "grace");
+        await InsertCommittedAsync(system, ada, grace);
+        await TombstoneCommittedAsync(system, grace.Resource);
+
+        await using var ctx = NewContext();
+        var store = new PostgresDataRepository(ctx).ScimStore;
+        var read = await store.GetLiveResourceAsync(system.Id, system.UserTypeId, ada.Resource.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(JsonNode.DeepEquals(JsonNode.Parse(read!.Payload!), JsonNode.Parse(ada.Resource.Payload!)), Is.True, "jsonb normalises spacing");
+            Assert.That(read?.Version, Is.EqualTo(1));
+            Assert.That(await store.GetLiveResourceAsync(system.Id, system.GroupTypeId, ada.Resource.Id), Is.Null, "wrong type");
+            Assert.That(await store.GetLiveResourceAsync(other.Id, other.UserTypeId, ada.Resource.Id), Is.Null, "another system's");
+            Assert.That(await store.GetLiveResourceAsync(system.Id, system.UserTypeId, grace.Resource.Id), Is.Null, "a tombstone");
+        }
+    }
+
+    [Test]
+    public async Task Repository_GetReferencesAsync_ReadsEveryReferenceWithItsTargetTypeAsync()
+    {
+        var system = await SeedSystemAsync("read-references");
+        var ada = User(system, "ada");
+        var staff = Group(system, "Staff");
+        var admins = Group(system, "Admins");
+        await InsertCommittedAsync(system, ada, staff, admins);
+        await WriteCommittedAsync(system, async s => await s.AddReferencesAsync(admins.Resource.Id, Members, [ada.Resource.Id, staff.Resource.Id]));
+
+        await using var ctx = NewContext();
+        var references = await new PostgresDataRepository(ctx).ScimStore.GetReferencesAsync(admins.Resource.Id);
+
+        Assert.That(references, Is.EquivalentTo(new[]
+        {
+            new ScimStoreReferenceTarget(Members, ada.Resource.Id, system.UserTypeId),
+            new ScimStoreReferenceTarget(Members, staff.Resource.Id, system.GroupTypeId)
+        }));
+    }
+
+    [Test]
+    public async Task DisposeAsync_Twice_ReleasesTheConnectionOnceAsync()
+    {
+        // The server releases the write lock early on the members direct path, then reads on the same context, so a
+        // second dispose must not close a connection opened since.
+        var system = await SeedSystemAsync("dispose-twice");
+        await using var ctx = NewContext();
+        var session = (await new PostgresDataRepository(ctx).ScimStore.BeginWriteAsync(system.Id))!;
+        await session.DisposeAsync();
+        await ctx.Database.OpenConnectionAsync();
+
+        await session.DisposeAsync();
+
+        Assert.That(ctx.Database.GetDbConnection().State, Is.EqualTo(System.Data.ConnectionState.Open));
     }
 
     [Test]

@@ -38,6 +38,7 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
     // The version each resource reached in this session. A resource's version rises once per session, so a second
     // touch (an update after a reference change, two reference operations) restamps it without raising it again.
     private readonly Dictionary<Guid, long> _versions = [];
+    private bool _disposed;
 
     private bool _committed;
 
@@ -58,19 +59,8 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
 
     public DateTime Timestamp { get; }
 
-    public async Task<ScimStoreResource?> GetLiveResourceAsync(int resourceTypeId, Guid id)
-    {
-        await using var command = Command($"""
-            SELECT {BulkSqlHelpers.ToQuotedList(ScimStoreColumns.Resources)}
-            FROM "ScimStoreResources"
-            WHERE "Id" = @id AND "ConnectedSystemId" = @system AND "ResourceTypeId" = @type AND "DeletedAt" IS NULL
-            """);
-        command.Parameters.AddWithValue("id", id);
-        command.Parameters.AddWithValue("type", resourceTypeId);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? ReadResource(reader) : null;
-    }
+    public Task<ScimStoreResource?> GetLiveResourceAsync(int resourceTypeId, Guid id) =>
+        ScimStoreReads.LiveResourceAsync(_connection, _transaction, ConnectedSystemId, resourceTypeId, id);
 
     public async Task<IReadOnlyDictionary<Guid, int>> GetLiveResourceTypeIdsAsync(IReadOnlyCollection<Guid> ids)
     {
@@ -90,15 +80,8 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         return types;
     }
 
-    public async Task<IReadOnlyList<Guid>> GetReferenceTargetIdsAsync(Guid sourceId, string attribute)
-    {
-        await using var command = Command("""
-            SELECT "TargetId" FROM "ScimStoreReferences" WHERE "SourceId" = @source AND "Attribute" = @attribute
-            """);
-        command.Parameters.AddWithValue("source", sourceId);
-        command.Parameters.AddWithValue("attribute", attribute);
-        return await ReadGuidsAsync(command);
-    }
+    public Task<IReadOnlyList<ScimStoreReferenceTarget>> GetReferencesAsync(Guid sourceId, IReadOnlyCollection<Guid>? amongTargetIds = null) =>
+        ScimStoreReads.ReferencesAsync(_connection, _transaction, sourceId, amongTargetIds);
 
     public async Task<ScimStoreWriteResult> InsertResourceAsync(ScimStoreResource resource, IReadOnlyCollection<ScimStoreUniqueValue> uniqueValues)
     {
@@ -166,7 +149,7 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         return ScimStoreWriteResult.Written(version);
     }
 
-    public async Task<IReadOnlyList<Guid>?> TombstoneResourceAsync(int resourceTypeId, Guid id)
+    public async Task<IReadOnlyList<ScimStoreReferrer>?> TombstoneResourceAsync(int resourceTypeId, Guid id)
     {
         EnsureUsable();
 
@@ -197,16 +180,22 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         }
 
         // References to it from other resources go too, and each of those resources has now changed.
-        List<Guid> sources;
-        await using (var toIt = Command("""DELETE FROM "ScimStoreReferences" WHERE "TargetId" = @id RETURNING "SourceId" """))
+        var referrers = new List<ScimStoreReferrer>();
+        await using (var toIt = Command("""
+            WITH removed AS (DELETE FROM "ScimStoreReferences" WHERE "TargetId" = @id RETURNING "SourceId", "Attribute")
+            SELECT DISTINCT removed."SourceId", source."ResourceTypeId", removed."Attribute"
+            FROM removed INNER JOIN "ScimStoreResources" AS source ON source."Id" = removed."SourceId"
+            """))
         {
             toIt.Parameters.AddWithValue("id", id);
-            sources = (await ReadGuidsAsync(toIt)).Distinct().ToList();
+            await using var reader = await toIt.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                referrers.Add(new ScimStoreReferrer(reader.GetGuid(0), reader.GetInt32(1), reader.GetString(2)));
         }
 
-        foreach (var source in sources)
+        foreach (var source in referrers.Select(r => r.SourceId).Distinct())
             await TouchResourceAsync(source);
-        return sources;
+        return referrers;
     }
 
     public async Task<long> AddReferencesAsync(Guid sourceId, string attribute, IReadOnlyCollection<Guid> targetIds)
@@ -300,8 +289,16 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         _committed = true;
     }
 
+    /// <remarks>
+    /// Idempotent: a caller may release the write lock early and dispose again on the way out, and the second dispose
+    /// must not close a connection the context has opened since.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
+        if (_disposed)
+            return;
+        _disposed = true;
+
         if (!_committed && _transaction.Connection != null)
             await _transaction.RollbackAsync();
         await _transaction.DisposeAsync();
@@ -409,8 +406,7 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         return command;
     }
 
-    private static NpgsqlParameter UuidArray(string name, IEnumerable<Guid> ids) =>
-        new(name, NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() };
+    private static NpgsqlParameter UuidArray(string name, IEnumerable<Guid> ids) => ScimStoreReads.UuidArray(name, ids);
 
     private static void AddResourceParameters(NpgsqlCommand command, string[] columns, object?[] values)
     {
@@ -430,20 +426,6 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
         "Created" or "LastModified" or "DeletedAt" => NpgsqlDbType.TimestampTz,
         "Payload" => NpgsqlDbType.Jsonb,
         _ => throw new ArgumentOutOfRangeException(nameof(column), column, "No parameter type for this SCIM store column.")
-    };
-
-    private static ScimStoreResource ReadResource(NpgsqlDataReader reader) => new()
-    {
-        // Read in ScimStoreColumns.Resources order.
-        Id = reader.GetGuid(0),
-        ConnectedSystemId = reader.GetInt32(1),
-        ResourceTypeId = reader.GetInt32(2),
-        Version = reader.GetInt64(3),
-        ChangeSequence = reader.GetInt64(4),
-        Created = reader.GetFieldValue<DateTimeOffset>(5).UtcDateTime,
-        LastModified = reader.GetFieldValue<DateTimeOffset>(6).UtcDateTime,
-        DeletedAt = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7).UtcDateTime,
-        Payload = reader.IsDBNull(8) ? null : reader.GetString(8)
     };
 
     private static async Task<List<Guid>> ReadGuidsAsync(NpgsqlCommand command)

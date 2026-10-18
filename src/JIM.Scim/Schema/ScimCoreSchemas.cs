@@ -35,7 +35,7 @@ public static class ScimCoreSchemas
             Description = "User Account",
             Attributes =
             [
-                Simple("userName", ScimAttributeTypes.String, required: true, description: "Unique identifier for the User, typically used to log in."),
+                Simple("userName", ScimAttributeTypes.String, required: true, uniqueness: "server", description: "Unique identifier for the User, typically used to log in."),
                 Complex("name", multiValued: false, subAttributes:
                 [
                     Simple("formatted", ScimAttributeTypes.String),
@@ -175,7 +175,8 @@ public static class ScimCoreSchemas
         string? mutability = null,
         string? returned = null,
         string? description = null,
-        List<string>? referenceTypes = null)
+        List<string>? referenceTypes = null,
+        string? uniqueness = null)
     {
         return new ScimSchemaAttribute
         {
@@ -185,6 +186,7 @@ public static class ScimCoreSchemas
             Mutability = mutability ?? ScimMutability.ReadWrite,
             Returned = returned ?? "default",
             Description = description,
+            Uniqueness = uniqueness,
             ReferenceTypes = referenceTypes ?? []
         };
     }
