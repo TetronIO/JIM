@@ -169,6 +169,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("FirstSeen")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ImportWatermarkFrom")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ImportWatermarkTo")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("InitiatedById")
                         .HasColumnType("uuid");
 

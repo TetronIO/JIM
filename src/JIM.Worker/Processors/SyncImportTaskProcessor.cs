@@ -460,6 +460,7 @@ public class SyncImportTaskProcessor
                     // The connector will return a NEW watermark on the first page that we'll save
                     // only once the run has staged everything it read (#1868).
                     var originalPersistedData = _connectedSystem.PersistedConnectorData;
+                    _activity.ImportWatermarkFrom = originalPersistedData;
                     string? newPersistedData = null;
                     string? connectorWarningMessage = null;
 
@@ -593,6 +594,7 @@ public class SyncImportTaskProcessor
                         try
                         {
                             await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, closeReturn);
+                            _activity.ImportWatermarkTo = closeReturn;
                         }
                         catch (Exception persistEx) when (!importPhaseSucceeded)
                         {
@@ -1128,6 +1130,7 @@ public class SyncImportTaskProcessor
             Log.Debug("PerformImportAsync: Recording the Connector's new watermark for Connected System {ConnectedSystemId} now that the run has staged everything it read. Old value: '{OldWatermark}', new value: '{NewWatermark}'",
                 _connectedSystem.Id, LogSanitiser.Sanitise(_connectedSystem.PersistedConnectorData), LogSanitiser.Sanitise(watermarkToRecord));
             await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, watermarkToRecord);
+            _activity.ImportWatermarkTo = watermarkToRecord;
         }
 
         // The run is done: leave the Activity describing the whole of it, not its last internal phase. Every

@@ -275,6 +275,27 @@ public class Activity
     public bool RunProfileExecutionStatsFinalised { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // import watermarks (for import Run Profile executions)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// For an import, the watermark the Connector started from: what the previous import recorded for this one to read
+    /// changes after. Null when there was none, for example before a Connected System's first import.
+    /// </summary>
+    /// <remarks>
+    /// The Connected System's persisted connector data as the run read it, in whatever form its Connector keeps it.
+    /// Recorded for every Connector, so any Delta Import can be diagnosed by what it read from and to; the SCIM 2.0
+    /// Service Provider also reads its journal range from the pair (D17 in SCIM_SERVER_DESIGN.md).
+    /// </remarks>
+    public string? ImportWatermarkFrom { get; set; }
+
+    /// <summary>
+    /// For an import, the watermark it recorded for the next import to start from. Null when it recorded none: it failed
+    /// or was cancelled before staging everything it read, or its Connector keeps no watermark.
+    /// </summary>
+    public string? ImportWatermarkTo { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // security audit event fields (for Authentication activities: interactive sign-in, API key and SSO access token)
     // -----------------------------------------------------------------------------------------------------------------
 
