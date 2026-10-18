@@ -36,6 +36,54 @@ public static class PostgresTestDatabase
         """;
 
     /// <summary>
+    /// The connection string for the <c>RequiresPostgres</c> fixtures, from the <c>JIM_TEST_RESET_*</c> environment
+    /// variables; null when <c>JIM_TEST_RESET_DB</c> is not set, which is how those fixtures know to skip.
+    /// </summary>
+    /// <param name="databaseSuffix">
+    /// Names a database of the calling assembly's own, <c>JIM_TEST_RESET_DB</c> followed by this suffix. The
+    /// database-tests job runs every test assembly at once against one server, and the Worker suite empties every
+    /// table before each of its tests, so any other assembly sharing its database has its rows removed mid-test.
+    /// Every assembly but the Worker suite gives one, and creates the database with <see cref="CreateDatabaseIfMissing"/>.
+    /// </param>
+    public static string? ConnectionStringFromEnvironment(string? databaseSuffix = null)
+    {
+        var database = Environment.GetEnvironmentVariable("JIM_TEST_RESET_DB");
+        if (string.IsNullOrEmpty(database))
+            return null;
+        database += databaseSuffix;
+
+        var host = Environment.GetEnvironmentVariable("JIM_TEST_RESET_HOST") ?? "localhost";
+        var user = Environment.GetEnvironmentVariable("JIM_TEST_RESET_USER") ?? "postgres";
+        var password = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PASSWORD") ?? "postgres";
+        var port = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PORT") ?? "5432";
+        return $"Host={host};Port={port};Database={database};Username={user};Password={password}";
+    }
+
+    /// <summary>
+    /// Creates the database a connection string names, if the server does not hold it yet, connecting to the
+    /// server's <c>postgres</c> database to do so.
+    /// </summary>
+    public static void CreateDatabaseIfMissing(string connectionString)
+    {
+        var target = new NpgsqlConnectionStringBuilder(connectionString);
+        var database = target.Database ?? throw new ArgumentException("The connection string names no database.", nameof(connectionString));
+        var admin = new NpgsqlConnectionStringBuilder(connectionString) { Database = "postgres", Pooling = false };
+
+        using var connection = new NpgsqlConnection(admin.ConnectionString);
+        connection.Open();
+        using (var exists = new NpgsqlCommand("SELECT 1 FROM pg_database WHERE datname = @name", connection))
+        {
+            exists.Parameters.AddWithValue("name", database);
+            if (exists.ExecuteScalar() != null)
+                return;
+        }
+
+        // A database name cannot be a parameter; it comes from the test environment, and is quoted as an identifier.
+        using var create = new NpgsqlCommand($"CREATE DATABASE \"{database.Replace("\"", "\"\"")}\"", connection);
+        create.ExecuteNonQuery();
+    }
+
+    /// <summary>
     /// Empties every table in the <c>public</c> schema except <see cref="MigrationHistoryTable"/> and restarts
     /// their identity sequences. Call it from a fixture's <c>[SetUp]</c> so each test starts from an empty,
     /// already-migrated schema.
