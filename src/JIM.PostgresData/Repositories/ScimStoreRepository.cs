@@ -86,6 +86,20 @@ public class ScimStoreRepository : IScimStoreRepository
         }
     }
 
+    public async Task<ScimStoreResource?> GetLiveResourceAsync(int connectedSystemId, int resourceTypeId, Guid id, CancellationToken cancellationToken = default)
+    {
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var lease = await RawSqlConnectionLease.AcquireAsync(connection);
+        return await ScimStoreReads.LiveResourceAsync(connection, null, connectedSystemId, resourceTypeId, id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ScimStoreReferenceTarget>> GetReferencesAsync(Guid sourceId, CancellationToken cancellationToken = default)
+    {
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var lease = await RawSqlConnectionLease.AcquireAsync(connection);
+        return await ScimStoreReads.ReferencesAsync(connection, null, sourceId, null, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypesAsync(int connectedSystemId, CancellationToken cancellationToken = default)
     {
         return await Repository.Database.ScimStoreResourceTypes
