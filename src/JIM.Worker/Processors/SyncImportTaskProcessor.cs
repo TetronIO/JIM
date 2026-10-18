@@ -402,6 +402,15 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
+                // A Connector behind a feature flag that has since been turned off fails here, saying why, rather than
+                // importing nothing: the Connected System was created while the flag was on.
+                if (ConnectedSystemServer.FeatureFlagFor(_connectedSystem.ConnectorDefinition.Name) is { } featureFlag &&
+                    !await _jim.FeatureFlags.IsEnabledAsync(featureFlag.Key))
+                {
+                    throw new CannotPerformImportException(
+                        $"This Connected System's Connector is part of the '{featureFlag.DisplayName}' feature, which is turned off. Turn it on to import.");
+                }
+
                 // Hand the SCIM 2.0 Service Provider Connector its Connected System's store
                 if (callBasedImportConnector is IConnectorScimResourceStoreAware storeAwareConnector)
                     storeAwareConnector.SetScimResourceStore(new ScimResourceStoreService(_jim, _connectedSystem.Id));
