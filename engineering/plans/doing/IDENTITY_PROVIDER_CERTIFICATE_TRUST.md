@@ -1,6 +1,6 @@
 # Identity Provider Certificate Trust - Implementation Plan
 
-- **Status:** Doing
+- **Status:** Doing (Phase 1 complete)
 - **Created:** 2026-10-18
 - **Issue:** [#2363](https://github.com/TetronIO/JIM/issues/2363)
 - **Related Issues:** #2362 (parent: easiest identity provider setup and maintenance), #2355 (AD FS lab), #1914 (certificate chain trust for Connectors), #2361 (AD FS troubleshooting)
@@ -115,7 +115,7 @@ Rejected (recorded on the walkthrough): a "Trust" button on the unauthenticated 
 
 Each phase is test-first (red, green, refactor) and builds and tests green before the next.
 
-1. **Shared trust rule and purpose.**
+1. **Shared trust rule and purpose.** ✅
    - Move `JimCertificateStoreTrust` to `JIM.Utilities/Security/CertificateStoreTrust.cs`; update `CertificateChainAssembler` and `SqlConnector`. Add `Evaluate` with unit tests (OS-trusted; vouched by root, intermediate, self-signed leaf; name mismatch refused despite store; expired refused; empty store; certificate not in store).
    - `CertificateTrustPurpose`, `TrustedCertificate.TrustedFor`, migration (default Connectors), repository `UpdateAsync` copies it, `RequiresPostgres` NoTracking round-trip test, snapshot field, `GetTrustedCertificatesAsync` filters Connectors, `GetSignInTrustedCertificatesAsync`. Add/update overloads accept `trustedFor` (default Connectors).
 2. **Back-channel and start-up.**

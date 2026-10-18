@@ -318,6 +318,8 @@ public class SynchronisationControllerServerCertificateTests
     public async Task TrustServerCertificateAsync_WhenTheCertificateIsAlreadyTrusted_ReturnsOkAsync()
     {
         _mockCertRepo.Setup(r => r.ExistsByThumbprintAsync(_leaf.Thumbprint)).ReturnsAsync(true);
+        _mockCertRepo.Setup(r => r.GetByThumbprintAsync(_leaf.Thumbprint))
+            .ReturnsAsync(new TrustedCertificate { Id = Guid.NewGuid(), Name = "Leaf", Thumbprint = _leaf.Thumbprint, TrustedFor = CertificateTrustPurpose.Connectors });
 
         var result = await _controller.TrustServerCertificateAsync(ConnectedSystemId, new TrustServerCertificateRequest { Thumbprint = _leaf.Thumbprint }) as OkObjectResult;
 

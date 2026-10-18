@@ -4,18 +4,18 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace JIM.Worker.Tests.Connectors;
+namespace JIM.TestSupport;
 
 /// <summary>
 /// Builds certificate hierarchies for tests: a root, the certificate authorities beneath it, and server certificates,
 /// each carrying its private key so it can sign the next or serve TLS.
 /// </summary>
-internal static class TestPki
+public static class TestPki
 {
     /// <summary>
     /// A self-signed root certificate authority.
     /// </summary>
-    internal static X509Certificate2 CreateRoot(string commonName, int validDays = 60)
+    public static X509Certificate2 CreateRoot(string commonName, int validDays = 60)
     {
         using var key = RSA.Create(2048);
         var request = NewRequest(commonName, key, isCertificateAuthority: true);
@@ -26,7 +26,7 @@ internal static class TestPki
     /// <summary>
     /// A certificate authority issued by <paramref name="issuer"/>.
     /// </summary>
-    internal static X509Certificate2 CreateIntermediate(string commonName, X509Certificate2 issuer, int validDays = 45,
+    public static X509Certificate2 CreateIntermediate(string commonName, X509Certificate2 issuer, int validDays = 45,
         bool isCertificateAuthority = true, DateTimeOffset? notAfter = null, string? issuerDownloadUrl = null)
     {
         using var key = RSA.Create(2048);
@@ -43,7 +43,7 @@ internal static class TestPki
     /// issuer's own dates, as a server whose issuing CA has expired would present. Passing <paramref name="notAfter"/>
     /// in the past gives an expired one instead, valid for the day before it.
     /// </summary>
-    internal static X509Certificate2 CreateServer(string hostName, X509Certificate2 issuer, string? issuerDownloadUrl = null, DateTimeOffset? notAfter = null)
+    public static X509Certificate2 CreateServer(string hostName, X509Certificate2 issuer, string? issuerDownloadUrl = null, DateTimeOffset? notAfter = null)
     {
         using var key = RSA.Create(2048);
         var request = NewRequest(hostName, key, isCertificateAuthority: false);
@@ -72,7 +72,7 @@ internal static class TestPki
     /// <summary>
     /// The public part of a certificate, as a server sends it or a PKI team hands it over.
     /// </summary>
-    internal static X509Certificate2 PublicOnly(X509Certificate2 certificate) =>
+    public static X509Certificate2 PublicOnly(X509Certificate2 certificate) =>
         X509CertificateLoader.LoadCertificate(certificate.RawData);
 
     private static CertificateRequest NewRequest(string commonName, RSA key, bool isCertificateAuthority)

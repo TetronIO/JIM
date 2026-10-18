@@ -222,6 +222,60 @@ public enum CertificateSourceType
 }
 
 /// <summary>
+/// What a certificate in the JIM certificate store vouches for. A certificate can be trusted for either purpose or
+/// both, and the two never stand in for each other.
+/// </summary>
+[Flags]
+public enum CertificateTrustPurpose
+{
+    /// <summary>
+    /// Trusted for nothing. Not a valid stored value; a certificate must be trusted for at least one purpose.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// Connectors trust servers whose certificate chains to this one (LDAPS, HTTPS, SQL Server TLS).
+    /// </summary>
+    Connectors = 1,
+
+    /// <summary>
+    /// JIM trusts the identity provider it signs people in through when its certificate chains to this one.
+    /// </summary>
+    SignIn = 2
+}
+
+/// <summary>
+/// How a server's TLS certificate was judged against the operating system's trust and the JIM certificate store.
+/// </summary>
+public enum CertificateStoreTrustOutcome
+{
+    /// <summary>
+    /// The operating system trusts the chain; the JIM certificate store was not needed.
+    /// </summary>
+    TrustedByOperatingSystem = 0,
+
+    /// <summary>
+    /// The operating system does not trust the chain, but a certificate in the JIM certificate store vouches for it.
+    /// </summary>
+    TrustedByJimCertificateStore = 1,
+
+    /// <summary>
+    /// Nothing vouches for the chain, or it is invalid (expired, badly signed).
+    /// </summary>
+    Untrusted = 2,
+
+    /// <summary>
+    /// The certificate does not name the server JIM connected to. Never waived, whatever the store holds.
+    /// </summary>
+    NameMismatch = 3,
+
+    /// <summary>
+    /// The server presented no certificate.
+    /// </summary>
+    NoCertificate = 4
+}
+
+/// <summary>
 /// Categories for service settings in the admin UI.
 /// </summary>
 public enum ServiceSettingCategory

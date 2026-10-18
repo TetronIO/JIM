@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.TestSupport;
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Data;
@@ -367,12 +368,58 @@ public class ServerCertificateTrustTests
     public async Task TrustServerCertificateAsync_WhenTheCertificateIsAlreadyTrusted_SaysSoRatherThanFailingAsync()
     {
         _mockCertRepo.Setup(r => r.ExistsByThumbprintAsync(_leaf.Thumbprint)).ReturnsAsync(true);
+        _mockCertRepo.Setup(r => r.GetByThumbprintAsync(_leaf.Thumbprint)).ReturnsAsync(StoredAs(_leaf, CertificateTrustPurpose.Connectors));
 
         var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _leaf.Thumbprint, _testUser);
 
         Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.AlreadyTrusted));
         _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
     }
+
+    /// <summary>
+    /// A certificate already in the store for sign-in only does not vouch for Connectors (#2363), so reporting it as
+    /// already trusted would leave the connection refused. It is widened to Connectors as well, through the audited
+    /// update, rather than added a second time.
+    /// </summary>
+    [Test]
+    public async Task TrustServerCertificateAsync_WhenTheCertificateIsTrustedForSignInOnly_WidensItToConnectorsAsync()
+    {
+        var stored = StoredAs(_leaf, CertificateTrustPurpose.SignIn);
+        _mockCertRepo.Setup(r => r.ExistsByThumbprintAsync(_leaf.Thumbprint)).ReturnsAsync(true);
+        _mockCertRepo.Setup(r => r.GetByThumbprintAsync(_leaf.Thumbprint)).ReturnsAsync(stored);
+        _mockCertRepo.Setup(r => r.GetByIdAsync(stored.Id)).ReturnsAsync(stored);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _leaf.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
+            Assert.That(result.Certificate?.Id, Is.EqualTo(stored.Id));
+        }
+        _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
+        _mockCertRepo.Verify(r => r.UpdateAsync(It.Is<TrustedCertificate>(c =>
+            c.Id == stored.Id && c.TrustedFor == (CertificateTrustPurpose.SignIn | CertificateTrustPurpose.Connectors))), Times.Once);
+    }
+
+    [Test]
+    public async Task TrustServerCertificateAsync_NewCertificate_TrustedForConnectorsAsync()
+    {
+        await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _leaf.Thumbprint, _testUser);
+
+        _mockCertRepo.Verify(r => r.CreateAsync(It.Is<TrustedCertificate>(c => c.TrustedFor == CertificateTrustPurpose.Connectors)), Times.Once);
+    }
+
+    private static TrustedCertificate StoredAs(PresentedServerCertificate certificate, CertificateTrustPurpose trustedFor) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = certificate.CommonName,
+        Thumbprint = certificate.Thumbprint,
+        Subject = certificate.Subject,
+        Issuer = certificate.Issuer,
+        SourceType = CertificateSourceType.Uploaded,
+        CertificateData = certificate.Data,
+        TrustedFor = trustedFor
+    };
 
     [Test]
     public async Task TrustServerCertificateAsync_WhenTheSystemMakesNoEncryptedConnection_OffersNothingToTrustAsync()

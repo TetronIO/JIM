@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.TestSupport;
 using JIM.Connectors.SCIM;
 using JIM.Models.Connectors;
 using JIM.Models.Exceptions;

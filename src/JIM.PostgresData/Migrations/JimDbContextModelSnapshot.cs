@@ -1333,6 +1333,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("TrustedFor")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("ValidFrom")
                         .HasColumnType("timestamp with time zone");
 
