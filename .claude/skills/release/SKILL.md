@@ -50,6 +50,8 @@ Before starting, verify:
 
 7. **Check the pre-release integration gate.** First check whether it is enforced: `gh variable get JIM_PRE_RELEASE_GATE_ENFORCED`. Unless that prints `true`, skip this check and that gate in Step 8, and tell the user the release will carry a "gate not enforced" warning. While it is `true`, `release.yml` refuses to run for a commit whose `jim-pre-release` commit status (posted by `.github/workflows/pre-release.yml`, the full integration suite against Samba AD, OpenLDAP and 389 Directory Server) is not `success`, with no override. The release commit does not exist yet, and merging the release PR (it changes `VERSION`) starts the suite on it by itself, so there is nothing to check yet beyond whether the suite is healthy: look at the most recent run (`gh run list --workflow pre-release.yml --limit 3`) and tell the user if it failed, because the same failure would hold the release up for about two hours after the merge.
 
+8. **Check the deployment lab gate.** First check whether it is enforced: `gh variable get JIM_DEPLOY_LAB_GATE_ENFORCED`. Unless that prints `true`, skip this check and that gate in Step 8, and tell the user the release will carry a "gate not enforced" warning. While it is `true`, `release.yml` refuses to run for a commit whose `jim-deploy-lab` commit status (posted by `.github/workflows/deploy-lab.yml`, which installs and upgrades a bundle of the commit on fresh air-gapped VMs) is not `success`, with no override. It runs nightly on `main`, so check the tip of `main` now as an early warning: `pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"`. On exit 1, tell the user what it printed; a red night is a real installation or upgrade failure, and the way forward is a fix. Merging the release PR starts the lab on the release commit by itself.
+
 ## Documentation Review and Update
 
 Before validating the changelog, ensure all documentation reflects the current state of the codebase.
@@ -371,6 +373,16 @@ pwsh -File ./scripts/Test-PreReleaseGate.ps1 -Sha "$(git rev-parse HEAD)"
 ```
 
 If no run started (`VERSION` unchanged, or the run was cancelled), dispatch one with `gh workflow run pre-release.yml --ref main`. Do NOT tag until the script exits 0; on exit 1, tell the user the state and run link it prints. The remedy is a fix and another run, never a way round the gate: the `jim-pre-release-gate` job in `release.yml` runs the same script.
+
+**Gate (only while `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`; see Pre-Flight check 8): the deployment lab must have passed on this exact commit, before you tag it.** Merging the release PR started `deploy-lab.yml` on the merge commit by itself (like `pre-release.yml`, it runs on every push to `main` that changes `VERSION`), so do not dispatch it; find that run, wait for it (about 45 minutes, inside the pre-release suite's time), then check:
+
+```bash
+gh run list --workflow deploy-lab.yml --limit 1 --json databaseId,headSha,status   # headSha must be the merge commit
+gh run watch <run-id>
+pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha "$(git rev-parse HEAD)"
+```
+
+If no run started, dispatch one with `gh workflow run deploy-lab.yml --ref main`. Do NOT tag until the script exits 0; on exit 1, tell the user the state and run link it prints. The remedy is a fix and another run: the `jim-deploy-lab-gate` job in `release.yml` runs the same script.
 
 JIM enforces signed tags (`tag.forceSignAnnotated=true`), so use `git tag -a -m`, not a lightweight tag:
 
