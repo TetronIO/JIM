@@ -1,6 +1,6 @@
 # Identity Provider Certificate Trust - Implementation Plan
 
-- **Status:** Doing (Phases 1-3 complete)
+- **Status:** Doing (Phases 1-4 complete)
 - **Created:** 2026-10-18
 - **Issue:** [#2363](https://github.com/TetronIO/JIM/issues/2363)
 - **Related Issues:** #2362 (parent: easiest identity provider setup and maintenance), #2355 (AD FS lab), #1914 (certificate chain trust for Connectors), #2361 (AD FS troubleshooting)
@@ -126,7 +126,7 @@ Each phase is test-first (red, green, refactor) and builds and tests green befor
    - Models, `IdentityProviderTrustServer` with probe seam, `TrustPresentedCertificateAsync` (add, widen, thumbprint not presented, mismatch, Activity attribution for user and API key).
    - `IdentityProviderTrustMonitor` hosted service with on-demand floor; start-up warning log.
    - `GET /api/v1/auth/identity-provider-trust` (anonymous) and `POST /api/v1/certificates/identity-provider` (Administrator); DTO changes (`trustedFor`, `inUseBySignIn`). Controller tests, including attribute checks for anonymous/Administrator.
-4. **Portal.**
+4. **Portal.** ✅
    - `/sign-in-unavailable` page, middleware (tests: portal request redirected; `/api` untouched; unrelated exceptions untouched), polling script.
    - Certificates page: **Trusted for** column and dialog fields, "In use by sign-in" status, typed confirmation for delete/disable/removing Sign-in on the in-use certificate.
    - Banner and trust dialog; banner content tests.

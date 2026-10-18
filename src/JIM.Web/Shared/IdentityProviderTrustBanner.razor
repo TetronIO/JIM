@@ -1,0 +1,79 @@
+@using JIM.Web.Authentication
+@using JIM.Web.Models
+@using JIM.Web.Services
+@implements IDisposable
+@inject IIdentityProviderTrustMonitor IdentityProviderTrust
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject TrustedCertificateChanges CertificateChanges
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Tells administrators, on every page, when new sign-ins will fail because of the identity provider's certificate, or
+   soon will (#2363). Anyone already signed in keeps working until their session ends, so an administrator who sees this is the
+   one person who can still put it right from the portal: the banner offers to, where trusting a certificate is the fix.
+   It says nothing at all when there is nothing to say, and reads the background monitor's last check rather than
+   connecting to the identity provider itself. *@
+
+@if (_content != null)
+{
+    <MudAlert Severity="@_content.Severity" Dense="true" Class="jim-service-health-banner mb-5">
+        <span>@_content.Sentence</span>
+        <span class="jim-service-health-banner-links">
+            @if (_content.OfferToTrust)
+            {
+                <AlertButton Severity="@_content.Severity" Size="Size.Small" OnClick="ReviewAndTrustAsync">Review and trust</AlertButton>
+            }
+            @if (_content.LinkToCertificates)
+            {
+                <MudLink Href="/admin/certificates" Color="Color.Inherit" Underline="Underline.Always">Certificates</MudLink>
+            }
+            <MudLink Href="@IdentityProviderTrustMonitor.DocsUrl" Target="_blank" Color="Color.Inherit" Underline="Underline.Always">How to fix it</MudLink>
+        </span>
+    </MudAlert>
+}
+
+@code {
+    /// <summary>
+    /// How often the banner re-reads the monitor's status. A memory read, so cheap; the monitor itself decides how
+    /// often the identity provider is actually checked.
+    /// </summary>
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
+
+    private IdentityProviderTrustBannerContent? _content;
+    private Timer? _pollTimer;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        _pollTimer = new Timer(_ => InvokeAsync(() =>
+        {
+            Refresh();
+            StateHasChanged();
+        }), null, PollInterval, PollInterval);
+    }
+
+    private void Refresh() => _content = IdentityProviderTrustDisplay.Banner(IdentityProviderTrust.Current, DateTime.UtcNow);
+
+    private async Task ReviewAndTrustAsync()
+    {
+        // The chain shown is read fresh (within the monitor's floor), so the choice is made from what the identity
+        // provider presents now rather than from whenever the banner last looked.
+        var status = await IdentityProviderTrust.GetFreshStatusAsync(CancellationToken.None);
+        var message = await TrustIdentityProviderCertificateDialog.ShowAsync(DialogService, status);
+        if (message != null)
+        {
+            Snackbar.Add(message, Severity.Success);
+            await CertificateChanges.NotifyAsync();
+        }
+
+        Refresh();
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+        _pollTimer = null;
+    }
+}

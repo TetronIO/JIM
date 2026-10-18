@@ -75,11 +75,12 @@ else
                 <MudContainer MaxWidth="@_contentMaxWidth" Class="pt-5 pb-5">
                     <LoggingErrorBoundary @ref="_errorBoundary">
                         <ChildContent>
-                            @* A service outage or a stalled task, told to administrators on every page. Inside the
+                            @* A service outage, a stalled task, or an identity provider new sign-ins cannot trust, told to administrators on every page. Inside the
                                error boundary so a fault in it is contained the way a page's would be; it renders
                                nothing when all is well, so the page body sits exactly where it always has. *@
                             <AuthorizeView Roles="Administrator">
                                 <ServiceHealthBanner />
+                                <IdentityProviderTrustBanner />
                             </AuthorizeView>
                             @Body
                         </ChildContent>

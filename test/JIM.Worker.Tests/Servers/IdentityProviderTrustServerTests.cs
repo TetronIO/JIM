@@ -173,6 +173,7 @@ public class IdentityProviderTrustServerTests
         {
             Assert.That(status.State, Is.EqualTo(IdentityProviderTrustState.Untrusted));
             Assert.That(status.UnsentIssuer, Is.EqualTo(_root.Subject));
+            Assert.That(status.UnsentIssuerCommonName, Is.EqualTo("Contoso Root CA"));
             Assert.That(status.SuggestedCertificate?.Thumbprint, Is.EqualTo(_issuingCa.Thumbprint));
         }
     }

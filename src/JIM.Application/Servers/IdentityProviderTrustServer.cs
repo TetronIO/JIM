@@ -216,6 +216,7 @@ public class IdentityProviderTrustServer
             TrustedBy = state == IdentityProviderTrustState.Trusted ? decision?.Outcome : null,
             PresentedChain = presented,
             UnsentIssuer = unsentIssuer,
+            UnsentIssuerCommonName = unsentIssuer == null ? null : CommonNameOf(unsentIssuer),
             VouchingCertificates = state == IdentityProviderTrustState.Trusted ? vouching : [],
             Message = message,
             CheckedUtc = now

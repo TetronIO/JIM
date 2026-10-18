@@ -47,6 +47,11 @@ public class IdentityProviderTrustStatus
     public string? UnsentIssuer { get; init; }
 
     /// <summary>
+    /// <see cref="UnsentIssuer"/>'s common name: what to call it.
+    /// </summary>
+    public string? UnsentIssuerCommonName { get; init; }
+
+    /// <summary>
     /// The store's certificates that vouch for the identity provider now, leaf first. Empty unless the JIM certificate
     /// store is what trusts it.
     /// </summary>

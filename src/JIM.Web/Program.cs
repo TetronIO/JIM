@@ -509,6 +509,7 @@ try
 
     // User preferences service for storing UI settings in browser localStorage
     builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
+    builder.Services.AddScoped<TrustedCertificateChanges>();
 
     // Configuration change previews (#827): surfaces start a preview through the starter rather than the
     // application layer directly, so the informed-choice prompt for a large data set is applied in one place
@@ -686,6 +687,10 @@ try
         context => context.Request.Path.StartsWithSegments("/api"),
         appBuilder => appBuilder.UseGlobalExceptionHandler()
     );
+
+    // A portal sign-in that cannot reach or trust the identity provider lands on a page explaining why and how to fix
+    // it (#2363), rather than the generic error page. Wraps authentication, which is where both failures are thrown.
+    app.UseMiddleware<IdentityProviderUnavailableMiddleware>();
 
     app.UseAuthentication();
 
