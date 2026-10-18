@@ -103,6 +103,14 @@ else
     [Parameter]
     public string? UserHref { get; set; }
 
+    /// <summary>
+    /// The call site looked the person up, so <see cref="UserHref"/> is the whole answer: when it is null the person
+    /// has no Metaverse Object (deleted since, or a history row the #2066 repair could not attribute), and a link by
+    /// id would lead to a page that does not exist. List rows leave this false and link by id without a lookup.
+    /// </summary>
+    [Parameter]
+    public bool UserLookedUp { get; set; }
+
     /// <summary>Smaller icons for a dense row; the default suits a field on a page.</summary>
     [Parameter]
     public bool Dense { get; set; }
@@ -113,5 +121,7 @@ else
 
     private string DisplayName => InitiatedByName ?? InitiatedById?.ToString() ?? "Unknown";
 
-    private string? UserLink => !string.IsNullOrEmpty(UserHref) ? UserHref : Helpers.GetInitiatorHref(InitiatedByType, InitiatedById);
+    private string? UserLink => !string.IsNullOrEmpty(UserHref) ? UserHref
+        : UserLookedUp ? null
+        : Helpers.GetInitiatorHref(InitiatedByType, InitiatedById);
 }

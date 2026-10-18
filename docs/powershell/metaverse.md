@@ -317,7 +317,7 @@ With just `-Id`, a summary: each attribute that holds a value, with the distinct
 | `AttributeName` | `string` | The attribute's name. |
 | `AttributeType` | `string` | The kind of value the attribute holds. One of `NotSet`, `Text`, `Number`, `DateTime`, `Binary`, `Reference`, `Guid`, `Boolean`, `LongNumber` or `Decimal`. |
 | `AttributePlurality` | `string` | Whether the attribute holds one value or many. One of `SingleValued` or `MultiValued`. |
-| `CurrentValues` | `object[]` | The values the attribute holds now, each with its origin; at most 50, CurrentValueTotalCount giving the full count. Each has `DisplayValue`, `ReferenceMetaverseObjectId`, `ReferenceTypeName` and `Origin`. |
+| `CurrentValues` | `object[]` | The values the attribute holds now, each with its origin; at most 50, CurrentValueTotalCount giving the full count. Each has `DisplayValue`, `ReferenceMetaverseObjectId`, `ReferenceTypeName`, `ReferenceTypePluralName` and `Origin`. |
 | `CurrentValueTotalCount` | `int` | How many values the attribute holds, including any beyond the 50 CurrentValues lists. |
 | `ContributingConnectedSystemObject` | `object` | The joined Connected System Object the current value came from; empty when none can be identified. It has `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `TypeName`, `DisplayName` and `ExternalId`. |
 | `LastSet` | `object` | The most recent recorded change that set the current value, with its Activity; empty when no change is recorded. It has `ChangeTime`, `ActivityId`, `ActivityRunProfileExecutionItemId`, `ActivityDescription`, `InitiatedByName` and `ChangeInitiatorType`. |

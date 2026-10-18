@@ -1,4 +1,5 @@
 @using JIM.Models.Activities
+@using JIM.Models.Core.DTOs
 @using JIM.Models.Enums
 @using JIM.Models.Staging
 @using JIM.Models.Tasking
@@ -533,13 +534,14 @@
                     case ActivityTargetType.MetaverseObject:
                         <div>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Metaverse Object</MudText><br/>
-                            @if (_selectedActivity.MetaverseObjectId.HasValue)
+                            @if (_selectedMetaverseObjectHeader != null)
                             {
-                                <MudLink Typo="Typo.body1" Href="@($"/admin/metaverse/{_selectedActivity.MetaverseObjectId}")">@(_selectedActivity.TargetName ?? _selectedActivity.MetaverseObjectId.ToString())</MudLink>
+                                <MudLink Typo="Typo.body1" Href="@Utilities.GetMetaverseObjectHref(_selectedMetaverseObjectHeader)">@(_selectedActivity.TargetName ?? _selectedMetaverseObjectHeader.Id.ToString())</MudLink>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                                @* No longer exists (deleted since), or the Activity names no Metaverse Object. *@
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? _selectedActivity.MetaverseObjectId?.ToString() ?? "-")</MudText>
                             }
                         </div>
                         break;
@@ -801,6 +803,10 @@
     private VirtualisedDataGrid<Activity>? _grid;
     private bool _panelOpen;
     private Activity? _selectedActivity;
+
+    // The selected Activity's Metaverse Object, looked up so its link can be built under its Object Type's plural name;
+    // null when the Activity targets no Metaverse Object or the object has since been deleted.
+    private MetaverseObjectHeader? _selectedMetaverseObjectHeader;
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _pollingPaused;
@@ -1099,10 +1105,21 @@
         return schedule?.Name ?? selectedValues[0];
     }
 
-    private void HandleRowClicked(Activity activity)
+    private async Task HandleRowClicked(Activity activity)
     {
         _selectedActivity = activity;
+        _selectedMetaverseObjectHeader = null;
         _panelOpen = true;
+
+        if (activity is not { TargetType: ActivityTargetType.MetaverseObject, MetaverseObjectId: { } metaverseObjectId })
+            return;
+
+        using var jim = JimFactory.Create();
+        var header = await jim.Metaverse.GetMetaverseObjectHeaderAsync(metaverseObjectId);
+
+        // Another row may have been selected while the lookup ran.
+        if (_selectedActivity == activity)
+            _selectedMetaverseObjectHeader = header;
     }
 
     /// <summary>

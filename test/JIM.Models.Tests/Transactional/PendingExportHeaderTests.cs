@@ -3,6 +3,7 @@
 
 using System;
 using System.Linq;
+using JIM.Models.Core;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using NUnit.Framework;
@@ -77,5 +78,32 @@ public class PendingExportHeaderTests
         var header = PendingExportHeader.FromEntity(entity);
 
         Assert.That(header.UnresolvedReferenceCount, Is.Zero);
+    }
+
+    [Test]
+    public void FromEntity_SourceMetaverseObjectWithItsType_CarriesTheTypesPluralName()
+    {
+        // The list links the source Metaverse Object to /t/{plural}/v/{id}; without the plural name it can only
+        // invent a route, which it used to (/admin/metaverse/objects/{id}, which does not exist; #2151).
+        var entity = BuildPendingExport();
+        var sourceMetaverseObject = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Name = "Person", PluralName = "People" }
+        };
+        entity.SourceMetaverseObject = sourceMetaverseObject;
+        entity.SourceMetaverseObjectId = sourceMetaverseObject.Id;
+
+        var header = PendingExportHeader.FromEntity(entity);
+
+        Assert.That(header.SourceMetaverseObjectTypePluralName, Is.EqualTo("People"));
+    }
+
+    [Test]
+    public void FromEntity_NoSourceMetaverseObject_HasNoTypePluralName()
+    {
+        var header = PendingExportHeader.FromEntity(BuildPendingExport());
+
+        Assert.That(header.SourceMetaverseObjectTypePluralName, Is.Null);
     }
 }

@@ -11,6 +11,7 @@
                    InitiatedById="@PrincipalId"
                    InitiatedByName="@PrincipalName"
                    UserHref="@_mvoHref"
+                   UserLookedUp="@(PrincipalType == ActivityInitiatorType.User)"
                    ScheduleName="@ScheduleName"
                    ScheduleExecutionId="@ScheduleExecutionId"
                    Dense="@Dense" />

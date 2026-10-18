@@ -45,7 +45,7 @@
                         {
                             var referenceId = value.ReferenceMetaverseObjectId.Value;
                             <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@value.ReferenceTypeName" Name="@value.DisplayValue"
-                                        Href="@Utilities.GetMetaverseObjectHref(referenceId, value.ReferenceTypeName ?? string.Empty)" Class="ma-0" />
+                                        Href="@(value.ReferenceTypePluralName is { } pluralName ? Utilities.GetMetaverseObjectHref(referenceId, pluralName) : null)" Class="ma-0" />
                         }
                         else
                         {
