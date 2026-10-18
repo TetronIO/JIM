@@ -1631,6 +1631,9 @@ function Get-DatabaseConfig {
             # default, so -C is required to accept the server's self-signed certificate. -b makes
             # sqlcmd exit non-zero on a SQL error, without which a failed seed looks like a success.
             SqlCommand          = @("/opt/mssql-tools18/bin/sqlcmd", "-C", "-b", "-S", "localhost", "-U", "sa", "-P", $password)
+            # sqlcmd logs in to the server itself and every script names its database, so there is
+            # nothing to switch to first; see ConvertTo-ContainerSqlScript.
+            ScriptPreamble      = ""
             ScriptArgument      = "-i"
 
             # The two providers seed the same row numbers, so without a distinct natural key they would
@@ -1684,10 +1687,13 @@ function Get-DatabaseConfig {
             Password            = $password
             Schema              = "JIMTEST"
 
-            # The password is double-quoted inside the connect string because it contains '@', which
-            # EZConnect otherwise reads as the separator before the host. Getting this wrong is what
-            # made the original Oracle healthcheck fail on every interval.
-            SqlCommand          = @("sqlplus", "-s", "system/`"$password`"@//localhost:1521/FREEPDB1")
+            # Operating-system authentication as SYSDBA, which is how the healthcheck connects too. It
+            # connects to the container database, so ConvertTo-ContainerSqlScript starts every script by
+            # switching to the pluggable database. No password login is involved: the AD lab keeps the
+            # oracle-data volume between runs, and its SYSTEM account was found locked (ORA-28000), which
+            # stopped every seed and every probe before they started.
+            SqlCommand          = @("sqlplus", "-s", "/ as sysdba")
+            ScriptPreamble      = "WHENEVER SQLERROR EXIT FAILURE`nSET FEEDBACK OFF`nALTER SESSION SET CONTAINER = FREEPDB1;`n"
             ScriptArgument      = "@"
 
             # See the SQL Server config above for why the providers seed different natural keys.
@@ -1733,6 +1739,24 @@ function Get-DatabaseConfig {
     }
 
     return $configs[$Provider]
+}
+
+function ConvertTo-ContainerSqlScript {
+    <#
+    .SYNOPSIS
+        Return a SQL script ready to run inside a database container with Get-DatabaseConfig's SqlCommand.
+    .DESCRIPTION
+        Oracle's SqlCommand logs in to the container database, so the script must first switch to the
+        pluggable database that holds the schemas; the config's ScriptPreamble does that, and stops the
+        script if the switch fails. SQL Server needs nothing, and its script comes back unchanged.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][string]$ScriptText
+    )
+
+    return "$($Config.ScriptPreamble)$ScriptText"
 }
 
 # Script-level cache for name data (loaded once)
