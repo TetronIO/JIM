@@ -962,6 +962,26 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_ConnectedSystem_SecretEncryptedWithLostKeys_RecordsEmptyMarkerInsteadOfThrowing()
+    {
+        // After the encryption keys are lost (#2124), every secret not yet re-entered is still the old ciphertext, and
+        // decrypting it throws. Snapshotting the Connected System must not fail the save that re-enters a credential.
+        var cs = new ConnectedSystem { Id = 9, Name = "AD", ConnectorDefinitionId = 4 };
+        cs.SettingValues.Add(new ConnectedSystemSettingValue
+        {
+            Id = 11,
+            Setting = new ConnectorDefinitionSetting { Id = 1, Name = "Password", Type = ConnectedSystemSettingType.StringEncrypted },
+            StringEncryptedValue = RoundTripCredentialProtection.UndecryptableValue
+        });
+
+        var snapshot = _service.CreateSnapshot(cs, HashKey);
+
+        var node = Child(snapshot.Root, "settingValues")!.Children!.Single();
+        Assert.That(node.IsSecret, Is.True);
+        Assert.That(node.Value, Is.Empty, "an undecryptable secret is recorded with the same empty marker as an unavailable protection service");
+    }
+
+    [Test]
     public void CreateSnapshot_ConnectedSystem_SecretHashIsDeterministicAndDetectsChange()
     {
         var unchangedA = HashOfSecretInSnapshot("same-value");
@@ -1465,13 +1485,21 @@ public class ConfigurationSnapshotServiceTests
     {
         private const string Prefix = "$JIM$v1$";
 
+        /// <summary>A protected value whose key has been lost: decrypting it throws, as the real service does.</summary>
+        public const string UndecryptableValue = Prefix + "encrypted-with-lost-keys";
+
         public string? Protect(string? plainText) =>
             string.IsNullOrEmpty(plainText) ? plainText : Prefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(plainText));
 
-        public string? Unprotect(string? protectedData) =>
-            string.IsNullOrEmpty(protectedData) || !IsProtected(protectedData)
+        public string? Unprotect(string? protectedData)
+        {
+            if (protectedData == UndecryptableValue)
+                throw new CryptographicException("The key {00000000-0000-0000-0000-000000000000} was not found in the key ring.");
+
+            return string.IsNullOrEmpty(protectedData) || !IsProtected(protectedData)
                 ? protectedData
                 : Encoding.UTF8.GetString(Convert.FromBase64String(protectedData[Prefix.Length..]));
+        }
 
         public bool IsProtected(string? value) =>
             !string.IsNullOrEmpty(value) && value.StartsWith(Prefix, StringComparison.Ordinal);

@@ -15,6 +15,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Utilities;
+using Serilog;
 
 namespace JIM.Application.Services;
 
@@ -539,7 +540,19 @@ public class ConfigurationSnapshotService
         // Decrypt transiently so the keyed hash is deterministic across versions; the plaintext is discarded
         // immediately and never stored. If credential protection is unavailable we cannot produce a meaningful keyed
         // hash, so an empty marker is recorded rather than risk storing ciphertext.
-        var plaintext = Application.CredentialProtection?.Unprotect(encryptedValue);
+        string? plaintext;
+        try
+        {
+            plaintext = Application.CredentialProtection?.Unprotect(encryptedValue);
+        }
+        catch (CryptographicException ex)
+        {
+            // Encrypted with keys that have since been lost (#2124). After a key loss every secret not yet re-entered
+            // is in this state, so throwing would fail the very save that re-enters one; record the empty marker.
+            Log.Warning(ex, "ComputeSecretHash: a secret configuration value could not be decrypted, so the encryption keys have probably been lost or replaced. It is recorded in change history without a hash until it is re-entered.");
+            return string.Empty;
+        }
+
         if (string.IsNullOrEmpty(plaintext))
             return string.Empty;
 
