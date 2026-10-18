@@ -1583,3 +1583,40 @@ Describe 'Remove-ContainerWithMissingNetwork' {
         $removed | Should -Be @('oracle-hris-b')
     }
 }
+
+Describe 'Scenario 016 database logins' {
+    It 'logs the Oracle seeder in through the container''s operating-system authentication, with no password' {
+        $config = Get-DatabaseConfig -Provider Oracle
+
+        $config.SqlCommand | Should -Be @('sqlplus', '-s', '/ as sysdba')
+        ($config.SqlCommand -join ' ') | Should -Not -Match ([regex]::Escape($config.Password))
+    }
+
+    It 'switches an Oracle script to the pluggable database before anything else runs' {
+        $config = Get-DatabaseConfig -Provider Oracle
+
+        $script = ConvertTo-ContainerSqlScript -Config $config -ScriptText "SELECT 1 FROM DUAL;`nEXIT`n"
+
+        # Feedback goes off before the switch, or its "Session altered." would land in every probe's output.
+        $lines = $script -split "`n"
+        $lines[1] | Should -Be 'SET FEEDBACK OFF'
+        $lines[2] | Should -Be 'ALTER SESSION SET CONTAINER = FREEPDB1;'
+        $script | Should -Match ([regex]::Escape("SELECT 1 FROM DUAL;`nEXIT`n") + '$')
+    }
+
+    It 'stops an Oracle script at once if the switch to the pluggable database fails' {
+        $config = Get-DatabaseConfig -Provider Oracle
+
+        $script = ConvertTo-ContainerSqlScript -Config $config -ScriptText "SELECT 1 FROM DUAL;"
+
+        $switchAt = $script.IndexOf('ALTER SESSION SET CONTAINER')
+        $script.IndexOf('WHENEVER SQLERROR EXIT FAILURE') | Should -BeGreaterOrEqual 0
+        $script.IndexOf('WHENEVER SQLERROR EXIT FAILURE') | Should -BeLessThan $switchAt
+    }
+
+    It 'leaves a SQL Server script as it is' {
+        $config = Get-DatabaseConfig -Provider SqlServer
+
+        ConvertTo-ContainerSqlScript -Config $config -ScriptText "SELECT 1;" | Should -Be "SELECT 1;"
+    }
+}

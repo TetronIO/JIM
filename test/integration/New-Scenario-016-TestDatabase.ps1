@@ -413,6 +413,30 @@ FROM EMPLOYEES WHERE MOD(EMPLOYEE_ID, 3) = 0
 "@
 }
 
+function Get-OracleJimTestAccountScript {
+    <#
+    .SYNOPSIS
+        Keep JIMTEST, the account JIM logs in as, able to log in however long the database is kept.
+    .DESCRIPTION
+        The AD lab keeps the oracle-data volume between runs, so the database outlives the DEFAULT
+        profile's limits: its SYSTEM account was found locked. A profile with no lockout and no expiry
+        stops that happening to JIMTEST, and setting the password again clears an expiry that already
+        has. Both the seed and the reset run it, so a database the seed skips is put right too.
+    #>
+    return @"
+DECLARE
+    profile_exists NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO profile_exists FROM DBA_PROFILES WHERE PROFILE = 'JIM_TEST_ACCOUNT';
+    IF profile_exists = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE PROFILE JIM_TEST_ACCOUNT LIMIT FAILED_LOGIN_ATTEMPTS UNLIMITED PASSWORD_LIFE_TIME UNLIMITED';
+    END IF;
+    EXECUTE IMMEDIATE 'ALTER USER JIMTEST IDENTIFIED BY "$($config.Password)" PROFILE JIM_TEST_ACCOUNT ACCOUNT UNLOCK';
+END;
+/
+"@
+}
+
 function New-OracleSeedScript {
     param([int]$Rows)
 
@@ -425,7 +449,7 @@ SET DEFINE OFF
 SET SERVEROUTPUT ON
 SET FEEDBACK OFF
 
--- The application schema JIM connects as. Created by SYSTEM, which is who this script runs as.
+-- The application schema JIM connects as. Created by SYS, which is who this script runs as.
 DECLARE
     user_exists NUMBER;
 BEGIN
@@ -438,6 +462,8 @@ BEGIN
     EXECUTE IMMEDIATE 'GRANT CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE TRIGGER, UNLIMITED TABLESPACE TO JIMTEST';
 END;
 /
+
+$(Get-OracleJimTestAccountScript)
 
 -- Everything from here builds inside JIMTEST's own schema.
 ALTER SESSION SET CURRENT_SCHEMA = JIMTEST;
@@ -684,6 +710,8 @@ WHENEVER SQLERROR EXIT FAILURE
 SET DEFINE OFF
 SET FEEDBACK OFF
 
+$(Get-OracleJimTestAccountScript)
+
 ALTER SESSION SET CURRENT_SCHEMA = JIMTEST;
 
 DELETE FROM APP_USER_ROLES;
@@ -739,7 +767,7 @@ function Invoke-ContainerSqlScript {
 
     # UTF-8 without a byte order mark: SQL*Plus reads a BOM as part of the first statement.
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($localPath, $ScriptText, $utf8NoBom)
+    [System.IO.File]::WriteAllText($localPath, (ConvertTo-ContainerSqlScript -Config $Config -ScriptText $ScriptText), $utf8NoBom)
 
     try {
         docker cp $localPath "$($Config.ContainerName):/tmp/$ScriptName" 2>&1 | Out-Null
@@ -811,7 +839,7 @@ function Get-OracleSeededHash {
     $probeName = "jim-seed-probe.sql"
     $localPath = Join-Path ([System.IO.Path]::GetTempPath()) $probeName
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($localPath, $Query, $utf8NoBom)
+    [System.IO.File]::WriteAllText($localPath, (ConvertTo-ContainerSqlScript -Config $Config -ScriptText $Query), $utf8NoBom)
 
     try {
         docker cp $localPath "$($Config.ContainerName):/tmp/$probeName" 2>&1 | Out-Null
