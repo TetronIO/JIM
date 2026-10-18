@@ -38,7 +38,7 @@ public static class ScimResourceIntake
         var missing = CheckRequired(applied.Resource!, schema);
         return missing != null
             ? new ScimIntakeResult { Error = missing, Coercions = applied.Coercions }
-            : new ScimIntakeResult { Resource = applied.Resource, Coercions = applied.Coercions };
+            : new ScimIntakeResult { Resource = applied.Resource, Coercions = applied.Coercions, IgnoredAttributes = applied.IgnoredAttributes };
     }
 
     /// <summary>

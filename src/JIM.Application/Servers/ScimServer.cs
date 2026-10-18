@@ -35,6 +35,11 @@ public class ScimServer
 {
     private const string NoSuchResource = "The resource does not exist.";
 
+    /// <summary>
+    /// The most ignored attribute names one journal entry keeps.
+    /// </summary>
+    public const int MaxIgnoredAttributesJournalled = 50;
+
     private readonly ILogger _logger = Log.ForContext<ScimServer>();
 
     private JimApplication Application { get; }
@@ -116,7 +121,7 @@ public class ScimServer
         var held = Held(split.References, targets.TypeNames);
         var composed = ScimReferenceEntries.Compose(split.Payload, type, held);
         await session.AppendJournalEntriesAsync([Journal(context, id, type.Name, ScimStoreOperation.Created,
-            ScimResourceDiff.ChangedAttributes([], composed, type.Schema))]);
+            ScimResourceDiff.ChangedAttributes([], composed, type.Schema), intake.IgnoredAttributes)]);
         await session.CommitAsync();
 
         resource.LastModified = session.Timestamp;
@@ -183,7 +188,7 @@ public class ScimServer
             return NoSuchEndpoint();
 
         return await WriteWholeAsync(session, context, definitions, type, resourceId, ifMatch, ScimStoreOperation.Replaced, selection,
-            _ => Task.FromResult<(JsonObject?, ScimError?)>((intake.Resource, null)), split);
+            _ => new ScimPatchResult { Resource = intake.Resource, IgnoredAttributes = intake.IgnoredAttributes }, split);
     }
     #endregion
 
@@ -219,11 +224,11 @@ public class ScimServer
                 var applied = ScimPatchApplier.Apply(current, operations, type.Schema);
                 LogCoercions(context, type, applied.Coercions);
                 if (applied.Error != null)
-                    return Task.FromResult<(JsonObject?, ScimError?)>((null, applied.Error));
+                    return applied;
 
                 // An operation can remove a required attribute, which only the patched resource shows.
                 var missing = ScimResourceIntake.CheckRequired(applied.Resource!, type.Schema);
-                return Task.FromResult<(JsonObject?, ScimError?)>(missing == null ? (applied.Resource, null) : (null, missing));
+                return missing == null ? applied : new ScimPatchResult { Error = missing };
             }, split: null);
     }
 
@@ -270,7 +275,7 @@ public class ScimServer
             }
 
             await session.AppendJournalEntriesAsync([Journal(context, id, type.Name, ScimStoreOperation.Patched,
-                outcome.Changes.Select(c => c.Attribute).Distinct().Order(StringComparer.Ordinal))]);
+                outcome.Changes.Select(c => c.Attribute).Distinct().Order(StringComparer.Ordinal), outcome.IgnoredAttributes)]);
             await session.CommitAsync();
             current.Version = version;
             current.LastModified = session.Timestamp;
@@ -329,12 +334,12 @@ public class ScimServer
     #region shared
     /// <summary>
     /// A write that produces the whole resource (PUT, and a PATCH outside the direct path): reads the resource as it
-    /// stands, has <paramref name="produce"/> make the new one from it, and writes the payload and whichever reference
-    /// attributes changed.
+    /// stands, has <paramref name="produce"/> make the new one from it (or refuse the request), and writes the payload
+    /// and whichever reference attributes changed.
     /// </summary>
     private async Task<ScimServiceResult> WriteWholeAsync(IScimStoreWriteSession session, ScimRequestContext context,
         ScimServiceDefinitions definitions, ScimServiceResourceType type, Guid id, string? ifMatch, ScimStoreOperation operation,
-        ScimAttributeSelection? selection, Func<JsonObject, Task<(JsonObject? Resource, ScimError? Error)>> produce, ScimReferenceSplit? split)
+        ScimAttributeSelection? selection, Func<JsonObject, ScimPatchResult> produce, ScimReferenceSplit? split)
     {
         var current = await session.GetLiveResourceAsync(type.Id, id);
         if (current == null)
@@ -346,11 +351,11 @@ public class ScimServer
         var currentHeld = Held(await session.GetReferencesAsync(id), definitions);
         var before = ScimReferenceEntries.Compose(currentPayload, type, currentHeld);
 
-        var (produced, error) = await produce(before);
-        if (error != null)
-            return ScimServiceResult.Failed(error);
+        var produced = produce(before);
+        if (produced.Error != null)
+            return ScimServiceResult.Failed(produced.Error);
 
-        split ??= ScimReferenceEntries.Split(produced!, type);
+        split ??= ScimReferenceEntries.Split(produced.Resource!, type);
         if (split.Error != null)
             return ScimServiceResult.Failed(split.Error);
 
@@ -393,7 +398,7 @@ public class ScimServer
         foreach (var (attribute, ids) in changedReferences)
             version = await session.ReplaceReferencesAsync(id, attribute, ids.ToList());
 
-        await session.AppendJournalEntriesAsync([Journal(context, id, type.Name, operation, changed)]);
+        await session.AppendJournalEntriesAsync([Journal(context, id, type.Name, operation, changed, produced.IgnoredAttributes)]);
         await session.CommitAsync();
 
         current.Version = version;
@@ -504,13 +509,20 @@ public class ScimServer
     private static string Location(ScimRequestContext context, ScimServiceResourceType type, Guid id) =>
         $"{context.BaseUrl.TrimEnd('/')}/{type.Endpoint.Trim('/')}/{ScimReferenceEntries.Format(id)}";
 
+    /// <param name="ignoredAttributes">Attributes the request carried that the definitions do not declare (D17). The names
+    /// come from the client, so at most <see cref="MaxIgnoredAttributesJournalled"/> are kept, each cut to the store's
+    /// attribute name length.</param>
     private static ScimStoreJournalEntry Journal(ScimRequestContext context, Guid resourceId, string typeName, ScimStoreOperation operation,
-        IEnumerable<string> changedAttributes) => new()
+        IEnumerable<string> changedAttributes, IReadOnlyList<string>? ignoredAttributes = null) => new()
     {
         ResourceId = resourceId,
         ResourceTypeName = typeName,
         Operation = operation,
         ChangedAttributes = changedAttributes.ToList(),
+        IgnoredAttributes = (ignoredAttributes ?? [])
+            .Take(MaxIgnoredAttributesJournalled)
+            .Select(name => name.Length > ScimStoreLimits.AttributeMaxLength ? name[..ScimStoreLimits.AttributeMaxLength] : name)
+            .ToList(),
         ApiKeyId = context.ApiKeyId,
         ApiKeyName = context.ApiKeyName,
         ClientAddress = context.ClientAddress

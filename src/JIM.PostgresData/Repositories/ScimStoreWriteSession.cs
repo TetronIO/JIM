@@ -273,6 +273,7 @@ internal sealed class ScimStoreWriteSession : IScimStoreWriteSession
             await writer.WriteAsync(entry.ResourceTypeName, NpgsqlDbType.Varchar);
             await writer.WriteAsync((int)entry.Operation, NpgsqlDbType.Integer);
             await writer.WriteAsync(entry.ChangedAttributes.ToArray(), NpgsqlDbType.Array | NpgsqlDbType.Text);
+            await writer.WriteAsync(entry.IgnoredAttributes.ToArray(), NpgsqlDbType.Array | NpgsqlDbType.Text);
             await WriteNullableAsync(writer, entry.ApiKeyId, NpgsqlDbType.Uuid);
             await WriteNullableAsync(writer, entry.ApiKeyName, NpgsqlDbType.Text);
             await WriteNullableAsync(writer, entry.ClientAddress, NpgsqlDbType.Varchar);

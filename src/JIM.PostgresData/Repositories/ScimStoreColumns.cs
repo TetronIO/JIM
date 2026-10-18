@@ -62,6 +62,6 @@ internal static class ScimStoreColumns
     internal static readonly string[] JournalEntries =
     [
         "ConnectedSystemId", "ChangeSequence", "ResourceId", "ResourceTypeName", "Operation", "ChangedAttributes",
-        "ApiKeyId", "ApiKeyName", "ClientAddress", "Occurred"
+        "IgnoredAttributes", "ApiKeyId", "ApiKeyName", "ClientAddress", "Occurred"
     ];
 }

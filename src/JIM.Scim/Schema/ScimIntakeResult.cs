@@ -28,4 +28,10 @@ public sealed class ScimIntakeResult
     /// log. They name attributes, never values.
     /// </summary>
     public IReadOnlyList<string> Coercions { get; init; } = [];
+
+    /// <summary>
+    /// The attributes the body carried that the resource type does not declare, by full name, which the store does not
+    /// keep (D17). Read-only attributes are not among them.
+    /// </summary>
+    public IReadOnlyList<string> IgnoredAttributes { get; init; } = [];
 }

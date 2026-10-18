@@ -279,6 +279,68 @@ public class ScimServerDatabaseTests
         }
     }
 
+    [Test]
+    public async Task CreateAsync_UndeclaredAttributes_AreJournalledAsIgnoredAsync()
+    {
+        var body = UserBody("ada");
+        body["favouriteColour"] = "green";
+        body["urn:example:params:scim:schemas:extension:undeclared:2.0:User"] = new JsonObject { ["badge"] = "B-1" };
+
+        await CreateAsync(Users, body);
+
+        Assert.That((await JournalAsync()).Single().IgnoredAttributes, Is.EquivalentTo(new[]
+        {
+            "favouriteColour", "urn:example:params:scim:schemas:extension:undeclared:2.0:User:badge"
+        }));
+    }
+
+    [Test]
+    public async Task CreateAsync_ManyLongUndeclaredAttributes_JournalsABoundedListAsync()
+    {
+        // The names come from the client, so a client cannot make one journal entry arbitrarily large.
+        var body = UserBody("ada");
+        for (var i = 0; i < 80; i++)
+            body[$"x{i:D2}{new string('a', 500)}"] = "v";
+
+        await CreateAsync(Users, body);
+
+        var ignored = (await JournalAsync()).Single().IgnoredAttributes;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ignored, Has.Count.EqualTo(ScimServer.MaxIgnoredAttributesJournalled));
+            Assert.That(ignored.Max(n => n.Length), Is.LessThanOrEqualTo(ScimStoreLimits.AttributeMaxLength));
+        }
+    }
+
+    [Test]
+    public async Task PatchAsync_UndeclaredAttribute_IsJournalledAsIgnoredAsync()
+    {
+        var id = Id(await CreateAsync(Users, UserBody("ada")));
+
+        await PatchAsync(Users, id, """
+            [{"op":"replace","path":"title","value":"Analyst"},
+             {"op":"replace","path":"urn:example:params:scim:schemas:extension:undeclared:2.0:User:badge","value":"B-1"}]
+            """);
+
+        var entry = (await JournalAsync()).Last();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entry.ChangedAttributes, Is.EqualTo(new[] { "title" }));
+            Assert.That(entry.IgnoredAttributes, Is.EqualTo(new[] { "urn:example:params:scim:schemas:extension:undeclared:2.0:User:badge" }));
+        }
+    }
+
+    [Test]
+    public async Task PatchAsync_MembersWithAnUndeclaredSubAttribute_JournalsItAsIgnoredAsync()
+    {
+        var ada = await CreateUserAsync("ada");
+        var admins = await CreateGroupAsync("Admins");
+
+        await PatchAsync(Groups, admins, $$$"""[{"op":"add","path":"members","value":[{"value":"{{{ada}}}","nickname":"x"}]}]""");
+
+        Assert.That((await JournalAsync()).Last().IgnoredAttributes, Is.EqualTo(new[] { "members.nickname" }));
+    }
+
     // ─── Get ───
 
     [Test]
