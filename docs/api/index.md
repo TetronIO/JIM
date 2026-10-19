@@ -45,6 +45,7 @@ The interactive API reference groups its endpoints by resource. Each group, and 
 | Previews | Reading and cancelling a [Configuration Change Preview](../configuration/configuration-changes.md) (`/api/v1/previews`) |
 | ScheduleExecutions | [Schedule Executions](../configuration/schedules.md#executions): watching and cancelling runs (`/api/v1/schedule-executions`) |
 | Schedules | [Schedules](../configuration/schedules.md), and running one on demand (`/api/v1/schedules`) |
+| ScimServiceProvider | A Connected System's SCIM 2.0 Service Provider endpoint: the keys identity providers call it with, what its store holds, and the resource types and schemas it serves (`/api/v1/synchronisation/connected-systems/{id}/scim`); a [Preview feature](../administration/preview-features.md) |
 | Security | [Roles](../configuration/roles.md) and who holds them (`/api/v1/security`) |
 | ServiceSettings | [Service Settings](../configuration/service-settings.md) (`/api/v1/service-settings`) |
 | Synchronisation | [Connected Systems](../configuration/connected-systems.md), the objects in each Connector Space, [Run Profiles](../configuration/run-profiles.md), [Synchronisation Rules](../configuration/synchronisation-rules.md), [Data Flow](../configuration/data-flow.md) and Pending Exports (`/api/v1/synchronisation`) |

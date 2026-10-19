@@ -63,6 +63,18 @@ public class ApiKeyDto
     public List<RoleDto> Roles { get; set; } = [];
 
     /// <summary>
+    /// What the key may be used for: <c>None</c> for an ordinary API key authorised by its roles, or
+    /// <c>ScimServiceProvider</c> for a SCIM client's key, which works only on the SCIM endpoint of one Connected
+    /// System and carries no roles.
+    /// </summary>
+    public ApiKeyScope Scope { get; set; }
+
+    /// <summary>
+    /// The Connected System a scoped key works for; null for an ordinary API key.
+    /// </summary>
+    public int? ScopeConnectedSystemId { get; set; }
+
+    /// <summary>
     /// Creates a DTO from an ApiKey entity.
     /// </summary>
     public static ApiKeyDto FromEntity(ApiKey entity)
@@ -78,7 +90,9 @@ public class ApiKeyDto
             LastUsedAt = entity.LastUsedAt,
             LastUsedFromIp = entity.LastUsedFromIp,
             IsEnabled = entity.IsEnabled,
-            Roles = entity.Roles.Select(RoleDto.FromEntity).ToList()
+            Roles = entity.Roles.Select(RoleDto.FromEntity).ToList(),
+            Scope = entity.Scope,
+            ScopeConnectedSystemId = entity.ScopeConnectedSystemId
         };
     }
 }
@@ -93,6 +107,30 @@ public class ApiKeyCreateResponseDto : ApiKeyDto
     /// The full API key. This is only returned on creation and cannot be retrieved again.
     /// </summary>
     public string Key { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Creates the response for a key just created, carrying its secret.
+    /// </summary>
+    public static ApiKeyCreateResponseDto FromCreated(ApiKey entity, string key)
+    {
+        var dto = FromEntity(entity);
+        return new ApiKeyCreateResponseDto
+        {
+            Id = dto.Id,
+            Name = dto.Name,
+            Description = dto.Description,
+            KeyPrefix = dto.KeyPrefix,
+            CreatedAt = dto.CreatedAt,
+            ExpiresAt = dto.ExpiresAt,
+            LastUsedAt = dto.LastUsedAt,
+            LastUsedFromIp = dto.LastUsedFromIp,
+            IsEnabled = dto.IsEnabled,
+            Roles = dto.Roles,
+            Scope = dto.Scope,
+            ScopeConnectedSystemId = dto.ScopeConnectedSystemId,
+            Key = key
+        };
+    }
 }
 
 /// <summary>
