@@ -319,9 +319,9 @@ public class SystemResetDatabaseTests
 
         await using var verify = NewContext();
         var keys = await verify.ApiKeys.Include(k => k.Roles).ToListAsync();
-        Assert.That(keys.Select(k => k.Id), Is.EqualTo(new[] { infrastructureKeyId }),
+        Assert.That(keys.Select(k => k.Id).ToArray(), Is.EqualTo(new[] { infrastructureKeyId }),
             "only the infrastructure key survives a reset");
-        Assert.That(keys[0].Roles.Select(r => r.Name), Is.EqualTo(new[] { Constants.BuiltInRoles.Administrator }),
+        Assert.That(keys[0].Roles.Select(r => r.Name).ToArray(), Is.EqualTo(new[] { Constants.BuiltInRoles.Administrator }),
             "the infrastructure key keeps its Administrator role");
     }
 
