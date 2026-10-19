@@ -314,12 +314,102 @@ public class ScimStoreListDatabaseTests
         }
     }
 
+    // ─── Reads for import ───
+
+    [Test]
+    public async Task ReadForImportAsync_Full_WalksEveryLiveResourceOfEveryTypeByIdWithTheirReferencesAsync()
+    {
+        var ada = await InsertAsync(_userTypeId, """{"userName":"ada"}""");
+        var grace = await InsertAsync(_userTypeId, """{"userName":"grace"}""");
+        var gone = await InsertAsync(_userTypeId, """{"userName":"gone"}""");
+        await TombstoneAsync(_userTypeId, gone);
+        var staff = await InsertAsync(_groupTypeId, """{"displayName":"Staff"}""");
+        await WriteAsync(async s => await s.AddReferencesAsync(staff, "members", [ada, grace]));
+
+        var walked = new List<ScimStoreResource>();
+        var references = new Dictionary<Guid, IReadOnlyList<ScimStoreReferenceTarget>>();
+        Guid? after = null;
+        while (true)
+        {
+            var page = await ReadForImportAsync(new ScimStoreImportQuery { After = after, Count = 2 });
+            walked.AddRange(page.Resources);
+            foreach (var (source, held) in page.References)
+                references[source] = held;
+            if (!page.HasMore)
+                break;
+            after = page.Resources[^1].Id;
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(walked.Select(r => r.Id), Is.EquivalentTo(new[] { ada, grace, staff }), "live resources of every type; no tombstone");
+            Assert.That(walked.Select(r => r.ResourceTypeId).Distinct(), Is.EquivalentTo(new[] { _userTypeId, _groupTypeId }));
+            Assert.That(references[staff].Select(r => r.TargetId), Is.EquivalentTo(new[] { ada, grace }));
+        }
+    }
+
+    [Test]
+    public async Task ReadForImportAsync_Changes_ReadsLiveResourcesAndTombstonesInTheRangeOnlyAsync()
+    {
+        var before = await InsertAsync(_userTypeId, """{"userName":"before"}""");
+        var from = await StateSequenceAsync();
+        var ada = await InsertAsync(_userTypeId, """{"userName":"ada"}""");
+        await TombstoneAsync(_userTypeId, before);
+        var upTo = await StateSequenceAsync();
+        var after = await InsertAsync(_userTypeId, """{"userName":"after"}""");
+
+        var page = await ReadForImportAsync(new ScimStoreImportQuery { Count = 10, ChangedAfter = from, ChangedUpTo = upTo });
+
+        var byId = page.Resources.ToDictionary(r => r.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(byId.Keys, Is.EquivalentTo(new[] { ada, before }), "the deletion in the range is read; the write after it is not");
+            Assert.That(byId[before].DeletedAt, Is.Not.Null);
+            Assert.That(byId[before].Payload, Is.Null);
+            Assert.That(byId[ada].DeletedAt, Is.Null);
+            Assert.That(byId.ContainsKey(after), Is.False);
+        }
+    }
+
+    [Test]
+    public async Task ReadForImportAsync_Changes_PagesByIdWithinTheRangeAsync()
+    {
+        var from = await StateSequenceAsync();
+        var ids = await InsertUsersAsync(5);
+        var upTo = await StateSequenceAsync();
+
+        var walked = new List<Guid>();
+        Guid? after = null;
+        while (true)
+        {
+            var page = await ReadForImportAsync(new ScimStoreImportQuery { After = after, Count = 2, ChangedAfter = from, ChangedUpTo = upTo });
+            walked.AddRange(page.Resources.Select(r => r.Id));
+            if (!page.HasMore)
+                break;
+            after = page.Resources[^1].Id;
+        }
+
+        Assert.That(walked, Is.EquivalentTo(ids));
+    }
+
     // ─── Helpers ───
 
     private async Task<ScimStorePage> ListAsync(ScimStoreQuery query)
     {
         await using var ctx = NewContext();
         return await new PostgresDataRepository(ctx).ScimStore.ListLiveResourcesAsync(_systemId, query);
+    }
+
+    private async Task<ScimStoreImportPage> ReadForImportAsync(ScimStoreImportQuery query)
+    {
+        await using var ctx = NewContext();
+        return await new PostgresDataRepository(ctx).ScimStore.ReadForImportAsync(_systemId, query);
+    }
+
+    private async Task<long> StateSequenceAsync()
+    {
+        await using var ctx = NewContext();
+        return (await new PostgresDataRepository(ctx).ScimStore.GetStateAsync(_systemId))?.LastChangeSequence ?? 0;
     }
 
     private async Task<List<Guid>> MatchAsync(ScimStoreFilter filter) =>

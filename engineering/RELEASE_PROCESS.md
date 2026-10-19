@@ -6,7 +6,7 @@ This document describes how to create releases of JIM, including support for air
 
 JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
 
-1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below) and a green `jim-pre-release` commit status (the pre-release integration gate, below)
+1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below), a green `jim-pre-release` commit status (the pre-release integration gate, below) and a green `jim-deploy-lab` commit status (the deployment lab gate, below)
 2. Validates the build and runs all tests
 3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
 4. Publishes the PowerShell module to PSGallery
@@ -35,6 +35,15 @@ A release is also refused unless the exact commit being tagged has a `success` c
 - **Reading a result:** `pwsh -File ./scripts/Test-PreReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`; otherwise it exits 1 and prints the state (or "not reported"), the run link and the remedy. The status description carries the scenario counts ("51/53 scenario runs passed across 3 directory passes"); each run's job summary has a per-directory table, and its artefact holds the regression reports and logs for 30 days.
 - **Both gates share one implementation,** `scripts/ReleaseGate.ps1`; each gate script fixes its own context and remedy, so neither can be pointed at another status.
 - **The two suites overlap.** The lab runs on the Hyper-V host and this suite on its own runner, so a release waits for the slower of the two rather than their sum.
+
+## The Deployment Lab Gate
+
+A release is also refused unless the exact commit being tagged has a `success` commit status named `jim-deploy-lab`. The status is posted by `.github/workflows/deploy-lab.yml`, which builds a release bundle from the commit and installs and upgrades it the way customers do, on fresh air-gapped VMs on the deployment lab host (`test/ci/deployment/lab/README.md`): Docker with both image stores, rootful and rootless Podman, Ubuntu 24.04 and AlmaLinux 9 with SELinux enforcing; upgrades from the latest release with a rollback by the guide; the installer's refusals, re-runs and certificate options; an external PostgreSQL server; and a soak of restarts and reboots. It closes the gap [#1876](https://github.com/TetronIO/JIM/issues/1876) found: CI's `deployment-boot` job installs on one host with internet access, so a release could otherwise ship an installer, upgrade or rollback that had never run on a customer-like host.
+
+- **It starts by itself,** nightly on `main` and on every push to `main` that changes `VERSION`, as the pre-release suite does, so merging the release PR starts it on the release commit with nothing to dispatch. It can also be dispatched (`gh workflow run deploy-lab.yml --ref main`), with a choice of cells.
+- **It is enforced twice, behind one switch,** like the other gates: the `/release` skill runs `scripts/Test-DeployLabReleaseGate.ps1` before it tags, and the `jim-deploy-lab-gate` job in `release.yml` runs the same script, which `validate` needs. Both run only while the repository variable `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`; set it after the lab's first green run in Actions (`gh variable set JIM_DEPLOY_LAB_GATE_ENFORCED --body true`). Once set there is no override.
+- **Reading a result:** `pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`. The status description carries the cell count ("19 of 19 cells passed"); each run's job summary holds the full report, and its artefact every cell's logs for 30 days.
+- **It overlaps the others.** It runs on its own host in about 45 minutes, so it finishes well inside the pre-release suite's time and adds nothing to a release's wait.
 
 ## Release History
 

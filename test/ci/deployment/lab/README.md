@@ -200,6 +200,19 @@ cell's database server its `DatabaseMemoryGiB`), and the runner starts cells, la
 host's memory less `ReserveGiB` (Lab.psd1). `-BudgetGiB` and
 `-MaxParallel` override that.
 
+## In GitHub Actions
+
+`.github/workflows/deploy-lab.yml` runs the whole matrix on the lab host's own runner (label `jim-deploy-lab`, alone in
+a runner group of that name): nightly on `main`, by itself when a change to `VERSION` reaches `main` (the release pull
+request's merge), and on dispatch, with optional cells and tags. It posts a `jim-deploy-lab` commit status on the
+commit it tested, which the release gate (`scripts/Test-DeployLabReleaseGate.ps1`, a job of `release.yml`) requires
+once `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`. The report is the job's summary, and every cell's folder is an artefact
+for 30 days.
+
+A run by hand on the host and a run in Actions would collide (the same VM names, the same memory), so the workflow
+refuses to start while any `jl-` VM exists, and deletes every one when it finishes. Run by hand only when no workflow
+run is in progress, and delete any VM a run by hand kept (`-KeepVm`) before the next night.
+
 ## Adding a cell
 
 Add a line to `Cells.psd1`. A new image must also be built on the lab host (`build-lab-images.sh` in

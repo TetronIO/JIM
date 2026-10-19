@@ -54,6 +54,12 @@ public interface IScimStoreRepository
     Task<ScimStorePage> ListLiveResourcesAsync(int connectedSystemId, ScimStoreQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// One page of what an import reads from a Connected System's store, with the references its live resources hold.
+    /// Reads outside any write session, and untracked, so a large store never enters an import's change tracker.
+    /// </summary>
+    Task<ScimStoreImportPage> ReadForImportAsync(int connectedSystemId, ScimStoreImportQuery query, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The resource types a Connected System's store accepts.
     /// </summary>
     Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypesAsync(int connectedSystemId, CancellationToken cancellationToken = default);

@@ -250,7 +250,7 @@ internal sealed class ScimConnectorImport
         };
     }
 
-    private static ConnectedSystemImportObject ToImportObject(ScimResourceReadResult read, string objectType)
+    internal static ConnectedSystemImportObject ToImportObject(ScimResourceReadResult read, string objectType)
     {
         if (read.Error != null)
         {

@@ -378,6 +378,10 @@ public class SyncImportTaskProcessor
         // staged are already imported, and that run would silently skip them. Null means there is nothing to record.
         string? watermarkToRecord = null;
 
+        // The watermark the run reached, recorded on its Activity once it completes. Unlike watermarkToRecord it is kept
+        // when it equals the one the run started from: the run still reached it.
+        string? watermarkReached = null;
+
         // The fetching step is entered by each branch below, once the work it names is about to
         // start: a call-based import connects first, and entering the later step here would close
         // connecting out before it began.
@@ -401,6 +405,19 @@ public class SyncImportTaskProcessor
                         DataProtectionHelper.CreateProvider());
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
+
+                // A Connector behind a feature flag that has since been turned off fails here, saying why, rather than
+                // importing nothing: the Connected System was created while the flag was on.
+                if (ConnectedSystemServer.FeatureFlagFor(_connectedSystem.ConnectorDefinition.Name) is { } featureFlag &&
+                    !await _jim.FeatureFlags.IsEnabledAsync(featureFlag.Key))
+                {
+                    throw new CannotPerformImportException(
+                        $"This Connected System's Connector is part of the '{featureFlag.DisplayName}' feature, which is turned off. Turn it on to import.");
+                }
+
+                // Hand the SCIM 2.0 Service Provider Connector its Connected System's store
+                if (callBasedImportConnector is IConnectorScimResourceStoreAware storeAwareConnector)
+                    storeAwareConnector.SetScimResourceStore(new ScimResourceStoreService(_jim, _connectedSystem.Id));
 
                 // Tracks whether the import phase below completed without throwing. Read from the
                 // finally block to decide whether a failure while persisting CloseImportConnection's
@@ -447,6 +464,7 @@ public class SyncImportTaskProcessor
                     // The connector will return a NEW watermark on the first page that we'll save
                     // only once the run has staged everything it read (#1868).
                     var originalPersistedData = _connectedSystem.PersistedConnectorData;
+                    _activity.ImportWatermarkFrom = originalPersistedData;
                     string? newPersistedData = null;
                     string? connectorWarningMessage = null;
 
@@ -538,6 +556,7 @@ public class SyncImportTaskProcessor
 
                     // Every page has been read, but nothing has been staged yet, so the new watermark is only
                     // remembered here; it is recorded at the end of the run, once staging has succeeded (#1868).
+                    watermarkReached = newPersistedData;
                     if (newPersistedData != null && newPersistedData != originalPersistedData)
                         watermarkToRecord = newPersistedData;
 
@@ -576,10 +595,12 @@ public class SyncImportTaskProcessor
                     if (closeReturn != null)
                     {
                         watermarkToRecord = null;
+                        watermarkReached = null;
 
                         try
                         {
                             await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, closeReturn);
+                            _activity.ImportWatermarkTo = closeReturn;
                         }
                         catch (Exception persistEx) when (!importPhaseSucceeded)
                         {
@@ -664,6 +685,7 @@ public class SyncImportTaskProcessor
             && await WithholdConnectorReportedDeletesOverTheLimitsAsync(connectedSystemObjectsToBeUpdated))
         {
             watermarkToRecord = null;
+            watermarkReached = null;
         }
 
         // process deletions
@@ -1116,6 +1138,9 @@ public class SyncImportTaskProcessor
                 _connectedSystem.Id, LogSanitiser.Sanitise(_connectedSystem.PersistedConnectorData), LogSanitiser.Sanitise(watermarkToRecord));
             await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, watermarkToRecord);
         }
+
+        if (watermarkReached != null)
+            _activity.ImportWatermarkTo = watermarkReached;
 
         // The run is done: leave the Activity describing the whole of it, not its last internal phase. Every
         // phase above set the counters to its own work (the flush just now to the handful of items it had

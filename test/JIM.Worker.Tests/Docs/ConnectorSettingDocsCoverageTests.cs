@@ -3,6 +3,7 @@
 
 using System.Text.RegularExpressions;
 using JIM.Application.Servers;
+using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 
@@ -111,7 +112,13 @@ public class ConnectorSettingDocsCoverageTests
             "apply:\n  " + string.Join("\n  ", problems));
     }
 
-    private static List<IConnector> Connectors() => SeedingServer.BuiltInConnectors();
+    /// <summary>
+    /// The built-in Connectors an administrator can meet. One behind an In Development feature flag is surfaced nowhere,
+    /// so it has no public page until its flag reaches Preview, when this starts requiring one.
+    /// </summary>
+    private static List<IConnector> Connectors() => SeedingServer.BuiltInConnectors()
+        .Where(c => ConnectedSystemServer.FeatureFlagFor(c.Name)?.Tier != FeatureFlagTier.InDevelopment)
+        .ToList();
 
     /// <summary>The settings a Connector asks an administrator for, by the name the settings form shows.</summary>
     private static List<string> SettingNames(IConnector connector) =>

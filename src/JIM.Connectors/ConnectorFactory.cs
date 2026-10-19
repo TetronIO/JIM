@@ -4,6 +4,7 @@
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
+using JIM.Connectors.SCIM.ServiceProvider;
 using JIM.Connectors.Sql;
 using JIM.Models.Interfaces;
 
@@ -41,6 +42,8 @@ public class ConnectorFactory : IConnectorFactory
             return new FileConnector();
         if (connectorName == ConnectorConstants.ScimClientConnectorName)
             return new ScimConnector();
+        if (connectorName == ConnectorConstants.ScimServiceProviderConnectorName)
+            return new ScimServiceProviderConnector();
         if (connectorName == ConnectorConstants.SqlConnectorName)
             return new SqlConnector();
 
