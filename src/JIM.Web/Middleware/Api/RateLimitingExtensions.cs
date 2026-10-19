@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.RateLimiting;
 using JIM.Utilities;
 using JIM.Web.Extensions;
+using JIM.Web.Scim;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -101,9 +102,18 @@ public static class RateLimitingExtensions
             ? (int)Math.Ceiling(retryAfter.TotalSeconds)
             : (int)RateLimitPartitionResolver.Window.TotalSeconds;
 
+        await WriteRejectionAsync(httpContext, retryAfterSeconds, cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes a throttled request's <c>429</c> with <c>Retry-After</c>: a SCIM error on <c>/scim</c> (RFC 7644 section
+    /// 3.12, D8), the REST API's error body everywhere else.
+    /// </summary>
+    public static async Task WriteRejectionAsync(HttpContext httpContext, int retryAfterSeconds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(httpContext);
+
         httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
-        httpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-        httpContext.Response.ContentType = "application/json";
 
         var logger = httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
             .CreateLogger("JIM.Web.Middleware.Api.RateLimiting");
@@ -114,6 +124,15 @@ public static class RateLimitingExtensions
             httpContext.Connection.RemoteIpAddress.ToNormalisedString(),
             retryAfterSeconds);
 
+        if (ScimRoutes.IsScimRequest(httpContext.Request))
+        {
+            await ScimResponses.WriteErrorAsync(httpContext, StatusCodes.Status429TooManyRequests,
+                "Too many requests. Retry after the indicated delay.");
+            return;
+        }
+
+        httpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        httpContext.Response.ContentType = "application/json";
         var errorResponse = new ApiErrorResponse
         {
             Code = ApiErrorCodes.TooManyRequests,

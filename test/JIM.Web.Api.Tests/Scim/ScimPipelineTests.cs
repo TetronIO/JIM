@@ -233,6 +233,23 @@ public class ScimPipelineTests
         }
     }
 
+    [Test]
+    public async Task RateLimitRejection_OnScim_Scim429WithRetryAfterAsync()
+    {
+        var context = Request("/scim/v2/7/Users");
+        context.RequestServices = new ServiceCollection().AddLogging().BuildServiceProvider();
+
+        await RateLimitingExtensions.WriteRejectionAsync(context, retryAfterSeconds: 12, System.Threading.CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(context.Response.StatusCode, Is.EqualTo(StatusCodes.Status429TooManyRequests));
+            Assert.That(context.Response.Headers.RetryAfter.ToString(), Is.EqualTo("12"));
+            Assert.That(context.Response.ContentType, Does.StartWith(ScimResponses.ContentType));
+            Assert.That(Body(context)?["status"]?.GetValue<string>(), Is.EqualTo("429"));
+        }
+    }
+
     #endregion
 
     #region helpers

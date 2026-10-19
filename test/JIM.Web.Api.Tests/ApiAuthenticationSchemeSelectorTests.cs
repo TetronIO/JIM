@@ -60,6 +60,23 @@ public class ApiAuthenticationSchemeSelectorTests
         Assert.That(ApiAuthenticationSchemeSelector.SelectScheme(context), Is.Null);
     }
 
+    [Test]
+    public void SelectScheme_BareApiKeyOnScim_SelectsApiKeyScheme()
+    {
+        // The handler accepts a bare key on /scim; the selector must route it there, or the rate limiter and the
+        // rest of the pipeline would see the request as anonymous.
+        var context = BuildContext("jim_ak_0123456789abcdef");
+        context.Request.Path = "/scim/v2/7/Users";
+
+        Assert.That(ApiAuthenticationSchemeSelector.SelectScheme(context), Is.EqualTo(ApiKeyAuthenticationHandler.SchemeName));
+    }
+
+    [Test]
+    public void SelectScheme_BareApiKeyOutsideScim_LeavesTheCookieScheme()
+    {
+        Assert.That(ApiAuthenticationSchemeSelector.SelectScheme(BuildContext("jim_ak_0123456789abcdef")), Is.Null);
+    }
+
     private static DefaultHttpContext BuildContext(string? authorization)
     {
         var context = new DefaultHttpContext();

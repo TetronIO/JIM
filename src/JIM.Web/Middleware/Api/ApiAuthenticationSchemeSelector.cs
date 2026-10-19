@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Scim;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace JIM.Web.Middleware.Api;
@@ -23,7 +24,13 @@ public static class ApiAuthenticationSchemeSelector
         ArgumentNullException.ThrowIfNull(context);
 
         if (!BearerToken.TryRead(context.Request, out var token))
-            return null;
+        {
+            // On /scim only, a bare key with no scheme is a credential too (see ApiKeyAuthenticationHandler).
+            var values = context.Request.Headers.Authorization;
+            return ScimRoutes.IsScimRequest(context.Request) && values.Count == 1 && BearerToken.IsApiKey(values[0]?.Trim() ?? string.Empty)
+                ? ApiKeyAuthenticationHandler.SchemeName
+                : null;
+        }
 
         return BearerToken.IsApiKey(token)
             ? ApiKeyAuthenticationHandler.SchemeName

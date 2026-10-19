@@ -387,6 +387,14 @@ public static class Constants
         /// </summary>
         public const string RateLimitingUnauthenticatedRequestsPerMinute = "Security.RateLimiting.UnauthenticatedRequestsPerMinute";
 
+        /// <summary>
+        /// The maximum number of requests the SCIM clients of one Connected System may make to its SCIM 2.0 Service
+        /// Provider endpoint per rolling minute, shared by all of that Connected System's keys so that rotating a key
+        /// does not double the budget. "Service Provider" names the inbound role, so it cannot be mistaken for the SCIM
+        /// client Connector's outbound throttling. Default: 1,500.
+        /// </summary>
+        public const string RateLimitingScimServiceProviderRequestsPerMinute = "Security.RateLimiting.ScimServiceProviderRequestsPerMinute";
+
         // Worker Settings
         /// <summary>
         /// The duration after which a processing task with no heartbeat update is considered stale/abandoned.
@@ -427,6 +435,7 @@ public static class Constants
         public const bool Enabled = true;
         public const int AuthenticatedRequestsPerMinute = 300;
         public const int UnauthenticatedRequestsPerMinute = 30;
+        public const int ScimServiceProviderRequestsPerMinute = 1500;
     }
 
     /// <summary>

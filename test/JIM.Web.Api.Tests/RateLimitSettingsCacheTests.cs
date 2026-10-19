@@ -74,6 +74,21 @@ public class RateLimitSettingsCacheTests
     }
 
     [Test]
+    public async Task GetSnapshotAsync_ScimServiceProviderLimit_ReadFromItsSettingOrDefaultedAsync()
+    {
+        _mockSettingsRepo.Setup(r => r.GetSettingAsync(It.IsAny<string>())).ReturnsAsync((ServiceSetting?)null);
+        var defaulted = await new RateLimitSettingsCache(_mockFactory.Object, NullLogger()).GetSnapshotAsync();
+        SetupSetting(Constants.SettingKeys.RateLimitingScimServiceProviderRequestsPerMinute, ServiceSettingValueType.Integer, "900");
+        var persisted = await new RateLimitSettingsCache(_mockFactory.Object, NullLogger()).GetSnapshotAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(defaulted.ScimServiceProviderRequestsPerMinute, Is.EqualTo(1500));
+            Assert.That(persisted.ScimServiceProviderRequestsPerMinute, Is.EqualTo(900));
+        }
+    }
+
+    [Test]
     public async Task GetSnapshotAsync_CalledTwiceWithinTtl_ReadsTheDatabaseOnlyOnceAsync()
     {
         _mockSettingsRepo.Setup(r => r.GetSettingAsync(It.IsAny<string>())).ReturnsAsync((ServiceSetting?)null);
