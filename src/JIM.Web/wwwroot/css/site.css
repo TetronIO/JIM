@@ -3869,6 +3869,53 @@ html[lang] .jim-kv-table td:first-child {
 }
 
 /* ---------------------------------------------------------------------------
+   Stat tiles nested in a panel (<ConnectedSystemScimTab />'s Store)
+
+   A filled inner surface rather than a border, so the panel's outline stays the
+   only line. A tile asking for action (.jim-stat-tile--attention) takes a primary
+   tint and a primary figure; only one figure on a panel should.
+   --------------------------------------------------------------------------- */
+/* Flex rather than grid: tiles grow to fill their row, so five tiles wrap as 3 + 2 rather than leaving one alone. */
+.jim-stat-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.jim-stat-tile {
+    flex: 1 1 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 16px;
+    border-radius: var(--mud-default-borderradius);
+    background-color: var(--jim-inner-surface, var(--mud-palette-action-default-hover));
+}
+
+.jim-stat-tile-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Qualified to beat MudBlazor's own type scale, which loads after this file. */
+.jim-stat-tile .jim-stat-tile-value.mud-typography {
+    font-size: 2rem;
+    font-weight: 500;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-stat-tile--attention {
+    background-color: rgba(var(--mud-palette-primary-rgb), 0.12);
+}
+
+.jim-stat-tile--attention .jim-stat-tile-value {
+    color: var(--mud-palette-primary);
+}
+
+/* ---------------------------------------------------------------------------
    Server certificate card (<ServerCertificateCard />)
 
    Presents the certificate a directory server offered when a connection was

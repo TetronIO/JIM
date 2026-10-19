@@ -136,51 +136,66 @@
 </MudTable>
 
 @* ─── Store ─── *@
+@* Tiles filled rather than outlined, inside the panel, so the panel's border stays the only line. Awaiting Import is
+   the one figure that asks for action, so it alone takes the accent, and only while it is above zero. *@
 <MudPaper Outlined="true" Class="pa-4 mt-6">
-    <MudText Typo="Typo.h6">Store</MudText>
+    <MudText Typo="Typo.h6" Class="mb-3">Store</MudText>
     @if (_summary == null)
     {
-        <MudSkeleton Class="mt-3" Height="72px" />
+        <MudSkeleton Height="96px" />
     }
     else
     {
-        <MudGrid Spacing="4" Class="mt-1">
+        <div class="jim-stat-tiles">
             @foreach (var count in _summary.ResourceCounts)
             {
-                <MudItem xs="12" sm="6" md="2">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">@count.ResourceTypeName.Pluralize()</MudText>
-                    <MudText Typo="Typo.h5">@count.Count.ToString("N0", CultureInfo.CurrentCulture)</MudText>
-                </MudItem>
+                <div class="jim-stat-tile">
+                    <div class="jim-stat-tile-label">
+                        <MudIcon Icon="@ResourceTypeIcon(count.ResourceTypeName)" Color="Color.Primary" />
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">@count.ResourceTypeName.Pluralize()</MudText>
+                    </div>
+                    <MudText Typo="Typo.h4" Class="jim-stat-tile-value">@count.Count.ToString("N0", CultureInfo.CurrentCulture)</MudText>
+                </div>
             }
-            <MudItem xs="12" sm="6" md="3">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Awaiting Import</MudText>
-                <MudText Typo="Typo.h5">@_summary.ChangesAwaitingImport.ToString("N0", CultureInfo.CurrentCulture)</MudText>
+            <div class="@(_summary.ChangesAwaitingImport > 0 ? "jim-stat-tile jim-stat-tile--attention" : "jim-stat-tile")">
+                <div class="jim-stat-tile-label">
+                    <MudIcon Icon="@Icons.Material.Filled.Sync" Color="Color.Primary" />
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Awaiting Import</MudText>
+                </div>
+                <MudText Typo="Typo.h4" Class="jim-stat-tile-value">@_summary.ChangesAwaitingImport.ToString("N0", CultureInfo.CurrentCulture)</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
                     @(_summary.ImportedUpTo.HasValue ? "changes since the last import" : "never imported")
                 </MudText>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Deletions Held</MudText>
-                <MudText Typo="Typo.h5">@_summary.Tombstones.ToString("N0", CultureInfo.CurrentCulture)</MudText>
+            </div>
+            <div class="jim-stat-tile">
+                <div class="jim-stat-tile-label">
+                    <MudIcon Icon="@Icons.Material.Filled.DeleteSweep" Color="Color.Primary" />
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Deletions Held</MudText>
+                </div>
+                <MudText Typo="Typo.h4" Class="jim-stat-tile-value">@_summary.Tombstones.ToString("N0", CultureInfo.CurrentCulture)</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">until an import reads them</MudText>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="2">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Last Write</MudText>
+            </div>
+            <div class="jim-stat-tile">
+                <div class="jim-stat-tile-label">
+                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Primary" />
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Last Write</MudText>
+                </div>
                 @if (_summary.LastWrite.HasValue)
                 {
                     var lastWrite = _summary.LastWrite.Value.ToLocalTime();
                     <div>
                         <MudTooltip Text="@lastWrite.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            <MudText Typo="Typo.h6">@lastWrite.ToRelativeTime()</MudText>
+                            <MudText Typo="Typo.h5" Class="pt-1">@lastWrite.ToRelativeTime()</MudText>
                         </MudTooltip>
                     </div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">by a SCIM client</MudText>
                 }
                 else
                 {
-                    <MudText Typo="Typo.h6" Class="mud-text-secondary">Never</MudText>
+                    <MudText Typo="Typo.h5" Class="pt-1 mud-text-secondary">Never</MudText>
                 }
-            </MudItem>
-        </MudGrid>
+            </div>
+        </div>
     }
 </MudPaper>
 
@@ -327,6 +342,13 @@
 
     private string SchemaName(string? urn) =>
         urn != null && _schemaNames.TryGetValue(urn, out var name) ? name.Humanize(LetterCasing.Title) : urn ?? "";
+
+    private static string ResourceTypeIcon(string resourceTypeName) => resourceTypeName switch
+    {
+        "User" => Icons.Material.Filled.Person,
+        "Group" => Icons.Material.Filled.Groups,
+        _ => Icons.Material.Filled.Inventory2
+    };
 
     private void ShowCreateDialog()
     {
