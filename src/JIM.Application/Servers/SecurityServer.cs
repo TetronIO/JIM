@@ -538,7 +538,7 @@ public class SecurityServer
     {
         if (await Application.Repository.ApiKeys.CountActiveScopedKeysAsync(connectedSystemId, now, excludingId) >= MaximumActiveScopedApiKeys)
             throw new InvalidOperationException(
-                $"This Connected System already has two keys that can be used. Disable or delete one before adding another.");
+                "This Connected System already has two keys that can be used. Disable or delete one before adding another.");
     }
 
     /// <summary>

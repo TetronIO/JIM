@@ -103,15 +103,15 @@ public class ScopedApiKeyAuthorisationTests
                 continue;
             }
 
+            if (typeAnonymous)
+                continue;
+
             var actions = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
-                .Where(m => !m.IsSpecialName && m.GetCustomAttribute<NonActionAttribute>() == null);
+                .Where(m => !m.IsSpecialName && m.GetCustomAttribute<NonActionAttribute>() == null
+                    && !m.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any());
             foreach (var action in actions)
-            {
-                if (typeAnonymous || action.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any())
-                    continue;
                 yield return ($"{type.Name}.{action.Name}",
                     typeData.Concat(action.GetCustomAttributes<AuthorizeAttribute>(inherit: true)).ToList());
-            }
         }
     }
 

@@ -1,6 +1,6 @@
 # SCIM 2.0 Service Provider Design
 
-- **Status:** Doing (Phases 1 to 3 complete: the SCIM store, the server's writes, Get and list, and the Service Provider Connector behind its feature flag)
+- **Status:** Doing (Phases 1 to 3 and 4a complete: the SCIM store, the server's writes, Get and list, the Service Provider Connector behind its feature flag, and scoped API keys)
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
 - **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
@@ -374,6 +374,16 @@ The store reader seam, the connector (Full and Delta Import), registration in `C
 ### Phase 4: HTTP surface
 
 Two PRs: **4a** scoped API keys (the scope, its enforcement, the per-Connected-System limits, minting at the application layer; the management surfaces are Phase 5), then **4b** the `/scim` surface itself.
+
+#### 4a: Scoped API keys ✅
+
+- **Model:** `ApiKey.Scope` (`None` or `ScimServiceProvider`) and `ScopeConnectedSystemId`, with a check constraint that the two agree and a foreign key that cascades, so deleting the Connected System deletes its keys. The configuration snapshot records both.
+- **Minting** is `SecurityServer.CreateScimServiceProviderKeyAsync`, behind the flag: the Connected System must use the Service Provider Connector, the key carries no roles, expiry defaults to 365 days and is capped at 730, and a third usable key (enabled and unexpired) is refused. The generic create path refuses any scope, and an update can change no key's scope, give a scoped key a role, remove or exceed its expiry, or make it a third usable key. Secrets are generated and hashed by `ApiKeyMaterial` in JIM.Application, which the portal and REST create paths now use too.
+- **Enforcement:** a scoped key's principal carries `jim_key_scope` and `jim_key_scope_connected_system_id` and no role claims; authentication refuses it outside `/scim` (audited as "API key is scoped to the SCIM endpoint"), and the default authorisation policy refuses a scoped principal as a second line. A sweep test evaluates every controller action and hub against a scoped principal. Usage stamps were already throttled to one per key per 30 seconds, which is enough for SCIM request rates.
+- **Verified on the light stack:** a scoped key got 401 on `/api/v1/userinfo`, the Connected System list and the API key list, while an unscoped key got 200 on the first; on `/scim` it authenticated and the fallback page's default policy refused it (403), proving the second line independently. The refusal was recorded in the security audit log.
+- **Still open for 4b:** the `/scim` policy that checks the key's Connected System against the route.
+
+#### 4b: The `/scim` surface
 
 The `ApiKeys` scope column and scoped key authentication with its failure semantics (D3), the journal's actor taken from the authenticated key (D17), the `/scim` pipeline stages, discovery, Users and Groups (POST, GET, PUT, PATCH, DELETE, list with filtering and paging), error mapping, rate limiting and secure transport, behind the flag (D16).
 
