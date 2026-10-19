@@ -1,0 +1,180 @@
+@using JIM.Models.Security
+@using JIM.Web.Authentication
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject IIdentityProviderTrustMonitor IdentityProviderTrust
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    Trusting a certificate the identity provider presents, for sign-in (#2363). Opened from the administrators' banner
+    by someone already signed in, which is why it can fix the problem here rather than sending them to PowerShell.
+
+    As with a Connected System's server certificate, the chain is read from the identity provider again when the
+    confirmation is given: a certificate other than the one shown stops the action instead of being trusted.
+*@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Title</MudText>
+    </TitleContent>
+    <DialogContent>
+        @switch (_step)
+        {
+            case Step.Confirm:
+                <MudStack Spacing="4">
+                    <MudText Typo="Typo.body1">
+                        Your identity provider, @Status.Host, presented this chain. JIM will trust the certificate you
+                        choose for sign-in, until you remove it from <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>.
+                        Check its thumbprint against the one your certificate authority publishes before you continue.
+                    </MudText>
+
+                    @if (_options.Count > 1)
+                    {
+                        <MudRadioGroup T="string" @bind-Value="_selectedThumbprint">
+                            @foreach (var option in _options)
+                            {
+                                <div class="jim-trust-option @(option.Thumbprint == _selectedThumbprint ? "jim-trust-option-selected" : "")">
+                                    <MudRadio T="string" Value="@option.Thumbprint" Color="Color.Primary">
+                                        <div class="jim-trust-option-title">
+                                            @option.CommonName
+                                            @if (option.Thumbprint == Status.SuggestedCertificate?.Thumbprint)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ml-1">Recommended</MudChip>
+                                            }
+                                        </div>
+                                        <div class="jim-trust-option-note">@DescribeDurability(option)</div>
+                                    </MudRadio>
+                                </div>
+                            }
+                        </MudRadioGroup>
+                    }
+
+                    @if (Status.UnsentIssuer != null)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @Status.Host did not send @CertificateDisplay.FormatDistinguishedName(Status.UnsentIssuer), which issued the top of this chain.
+                            Uploading it from your certificate authority, trusted for sign-in, lasts longer than anything here.
+                        </MudText>
+                    }
+
+                    <div class="jim-trust-compare">
+                        <div class="jim-trust-compare-label">Thumbprint to check</div>
+                        <div class="jim-trust-compare-value">@CertificateDisplay.FormatThumbprint(_selectedThumbprint)</div>
+                    </div>
+
+                    <MudTextField @bind-Value="_changeReason" Label="Change reason" Variant="Variant.Outlined"
+                                  Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
+                                  HelperText="Recorded on the Activity alongside your name." />
+                </MudStack>
+                break;
+
+            case Step.Failed:
+                <MudAlert Severity="Severity.Error">@_failureMessage</MudAlert>
+                break;
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" DropShadow="false">@(_step == Step.Failed ? "Close" : "Cancel")</MudButton>
+        @if (_step == Step.Confirm)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" Disabled="_busy" OnClick="TrustAsync">
+                @if (_busy)
+                {
+                    <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                    <span class="ms-2">Trusting</span>
+                }
+                else
+                {
+                    <text>Trust for sign-in</text>
+                }
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>
+    /// The identity provider's status as the banner showed it, which the choice is offered from.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IdentityProviderTrustStatus Status { get; set; } = null!;
+
+    private enum Step { Confirm, Failed }
+
+    private Step _step;
+    private bool _busy;
+    private string? _selectedThumbprint;
+    private string? _changeReason;
+    private string? _failureMessage;
+    private List<IdentityProviderCertificate> _options = [];
+
+    protected override void OnInitialized()
+    {
+        // Highest first: a certificate authority outlasts the certificates it issues, so it is offered first and selected.
+        _options = Enumerable.Reverse(Status.PresentedChain).ToList();
+        _selectedThumbprint = Status.SuggestedCertificate?.Thumbprint ?? _options.FirstOrDefault()?.Thumbprint;
+        _changeReason = $"Restoring sign-in through {Status.Host}.";
+    }
+
+    private string Title => _step == Step.Failed
+        ? "JIM could not trust this certificate"
+        : $"Trust {_options.FirstOrDefault(o => o.Thumbprint == _selectedThumbprint)?.CommonName ?? "this certificate"} for sign-in?";
+
+    private static string DescribeDurability(IdentityProviderCertificate option) => option.IsServerCertificate
+        ? $"This identity provider's own certificate. Needs trusting again when it is renewed, on {option.ValidTo:d MMM yyyy}."
+        : $"Covers every certificate this certificate authority issues, until its own certificate expires on {option.ValidTo:d MMM yyyy}.";
+
+    private async Task TrustAsync()
+    {
+        if (_busy || string.IsNullOrEmpty(_selectedThumbprint))
+            return;
+
+        _busy = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var result = await jim.IdentityProviderTrust.TrustPresentedCertificateAsync(_selectedThumbprint, user, changeReason: _changeReason);
+
+            if (result.Outcome is IdentityProviderCertificateTrustOutcome.Trusted
+                or IdentityProviderCertificateTrustOutcome.TrustedForSignInAsWell
+                or IdentityProviderCertificateTrustOutcome.AlreadyTrusted)
+            {
+                await IdentityProviderTrust.RecheckAsync(CancellationToken.None);
+                MudDialog.Close(DialogResult.Ok(result.Message));
+                return;
+            }
+
+            _failureMessage = result.Message ?? "JIM could not trust this certificate.";
+            _step = Step.Failed;
+            MudDialog.StateHasChanged();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Opens the dialog and returns the outcome's message, or null when the administrator backed out or it failed.
+    /// </summary>
+    public static async Task<string?> ShowAsync(IDialogService dialogService, IdentityProviderTrustStatus status)
+    {
+        var parameters = new DialogParameters<TrustIdentityProviderCertificateDialog> { { x => x.Status, status } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+
+        var dialog = await dialogService.ShowAsync<TrustIdentityProviderCertificateDialog>("Trust a certificate for sign-in?", parameters, options);
+        var result = await dialog.Result;
+        return result is null or { Canceled: true } ? null : result.Data as string;
+    }
+}

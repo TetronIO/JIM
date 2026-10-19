@@ -67,9 +67,11 @@ public class CertificateServer : ICertificateProvider
     /// <summary>
     /// Adds a certificate from uploaded data (PEM or DER encoded).
     /// </summary>
-    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, MetaverseObject? initiatedBy = null, string? notes = null, string? changeReason = null)
+    /// <param name="trustedFor">What the certificate vouches for. Connectors when not given.</param>
+    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, MetaverseObject? initiatedBy = null, string? notes = null, string? changeReason = null,
+        CertificateTrustPurpose trustedFor = CertificateTrustPurpose.Connectors)
     {
-        return await AddFromDataCoreAsync(name, certificateData, notes, changeReason,
+        return await AddFromDataCoreAsync(name, certificateData, notes, changeReason, trustedFor,
             activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
             certificate => AuditHelper.SetCreated(certificate, initiatedBy));
     }
@@ -77,16 +79,20 @@ public class CertificateServer : ICertificateProvider
     /// <summary>
     /// Adds a certificate from uploaded data (PEM or DER encoded). API-key initiator overload.
     /// </summary>
-    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, ApiKey initiatedByApiKey, string? notes = null, string? changeReason = null)
+    /// <param name="trustedFor">What the certificate vouches for. Connectors when not given.</param>
+    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, ApiKey initiatedByApiKey, string? notes = null, string? changeReason = null,
+        CertificateTrustPurpose trustedFor = CertificateTrustPurpose.Connectors)
     {
-        return await AddFromDataCoreAsync(name, certificateData, notes, changeReason,
+        return await AddFromDataCoreAsync(name, certificateData, notes, changeReason, trustedFor,
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
             certificate => AuditHelper.SetCreated(certificate, initiatedByApiKey));
     }
 
     private async Task<TrustedCertificate> AddFromDataCoreAsync(string name, byte[] certificateData, string? notes, string? changeReason,
-        Func<Activity, Task> createActivityAsync, Action<TrustedCertificate> setCreated)
+        CertificateTrustPurpose trustedFor, Func<Activity, Task> createActivityAsync, Action<TrustedCertificate> setCreated)
     {
+        RequirePurpose(trustedFor);
+
         var activity = new Activity
         {
             TargetName = name,
@@ -118,6 +124,7 @@ public class CertificateServer : ICertificateProvider
                 CertificateData = certificateData,
                 FilePath = null,
                 IsEnabled = true,
+                TrustedFor = trustedFor,
                 Notes = notes
             };
 
@@ -141,9 +148,11 @@ public class CertificateServer : ICertificateProvider
     /// <summary>
     /// Adds a certificate from a file path in the connector-files mount.
     /// </summary>
-    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, MetaverseObject? initiatedBy = null, string? notes = null, string? changeReason = null)
+    /// <param name="trustedFor">What the certificate vouches for. Connectors when not given.</param>
+    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, MetaverseObject? initiatedBy = null, string? notes = null, string? changeReason = null,
+        CertificateTrustPurpose trustedFor = CertificateTrustPurpose.Connectors)
     {
-        return await AddFromFilePathCoreAsync(name, filePath, notes, changeReason,
+        return await AddFromFilePathCoreAsync(name, filePath, notes, changeReason, trustedFor,
             activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
             certificate => AuditHelper.SetCreated(certificate, initiatedBy));
     }
@@ -151,16 +160,20 @@ public class CertificateServer : ICertificateProvider
     /// <summary>
     /// Adds a certificate from a file path in the connector-files mount. API-key initiator overload.
     /// </summary>
-    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, ApiKey initiatedByApiKey, string? notes = null, string? changeReason = null)
+    /// <param name="trustedFor">What the certificate vouches for. Connectors when not given.</param>
+    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, ApiKey initiatedByApiKey, string? notes = null, string? changeReason = null,
+        CertificateTrustPurpose trustedFor = CertificateTrustPurpose.Connectors)
     {
-        return await AddFromFilePathCoreAsync(name, filePath, notes, changeReason,
+        return await AddFromFilePathCoreAsync(name, filePath, notes, changeReason, trustedFor,
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
             certificate => AuditHelper.SetCreated(certificate, initiatedByApiKey));
     }
 
     private async Task<TrustedCertificate> AddFromFilePathCoreAsync(string name, string filePath, string? notes, string? changeReason,
-        Func<Activity, Task> createActivityAsync, Action<TrustedCertificate> setCreated)
+        CertificateTrustPurpose trustedFor, Func<Activity, Task> createActivityAsync, Action<TrustedCertificate> setCreated)
     {
+        RequirePurpose(trustedFor);
+
         var activity = new Activity
         {
             TargetName = name,
@@ -197,6 +210,7 @@ public class CertificateServer : ICertificateProvider
                 CertificateData = null,
                 FilePath = filePath,
                 IsEnabled = true,
+                TrustedFor = trustedFor,
                 Notes = notes
             };
 
@@ -218,28 +232,34 @@ public class CertificateServer : ICertificateProvider
     }
 
     /// <summary>
-    /// Updates a trusted certificate's editable properties (name, notes, enabled state).
+    /// Updates a trusted certificate's editable properties (name, notes, enabled state, what it is trusted for).
     /// </summary>
-    public async Task UpdateAsync(Guid id, MetaverseObject? initiatedBy = null, string? name = null, string? notes = null, bool? isEnabled = null, string? changeReason = null)
+    public async Task UpdateAsync(Guid id, MetaverseObject? initiatedBy = null, string? name = null, string? notes = null, bool? isEnabled = null, string? changeReason = null,
+        CertificateTrustPurpose? trustedFor = null)
     {
-        await UpdateCoreAsync(id, name, notes, isEnabled, changeReason,
+        await UpdateCoreAsync(id, name, notes, isEnabled, trustedFor, changeReason,
             activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
             certificate => AuditHelper.SetUpdated(certificate, initiatedBy));
     }
 
     /// <summary>
-    /// Updates a trusted certificate's editable properties (name, notes, enabled state). API-key initiator overload.
+    /// Updates a trusted certificate's editable properties (name, notes, enabled state, what it is trusted for).
+    /// API-key initiator overload.
     /// </summary>
-    public async Task UpdateAsync(Guid id, ApiKey initiatedByApiKey, string? name = null, string? notes = null, bool? isEnabled = null, string? changeReason = null)
+    public async Task UpdateAsync(Guid id, ApiKey initiatedByApiKey, string? name = null, string? notes = null, bool? isEnabled = null, string? changeReason = null,
+        CertificateTrustPurpose? trustedFor = null)
     {
-        await UpdateCoreAsync(id, name, notes, isEnabled, changeReason,
+        await UpdateCoreAsync(id, name, notes, isEnabled, trustedFor, changeReason,
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
             certificate => AuditHelper.SetUpdated(certificate, initiatedByApiKey));
     }
 
-    private async Task UpdateCoreAsync(Guid id, string? name, string? notes, bool? isEnabled, string? changeReason,
+    private async Task UpdateCoreAsync(Guid id, string? name, string? notes, bool? isEnabled, CertificateTrustPurpose? trustedFor, string? changeReason,
         Func<Activity, Task> createActivityAsync, Action<TrustedCertificate> setUpdated)
     {
+        if (trustedFor.HasValue)
+            RequirePurpose(trustedFor.Value);
+
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id)
             ?? throw new InvalidOperationException($"Certificate with ID {id} not found.");
 
@@ -270,6 +290,11 @@ public class CertificateServer : ICertificateProvider
             {
                 changes.Add($"Enabled: {certificate.IsEnabled} → {isEnabled.Value}");
                 certificate.IsEnabled = isEnabled.Value;
+            }
+            if (trustedFor.HasValue && trustedFor.Value != certificate.TrustedFor)
+            {
+                changes.Add($"Trusted for: {certificate.TrustedFor} → {trustedFor.Value}");
+                certificate.TrustedFor = trustedFor.Value;
             }
 
             setUpdated(certificate);
@@ -461,7 +486,8 @@ public class CertificateServer : ICertificateProvider
     public async Task<ServerCertificateTrustResult> TrustServerCertificateAsync(int connectedSystemId, string expectedThumbprint, MetaverseObject? initiatedBy = null, string? changeReason = null, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
     {
         return await TrustServerCertificateCoreAsync(connectedSystemId, expectedThumbprint, changeReason, draftSettingValues,
-            (name, data, notes, reason) => AddFromDataAsync(name, data, initiatedBy, notes, reason));
+            (name, data, notes, reason) => AddFromDataAsync(name, data, initiatedBy, notes, reason),
+            (id, trustedFor, reason) => UpdateAsync(id, initiatedBy, changeReason: reason, trustedFor: trustedFor));
     }
 
     /// <summary>
@@ -472,7 +498,8 @@ public class CertificateServer : ICertificateProvider
     public async Task<ServerCertificateTrustResult> TrustServerCertificateAsync(int connectedSystemId, string expectedThumbprint, ApiKey initiatedByApiKey, string? changeReason = null, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
     {
         return await TrustServerCertificateCoreAsync(connectedSystemId, expectedThumbprint, changeReason, draftSettingValues,
-            (name, data, notes, reason) => AddFromDataAsync(name, data, initiatedByApiKey, notes, reason));
+            (name, data, notes, reason) => AddFromDataAsync(name, data, initiatedByApiKey, notes, reason),
+            (id, trustedFor, reason) => UpdateAsync(id, initiatedByApiKey, changeReason: reason, trustedFor: trustedFor));
     }
 
     private async Task<ServerCertificateTrustResult> TrustServerCertificateCoreAsync(
@@ -480,7 +507,8 @@ public class CertificateServer : ICertificateProvider
         string expectedThumbprint,
         string? changeReason,
         IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues,
-        Func<string, byte[], string?, string?, Task<TrustedCertificate>> addAsync)
+        Func<string, byte[], string?, string?, Task<TrustedCertificate>> addAsync,
+        Func<Guid, CertificateTrustPurpose, string, Task> updateTrustedForAsync)
     {
         var expected = NormaliseThumbprint(expectedThumbprint);
         if (string.IsNullOrEmpty(expected))
@@ -545,7 +573,12 @@ public class CertificateServer : ICertificateProvider
         }
 
         var chosen = chainCertificates[chosenIndex];
-        if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(chosen.Thumbprint))
+        var reason = string.IsNullOrWhiteSpace(changeReason)
+            ? $"Trusted the certificate presented by {endpoint.Host}:{endpoint.Port} for the '{connectedSystem.Name}' Connected System."
+            : changeReason;
+
+        var existing = await Application.Repository.TrustedCertificates.GetByThumbprintAsync(chosen.Thumbprint);
+        if (existing != null && existing.TrustedFor.HasFlag(CertificateTrustPurpose.Connectors))
         {
             return new ServerCertificateTrustResult
             {
@@ -556,12 +589,18 @@ public class CertificateServer : ICertificateProvider
             };
         }
 
-        var notes = $"Trusted from the '{connectedSystem.Name}' Connected System, which {endpoint.Host}:{endpoint.Port} presented it to.";
-        var reason = string.IsNullOrWhiteSpace(changeReason)
-            ? $"Trusted the certificate presented by {endpoint.Host}:{endpoint.Port} for the '{connectedSystem.Name}' Connected System."
-            : changeReason;
-
-        var certificate = await addAsync(chosen.CommonName, chosen.Data, notes, reason);
+        TrustedCertificate certificate;
+        if (existing != null)
+        {
+            // In the store for sign-in only, which does not vouch for Connectors: widen it rather than add a duplicate.
+            await updateTrustedForAsync(existing.Id, existing.TrustedFor | CertificateTrustPurpose.Connectors, reason);
+            certificate = existing;
+        }
+        else
+        {
+            var notes = $"Trusted from the '{connectedSystem.Name}' Connected System, which {endpoint.Host}:{endpoint.Port} presented it to.";
+            certificate = await addAsync(chosen.CommonName, chosen.Data, notes, reason);
+        }
 
         // Certificate authorities between the server's certificate and the one chosen that the server does not send:
         // JIM found them by downloading, which a connection cannot be relied on to do (the LDAP Connector's TLS stack
@@ -570,7 +609,7 @@ public class CertificateServer : ICertificateProvider
         var storedIntermediates = new List<TrustedCertificate>();
         foreach (var intermediate in chainCertificates.Take(chosenIndex).Skip(1).Where(c => c.Source == ServerCertificateChainElementSource.Downloaded))
         {
-            var stored = await AddUnlessAlreadyTrustedAsync(intermediate, addAsync,
+            var stored = await AddUnlessAlreadyTrustedAsync(intermediate, addAsync, updateTrustedForAsync,
                 $"Stored alongside '{chosen.CommonName}' so JIM can link it to the certificate {endpoint.Host}:{endpoint.Port} presents, which does not send this certificate authority itself. Downloaded from {intermediate.DownloadedFrom}.",
                 reason);
             storedIntermediates.AddRange(stored == null ? [] : [stored]);
@@ -587,17 +626,24 @@ public class CertificateServer : ICertificateProvider
     }
 
     /// <summary>
-    /// Adds a certificate to the store, or returns null where it is already there.
+    /// Adds a certificate to the store for Connectors, or returns null where it is already there. One stored for
+    /// sign-in only is widened to Connectors as well.
     /// </summary>
     private async Task<TrustedCertificate?> AddUnlessAlreadyTrustedAsync(
         PresentedServerCertificate certificate,
         Func<string, byte[], string?, string?, Task<TrustedCertificate>> addAsync,
+        Func<Guid, CertificateTrustPurpose, string, Task> updateTrustedForAsync,
         string notes,
         string reason)
     {
-        return await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(certificate.Thumbprint)
-            ? null
-            : await addAsync(certificate.CommonName, certificate.Data, notes, reason);
+        var existing = await Application.Repository.TrustedCertificates.GetByThumbprintAsync(certificate.Thumbprint);
+        if (existing == null)
+            return await addAsync(certificate.CommonName, certificate.Data, notes, reason);
+
+        if (!existing.TrustedFor.HasFlag(CertificateTrustPurpose.Connectors))
+            await updateTrustedForAsync(existing.Id, existing.TrustedFor | CertificateTrustPurpose.Connectors, reason);
+
+        return null;
     }
 
     /// <summary>
@@ -697,15 +743,28 @@ public class CertificateServer : ICertificateProvider
     #endregion
 
     /// <summary>
-    /// Gets all enabled trusted certificates as X509Certificate2 objects.
+    /// Gets the enabled certificates trusted for Connectors, as X509Certificate2 objects.
     /// Implements ICertificateProvider for use by connectors.
     /// </summary>
     public async Task<List<X509Certificate2>> GetTrustedCertificatesAsync()
     {
+        return await LoadTrustedForAsync(CertificateTrustPurpose.Connectors);
+    }
+
+    /// <summary>
+    /// Gets the enabled certificates trusted for sign-in: the ones that vouch for the identity provider.
+    /// </summary>
+    public async Task<List<X509Certificate2>> GetSignInTrustedCertificatesAsync()
+    {
+        return await LoadTrustedForAsync(CertificateTrustPurpose.SignIn);
+    }
+
+    private async Task<List<X509Certificate2>> LoadTrustedForAsync(CertificateTrustPurpose purpose)
+    {
         var certificates = await GetEnabledAsync();
         var x509Certs = new List<X509Certificate2>();
 
-        foreach (var cert in certificates)
+        foreach (var cert in certificates.Where(c => c.TrustedFor.HasFlag(purpose)))
         {
             try
             {
@@ -802,6 +861,16 @@ public class CertificateServer : ICertificateProvider
         await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
             hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(certificate, hashKey)),
             $"Trusted Certificate {certificate.Id}");
+    }
+
+    /// <summary>
+    /// A certificate trusted for nothing would sit in the store doing nothing while looking as though it mattered.
+    /// </summary>
+    private static void RequirePurpose(CertificateTrustPurpose trustedFor)
+    {
+        const CertificateTrustPurpose known = CertificateTrustPurpose.Connectors | CertificateTrustPurpose.SignIn;
+        if (trustedFor == CertificateTrustPurpose.None || (trustedFor & ~known) != 0)
+            throw new ArgumentException("A certificate must be trusted for Connectors, sign-in, or both.", nameof(trustedFor));
     }
 
     /// <summary>

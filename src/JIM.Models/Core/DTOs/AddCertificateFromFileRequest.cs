@@ -35,4 +35,10 @@ public class AddCertificateFromFileRequest
     /// </summary>
     [StringLength(1000, ErrorMessage = "Change reason must not exceed 1000 characters.")]
     public string? ChangeReason { get; set; }
+
+    /// <summary>
+    /// What the certificate is trusted for: <c>Connectors</c>, <c>SignIn</c> (the identity provider), or both
+    /// (<c>"Connectors, SignIn"</c>). <c>Connectors</c> when omitted.
+    /// </summary>
+    public CertificateTrustPurpose? TrustedFor { get; set; }
 }

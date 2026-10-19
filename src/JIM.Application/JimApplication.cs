@@ -77,6 +77,7 @@ public class JimApplication : IDisposable
     /// JIM's homegrown feature-flag mechanism (#1781), built on the Service Settings store.
     /// </summary>
     public FeatureFlagServer FeatureFlags { get; }
+    public IdentityProviderTrustServer IdentityProviderTrust { get; }
     public InitialPasswordServer InitialPasswords { get; }
 
     /// <summary>
@@ -137,6 +138,7 @@ public class JimApplication : IDisposable
         Activities = new ActivityServer(this);
         Auth = new AuthServer(this);
         Certificates = new CertificateServer(this);
+        IdentityProviderTrust = new IdentityProviderTrustServer(this);
         ChangeHistory = new ChangeHistoryServer(this);
         ConfigurationChangeCapture = new ConfigurationChangeCaptureService(this);
         ConfigurationChangePreflight = new ConfigurationChangePreflightService(this);

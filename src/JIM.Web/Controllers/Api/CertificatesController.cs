@@ -9,7 +9,9 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Security;
 using JIM.Utilities;
+using JIM.Web.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -28,10 +30,15 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class CertificatesController(ILogger<CertificatesController> logger, JimApplication application) : ApiControllerBase(application, logger)
+public class CertificatesController(ILogger<CertificatesController> logger, JimApplication application, IIdentityProviderTrustMonitor identityProviderTrust)
+    : ApiControllerBase(application, logger)
 {
+    private const CertificateTrustPurpose KnownPurposes = CertificateTrustPurpose.Connectors | CertificateTrustPurpose.SignIn;
+    private const string InvalidPurposeMessage = "TrustedFor must be Connectors, SignIn, or both (\"Connectors, SignIn\").";
+
     private readonly ILogger<CertificatesController> _logger = logger;
     private readonly JimApplication _application = application;
+    private readonly IIdentityProviderTrustMonitor _identityProviderTrust = identityProviderTrust;
 
     /// <summary>
     /// List Trusted Certificates
@@ -45,7 +52,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     {
         _logger.LogDebug("Getting all trusted certificates (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
         var certificates = await _application.Certificates.GetAllAsync();
-        var headers = certificates.Select(TrustedCertificateHeader.FromEntity).AsQueryable();
+        var headers = certificates.Select(ToHeader).AsQueryable();
 
         // Apply sorting and filtering, then paginate
         var result = headers
@@ -66,7 +73,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     {
         _logger.LogDebug("Getting enabled trusted certificates");
         var certificates = await _application.Certificates.GetEnabledAsync();
-        var headers = certificates.Select(TrustedCertificateHeader.FromEntity);
+        var headers = certificates.Select(ToHeader);
         return Ok(headers);
     }
 
@@ -86,7 +93,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         if (certificate == null)
             return NotFound();
 
-        return Ok(TrustedCertificateDetailDto.FromEntity(certificate));
+        return Ok(ToDetail(certificate));
     }
 
     /// <summary>
@@ -109,6 +116,9 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         if (string.IsNullOrWhiteSpace(request.CertificateDataBase64))
             return BadRequest(ApiErrorResponse.ValidationError("Certificate data is required"));
 
+        if (!IsValidPurpose(request.TrustedFor))
+            return BadRequest(ApiErrorResponse.ValidationError(InvalidPurposeMessage));
+
         byte[] certificateData;
         try
         {
@@ -124,10 +134,10 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
             _logger.LogInformation("Adding trusted certificate from uploaded data: {Name}", LogSanitiser.Sanitise(request.Name));
             var apiKey = await GetCurrentApiKeyAsync();
             var certificate = apiKey != null
-                ? await _application.Certificates.AddFromDataAsync(request.Name, certificateData, apiKey, request.Notes, request.ChangeReason)
-                : await _application.Certificates.AddFromDataAsync(request.Name, certificateData, await GetCurrentUserAsync(), request.Notes, request.ChangeReason);
+                ? await _application.Certificates.AddFromDataAsync(request.Name, certificateData, apiKey, request.Notes, request.ChangeReason, request.TrustedFor ?? CertificateTrustPurpose.Connectors)
+                : await _application.Certificates.AddFromDataAsync(request.Name, certificateData, await GetCurrentUserAsync(), request.Notes, request.ChangeReason, request.TrustedFor ?? CertificateTrustPurpose.Connectors);
 
-            return CreatedAtRoute("GetCertificate", new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
+            return CreatedAtRoute("GetCertificate", new { id = certificate.Id }, ToDetail(certificate));
         }
         catch (InvalidOperationException ex)
         {
@@ -163,15 +173,18 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         if (string.IsNullOrWhiteSpace(request.FilePath))
             return BadRequest(ApiErrorResponse.ValidationError("File path is required"));
 
+        if (!IsValidPurpose(request.TrustedFor))
+            return BadRequest(ApiErrorResponse.ValidationError(InvalidPurposeMessage));
+
         try
         {
             _logger.LogInformation("Adding trusted certificate from file: {Name} ({FilePath})", LogSanitiser.Sanitise(request.Name), LogSanitiser.Sanitise(request.FilePath));
             var apiKey = await GetCurrentApiKeyAsync();
             var certificate = apiKey != null
-                ? await _application.Certificates.AddFromFilePathAsync(request.Name, request.FilePath, apiKey, request.Notes, request.ChangeReason)
-                : await _application.Certificates.AddFromFilePathAsync(request.Name, request.FilePath, await GetCurrentUserAsync(), request.Notes, request.ChangeReason);
+                ? await _application.Certificates.AddFromFilePathAsync(request.Name, request.FilePath, apiKey, request.Notes, request.ChangeReason, request.TrustedFor ?? CertificateTrustPurpose.Connectors)
+                : await _application.Certificates.AddFromFilePathAsync(request.Name, request.FilePath, await GetCurrentUserAsync(), request.Notes, request.ChangeReason, request.TrustedFor ?? CertificateTrustPurpose.Connectors);
 
-            return CreatedAtRoute("GetCertificate", new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
+            return CreatedAtRoute("GetCertificate", new { id = certificate.Id }, ToDetail(certificate));
         }
         catch (FileNotFoundException ex)
         {
@@ -207,14 +220,17 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         if (existing == null)
             return NotFound();
 
+        if (request.TrustedFor.HasValue && !IsValidPurpose(request.TrustedFor))
+            return BadRequest(ApiErrorResponse.ValidationError(InvalidPurposeMessage));
+
         try
         {
             _logger.LogInformation("Updating trusted certificate: {Id}", id);
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.Certificates.UpdateAsync(id, apiKey, request.Name, request.Notes, request.IsEnabled, request.ChangeReason);
+                await _application.Certificates.UpdateAsync(id, apiKey, request.Name, request.Notes, request.IsEnabled, request.ChangeReason, request.TrustedFor);
             else
-                await _application.Certificates.UpdateAsync(id, await GetCurrentUserAsync(), request.Name, request.Notes, request.IsEnabled, request.ChangeReason);
+                await _application.Certificates.UpdateAsync(id, await GetCurrentUserAsync(), request.Name, request.Notes, request.IsEnabled, request.ChangeReason, request.TrustedFor);
 
             return NoContent();
         }
@@ -223,6 +239,66 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
             _logger.LogWarning(ex, "Failed to update certificate: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// Trust a certificate the identity provider presents
+    /// </summary>
+    /// <remarks>
+    /// JIM connects to its identity provider again, finds the certificate with the given thumbprint in the chain it
+    /// presents, and adds it to the JIM certificate store trusted for sign-in; sign-in then works without a restart.
+    /// Name the highest certificate presented (<c>suggestedThumbprint</c> in
+    /// <c>GET /api/v1/auth/identity-provider-trust</c>): a certificate authority outlasts the certificates it issues.
+    ///
+    /// Check the thumbprint against the one your certificate authority publishes before trusting it. Nothing is
+    /// trusted that the identity provider is not presenting now, or that would not make it trusted.
+    ///
+    /// Before anyone can sign in, call this with the infrastructure API key.
+    /// </remarks>
+    /// <param name="request">The thumbprint to trust, and optionally a name and why.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The outcome, the certificate as it now sits in the store, and the identity provider's status afterwards.</returns>
+    /// <response code="201">The certificate was added to the JIM certificate store, trusted for sign-in.</response>
+    /// <response code="200">The certificate was already in the store: now trusted for sign-in as well (<c>TrustedForSignInAsWell</c>), or already trusted for it (<c>AlreadyTrusted</c>).</response>
+    /// <response code="400">No thumbprint was given, the certificate does not name the identity provider's host (<c>NameMismatch</c>), or its chain is invalid however it is anchored (<c>InvalidChain</c>).</response>
+    /// <response code="409">The identity provider is not presenting a certificate with that thumbprint now (<c>ThumbprintNotPresented</c>).</response>
+    /// <response code="502">The identity provider could not be reached, uses plain HTTP, or none is configured (<c>IdentityProviderUnavailable</c>).</response>
+    [HttpPost("identity-provider", Name = "TrustIdentityProviderCertificate")]
+    [ProducesResponseType(typeof(TrustIdentityProviderCertificateResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(TrustIdentityProviderCertificateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TrustIdentityProviderCertificateResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(TrustIdentityProviderCertificateResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(TrustIdentityProviderCertificateResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> TrustIdentityProviderCertificateAsync([FromBody] TrustIdentityProviderCertificateRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Thumbprint))
+            return BadRequest(ApiErrorResponse.ValidationError("A thumbprint is required. JIM will not trust whatever the identity provider happens to be presenting."));
+
+        _logger.LogInformation("Trusting a certificate the identity provider presents: {Thumbprint}", LogSanitiser.Sanitise(request.Thumbprint));
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.IdentityProviderTrust.TrustPresentedCertificateAsync(request.Thumbprint, apiKey, request.Name, request.ChangeReason, cancellationToken)
+            : await _application.IdentityProviderTrust.TrustPresentedCertificateAsync(request.Thumbprint, await GetCurrentUserAsync(), request.Name, request.ChangeReason, cancellationToken);
+
+        var changed = result.Outcome is IdentityProviderCertificateTrustOutcome.Trusted or IdentityProviderCertificateTrustOutcome.TrustedForSignInAsWell;
+        var status = changed ? await _identityProviderTrust.RecheckAsync(cancellationToken) : result.Status;
+        var response = new TrustIdentityProviderCertificateResponse
+        {
+            Outcome = result.Outcome,
+            Message = result.Message,
+            Certificate = result.Certificate == null ? null : ToDetail(result.Certificate, status),
+            Status = status == null ? null : IdentityProviderTrustStatusDto.FromStatus(status, includeStoreDetail: true)
+        };
+
+        return result.Outcome switch
+        {
+            IdentityProviderCertificateTrustOutcome.Trusted => StatusCode(StatusCodes.Status201Created, response),
+            IdentityProviderCertificateTrustOutcome.TrustedForSignInAsWell or IdentityProviderCertificateTrustOutcome.AlreadyTrusted => Ok(response),
+            IdentityProviderCertificateTrustOutcome.ThumbprintNotPresented => Conflict(response),
+            IdentityProviderCertificateTrustOutcome.IdentityProviderUnavailable => StatusCode(StatusCodes.Status502BadGateway, response),
+            _ => BadRequest(response)
+        };
     }
 
     /// <summary>
@@ -390,4 +466,26 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     #endregion
+
+    private static bool IsValidPurpose(CertificateTrustPurpose? trustedFor) =>
+        trustedFor is null || (trustedFor.Value != CertificateTrustPurpose.None && (trustedFor.Value & ~KnownPurposes) == 0);
+
+    private TrustedCertificateHeader ToHeader(TrustedCertificate certificate)
+    {
+        var header = TrustedCertificateHeader.FromEntity(certificate);
+        var status = _identityProviderTrust.Current;
+        header.UsedBySignIn = status.IsUsedBySignIn(certificate.Id);
+        header.SignInDependsOnIt = status.SignInDependsOn(certificate.Id);
+        return header;
+    }
+
+    private TrustedCertificateDetailDto ToDetail(TrustedCertificate certificate) => ToDetail(certificate, _identityProviderTrust.Current);
+
+    private static TrustedCertificateDetailDto ToDetail(TrustedCertificate certificate, IdentityProviderTrustStatus? status)
+    {
+        var detail = TrustedCertificateDetailDto.FromEntity(certificate);
+        detail.UsedBySignIn = status?.IsUsedBySignIn(certificate.Id) == true;
+        detail.SignInDependsOnIt = status?.SignInDependsOn(certificate.Id) == true;
+        return detail;
+    }
 }

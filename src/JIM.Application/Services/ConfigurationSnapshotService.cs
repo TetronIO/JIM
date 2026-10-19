@@ -1016,7 +1016,7 @@ public class ConfigurationSnapshotService
     /// <summary>
     /// Builds a metadata-only snapshot of a Trusted Certificate (a Guid-keyed configuration object): its name, the
     /// public X.509 identity fields (thumbprint, subject, issuer, serial number, validity window), its source, enabled
-    /// state and notes. The raw certificate material (DER/PEM bytes) is never captured in any form; the thumbprint
+    /// state, what it is trusted for, and notes. The raw certificate material (DER/PEM bytes) is never captured in any form; the thumbprint
     /// already identifies the exact certificate, so a swap is always detectable from metadata alone. Trusted
     /// Certificates carry no secrets; <paramref name="hashKey"/> keeps the signature uniform with the other builders.
     /// </summary>
@@ -1035,6 +1035,7 @@ public class ConfigurationSnapshotService
         AddEnum(children, "sourceType", certificate.SourceType, "Source");
         Add(children, "filePath", certificate.FilePath, "File path");
         Add(children, "enabled", Render(certificate.IsEnabled), "Enabled");
+        AddEnum(children, "trustedFor", certificate.TrustedFor, "Trusted for");
         Add(children, "notes", certificate.Notes, "Notes");
 
         return new ConfigurationSnapshot

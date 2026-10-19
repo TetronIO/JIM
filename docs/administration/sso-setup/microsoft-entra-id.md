@@ -159,6 +159,10 @@ JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 
 To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
 
+## Microsoft Entra ID Troubleshooting
+
+- **Sign-in is unavailable / JIM does not trust the certificate**: Microsoft Entra ID's certificates come from public certificate authorities the operating system trusts, so this usually means a proxy between JIM and Microsoft inspects TLS and presents your organisation's certificate instead. Trust the proxy's certificate authority for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
+
 ## Next steps
 
 If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

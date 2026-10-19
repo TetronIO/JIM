@@ -3,6 +3,8 @@
 
 using Asp.Versioning;
 using JIM.Models.Core;
+using JIM.Web.Authentication;
+using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -92,6 +94,33 @@ public class AuthController : ControllerBase
             UsePkce = true,
             CodeChallengeMethod = "S256"
         });
+    }
+
+    /// <summary>
+    /// Get the identity provider's trust status
+    /// </summary>
+    /// <remarks>
+    /// Whether JIM trusts its identity provider's TLS certificate, and the chain the identity provider presents. When
+    /// the state is <c>Untrusted</c>, trust the certificate named by <c>suggestedThumbprint</c> with
+    /// <c>POST /api/v1/certificates/identity-provider</c> (Administrator role; before anyone can sign in, use the
+    /// infrastructure API key), or upload <c>unsentIssuer</c>'s certificate trusted for <c>SignIn</c>.
+    ///
+    /// This endpoint is unauthenticated, because it matters most when nobody can sign in. It shows only what any TLS
+    /// client of the identity provider can see; what the JIM certificate store holds is returned to administrators
+    /// only. JIM checks again at most every few seconds however often this is called.
+    /// </remarks>
+    /// <param name="monitor">The identity provider's last known status.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The identity provider's trust status.</returns>
+    /// <response code="200">Returns the status.</response>
+    [HttpGet("identity-provider-trust", Name = "GetIdentityProviderTrust")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IdentityProviderTrustStatusDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetIdentityProviderTrustAsync([FromServices] IIdentityProviderTrustMonitor monitor, CancellationToken cancellationToken)
+    {
+        var status = await monitor.GetFreshStatusAsync(cancellationToken);
+        var isAdministrator = User.IsInRole(Constants.BuiltInRoles.Administrator);
+        return Ok(IdentityProviderTrustStatusDto.FromStatus(status, includeStoreDetail: isAdministrator));
     }
 }
 

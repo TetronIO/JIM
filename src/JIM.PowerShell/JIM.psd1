@@ -216,6 +216,7 @@
         'Remove-JIMCertificate',
         'Test-JIMCertificate',
         'Export-JIMCertificate',
+        'Get-JIMIdentityProviderTrust',
 
         # Security
         'Get-JIMRole',
