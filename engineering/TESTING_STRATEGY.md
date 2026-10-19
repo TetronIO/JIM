@@ -156,7 +156,7 @@ Total: 43 tests.
 
 **Running locally**:
 
-Use the `jim-test-db` alias, which spins up a disposable PostgreSQL container on port 5433 (so it never collides with your dev `jim-db` on 5432), runs the tier, and tears the container down:
+Use the `jim-test-db` alias, which spins up a disposable PostgreSQL container on port 5433 (so it never collides with your dev `jim-db` on 5432), runs the tier, and tears the container down. The container comes from `test/scripts/Start-PostgresTestServer.ps1`, which CI's `database-tests` job runs too: both use the image pinned in `docker-compose.yml`, with durability off and a `C.UTF-8` cluster as the bundled database has:
 
 ```bash
 jim-test-db
@@ -170,7 +170,7 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
   dotnet test JIM.sln --filter "Category=RequiresPostgres"
 ```
 
-**Running in CI**: The `database-tests` job in `.github/workflows/ci.yml` stands up a PostgreSQL service container, turns off `fsync`, `synchronous_commit` and `full_page_writes` on it (the database is discarded, and with them on the job's run time followed the runner's disk speed), points `JIM_TEST_RESET_*` at a throwaway `jim_test` database, and runs `dotnet test JIM.sln --filter "Category=RequiresPostgres"` on every PR. It runs alongside the in-memory `build-and-test` job, so the two tiers give independent feedback and a failure here blocks the PR.
+**Running in CI**: The `database-tests` job in `.github/workflows/ci.yml` stands up PostgreSQL with `test/scripts/Start-PostgresTestServer.ps1` (the script behind `jim-test-db`), from the image pinned in `docker-compose.yml` rather than a service container's hand-maintained pin (#2075), with `fsync`, `synchronous_commit` and `full_page_writes` off (the database is discarded, and with them on the job's run time followed the runner's disk speed), points `JIM_TEST_RESET_*` at a throwaway `jim_test` database, and runs `dotnet test JIM.sln --filter "Category=RequiresPostgres"` on every PR. It runs alongside the in-memory `build-and-test` job, so the two tiers give independent feedback and a failure here blocks the PR.
 
 **What Database-Backed Component Tests Are Good At**:
 - ✅ Catching persistence bugs the in-memory provider's auto-tracking masks (silent no-op writes)

@@ -58,8 +58,7 @@
 - `jim-prd` - Create a new PRD from template (prompts for feature name)
 
 **Docker (Manual Commands):**
-- `docker compose -f .devcontainer/db.yml up -d` - Start database (same as jim-db)
-- `docker compose -f .devcontainer/db.yml down` - Stop database
+- `jim-db` / `jim-db-stop` - Start / stop the standalone database. Not `docker compose -f .devcontainer/db.yml` directly: `db.yml` takes its image from `JIM_DEV_DB_IMAGE`, which the aliases set from the PostgreSQL pin in `docker-compose.yml` (#2075)
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**

@@ -46,6 +46,11 @@ BeforeAll {
             [System.Collections.Specialized.OrderedDictionary]$DockerTags = ([ordered]@{
                 'latest' = $script:DigestC; '0.24' = $script:DigestA; '0.24.2' = $script:DigestA; '0.24.2-alpine' = $script:DigestC
             }),
+            # The Trivy scanner's tags, kept apart from the lychee ones above so each image's
+            # pin can be tested on its own. Trivy also publishes per-architecture variants.
+            [System.Collections.Specialized.OrderedDictionary]$TrivyTags = ([ordered]@{
+                'latest' = $script:DigestC; '0.76' = $script:DigestA; '0.76.0' = $script:DigestA; '0.76.0-amd64' = $script:DigestC
+            }),
             [int]$DockerPageSize = 100
         )
 
@@ -54,6 +59,7 @@ BeforeAll {
             NpmVersions    = $NpmVersions
             NuGetVersions  = $NuGetVersions
             DockerTags     = $DockerTags
+            TrivyTags      = $TrivyTags
             DockerPageSize = $DockerPageSize
             Failing        = $false
             Uris           = [System.Collections.ArrayList]::new()
@@ -80,11 +86,14 @@ BeforeAll {
         }
 
         if ($Uri -match 'hub\.docker\.com/v2/repositories/(?<repo>[^/]+/[^/]+)/tags') {
+            # Taken before the page match below replaces $Matches.
+            $repo = $Matches.repo
             $size = $global:FakeRegistry.DockerPageSize
             $page = if ($Uri -match '[?&]page=(\d+)') { [int]$Matches[1] } else { 1 }
-            $all = @($global:FakeRegistry.DockerTags.GetEnumerator() | ForEach-Object { [pscustomobject]@{ name = $_.Key; digest = $_.Value } })
+            $tags = if ($repo -eq 'aquasec/trivy') { $global:FakeRegistry.TrivyTags } else { $global:FakeRegistry.DockerTags }
+            $all = @($tags.GetEnumerator() | ForEach-Object { [pscustomobject]@{ name = $_.Key; digest = $_.Value } })
             $slice = @($all | Select-Object -Skip (($page - 1) * $size) -First $size)
-            $next = if ($page * $size -lt $all.Count) { "https://hub.docker.com/v2/repositories/$($Matches.repo)/tags?page=$($page + 1)&page_size=$size&name=." } else { $null }
+            $next = if ($page * $size -lt $all.Count) { "https://hub.docker.com/v2/repositories/$repo/tags?page=$($page + 1)&page_size=$size&name=." } else { $null }
             return [pscustomobject]@{ count = $all.Count; next = $next; results = $slice }
         }
 
@@ -98,12 +107,20 @@ BeforeAll {
             [string]$PlaywrightVersion = '0.0.79',
             [string]$DotnetEfVersion = '10.0.10',
             [string]$LycheeTag = '0.24.2',
-            [string]$LycheeDigest = $script:DigestA
+            [string]$LycheeDigest = $script:DigestA,
+            [string]$TrivyTag = '0.76.0',
+            [string]$TrivyDigest = $script:DigestA
         )
 
         $root = Join-Path $TestDrive ("Pins_" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path (Join-Path $root '.devcontainer') -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $root 'scripts') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $root '.github') -Force | Out-Null
+
+        Set-Content -Path (Join-Path $root '.github/trivy-image.txt') -Value @"
+# The Trivy scanner image the scan-images job runs, pinned by tag and digest.
+aquasec/trivy:$TrivyTag@$TrivyDigest
+"@
 
         Set-Content -Path (Join-Path $root 'scripts/Test-DocsSite.ps1') -Value @"
 # lychee $LycheeTag, the official multi-architecture image, pinned by digest.
@@ -290,6 +307,66 @@ Describe 'check-tooling-pins.ps1' {
 
             $script:ExitCode | Should -Be 0
             $script:Output | Should -Match 'lycheeverse/lychee\s+0\.24\.2\s+->\s+0\.24\.2\s+current'
+        }
+    }
+
+    Context 'when the Trivy scanner image pin is behind' {
+
+        It 'proposes the newer scanner release, moving its tag and digest together' {
+            New-FakeRegistry -NpmLatest '0.0.79' -NpmVersions @('0.0.79') -NuGetVersions @('10.0.10') -TrivyTags ([ordered]@{
+                '0.76.0' = $script:DigestA; '0.77.0' = $script:DigestB; '0.77.0-arm64' = $script:DigestC; 'latest' = $script:DigestB
+            })
+            $tree = New-PinTree
+
+            Invoke-CheckToolingPins -Tree $tree -Apply
+
+            $script:ExitCode | Should -Be 2
+            Get-Content (Join-Path $tree '.github/trivy-image.txt') -Raw |
+                Should -Match "(?m)^aquasec/trivy:0\.77\.0@$([regex]::Escape($script:DigestB))$"
+            # The lychee pin is current, so it is left alone.
+            Get-Content (Join-Path $tree 'scripts/Test-DocsSite.ps1') -Raw | Should -Match 'lycheeverse/lychee:0\.24\.2@'
+        }
+
+        It 'fails loudly when the pinned scanner release is gone from Docker Hub' {
+            New-FakeRegistry -NpmLatest '0.0.79' -NpmVersions @('0.0.79') -NuGetVersions @('10.0.10') -TrivyTags ([ordered]@{ '0.77.0' = $script:DigestB })
+
+            Invoke-CheckToolingPins -Tree (New-PinTree)
+
+            $script:ExitCode | Should -Be 3
+            $script:Output | Should -Match 'aquasec/trivy.*WITHDRAWN'
+        }
+    }
+
+    Context "against the repository's own pin files" {
+
+        It 'finds every pin, so a reworded pin line cannot leave a tool unwatched' {
+            # The trees above are written to match the pin files, which is no proof the files still match the
+            # patterns. Copy the real ones and read them: a pattern that no longer matches throws here.
+            $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..')).Path
+            $tree = Join-Path $TestDrive ("Real_" + [guid]::NewGuid().ToString('N'))
+            foreach ($file in @('.devcontainer/setup.sh', '.mcp.json', 'scripts/Test-DocsSite.ps1', '.github/trivy-image.txt')) {
+                New-Item -ItemType Directory -Path (Split-Path (Join-Path $tree $file)) -Force | Out-Null
+                Copy-Item -Path (Join-Path $repoRoot $file) -Destination (Join-Path $tree $file)
+            }
+
+            Invoke-CheckToolingPins -Tree $tree
+
+            # The fake registry knows none of the real versions, so they read as withdrawn (3) or behind (2);
+            # what matters is that every tool was read.
+            $script:ExitCode | Should -BeIn @(2, 3)
+            foreach ($name in @('@playwright/mcp', 'dotnet-ef', 'lycheeverse/lychee', 'aquasec/trivy')) {
+                $script:Output | Should -Match ([regex]::Escape($name))
+            }
+        }
+
+        It 'is the only place the scan job takes its scanner image from' {
+            # Dependabot does not read an image named in a workflow's env, and the App that commits the pin check's
+            # bumps cannot write .github/workflows/, so a scanner pin back in ci.yml would go unwatched again (#2075).
+            $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..')).Path
+            $ci = Get-Content (Join-Path $repoRoot '.github/workflows/ci.yml') -Raw
+
+            $ci | Should -Not -Match 'aquasec/trivy:\d[\w.\-]*@sha256:[0-9a-f]{64}'
+            $ci | Should -Match ([regex]::Escape('.github/trivy-image.txt'))
         }
     }
 

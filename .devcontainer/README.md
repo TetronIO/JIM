@@ -371,9 +371,11 @@ This only affects native Linux hosts. Docker Desktop on macOS/Windows and GitHub
 
 **For local development (jim-db):**
 ```bash
-docker compose -f .devcontainer/db.yml up -d
-docker compose -f .devcontainer/db.yml logs
+jim-db
+jim-db-logs
 ```
+
+Start it with `jim-db` rather than `docker compose -f .devcontainer/db.yml` directly: `db.yml` takes its image from the PostgreSQL pinned in `docker-compose.yml`, which `jim-db` reads, so a bare `docker compose` stops with "required variable JIM_DEV_DB_IMAGE is missing a value".
 
 **For full Docker stack (jim-stack):**
 ```bash
@@ -385,7 +387,7 @@ If you see memory allocation errors, PostgreSQL may be over-provisioned for the 
 ```bash
 # Re-tune and clean restart
 jim-postgres-tune
-docker compose -f .devcontainer/db.yml down -v
+jim-db-stop && docker volume rm jim-db-volume
 jim-db
 ```
 
@@ -393,7 +395,7 @@ jim-db
 
 ```bash
 # Ensure database is running
-docker compose -f .devcontainer/db.yml ps
+docker ps --filter name=JIM.Database
 
 # Apply migrations manually
 dotnet ef database update --project src/JIM.PostgresData
@@ -421,7 +423,7 @@ dotnet build JIM.sln
 
 ```bash
 # Stop and remove database
-docker compose -f .devcontainer/db.yml down -v
+jim-db-stop && docker volume rm jim-db-volume
 
 # Re-run setup
 bash .devcontainer/setup.sh

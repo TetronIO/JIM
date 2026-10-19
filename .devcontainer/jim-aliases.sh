@@ -172,35 +172,30 @@ alias jim-test='dotnet test JIM.sln'
 # Run the database-backed (real-PostgreSQL) test tier against a throwaway database.
 # These fixtures are gated by JIM_TEST_RESET_DB and self-skip in a normal `jim-test`
 # run. This spins up a disposable PostgreSQL container, points the tier at it, runs
-# `Category=RequiresPostgres`, then tears the container down. Needs `jim-db` NOT to be
-# using the same container name; it uses a dedicated `jim-test-db` container on port 5433
-# so it never collides with your dev database. See engineering/TESTING_STRATEGY.md.
+# `Category=RequiresPostgres`, then tears the container down. It uses a dedicated
+# `jim-test-db` container on port 5433 so it never collides with your dev database.
+# The container is started by test/scripts/Start-PostgresTestServer.ps1, the same script
+# CI's database-tests job runs, so both test against the image docker-compose.yml pins.
+# See engineering/TESTING_STRATEGY.md.
 jim-test-db() {
-  local container='jim-test-db'
-  local image='postgres:18.4@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20'
-  echo "Starting throwaway PostgreSQL ($container) on port 5433..."
-  docker rm -f "$container" >/dev/null 2>&1 || true
-  docker run -d --name "$container" \
-    -e POSTGRES_USER=postgres \
-    -e POSTGRES_PASSWORD=postgres \
-    -e POSTGRES_DB=jim_test \
-    -p 5433:5432 "$image" >/dev/null || { echo "Failed to start $container"; return 1; }
+  local server='test/scripts/Start-PostgresTestServer.ps1'
+  local started
+  started="$(pwsh -NoProfile -File "$server" -HostPort 5433)" || {
+    echo "$started"
+    echo "Failed to start the throwaway PostgreSQL"
+    pwsh -NoProfile -File "$server" -Stop >/dev/null 2>&1
+    return 1
+  }
+  echo "$started" | grep -v '^export '
 
-  echo "Waiting for PostgreSQL to accept connections..."
-  local ready=''
-  for _ in $(seq 1 30); do
-    if docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; then ready=1; break; fi
-    sleep 1
-  done
-  if [ -z "$ready" ]; then echo "PostgreSQL did not become ready"; docker rm -f "$container" >/dev/null 2>&1; return 1; fi
-
-  JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=5433 JIM_TEST_RESET_USER=postgres \
-    JIM_TEST_RESET_PASSWORD=postgres JIM_TEST_RESET_DB=jim_test \
+  # A subshell, so the throwaway database's settings do not linger in your shell.
+  (
+    eval "$(echo "$started" | grep '^export ')"
     dotnet test JIM.sln --filter "Category=RequiresPostgres" --verbosity normal
+  )
   local rc=$?
 
-  echo "Removing throwaway PostgreSQL ($container)..."
-  docker rm -f "$container" >/dev/null 2>&1 || true
+  pwsh -NoProfile -File "$server" -Stop
   return $rc
 }
 # Kill cached MSBuild worker nodes that stack up across build/test iterations.
@@ -450,22 +445,27 @@ _jim_compose() {
   echo "${args[@]}"
 }
 
+# Runs docker compose against the standalone database's files. db.yml takes its image from
+# JIM_DEV_DB_IMAGE, set here to the PostgreSQL pinned in docker-compose.yml, so the dev
+# database runs what customers run and moves with every Dependabot bump of that pin (#2075).
 _jim_db_compose() {
   local args=(-f .devcontainer/db.yml)
   [ -f .devcontainer/db.local.yml ] && args+=(-f .devcontainer/db.local.yml)
-  echo "${args[@]}"
+  local image
+  image="$(pwsh -NoProfile -File scripts/Get-PostgresImageReference.ps1)" || return 1
+  JIM_DEV_DB_IMAGE="$image" docker compose "${args[@]}" "$@"
 }
 
 # Standalone database (local development workflow)
 jim-db() {
   _jim_heal_docker_creds
-  docker compose $(_jim_db_compose) up -d
+  _jim_db_compose up -d
 }
 jim-db-stop() {
-  docker compose $(_jim_db_compose) down
+  _jim_db_compose down
 }
 jim-db-logs() {
-  docker compose $(_jim_db_compose) logs -f
+  _jim_db_compose logs -f
 }
 
 # Standalone Keycloak IdP (local debugging workflow - use with jim-db + F5)
@@ -853,4 +853,4 @@ jim-openapi-generate() {
 
 # Wipe JIM data (reset to initial state without destroying database)
 # Note: Preserves MetaverseObjects with Administrator role assignments
-alias jim-wipe='echo "Wiping JIM data..." && docker compose -f .devcontainer/db.yml exec -T jim.database psql -U ${JIM_DATABASE_USERNAME:-jim} -d ${JIM_DATABASE_NAME:-jim} -c "BEGIN; CREATE TEMP TABLE admin_mvos AS SELECT \"StaticMembersId\" as \"Id\" FROM \"MetaverseObjectRole\" WHERE \"RolesId\" = (SELECT \"Id\" FROM \"Roles\" WHERE \"Name\" = '\''Administrator'\''); DELETE FROM \"MetaverseObjectChangeAttributeValues\" WHERE \"MetaverseObjectChangeAttributeId\" IN (SELECT moca.\"Id\" FROM \"MetaverseObjectChangeAttributes\" moca JOIN \"MetaverseObjectChanges\" moc ON moca.\"MetaverseObjectChangeId\" = moc.\"Id\" WHERE moc.\"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos)); DELETE FROM \"MetaverseObjectChangeAttributes\" WHERE \"MetaverseObjectChangeId\" IN (SELECT \"Id\" FROM \"MetaverseObjectChanges\" WHERE \"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos)); DELETE FROM \"MetaverseObjectChanges\" WHERE \"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos); DELETE FROM \"ConnectedSystemObjectChangeAttributeValues\"; DELETE FROM \"ConnectedSystemObjectChangeAttributes\"; DELETE FROM \"ConnectedSystemObjectChanges\"; DELETE FROM \"PendingExportAttributeValueChanges\"; DELETE FROM \"PendingExports\"; DELETE FROM \"DeferredReferences\"; DELETE FROM \"ActivityRunProfileExecutionItems\"; DELETE FROM \"Activities\"; DELETE FROM \"WorkerTasks\"; DELETE FROM \"MetaverseObjectAttributeValues\" WHERE \"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos) AND \"ReferenceValueId\" IS NULL; DELETE FROM \"MetaverseObjectAttributeValues\" WHERE \"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos); DELETE FROM \"MetaverseObjects\" WHERE \"Id\" NOT IN (SELECT \"Id\" FROM admin_mvos); DELETE FROM \"ConnectedSystemObjectAttributeValues\"; DELETE FROM \"ConnectedSystemObjects\"; DELETE FROM \"SyncRuleMappingSourceParamValues\"; DELETE FROM \"SyncRuleMappingSources\"; DELETE FROM \"SyncRuleMappings\"; DELETE FROM \"SyncRuleScopingCriteria\"; DELETE FROM \"SyncRuleScopingCriteriaGroups\"; DELETE FROM \"ObjectMatchingRuleSourceParamValues\"; DELETE FROM \"ObjectMatchingRuleSources\"; DELETE FROM \"ObjectMatchingRules\"; DELETE FROM \"SyncRules\"; DELETE FROM \"ConnectedSystemRunProfiles\"; DELETE FROM \"ConnectedSystemSettingValues\"; DELETE FROM \"ConnectedSystemAttributes\"; DELETE FROM \"ConnectedSystemObjectTypes\"; DELETE FROM \"ConnectedSystemContainers\"; DELETE FROM \"ConnectedSystemPartitions\"; DELETE FROM \"ConnectedSystems\"; COMMIT;" > /dev/null 2>&1 && docker compose -f .devcontainer/db.yml exec -T jim.database psql -U ${JIM_DATABASE_USERNAME:-jim} -d ${JIM_DATABASE_NAME:-jim} -c "VACUUM ANALYZE;" > /dev/null 2>&1 && echo "✓ JIM data wiped successfully (preserved admin users)"'
+alias jim-wipe='echo "Wiping JIM data..." && _jim_db_compose exec -T jim.database psql -U ${JIM_DATABASE_USERNAME:-jim} -d ${JIM_DATABASE_NAME:-jim} -c "BEGIN; CREATE TEMP TABLE admin_mvos AS SELECT \"StaticMembersId\" as \"Id\" FROM \"MetaverseObjectRole\" WHERE \"RolesId\" = (SELECT \"Id\" FROM \"Roles\" WHERE \"Name\" = '\''Administrator'\''); DELETE FROM \"MetaverseObjectChangeAttributeValues\" WHERE \"MetaverseObjectChangeAttributeId\" IN (SELECT moca.\"Id\" FROM \"MetaverseObjectChangeAttributes\" moca JOIN \"MetaverseObjectChanges\" moc ON moca.\"MetaverseObjectChangeId\" = moc.\"Id\" WHERE moc.\"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos)); DELETE FROM \"MetaverseObjectChangeAttributes\" WHERE \"MetaverseObjectChangeId\" IN (SELECT \"Id\" FROM \"MetaverseObjectChanges\" WHERE \"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos)); DELETE FROM \"MetaverseObjectChanges\" WHERE \"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos); DELETE FROM \"ConnectedSystemObjectChangeAttributeValues\"; DELETE FROM \"ConnectedSystemObjectChangeAttributes\"; DELETE FROM \"ConnectedSystemObjectChanges\"; DELETE FROM \"PendingExportAttributeValueChanges\"; DELETE FROM \"PendingExports\"; DELETE FROM \"DeferredReferences\"; DELETE FROM \"ActivityRunProfileExecutionItems\"; DELETE FROM \"Activities\"; DELETE FROM \"WorkerTasks\"; DELETE FROM \"MetaverseObjectAttributeValues\" WHERE \"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos) AND \"ReferenceValueId\" IS NULL; DELETE FROM \"MetaverseObjectAttributeValues\" WHERE \"MetaverseObjectId\" NOT IN (SELECT \"Id\" FROM admin_mvos); DELETE FROM \"MetaverseObjects\" WHERE \"Id\" NOT IN (SELECT \"Id\" FROM admin_mvos); DELETE FROM \"ConnectedSystemObjectAttributeValues\"; DELETE FROM \"ConnectedSystemObjects\"; DELETE FROM \"SyncRuleMappingSourceParamValues\"; DELETE FROM \"SyncRuleMappingSources\"; DELETE FROM \"SyncRuleMappings\"; DELETE FROM \"SyncRuleScopingCriteria\"; DELETE FROM \"SyncRuleScopingCriteriaGroups\"; DELETE FROM \"ObjectMatchingRuleSourceParamValues\"; DELETE FROM \"ObjectMatchingRuleSources\"; DELETE FROM \"ObjectMatchingRules\"; DELETE FROM \"SyncRules\"; DELETE FROM \"ConnectedSystemRunProfiles\"; DELETE FROM \"ConnectedSystemSettingValues\"; DELETE FROM \"ConnectedSystemAttributes\"; DELETE FROM \"ConnectedSystemObjectTypes\"; DELETE FROM \"ConnectedSystemContainers\"; DELETE FROM \"ConnectedSystemPartitions\"; DELETE FROM \"ConnectedSystems\"; COMMIT;" > /dev/null 2>&1 && _jim_db_compose exec -T jim.database psql -U ${JIM_DATABASE_USERNAME:-jim} -d ${JIM_DATABASE_NAME:-jim} -c "VACUUM ANALYZE;" > /dev/null 2>&1 && echo "✓ JIM data wiped successfully (preserved admin users)"'

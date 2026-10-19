@@ -123,7 +123,7 @@ jobs:
 
   database-tests:
     # Runs the RequiresPostgres NUnit tier (the "Database-backed component tests"
-    # tier in engineering/TESTING_STRATEGY.md) against a real PostgreSQL service.
+    # tier in engineering/TESTING_STRATEGY.md) against a real PostgreSQL.
     # These fixtures self-skip in the in-memory build-and-test job (JIM_TEST_RESET_DB
     # unset); here they execute, guarding provider-specific and raw-SQL behaviour the
     # EF Core in-memory provider cannot reproduce (the class of bug behind #849/#850).
@@ -132,63 +132,18 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
-    services:
-      postgres:
-        # Pinned to match the production database image in docker-compose.yml; bump
-        # both together. Dependabot's docker ecosystem does not scan workflow service
-        # images, so this digest pin is maintained by hand.
-        image: postgres:18.4@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: jim_test
-          # Same locale as the bundled database in docker-compose.yml (UTF8, code-point
-          # ordering), so these tests see the sorting and case rules production runs with.
-          # The image's own default is en_US.utf8.
-          LANG: C.UTF-8
-        # Ephemeral host port. A fixed 5432:5432 collides on the self-hosted runner
-        # host, where a second runner service can be running another job (e.g. a
-        # JIM-Bench run) with its own PostgreSQL on the same port at the same moment.
-        ports:
-          - 5432
-        # Hold the job's steps until PostgreSQL is accepting connections. -U names a role that
-        # exists: without it pg_isready connects as the runner's OS user, and the server logs
-        # 'role "root" does not exist' every ten seconds into the service log this job is
-        # diagnosed from.
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    # The RequiresPostgres fixtures read these to build the connection string and to
-    # opt in (JIM_TEST_RESET_DB being set is what flips them from Assert.Ignore to run).
-    # jim_test is a throwaway database: each fixture migrates the schema once and empties
-    # every table between tests (PostgresTestDatabase.ResetAsync in JIM.TestSupport).
-    env:
-      JIM_TEST_RESET_HOST: localhost
-      JIM_TEST_RESET_USER: postgres
-      JIM_TEST_RESET_PASSWORD: postgres
-      JIM_TEST_RESET_DB: jim_test
-
+    # The throwaway PostgreSQL is started by test/scripts/Start-PostgresTestServer.ps1
+    # rather than declared as a service container. A service's image has to be written
+    # into this file, where Dependabot never moves it, and by #2075 that pin was a release
+    # behind the one customers get. The script reads the image Dependabot does maintain,
+    # in docker-compose.yml, and can also pass PostgreSQL the server arguments a service
+    # cannot be given (durability off, since the database is discarded with the job). It
+    # appends the connection settings the RequiresPostgres fixtures read (JIM_TEST_RESET_*;
+    # JIM_TEST_RESET_DB being set is what flips them from Assert.Ignore to run) to
+    # GITHUB_ENV. jim_test is a throwaway database: each fixture migrates the schema once
+    # and empties every table between tests (PostgresTestDatabase.ResetAsync in
+    # JIM.TestSupport). The devcontainer's jim-test-db runs the same script.
     steps:
-    # The database is discarded when the job ends, so durability buys nothing here, and paying
-    # for it made the job hostage to the runner's disk: on slow-disk runners PostgreSQL's
-    # checkpoints took 40 to 50 seconds each and every test ran about 4.5 times slower, the likely
-    # source of the 25 to 39 minute runs. A service container cannot be given server
-    # arguments, so the settings go in through ALTER SYSTEM; all three take effect on reload.
-    # The container id is passed via env rather than interpolated into the script.
-    - name: Relax durability on the throwaway database
-      env:
-        POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
-      run: |
-        docker exec "$POSTGRES_CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 \
-          -c "ALTER SYSTEM SET fsync = off" \
-          -c "ALTER SYSTEM SET synchronous_commit = off" \
-          -c "ALTER SYSTEM SET full_page_writes = off" \
-          -c "SELECT pg_reload_conf()"
-        docker exec "$POSTGRES_CONTAINER" psql -U postgres -tA \
-          -c "SELECT name || ' = ' || setting FROM pg_settings WHERE name IN ('fsync', 'synchronous_commit', 'full_page_writes') ORDER BY name"
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     - name: Setup .NET
       uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
@@ -198,14 +153,15 @@ jobs:
       run: dotnet restore JIM.sln --locked-mode
     - name: Build
       run: dotnet build JIM.sln --no-restore
+    - name: Start the throwaway PostgreSQL
+      run: pwsh -File ./test/scripts/Start-PostgresTestServer.ps1
     - name: Run database-backed tests (RequiresPostgres)
-      # The ephemeral host port must be read here rather than in the job-level env block
-      # above: the job context is only available inside steps, and referencing it at job
-      # level invalidates the whole workflow file (GitHub reports "workflow file issue"
-      # and no CI jobs run at all).
-      env:
-        JIM_TEST_RESET_PORT: ${{ job.services.postgres.ports['5432'] }}
       run: dotnet test JIM.sln --no-build --filter "Category=RequiresPostgres" --verbosity normal
+    # The self-hosted runner used on push events is not ephemeral; without this the
+    # container outlives the job. Prints the end of the server's log first.
+    - name: Tear down the throwaway PostgreSQL
+      if: always()
+      run: pwsh -File ./test/scripts/Start-PostgresTestServer.ps1 -Stop
 
   ldaps-tests:
     # Runs the RequiresLdaps NUnit tier against real directory servers over TLS:
@@ -456,15 +412,25 @@ jobs:
       # action's filter, and uses the same score GitHub Code Scanning shows).
       # ignore-unfixed stays on: no value blocking on CVEs with no upstream fix.
       #
+      # The scanner image is pinned by tag and digest in .github/trivy-image.txt, not
+      # here: tooling-pin-check watches that file and proposes bumps, which it could
+      # not do in a workflow file (its App has no permission to write one). A line
+      # that is not a digest pin fails the scan rather than running an unpinned scanner.
+      #
       # The image tag is passed via env, not interpolated into the run script, to
       # avoid GitHub Actions expression-injection (flagged by CodeQL actions).
       env:
-        # aquasec/trivy:0.70.0 pinned by digest (supply-chain governance).
-        TRIVY_IMAGE: 'aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e'
         IMAGE_REF: ${{ matrix.image_name }}:scan
         GITHUB_TOKEN: ${{ github.token }}
         DB_REPOSITORIES: 'ghcr.io/aquasecurity/trivy-db:2,mirror.gcr.io/aquasec/trivy-db:2'
       run: |
+        TRIVY_IMAGE="$(grep -Ev '^[[:space:]]*(#|$)' .github/trivy-image.txt)"
+        if ! [[ "$TRIVY_IMAGE" =~ ^aquasec/trivy:[0-9][0-9.]*@sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error title=Trivy image not pinned::.github/trivy-image.txt must hold one digest-pinned aquasec/trivy reference; found '$TRIVY_IMAGE'."
+          exit 1
+        fi
+        echo "Scanner: $TRIVY_IMAGE"
+
         CACHE_DIR="$RUNNER_TEMP/trivy-cache"
         mkdir -p "$CACHE_DIR"
 
