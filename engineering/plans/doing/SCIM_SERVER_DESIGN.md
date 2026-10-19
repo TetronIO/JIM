@@ -73,7 +73,7 @@ The universal SCIM credential is a static token sent as `Authorization: Bearer <
 - **Bearer everywhere.** JIM API keys move to `Authorization: Bearer jim_ak_...` only, across the whole product, and `X-API-Key` is removed ([#2088](https://github.com/TetronIO/JIM/issues/2088)). JIM is pre-v1.0, so there is no compatibility window.
 - **Scope is mandatory for SCIM.** A key used on `/scim/v2/{id}` must be scoped to that Connected System. A scoped key carries no role claims (not even the virtual User role) and is refused on every other path. The scope model is generic (scope type plus target) because #1566 needs scoped keys too.
 - **At most two active scoped keys per Connected System,** for overlap rotation; the portal shows each key's last-used time and address so the administrator can see the old one has gone quiet.
-- **Expiry is mandatory** for scoped keys: default 365 days, capped, with warnings as it approaches.
+- **Expiry is mandatory** for scoped keys: default 365 days, at most 730, with warnings as it approaches.
 - **Failure semantics.** Any authentication failure (missing, malformed, unknown, disabled, expired or wrong-system key) returns the same `401` with `WWW-Authenticate: Bearer realm="JIM SCIM"` (adding `error="invalid_token"` when a credential was presented) and a SCIM error body; the real reason is audited, aggregated per Connected System and key. Never a redirect. Authorisation failures return `403` with a SCIM error body.
 - **Unscoped Administrator keys are not accepted on `/scim`** (least privilege). The JIM-to-JIM tests mint a scoped key.
 - **Never on `/scim`:** HTTP Basic, the OAuth authorisation code grant, the password grant, `X-API-Key` or other custom headers, tokens in query strings, non-expiring tokens, anonymous access (discovery endpoints require authentication too).
@@ -284,7 +284,7 @@ SCIM client ◀── 201 Created · id · ETag W/"1" · Location
 
 - Endpoint policy names the API key scheme explicitly, so challenges go there and never to the OpenID Connect redirect.
 - Scope is checked from endpoint metadata and the `{connectedSystemId}` route value. As a second layer, the default authorisation policy requires an unscoped principal, so a scoped key can never satisfy a plain `[Authorize]` elsewhere.
-- **Rate limiting** is partitioned per Connected System (not per key, so rotation keys share one budget), defaulting to at least 1,500 requests a minute; unauthenticated `/scim` traffic is limited per address.
+- **Rate limiting** is partitioned per Connected System (not per key, so rotation keys share one budget), set by the Service Setting `Security.RateLimiting.ScimServiceProviderRequestsPerMinute` (default 1,500 per Connected System; "Service Provider" names the inbound role, so it cannot be mistaken for the SCIM client Connector's outbound throttling); unauthenticated `/scim` traffic is limited per address.
 - A `/scim` exception mapper returns SCIM error JSON (`400` `invalidSyntax`/`invalidValue`, `404`, `500`); automatic ProblemDetails is suppressed on SCIM controllers.
 - Secure transport is required, with a SCIM-shaped refusal; it is documented that a TLS-terminating proxy needs `JIM_TRUSTED_PROXIES`.
 - `application/scim+json` and `application/json` are both accepted and produced on request; request size and complexity limits match what the shipped client sends.
@@ -372,6 +372,8 @@ The store reader seam, the connector (Full and Delta Import), registration in `C
 - **Not surfaced yet:** the portal and the REST API do not show the two Activity columns. Whether and where to show them is open (see Phase 5).
 
 ### Phase 4: HTTP surface
+
+Two PRs: **4a** scoped API keys (the scope, its enforcement, the per-Connected-System limits, minting at the application layer; the management surfaces are Phase 5), then **4b** the `/scim` surface itself.
 
 The `ApiKeys` scope column and scoped key authentication with its failure semantics (D3), the journal's actor taken from the authenticated key (D17), the `/scim` pipeline stages, discovery, Users and Groups (POST, GET, PUT, PATCH, DELETE, list with filtering and paging), error mapping, rate limiting and secure transport, behind the flag (D16).
 

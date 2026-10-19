@@ -3220,13 +3220,24 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ScopeConnectedSystemId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("KeyHash");
 
                     b.HasIndex("KeyPrefix");
 
-                    b.ToTable("ApiKeys");
+                    b.HasIndex("ScopeConnectedSystemId");
+
+                    b.ToTable("ApiKeys", t =>
+                        {
+                            t.HasCheckConstraint("CK_ApiKeys_ScopeNamesItsConnectedSystem", "(\"Scope\" = 0) = (\"ScopeConnectedSystemId\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("JIM.Models.Security.Role", b =>
@@ -6211,6 +6222,14 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("ParentGroup");
+                });
+
+            modelBuilder.Entity("JIM.Models.Security.ApiKey", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.AuxiliaryClassDiscoveryResult", b =>
