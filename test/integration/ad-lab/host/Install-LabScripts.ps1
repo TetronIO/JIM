@@ -141,6 +141,11 @@ function Get-LabSettingsExample {
             'dc-source'  = [ordered]@{ domain = 'RESURGAM.LOCAL'; ipAddress = '10.99.0.12'; prefixLength = 24; gateway = '10.99.0.1'; enableRecycleBin = $false }
             'dc-target'  = [ordered]@{ domain = 'GENTIAN.LOCAL'; ipAddress = '10.99.0.13'; prefixLength = 24; gateway = '10.99.0.1'; enableRecycleBin = $false }
         }
+        # The AD FS server, a member of its domain controller's forest (New-LabFederationServer.ps1). computerName and
+        # serviceName may be added; they default to adfs1 and adfs (so adfs.panoply.local).
+        federationServers         = [ordered]@{
+            'adfs-primary' = [ordered]@{ domainController = 'dc-primary'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1' }
+        }
     }
 
     return ($settings | ConvertTo-Json -Depth 5)

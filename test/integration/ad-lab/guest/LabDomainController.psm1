@@ -583,12 +583,20 @@ function ConvertTo-LabVmNote {
         [Parameter(Mandatory)]
         [string]$NetBiosName,
 
-        [string]$IPAddress
+        [string]$IPAddress,
+
+        # What the VM is. A domain controller writes no role line, so its notes read exactly as they did before
+        # the lab had any other kind of VM.
+        [ValidateSet('DomainController', 'FederationServer')]
+        [string]$Role = 'DomainController'
     )
 
     $lines = @($script:VmNoteMarker, "domain=$Domain", "netbios=$NetBiosName", "computer=$ShortName")
     if (-not [string]::IsNullOrEmpty($IPAddress)) {
         $lines += "ip=$IPAddress"
+    }
+    if ($Role -ne 'DomainController') {
+        $lines += "role=$Role"
     }
     return ($lines -join "`n")
 }
@@ -635,12 +643,34 @@ function ConvertFrom-LabVmNote {
             $values[$line.Substring(0, $index).Trim()] = $line.Substring($index + 1).Trim()
         }
     }
+    $role = if ([string]::IsNullOrEmpty($values['role'])) { 'DomainController' } else { $values['role'] }
     return [pscustomobject][ordered]@{
         Domain       = $values['domain']
         NetBiosName  = $values['netbios']
         ComputerName = $values['computer']
         IPAddress    = $values['ip']
+        Role         = $role
     }
+}
+
+function Get-LabReadinessPort {
+    <#
+    .SYNOPSIS
+        The TCP port that proves a lab VM of a given role is serving after a revert: LDAPS on a domain controller,
+        HTTPS on a federation server.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('DomainController', 'FederationServer')]
+        [string]$Role
+    )
+
+    if ($Role -eq 'FederationServer') {
+        return 443
+    }
+    return 636
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -1595,22 +1625,43 @@ function Get-LabRebuildGenerationName {
 }
 
 function Get-LabRebuildRoleEntry {
-    # Internal: one domain controller's names, and the parameters of its candidate build when there are any.
+    # Internal: one lab VM's names, what it is, what it depends on, and the parameters of its candidate build when
+    # there are any. A domain controller (dc-primary) is role Primary and JIM_AD_LAB_PRIMARY_VM; an AD FS server
+    # (adfs-primary) is role AdfsPrimary and JIM_AD_LAB_ADFS_PRIMARY_VM.
     param(
         [Parameter(Mandatory)]
         [string]$LiveName,
 
         [AllowNull()]
-        [hashtable]$BuildParameters
+        [hashtable]$BuildParameters,
+
+        [ValidateSet('DomainController', 'FederationServer')]
+        [string]$Kind = 'DomainController',
+
+        [AllowNull()]
+        [string]$DependsOn
     )
 
-    $roleName = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($LiveName.Substring(3))
+    $textInfo = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo
+    if ($Kind -eq 'DomainController') {
+        $roleName = $textInfo.ToTitleCase($LiveName.Substring(3))
+        $variable = 'JIM_AD_LAB_{0}_VM' -f $LiveName.Substring(3).ToUpperInvariant()
+    }
+    else {
+        $roleName = (($LiveName -split '-') | ForEach-Object { $textInfo.ToTitleCase($_) }) -join ''
+        $variable = 'JIM_AD_LAB_{0}_VM' -f $LiveName.Replace('-', '_').ToUpperInvariant()
+    }
+    if ([string]::IsNullOrEmpty($DependsOn)) {
+        $DependsOn = $null
+    }
     return [pscustomobject][ordered]@{
         Role                = $roleName
+        Kind                = $Kind
+        DependsOn           = $DependsOn
         LiveName            = $LiveName
         CandidateName       = (Get-LabRebuildVmName -LiveName $LiveName -Kind Candidate)
         PrevName            = (Get-LabRebuildVmName -LiveName $LiveName -Kind Prev)
-        EnvironmentVariable = ('JIM_AD_LAB_{0}_VM' -f $LiveName.Substring(3).ToUpperInvariant())
+        EnvironmentVariable = $variable
         BuildParameters     = $BuildParameters
     }
 }
@@ -1668,16 +1719,26 @@ function ConvertFrom-LabRebuildSetting {
 
     $liveNames = @('dc-primary', 'dc-source', 'dc-target')
 
+    # AD FS servers (federationServers), each a member of one of the three forests, are rebuilt after the domain
+    # controllers, against their domain controller's candidate. Sorted by name, so the order is the same every time.
+    $federation = Get-LabSettingValue -Object $Settings -Name 'federationServers'
+    $federationNames = @(Get-LabSettingName -Object $federation | Sort-Object)
+
     if ($NamesOnly) {
         $vhdDirectory = $null
         $configured = Get-LabSettingValue -Object $Settings -Name 'vhdDirectory'
         if (-not [string]::IsNullOrWhiteSpace([string]$configured)) {
             $vhdDirectory = ([string]$configured).Trim()
         }
+        $nameRoles = @($liveNames | ForEach-Object { Get-LabRebuildRoleEntry -LiveName $_ -BuildParameters $null })
+        foreach ($name in $federationNames) {
+            $dependsOn = [string](Get-LabSettingValue -Object (Get-LabSettingValue -Object $federation -Name $name) -Name 'domainController')
+            $nameRoles += Get-LabRebuildRoleEntry -LiveName $name -BuildParameters $null -Kind FederationServer -DependsOn $dependsOn
+        }
         return [pscustomobject][ordered]@{
             VhdDirectory = $vhdDirectory
             Generation   = $null
-            Roles        = @($liveNames | ForEach-Object { Get-LabRebuildRoleEntry -LiveName $_ -BuildParameters $null })
+            Roles        = $nameRoles
         }
     }
 
@@ -1789,6 +1850,62 @@ function ConvertFrom-LabRebuildSetting {
         $roles.Add((Get-LabRebuildRoleEntry -LiveName $liveName -BuildParameters $parameters))
     }
 
+    foreach ($name in $federationNames) {
+        $server = Get-LabSettingValue -Object $federation -Name $name
+        if ($liveNames -contains $name) {
+            throw "settings.json federationServers holds '$name', which is a domain controller's name."
+        }
+        $null = Get-LabRebuildVmName -LiveName $name -Kind Candidate
+
+        $dependsOn = [string](Get-LabSettingValue -Object $server -Name 'domainController')
+        if ($liveNames -notcontains $dependsOn) {
+            throw "settings.json federation server $name joins '$dependsOn'; it must be one of $($liveNames -join ', ')."
+        }
+        $address = [string](Get-LabSettingValue -Object $server -Name 'ipAddress')
+        $gateway = [string](Get-LabSettingValue -Object $server -Name 'gateway')
+        $prefixText = [string](Get-LabSettingValue -Object $server -Name 'prefixLength')
+        foreach ($pair in @(@('ipAddress', $address), @('gateway', $gateway))) {
+            $parsed = $null
+            if (($pair[1] -notmatch $ipv4) -or (-not [System.Net.IPAddress]::TryParse($pair[1], [ref]$parsed))) {
+                throw "settings.json $name '$($pair[0])' is '$($pair[1])', which is not an IPv4 address."
+            }
+        }
+        $prefix = 0
+        if ((-not [int]::TryParse($prefixText, [ref]$prefix)) -or ($prefix -lt 8) -or ($prefix -gt 30)) {
+            throw "settings.json $name 'prefixLength' is '$prefixText'; it must be a number from 8 to 30."
+        }
+        if ($addresses.ContainsKey($address)) {
+            throw "settings.json gives $name the address $address, which $($addresses[$address]) already has."
+        }
+        $addresses[$address] = $name
+
+        $computerName = 'adfs1'
+        $serviceName = 'adfs'
+        $configuredComputer = [string](Get-LabSettingValue -Object $server -Name 'computerName')
+        $configuredService = [string](Get-LabSettingValue -Object $server -Name 'serviceName')
+        if (-not [string]::IsNullOrWhiteSpace($configuredComputer)) { $computerName = $configuredComputer.Trim() }
+        if (-not [string]::IsNullOrWhiteSpace($configuredService)) { $serviceName = $configuredService.Trim() }
+
+        # New-LabFederationServer.ps1 reads the domain from the domain controller's notes, so the candidate is
+        # named and nothing else of the forest is repeated here.
+        $parameters = @{
+            Name                 = (Get-LabRebuildVmName -LiveName $name -Kind Candidate)
+            DomainControllerName = (Get-LabRebuildVmName -LiveName $dependsOn -Kind Candidate)
+            IsoPath              = $shared['isoPath']
+            VhdDirectory         = (Join-LabPathText -Root $shared['vhdDirectory'] -Child $GenerationName)
+            SwitchName           = $shared['switchName']
+            IPAddress            = $address
+            PrefixLength         = $prefix
+            Gateway              = $gateway
+            ComputerName         = $computerName
+            ServiceName          = $serviceName
+        }
+        if (-not [string]::IsNullOrEmpty($CumulativeUpdatePath)) {
+            $parameters['CumulativeUpdatePath'] = $CumulativeUpdatePath
+        }
+        $roles.Add((Get-LabRebuildRoleEntry -LiveName $name -BuildParameters $parameters -Kind FederationServer -DependsOn $dependsOn))
+    }
+
     return [pscustomobject][ordered]@{
         VhdDirectory = $shared['vhdDirectory']
         Generation   = $GenerationName
@@ -1836,6 +1953,13 @@ function Get-LabRebuildBuildAction {
           older than MaxAgeHours                     Replace (a leftover from an earlier rebuild)
           recent, has its baseline checkpoint        Reuse   (this run's, or a retry's; already built)
           recent, no baseline checkpoint yet         Resume  (a build that failed part way; the build script converges)
+
+        A dependent candidate (the AD FS server, -DependencyCreatedUtc being its domain controller candidate's
+        creation time) keeps its computer account and service account in that domain controller's directory, so:
+
+          created before its dependency              Replace (that directory never held its accounts)
+          no baseline checkpoint yet                 Replace (a part-built server and a directory checkpoint that may
+                                                              not match cannot be resumed safely)
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -1846,6 +1970,8 @@ function Get-LabRebuildBuildAction {
         [datetime]$CandidateCreatedUtc = [datetime]::MinValue,
 
         [bool]$CandidateHasBaseline = $false,
+
+        [Nullable[datetime]]$DependencyCreatedUtc,
 
         [Parameter(Mandatory)]
         [datetime]$NowUtc,
@@ -1865,6 +1991,11 @@ function Get-LabRebuildBuildAction {
     $age = $NowUtc.ToUniversalTime() - $CandidateCreatedUtc.ToUniversalTime()
     if ($age.TotalHours -gt $MaxAgeHours) {
         return 'Replace'
+    }
+    if ($null -ne $DependencyCreatedUtc) {
+        if ((-not $CandidateHasBaseline) -or ($CandidateCreatedUtc.ToUniversalTime() -lt ([datetime]$DependencyCreatedUtc).ToUniversalTime())) {
+            return 'Replace'
+        }
     }
     if ($CandidateHasBaseline) {
         return 'Reuse'
@@ -2441,10 +2572,24 @@ function Invoke-LabRebuildRole {
                 $createdUtc = [datetime]$candidate.CreatedUtc
                 $hasBaseline = [bool]$candidate.HasBaseline
             }
-            $action = Get-LabRebuildBuildAction -CandidateExists ($null -ne $candidate) -CandidateCreatedUtc $createdUtc `
-                -CandidateHasBaseline $hasBaseline -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh
 
-            # The candidate is built with the live domain controller's address, so the live one must be off first.
+            # An AD FS server joins its domain controller's candidate, so that must be built first. Checked before
+            # anything is stopped, so a wrong order changes nothing.
+            $dependencyCreatedUtc = $null
+            if (-not [string]::IsNullOrEmpty($Role.DependsOn)) {
+                $dependencyName = Get-LabRebuildVmName -LiveName $Role.DependsOn -Kind Candidate
+                $dependency = & $Adapter.GetVm $dependencyName
+                Assert-LabRebuildVm -Vm $dependency -Name $dependencyName
+                if (($null -eq $dependency) -or (-not [bool]$dependency.HasBaseline)) {
+                    throw "'$dependencyName' is not built yet; build $($Role.DependsOn) before $($Role.LiveName), which joins its domain."
+                }
+                $dependencyCreatedUtc = [datetime]$dependency.CreatedUtc
+            }
+
+            $action = Get-LabRebuildBuildAction -CandidateExists ($null -ne $candidate) -CandidateCreatedUtc $createdUtc `
+                -CandidateHasBaseline $hasBaseline -DependencyCreatedUtc $dependencyCreatedUtc -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh
+
+            # The candidate is built with the live VM's address, so the live one must be off first.
             if (($null -ne $live) -and ($live.State -ne 'Off')) {
                 & $Adapter.Log "Stopping $($Role.LiveName): its address is the candidate's."
                 & $Adapter.StopVm $Role.LiveName
@@ -2461,7 +2606,7 @@ function Invoke-LabRebuildRole {
                 elseif ($action -eq 'Resume') {
                     & $Adapter.Log "Resuming the unfinished build of $($Role.CandidateName)."
                 }
-                & $Adapter.BuildVm $Role.BuildParameters
+                & $Adapter.BuildVm $Role.BuildParameters $Role.Kind
                 $built = & $Adapter.GetVm $Role.CandidateName
                 if (($null -eq $built) -or (-not [bool]$built.HasBaseline)) {
                     throw "The build of '$($Role.CandidateName)' finished but it has no baseline checkpoint."
@@ -2787,6 +2932,203 @@ public static class LabIsoStream
 }
 
 # ---------------------------------------------------------------------------------------------
+# Windows only: creating a lab VM and installing Windows on it (host)
+# ---------------------------------------------------------------------------------------------
+#
+# Shared by New-LabDomainController.ps1 and New-LabFederationServer.ps1: every lab VM is the same Generation 2 VM
+# installed unattended from the same media. What makes it a domain controller or a federation server is its guest
+# script.
+
+function Get-LabInstallImage {
+    <#
+    .SYNOPSIS
+        Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one:
+        { ImageIndex, ImageName, Evaluation }.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$IsoPath
+    )
+
+    Assert-LabWindows -Feature 'Reading the installation media'
+    $mounted = Mount-DiskImage -ImagePath $IsoPath -PassThru
+    try {
+        $drive = ($mounted | Get-Volume).DriveLetter
+        $wim = "${drive}:\sources\install.wim"
+        if (-not (Test-Path -LiteralPath $wim)) {
+            $wim = "${drive}:\sources\install.esd"
+        }
+        $images = @(Get-WindowsImage -ImagePath $wim)
+        return (Resolve-LabInstallImage -Image $images)
+    }
+    finally {
+        $null = Dismount-DiskImage -ImagePath $IsoPath
+    }
+}
+
+function New-LabUnattendIso {
+    <#
+    .SYNOPSIS
+        Renders autounattend.xml for one VM and writes it to a small ISO of its own.
+
+    .DESCRIPTION
+        The ISO carries the Administrator password (encoded, not encrypted; Windows Setup reads it from there). The
+        staging folder is deleted at once, and the caller deletes the ISO as soon as the install has finished
+        (Complete-LabUnattendedInstall).
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$TemplatePath,
+
+        [Parameter(Mandatory)]
+        [object]$Image,
+
+        [Parameter(Mandatory)]
+        [securestring]$Password,
+
+        [Parameter(Mandatory)]
+        [string]$ComputerName,
+
+        [Parameter(Mandatory)]
+        [string]$UILanguage,
+
+        [Parameter(Mandatory)]
+        [string]$Locale,
+
+        [Parameter(Mandatory)]
+        [string]$TimeZone,
+
+        [Parameter(Mandatory)]
+        [string]$IsoPath
+    )
+
+    Assert-LabWindows -Feature 'Building the unattend ISO'
+    if (-not $PSCmdlet.ShouldProcess($IsoPath, 'Create the unattend ISO')) {
+        return
+    }
+
+    $template = Get-Content -LiteralPath $TemplatePath -Raw
+    $values = @{
+        COMPUTER_NAME              = $ComputerName
+        ADMIN_PASSWORD_ENCODED     = (ConvertTo-LabUnattendPassword -Password $Password -Kind AdministratorPassword)
+        AUTOLOGON_PASSWORD_ENCODED = (ConvertTo-LabUnattendPassword -Password $Password -Kind Password)
+        IMAGE_NAME                 = $Image.ImageName
+        UI_LANGUAGE                = $UILanguage
+        LOCALE                     = $Locale
+        TIME_ZONE                  = $TimeZone
+    }
+    if ($Image.Evaluation) {
+        # Evaluation media takes no product key; the License phase applies the AVMA key by converting the edition.
+        $template = ConvertTo-LabKeylessUnattend -Template $template
+    }
+    else {
+        $values['PRODUCT_KEY'] = Get-LabAvmaKey -Edition Datacenter
+    }
+    $xml = ConvertTo-LabUnattendXml -Template $template -Values $values
+
+    $staging = Join-Path ([System.IO.Path]::GetTempPath()) ('jim-ad-lab-' + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $staging
+    try {
+        [System.IO.File]::WriteAllText((Join-Path $staging 'autounattend.xml'), $xml, (New-Object System.Text.UTF8Encoding($false)))
+        New-LabIsoImage -SourceDirectory $staging -IsoPath $IsoPath -VolumeLabel 'UNATTEND'
+    }
+    finally {
+        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function New-LabVirtualMachine {
+    <#
+    .SYNOPSIS
+        Creates a lab VM ready for its unattended install: Generation 2, Secure Boot, static memory, production
+        checkpoints only, the Windows media and the unattend ISO attached, booting from the media.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [string]$VhdDirectory,
+
+        [Parameter(Mandatory)]
+        [uint64]$VhdSizeBytes,
+
+        [Parameter(Mandatory)]
+        [uint64]$MemoryStartupBytes,
+
+        [Parameter(Mandatory)]
+        [int]$ProcessorCount,
+
+        [Parameter(Mandatory)]
+        [string]$SwitchName,
+
+        [Parameter(Mandatory)]
+        [string]$Notes,
+
+        [Parameter(Mandatory)]
+        [string]$IsoPath,
+
+        [Parameter(Mandatory)]
+        [string]$UnattendIsoPath
+    )
+
+    Assert-LabWindows -Feature 'Creating a VM'
+    if (-not $PSCmdlet.ShouldProcess($Name, 'Create the VM')) {
+        return
+    }
+
+    $vmFolder = Join-Path $VhdDirectory $Name
+    $vhdPath = Join-Path $vmFolder "$Name.vhdx"
+    if (Test-Path -LiteralPath $vhdPath) {
+        throw "The disk '$vhdPath' exists but there is no VM called '$Name'. Remove it, or use a different -VhdDirectory."
+    }
+    $null = New-Item -ItemType Directory -Path $vmFolder -Force
+    $null = New-VHD -Path $vhdPath -SizeBytes $VhdSizeBytes -Dynamic
+
+    $null = New-VM -Name $Name -Generation 2 -MemoryStartupBytes $MemoryStartupBytes -VHDPath $vhdPath -SwitchName $SwitchName -Path $VhdDirectory
+    Set-VM -Name $Name -StaticMemory -ProcessorCount $ProcessorCount -AutomaticCheckpointsEnabled $false `
+        -CheckpointType ProductionOnly -AutomaticStartAction Nothing -AutomaticStopAction ShutDown -Notes $Notes
+
+    # Secure Boot with the default (Microsoft Windows) template, which is what a Windows guest wants.
+    Set-VMFirmware -VMName $Name -EnableSecureBoot On
+
+    $windowsDrive = Add-VMDvdDrive -VMName $Name -Path $IsoPath -Passthru
+    $null = Add-VMDvdDrive -VMName $Name -Path $UnattendIsoPath
+    Set-VMFirmware -VMName $Name -FirstBootDevice $windowsDrive
+}
+
+function Complete-LabUnattendedInstall {
+    <#
+    .SYNOPSIS
+        After the unattended install: ejects all media, deletes the unattend ISO (it carries the password) and
+        boots from the disk from now on.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [string]$UnattendIsoPath
+    )
+
+    Assert-LabWindows -Feature 'Finishing an install'
+    if (-not $PSCmdlet.ShouldProcess($Name, 'Eject the install media')) {
+        return
+    }
+
+    foreach ($drive in @(Get-VMDvdDrive -VMName $Name)) {
+        Set-VMDvdDrive -VMName $Name -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation -Path $null
+    }
+    Remove-Item -LiteralPath $UnattendIsoPath -Force -ErrorAction SilentlyContinue
+    $disk = Get-VMHardDiskDrive -VMName $Name | Select-Object -First 1
+    Set-VMFirmware -VMName $Name -FirstBootDevice $disk
+}
+
+# ---------------------------------------------------------------------------------------------
 # Windows only: talking to a guest through PowerShell Direct (host)
 # ---------------------------------------------------------------------------------------------
 
@@ -2917,9 +3259,14 @@ function Copy-LabAssetToGuest {
 function Invoke-LabGuestPhase {
     <#
     .SYNOPSIS
-        Runs one phase of Initialize-LabDomainController.ps1 in the guest and returns its result object.
+        Runs one phase of a guest build script in the guest and returns its result object.
+
+    .DESCRIPTION
+        For Initialize-LabDomainController.ps1 pass -Phase and -Settings, and the phase's arguments are built here.
+        For another guest script (Initialize-LabFederationServer.ps1) pass -GuestScript and -Arguments built by that
+        script's own phase-argument function.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Settings')]
     param(
         [Parameter(Mandatory)]
         [string]$VMName,
@@ -2927,23 +3274,36 @@ function Invoke-LabGuestPhase {
         [Parameter(Mandatory)]
         [System.Management.Automation.PSCredential]$Credential,
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'Settings')]
         [ValidateSet('License', 'Prepare', 'Promote', 'Extend', 'Configure', 'Verify')]
         [string]$Phase,
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'Settings')]
         [System.Collections.IDictionary]$Settings,
+
+        # Named arguments for the guest script, Phase among them.
+        [Parameter(Mandatory, ParameterSetName = 'Arguments')]
+        [System.Collections.IDictionary]$Arguments,
 
         [string]$GuestScript = 'C:\jim-ad-lab\Initialize-LabDomainController.ps1'
     )
 
     Assert-LabWindows -Feature 'Running a guest phase'
-    $arguments = Get-LabGuestPhaseArgument -Phase $Phase -Settings $Settings
-    Write-Verbose ('Guest: {0} {1}' -f $GuestScript, (ConvertTo-LabArgumentString -Argument $arguments))
+    # Fresh variables, not $Phase: assigning to a parameter re-runs its ValidateSet, which lists only the domain
+    # controller's phases (and PowerShell names are case-insensitive, so $arguments would be $Arguments).
+    if ($PSCmdlet.ParameterSetName -eq 'Arguments') {
+        $phaseArguments = $Arguments
+        $phaseName = [string]$Arguments['Phase']
+    }
+    else {
+        $phaseArguments = Get-LabGuestPhaseArgument -Phase $Phase -Settings $Settings
+        $phaseName = $Phase
+    }
+    Write-Verbose ('Guest: {0} {1}' -f $GuestScript, (ConvertTo-LabArgumentString -Argument $phaseArguments))
 
     # A plain Hashtable crosses the remoting boundary; SecureString values travel encrypted by the session.
     $splat = @{}
-    foreach ($key in $arguments.Keys) { $splat[$key] = $arguments[$key] }
+    foreach ($key in $phaseArguments.Keys) { $splat[$key] = $phaseArguments[$key] }
 
     $output = Invoke-Command -VMName $VMName -Credential $Credential -ErrorAction Stop -ScriptBlock {
         param($script, $splat)
@@ -2952,7 +3312,7 @@ function Invoke-LabGuestPhase {
 
     $result = @($output | Where-Object { $null -ne $_ -and $_.PSObject.Properties['RebootRequired'] }) | Select-Object -Last 1
     if ($null -eq $result) {
-        throw "Phase $Phase returned no result object."
+        throw "Phase $phaseName returned no result object."
     }
     return $result
 }
@@ -3602,5 +3962,6 @@ Export-ModuleMember -Function @(
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
     'Get-LabRebuildBuildAction', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',
-    'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase'
+    'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase',
+    'Get-LabReadinessPort', 'Get-LabInstallImage', 'New-LabUnattendIso', 'New-LabVirtualMachine', 'Complete-LabUnattendedInstall'
 )

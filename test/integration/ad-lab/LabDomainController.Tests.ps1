@@ -927,6 +927,61 @@ Describe 'VM notes' {
         Test-LabVmNote -Notes $null | Should -BeFalse
     }
 
+    It 'reads a VM with no role line as a domain controller, so the notes already on the live VMs keep working' {
+        $notes = "jim-ad-lab v1`ndomain=PANOPLY.LOCAL`nnetbios=PANOPLY`ncomputer=dc1`nip=10.99.0.11"
+        (ConvertFrom-LabVmNote -Notes $notes).Role | Should -Be 'DomainController'
+        ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.11' | Should -Be $notes
+    }
+
+    It 'round-trips the federation server role' {
+        $notes = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'adfs1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.21' -Role FederationServer
+        $notes | Should -Match '(?m)^role=FederationServer$'
+        $parsed = ConvertFrom-LabVmNote -Notes $notes
+        $parsed.Role | Should -Be 'FederationServer'
+        $parsed.ComputerName | Should -Be 'adfs1'
+    }
+
+    It 'refuses a role it does not know' {
+        { ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'x1' -NetBiosName 'PANOPLY' -Role 'WebServer' } | Should -Throw
+    }
+}
+
+Describe 'Invoke-LabGuestPhase' {
+    BeforeAll {
+        Mock -ModuleName LabDomainController Assert-LabWindows {}
+        Mock -ModuleName LabDomainController Invoke-Command {
+            param($ArgumentList)
+            [pscustomobject]@{ Phase = $ArgumentList[1]['Phase']; Changed = $false; RebootRequired = $false; Detail = $ArgumentList[0] }
+        }
+        $script:Credential = New-Object System.Management.Automation.PSCredential('PANOPLY\Administrator', (Get-TestSecret -Value 'x'))
+    }
+
+    It 'runs a phase of another guest script from prebuilt arguments, whatever the phase is called' {
+        $result = Invoke-LabGuestPhase -VMName 'adfs-primary' -Credential $script:Credential `
+            -Arguments ([ordered]@{ Phase = 'Join'; Domain = 'PANOPLY.LOCAL' }) -GuestScript 'C:\jim-ad-lab\Initialize-LabFederationServer.ps1'
+        $result.Phase | Should -Be 'Join'
+        $result.Detail | Should -Be 'C:\jim-ad-lab\Initialize-LabFederationServer.ps1'
+    }
+
+    It 'still builds a domain controller phase from the settings' {
+        $settings = @{ ComputerName = 'dc1'; IPAddress = '10.99.0.11'; PrefixLength = 24; Gateway = '10.99.0.1' }
+        (Invoke-LabGuestPhase -VMName 'dc-primary' -Credential $script:Credential -Phase Prepare -Settings $settings).Phase | Should -Be 'Prepare'
+    }
+}
+
+Describe 'Get-LabReadinessPort' {
+    It 'waits for LDAPS on a domain controller' {
+        Get-LabReadinessPort -Role DomainController | Should -Be 636
+    }
+
+    It 'waits for HTTPS on a federation server, where AD FS answers' {
+        Get-LabReadinessPort -Role FederationServer | Should -Be 443
+    }
+
+    It 'refuses a role it does not know' {
+        { Get-LabReadinessPort -Role 'WebServer' } | Should -Throw
+    }
+
     It 'returns nothing for notes without the marker' {
         ConvertFrom-LabVmNote -Notes 'domain=PANOPLY.LOCAL' | Should -BeNullOrEmpty
     }
@@ -1215,6 +1270,69 @@ Describe 'ConvertFrom-LabRebuildSetting' {
         $primary.BuildParameters.DnsForwarder | Should -Be '10.0.0.1'
     }
 
+    It 'marks the domain controllers as such, depending on nothing, and builds no AD FS server when the settings have none' {
+        $plan = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
+        @($plan.Roles | ForEach-Object { $_.Kind }) | Should -Be @('DomainController', 'DomainController', 'DomainController')
+        foreach ($role in $plan.Roles) { $role.DependsOn | Should -BeNullOrEmpty }
+    }
+
+    It 'adds the AD FS server after the domain controllers, built against its domain controller''s candidate' {
+        $settings = Get-RebuildSetting
+        $settings.federationServers = @{ 'adfs-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1' } }
+        $plan = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'rebuild-20260930' -CumulativeUpdatePath 'D:\media\updates\kb1.msu'
+
+        @($plan.Roles | ForEach-Object { $_.LiveName }) | Should -Be @('dc-primary', 'dc-source', 'dc-target', 'adfs-primary')
+        $adfs = $plan.Roles[3]
+        $adfs.Kind | Should -Be 'FederationServer'
+        $adfs.DependsOn | Should -Be 'dc-primary'
+        $adfs.Role | Should -Be 'AdfsPrimary'
+        $adfs.EnvironmentVariable | Should -Be 'JIM_AD_LAB_ADFS_PRIMARY_VM'
+        $adfs.CandidateName | Should -Be 'adfs-primary-candidate'
+        $adfs.PrevName | Should -Be 'adfs-primary-prev'
+
+        $parameters = $adfs.BuildParameters
+        $parameters.Name | Should -Be 'adfs-primary-candidate'
+        $parameters.DomainControllerName | Should -Be 'dc-primary-candidate'
+        $parameters.IsoPath | Should -Be 'D:\media\WindowsServer2025.iso'
+        $parameters.VhdDirectory | Should -Be 'D:\Hyper-V\Virtual Hard Disks\rebuild-20260930'
+        $parameters.SwitchName | Should -Be 'Lab'
+        $parameters.IPAddress | Should -Be '10.99.0.21'
+        $parameters.PrefixLength | Should -Be 24
+        $parameters.Gateway | Should -Be '10.99.0.1'
+        $parameters.ComputerName | Should -Be 'adfs1'
+        $parameters.ServiceName | Should -Be 'adfs'
+        $parameters.CumulativeUpdatePath | Should -Be 'D:\media\updates\kb1.msu'
+        foreach ($key in 'Domain', 'NtpServer', 'DnsForwarder', 'ExchangeIsoPath') { $parameters.ContainsKey($key) | Should -BeFalse }
+    }
+
+    It 'takes the AD FS server''s computer and service names from the settings when given' {
+        $settings = Get-RebuildSetting
+        $settings.federationServers = @{ 'adfs-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1'; computerName = 'fs1'; serviceName = 'sts' } }
+        $parameters = (ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1').Roles[3].BuildParameters
+        $parameters.ComputerName | Should -Be 'fs1'
+        $parameters.ServiceName | Should -Be 'sts'
+    }
+
+    It 'refuses an AD FS server whose domain controller the lab does not have' {
+        $settings = Get-RebuildSetting
+        $settings.federationServers = @{ 'adfs-primary' = @{ domainController = 'dc-nowhere'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1' } }
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw "*'dc-nowhere'*"
+    }
+
+    It 'refuses an AD FS server on an address another lab VM already has' {
+        $settings = Get-RebuildSetting
+        $settings.federationServers = @{ 'adfs-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.11'; prefixLength = 24; gateway = '10.99.0.1' } }
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*10.99.0.11*dc-primary*'
+    }
+
+    It 'lists the AD FS server by name only with -NamesOnly, so a rollback is never blocked by its settings' {
+        $plan = ConvertFrom-LabRebuildSetting -Settings @{ federationServers = @{ 'adfs-primary' = @{ domainController = 'dc-primary' } } } -NamesOnly
+        @($plan.Roles | ForEach-Object { $_.LiveName }) | Should -Be @('dc-primary', 'dc-source', 'dc-target', 'adfs-primary')
+        $plan.Roles[3].Kind | Should -Be 'FederationServer'
+        $plan.Roles[3].DependsOn | Should -Be 'dc-primary'
+        $plan.Roles[3].BuildParameters | Should -BeNullOrEmpty
+    }
+
     It 'builds each candidate beneath a fresh folder of the generation, never over an existing disk' {
         $plan = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'rebuild-20260930'
         $plan.Generation | Should -Be 'rebuild-20260930'
@@ -1421,6 +1539,21 @@ Describe 'Get-LabRebuildBuildAction' {
 
     It 'honours a different age limit' {
         Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-30) -CandidateHasBaseline $true -NowUtc $script:BuildNow -MaxAgeHours 48 | Should -Be 'Reuse'
+    }
+
+    It 'reuses a dependent candidate (the AD FS server) built after the candidate it depends on' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-1) -CandidateHasBaseline $true `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow | Should -Be 'Reuse'
+    }
+
+    It 'replaces a dependent candidate built before the candidate it depends on, whose directory no longer holds its accounts' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-3) -CandidateHasBaseline $true `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-1) -NowUtc $script:BuildNow | Should -Be 'Replace'
+    }
+
+    It 'replaces, never resumes, a dependent candidate whose build stopped part way' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-1) -CandidateHasBaseline $false `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow | Should -Be 'Replace'
     }
 
     It 'replaces a recent candidate when asked for a fresh one' {
@@ -1739,6 +1872,7 @@ Describe 'Invoke-LabRebuildPhase' {
         }
 
         function Get-FakePlan {
+            param([switch]$WithFederation)
             $settings = @{
                 isoPath = 'D:\iso.iso'; vhdDirectory = 'D:\vm'; switchName = 'Lab'; ntpServer = 'ntp'; dnsForwarder = '10.0.0.1'
                 domainControllers = @{
@@ -1746,6 +1880,9 @@ Describe 'Invoke-LabRebuildPhase' {
                     'dc-source'  = @{ domain = 'RESURGAM.LOCAL'; ipAddress = '10.99.0.12'; prefixLength = 24; gateway = '10.99.0.1' }
                     'dc-target'  = @{ domain = 'GENTIAN.LOCAL'; ipAddress = '10.99.0.13'; prefixLength = 24; gateway = '10.99.0.1' }
                 }
+            }
+            if ($WithFederation) {
+                $settings.federationServers = @{ 'adfs-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1' } }
             }
             return (ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'rebuild-20260930')
         }
@@ -1789,17 +1926,26 @@ Describe 'Invoke-LabRebuildPhase' {
                 SetNotes      = { param($Name, $Notes) [void]$lab.Calls.Add("SetNotes $Name"); $lab.Vms[$Name].Notes = $Notes }.GetNewClosure()
                 RemoveVm      = { param($Name) [void]$lab.Calls.Add("RemoveVm $Name"); $lab.Vms.Remove($Name) }.GetNewClosure()
                 BuildVm       = {
-                    param($Parameters)
+                    param($Parameters, $Kind)
                     [void]$lab.Calls.Add("BuildVm $($Parameters.Name)")
                     if ($lab.FailBuildFor -eq $Parameters.Name) { throw "simulated build failure of $($Parameters.Name)" }
                     foreach ($other in $lab.Vms.Values) {
                         if (($other.State -eq 'Running') -and ((Get-LabVmNoteValue -Notes $other.Notes -Key 'ip') -eq $Parameters.IPAddress)) { throw "address $($Parameters.IPAddress) is in use by $($other.Name)" }
                     }
                     $lab.BuildIndex++
+                    if ($Kind -eq 'FederationServer') {
+                        # New-LabFederationServer.ps1 joins the domain controller's candidate, which must be there.
+                        $dc = $Parameters.DomainControllerName
+                        if (-not $lab.Vms.ContainsKey($dc) -or -not $lab.Vms[$dc].HasBaseline) { throw "no domain controller $dc to join" }
+                        $notes = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName $Parameters.ComputerName -NetBiosName 'PANOPLY' -IPAddress $Parameters.IPAddress -Role FederationServer
+                    }
+                    else {
+                        $notes = ConvertTo-LabVmNote -Domain $Parameters.Domain -ShortName 'dc1' -NetBiosName ($Parameters.Domain.Split('.')[0]) -IPAddress $Parameters.IPAddress
+                    }
                     $lab.Vms[$Parameters.Name] = @{
                         Name        = $Parameters.Name
                         State       = 'Running'
-                        Notes       = (ConvertTo-LabVmNote -Domain $Parameters.Domain -ShortName 'dc1' -NetBiosName ($Parameters.Domain.Split('.')[0]) -IPAddress $Parameters.IPAddress)
+                        Notes       = $notes
                         CreatedUtc  = $lab.Now
                         HasBaseline = $true
                         Build       = "26100.$(4000 + $lab.BuildIndex)"
@@ -1818,7 +1964,7 @@ Describe 'Invoke-LabRebuildPhase' {
 
         # A lab as it stands before a rebuild: the three live VMs, running, with a baseline, on build 26100.1000.
         function Add-FakeLiveSet {
-            param($Lab)
+            param($Lab, [switch]$WithFederation)
             foreach ($entry in @(@('dc-primary', 'PANOPLY.LOCAL', '10.99.0.11'), @('dc-source', 'RESURGAM.LOCAL', '10.99.0.12'), @('dc-target', 'GENTIAN.LOCAL', '10.99.0.13'))) {
                 $Lab.Vms[$entry[0]] = @{
                     Name        = $entry[0]
@@ -1829,11 +1975,102 @@ Describe 'Invoke-LabRebuildPhase' {
                     Build       = '26100.1000'
                 }
             }
+            if ($WithFederation) {
+                $Lab.Vms['adfs-primary'] = @{
+                    Name        = 'adfs-primary'
+                    State       = 'Running'
+                    Notes       = (ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'adfs1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.21' -Role FederationServer)
+                    CreatedUtc  = (Get-Utc -Day 1)
+                    HasBaseline = $true
+                    Build       = '26100.1000'
+                }
+            }
         }
 
         function Get-CallIndex {
             param($Lab, [string]$Call)
             return $Lab.Calls.IndexOf($Call)
+        }
+    }
+
+    Context 'The AD FS server' {
+        It 'builds its candidate after, and against, the domain controller candidate, stopping the live server first' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithFederation
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan -WithFederation) -Adapter $lab.Adapter)
+
+            @($results | ForEach-Object { $_.live }) | Should -Be @('dc-primary', 'dc-source', 'dc-target', 'adfs-primary')
+            $results[3].action | Should -Be 'Build'
+            (Get-CallIndex $lab 'BuildVm dc-primary-candidate') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm adfs-primary-candidate')
+            (Get-CallIndex $lab 'StopVm adfs-primary') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm adfs-primary-candidate')
+            $lab.Vms['adfs-primary'].State | Should -Be 'Off'
+            $lab.Vms['adfs-primary-candidate'].HasBaseline | Should -BeTrue
+        }
+
+        It 'refuses to build it before the domain controller candidate it joins exists, and builds nothing' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithFederation
+            { Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan -WithFederation) -Adapter $lab.Adapter -Role 'adfs-primary' } |
+                Should -Throw '*dc-primary-candidate*'
+            @($lab.Calls | Where-Object { $_ -like 'BuildVm*' }).Count | Should -Be 0
+            $lab.Vms['adfs-primary'].State | Should -Be 'Running'
+        }
+
+        It 'builds it again when the domain controller candidate was built again after it' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithFederation
+            $plan = Get-FakePlan -WithFederation
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Now = $lab.Now.AddHours(2)
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter -Role 'dc-primary' -Fresh)
+            $lab.Now = $lab.Now.AddHours(1)
+            $lab.Calls.Clear()
+
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter -Role 'adfs-primary')
+            $results[0].action | Should -Be 'Replace'
+            (Get-CallIndex $lab 'RemoveVm adfs-primary-candidate') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm adfs-primary-candidate')
+        }
+
+        It 'reuses it on a retry when the domain controller candidate is unchanged' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithFederation
+            $plan = Get-FakePlan -WithFederation
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Now = $lab.Now.AddHours(1)
+            $lab.Calls.Clear()
+
+            @(Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter -Role 'adfs-primary')[0].action | Should -Be 'Reuse'
+            @($lab.Calls | Where-Object { $_ -like 'BuildVm*' -or $_ -like 'RemoveVm*' }).Count | Should -Be 0
+        }
+
+        It 'stages and rolls back each domain controller before the AD FS server that depends on it' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithFederation
+            $plan = Get-FakePlan -WithFederation
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Calls.Clear()
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter)
+            (Get-CallIndex $lab 'RestoreVm dc-primary-candidate baseline') | Should -BeLessThan (Get-CallIndex $lab 'RestoreVm adfs-primary-candidate baseline')
+
+            $lab.Calls.Clear()
+            [void](Invoke-LabRebuildPhase -Phase Rollback -Plan $plan -Adapter $lab.Adapter)
+            (Get-CallIndex $lab 'RestoreVm dc-primary baseline') | Should -BeGreaterOrEqual 0
+            (Get-CallIndex $lab 'RestoreVm dc-primary baseline') | Should -BeLessThan (Get-CallIndex $lab 'RestoreVm adfs-primary baseline')
+            $lab.Vms['adfs-primary'].State | Should -Be 'Running'
+            $lab.Vms['adfs-primary-candidate'].State | Should -Be 'Off'
+        }
+
+        It 'promotes it with the domain controllers, keeping its role in its notes' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithFederation
+            $plan = Get-FakePlan -WithFederation
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter)
+            $results = @(Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter)
+
+            $results[3].action | Should -Be 'Promoted'
+            $lab.Vms.ContainsKey('adfs-primary-prev') | Should -BeTrue
+            (ConvertFrom-LabVmNote -Notes $lab.Vms['adfs-primary'].Notes).Role | Should -Be 'FederationServer'
         }
     }
 
