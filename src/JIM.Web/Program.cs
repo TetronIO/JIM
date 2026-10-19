@@ -23,6 +23,7 @@ using JIM.Web.Extensions.Api;
 using JIM.Web.Hubs;
 using JIM.Web.Logging;
 using JIM.Web.Middleware;
+using JIM.Web.Scim;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
@@ -689,6 +690,15 @@ try
         appBuilder => appBuilder.UseGlobalExceptionHandler()
     );
 
+    // The SCIM 2.0 Service Provider endpoints (#124): SCIM-shaped errors for anything unhandled, and dark (404) while
+    // the feature flag is off, decided before authentication so a disabled endpoint says nothing about credentials.
+    app.UseWhen(
+        context => ScimRoutes.IsScimRequest(context.Request),
+        appBuilder => appBuilder
+            .UseMiddleware<ScimExceptionMiddleware>()
+            .UseMiddleware<ScimFeatureGateMiddleware>()
+    );
+
     // A portal sign-in that cannot reach or trust the identity provider lands on a page explaining why and how to fix
     // it (#2363), rather than the generic error page. Wraps authentication, which is where both failures are thrown.
     app.UseMiddleware<IdentityProviderUnavailableMiddleware>();
@@ -725,6 +735,10 @@ try
 
     // Map the real-time notification hub for non-Blazor consumers (issue #307)
     app.MapHub<JimNotificationHub>("/hubs/notifications");
+
+    // An unknown /scim path is a SCIM 404, never the portal's page (whose default policy would answer a SCIM client
+    // with a refusal instead).
+    app.MapFallback("/scim/{**path}", context => ScimResponses.WriteErrorAsync(context, StatusCodes.Status404NotFound));
 
     app.MapFallbackToPage("/_Host");
 

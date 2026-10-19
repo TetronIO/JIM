@@ -10,6 +10,7 @@ using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Web.Authentication;
 using JIM.Web.Extensions;
+using JIM.Web.Scim;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Serilog;
@@ -26,11 +27,6 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     /// The name of the authentication scheme.
     /// </summary>
     public const string SchemeName = "ApiKey";
-
-    /// <summary>
-    /// The path under which SCIM clients call JIM, the only place a scoped key is accepted.
-    /// </summary>
-    public static readonly PathString ScimPathBase = new("/scim");
 
     // IServiceScopeFactory, not IServiceProvider: authentication handlers are resolved from the request scope, so
     // an injected IServiceProvider is the request's own provider and is disposed the moment the response completes.
@@ -58,7 +54,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
         // An API key arrives as a bearer token (RFC 6750), exactly as an SSO access token does; the key prefix is what
         // tells the two apart. Anything else (no Authorization header, another scheme, a JWT) is not this handler's to
         // judge, so it returns NoResult and leaves the request to the other schemes.
-        if (!BearerToken.TryRead(Request, out var providedKey) || !BearerToken.IsApiKey(providedKey))
+        if (!TryReadApiKey(Request, out var providedKey))
         {
             Log.Debug("ApiKeyAuthenticationHandler: No API key bearer token on path {Path}", Request.Path);
             return AuthenticateResult.NoResult();
@@ -109,7 +105,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             // A scoped key is a credential only on the endpoint it was minted for; anywhere else it opens nothing, so it
             // fails here rather than relying on every policy downstream to refuse it. Which Connected System it may
             // reach is the SCIM endpoint's own check.
-            if (apiKey.Scope != ApiKeyScope.None && !Request.Path.StartsWithSegments(ScimPathBase, StringComparison.OrdinalIgnoreCase))
+            if (apiKey.Scope != ApiKeyScope.None && !ScimRoutes.IsScimRequest(Request))
             {
                 Log.Warning("ApiKeyAuthenticationHandler: Scoped API key used outside the SCIM endpoint (prefix: {KeyPrefix})", apiKey.KeyPrefix);
                 RecordFailedAuthenticationEvent("API key is scoped to the SCIM endpoint", apiKey.KeyPrefix, clientIp);
@@ -153,6 +149,24 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             RecordFailedAuthenticationEvent("Authentication error", apiKeyPrefix: null, clientIp);
             return AuthenticateResult.Fail("Authentication error");
         }
+    }
+
+    /// <summary>
+    /// Reads an API key from the request: a bearer token carrying the key prefix, or on <c>/scim</c> only, the bare
+    /// key with no scheme, because some SCIM clients send the configured header value verbatim (D3).
+    /// </summary>
+    private static bool TryReadApiKey(HttpRequest request, out string key)
+    {
+        if (BearerToken.TryRead(request, out key) && BearerToken.IsApiKey(key))
+            return true;
+
+        var values = request.Headers.Authorization;
+        key = values.Count == 1 ? values[0]?.Trim() ?? string.Empty : string.Empty;
+        if (ScimRoutes.IsScimRequest(request) && BearerToken.IsApiKey(key) && !key.Contains(' ', StringComparison.Ordinal))
+            return true;
+
+        key = string.Empty;
+        return false;
     }
 
     /// <summary>
