@@ -38,7 +38,8 @@ public class ApiKeyDto
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
-    /// Optional expiry date. Null means the key never expires.
+    /// When the key stops working. Always set for a SCIM client's key; null only for an ordinary API key that never
+    /// expires.
     /// </summary>
     public DateTime? ExpiresAt { get; set; }
 
