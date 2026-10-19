@@ -138,20 +138,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
         _logger.LogInformation("Created API key {ApiKeyId} with prefix {KeyPrefix}", createdKey.Id, keyPrefix);
 
         // Return the full key only on creation
-        var responseDto = new ApiKeyCreateResponseDto
-        {
-            Id = createdKey.Id,
-            Name = createdKey.Name,
-            Description = createdKey.Description,
-            KeyPrefix = createdKey.KeyPrefix,
-            CreatedAt = createdKey.Created,
-            ExpiresAt = createdKey.ExpiresAt,
-            LastUsedAt = createdKey.LastUsedAt,
-            LastUsedFromIp = createdKey.LastUsedFromIp,
-            IsEnabled = createdKey.IsEnabled,
-            Roles = createdKey.Roles.Select(RoleDto.FromEntity).ToList(),
-            Key = fullKey // Only returned on creation!
-        };
+        var responseDto = ApiKeyCreateResponseDto.FromCreated(createdKey, fullKey);
 
         return CreatedAtRoute("GetApiKey", new { id = createdKey.Id }, responseDto);
     }

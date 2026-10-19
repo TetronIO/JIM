@@ -98,6 +98,29 @@ public class ApiKeysControllerTests
         Assert.That(keys!.Count(), Is.EqualTo(2));
     }
 
+    [Test]
+    public async Task GetAllAsync_ScopedKey_ShowsItsScopeAndConnectedSystem()
+    {
+        var apiKeys = new List<ApiKey>
+        {
+            new() { Id = Guid.NewGuid(), Name = "Entra key", KeyPrefix = "jim_ak_1234", Roles = new List<Role>(),
+                Scope = ApiKeyScope.ScimServiceProvider, ScopeConnectedSystemId = 12 },
+            new() { Id = Guid.NewGuid(), Name = "Pipeline", KeyPrefix = "jim_ak_5678", Roles = new List<Role>() }
+        };
+        _mockApiKeyRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(apiKeys);
+
+        var result = await _controller.GetAllAsync() as OkObjectResult;
+        var keys = (result?.Value as IEnumerable<ApiKeyDto>)!.ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(keys[0].Scope, Is.EqualTo(ApiKeyScope.ScimServiceProvider));
+            Assert.That(keys[0].ScopeConnectedSystemId, Is.EqualTo(12));
+            Assert.That(keys[1].Scope, Is.EqualTo(ApiKeyScope.None));
+            Assert.That(keys[1].ScopeConnectedSystemId, Is.Null);
+        }
+    }
+
     #endregion
 
     #region GetByIdAsync tests

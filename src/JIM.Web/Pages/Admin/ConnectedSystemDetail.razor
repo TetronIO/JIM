@@ -343,6 +343,15 @@ else if (_drift is { TrackingDisabled: true })
             <ConnectedSystemDetailsTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
 
+        @* The SCIM endpoint's own tab, beside Details: only a Connected System using the SCIM 2.0 Service Provider
+           Connector has one, and only while the Preview feature is on. *@
+        @if (_hasScimEndpoint)
+        {
+            <MudTabPanel Text="SCIM">
+                <ConnectedSystemScimTab ConnectedSystem="_connectedSystem" />
+            </MudTabPanel>
+        }
+
         <MudTabPanel Text="Settings">
             <ConnectedSystemSettingsTab ConnectedSystem="_connectedSystem"
                                         SettingCategories="_settingCategories!"
@@ -459,6 +468,12 @@ else if (_drift is { TrackingDisabled: true })
     // needs the list to offer (#1458).
     private IList<MetaverseObjectType>? _metaverseObjectTypes;
 
+    /// <summary>
+    /// Whether this Connected System has a SCIM endpoint to manage: it uses the SCIM 2.0 Service Provider Connector
+    /// and the feature is on.
+    /// </summary>
+    private bool _hasScimEndpoint;
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -474,6 +489,9 @@ else if (_drift is { TrackingDisabled: true })
             NavManager.NavigateTo("../");
             return;
         }
+
+        _hasScimEndpoint = _connectedSystem.ConnectorDefinition.Name == JIM.Connectors.ConnectorConstants.ScimServiceProviderConnectorName
+            && await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
 
         _breadcrumbs =
         [

@@ -18,6 +18,8 @@
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />API Keys
     <PageInfo Title="API Keys" DocsPage="configuration/api-keys.md">
         Manage API keys for non-interactive authentication. API keys can be used for CI/CD pipelines, integration testing, and automation scripts.
+        Keys for an identity provider to call a SCIM endpoint are listed here too, marked SCIM, but are created and managed on
+        their Connected System's SCIM tab.
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -47,6 +49,14 @@
                     {
                         <MudTooltip Text="Infrastructure key auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable." Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure</MudChip>
+                        </MudTooltip>
+                    }
+                    @if (context.Item.ScopeConnectedSystemId is { } scopedTo)
+                    {
+                        <MudTooltip Text="Works only on one Connected System's SCIM endpoint. Manage it on that Connected System's SCIM tab." Arrow="true" Placement="Placement.Top">
+                            <MudLink Href="@($"/admin/connected-systems/{scopedTo}?t=scim")">
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Icon="@Icons.Material.Filled.Link">SCIM</MudChip>
+                            </MudLink>
                         </MudTooltip>
                     }
                 </div>
@@ -152,8 +162,11 @@
             </HeaderTemplate>
             <CellTemplate>
                 <div class="d-flex justify-end gap-2">
-                    <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(context.Item)" />
+                    @* A SCIM key has no Roles and must expire, which this dialog cannot respect; it is edited on its
+                       Connected System's SCIM tab instead. *@
+                    <MudTooltip Text="@(context.Item.ScopeConnectedSystemId.HasValue ? "Edit this key on its Connected System's SCIM tab" : "Edit")" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small"
+                                       Disabled="@context.Item.ScopeConnectedSystemId.HasValue" OnClick="_ => ShowEditDialog(context.Item)" />
                     </MudTooltip>
                     <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error" OnClick="_ => HandleDeleteAsync(context.Item)" />
