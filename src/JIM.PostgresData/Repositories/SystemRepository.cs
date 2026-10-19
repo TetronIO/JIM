@@ -182,7 +182,33 @@ internal sealed class SystemRepository : ISystemRepository
     /// </summary>
     private static async Task WipeEverythingAsync(Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade db)
     {
+        await TruncateAllCustomerDataAsync(db);
+    }
+
+    /// <summary>
+    /// Runs <see cref="TruncateAllCustomerDataSql"/> while keeping the infrastructure API keys and their role
+    /// memberships, which every reset preserves (#2389).
+    /// </summary>
+    /// <remarks>
+    /// A scoped API key has a foreign key to its Connected System, so truncating <c>ConnectedSystems</c> with CASCADE
+    /// empties the whole <c>ApiKeys</c> table, and <c>ApiKeyRole</c> after it, whatever the rows hold. The
+    /// infrastructure keys are snapshotted into transaction-scoped temporary tables and restored after the truncate.
+    /// They are never scoped, so they reference no Connected System, and the roles they hold are built-in roles the
+    /// truncate does not touch; a custom role's membership is removed with the custom role later in the reset.
+    /// </remarks>
+    private static async Task TruncateAllCustomerDataAsync(Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade db)
+    {
+        await db.ExecuteSqlRawAsync(
+            @"CREATE TEMP TABLE _reset_infrastructure_api_key ON COMMIT DROP AS
+              SELECT * FROM ""ApiKeys"" WHERE ""IsInfrastructureKey"" = true;");
+        await db.ExecuteSqlRawAsync(
+            @"CREATE TEMP TABLE _reset_infrastructure_api_key_role ON COMMIT DROP AS
+              SELECT * FROM ""ApiKeyRole"" WHERE ""ApiKeyId"" IN (SELECT ""Id"" FROM _reset_infrastructure_api_key);");
+
         await db.ExecuteSqlRawAsync(TruncateAllCustomerDataSql);
+
+        await db.ExecuteSqlRawAsync(@"INSERT INTO ""ApiKeys"" SELECT * FROM _reset_infrastructure_api_key;");
+        await db.ExecuteSqlRawAsync(@"INSERT INTO ""ApiKeyRole"" SELECT * FROM _reset_infrastructure_api_key_role;");
     }
 
     /// <summary>
@@ -223,7 +249,7 @@ internal sealed class SystemRepository : ISystemRepository
               SELECT * FROM ""MetaverseObjectRole"" WHERE ""StaticMembersId"" = ANY(@adminIds);", adminIdParam());
 
         // 2. Full fast wipe (identical to the total-wipe path).
-        await db.ExecuteSqlRawAsync(TruncateAllCustomerDataSql);
+        await TruncateAllCustomerDataAsync(db);
 
         // 3. Restore the administrators. Null out references to objects that no longer exist before
         //    re-inserting the attribute values, so the inserts do not violate foreign keys.
