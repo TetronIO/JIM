@@ -3,10 +3,9 @@
 
 using System.Linq;
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Encodings.Web;
 using JIM.Application;
+using JIM.Application.Utilities;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Web.Authentication;
@@ -29,9 +28,9 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     public const string SchemeName = "ApiKey";
 
     /// <summary>
-    /// The prefix for API keys (e.g., jim_ak_).
+    /// The path under which SCIM clients call JIM, the only place a scoped key is accepted.
     /// </summary>
-    public const string ApiKeyPrefix = "jim_ak_";
+    public static readonly PathString ScimPathBase = new("/scim");
 
     // IServiceScopeFactory, not IServiceProvider: authentication handlers are resolved from the request scope, so
     // an injected IServiceProvider is the request's own provider and is disposed the moment the response completes.
@@ -77,7 +76,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             var jim = scope.ServiceProvider.GetRequiredService<JimApplication>();
 
             // Hash the provided key to look it up
-            var keyHash = HashApiKey(providedKey);
+            var keyHash = ApiKeyMaterial.Hash(providedKey);
             var apiKey = await jim.Security.GetApiKeyByHashAsync(keyHash);
 
             if (apiKey == null)
@@ -105,6 +104,16 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
                 Log.Warning("ApiKeyAuthenticationHandler: API key has expired (prefix: {KeyPrefix})", apiKey.KeyPrefix);
                 RecordFailedAuthenticationEvent("API key has expired", apiKey.KeyPrefix, clientIp);
                 return AuthenticateResult.Fail("API key has expired");
+            }
+
+            // A scoped key is a credential only on the endpoint it was minted for; anywhere else it opens nothing, so it
+            // fails here rather than relying on every policy downstream to refuse it. Which Connected System it may
+            // reach is the SCIM endpoint's own check.
+            if (apiKey.Scope != ApiKeyScope.None && !Request.Path.StartsWithSegments(ScimPathBase, StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Warning("ApiKeyAuthenticationHandler: Scoped API key used outside the SCIM endpoint (prefix: {KeyPrefix})", apiKey.KeyPrefix);
+                RecordFailedAuthenticationEvent("API key is scoped to the SCIM endpoint", apiKey.KeyPrefix, clientIp);
+                return AuthenticateResult.Fail("API key is scoped to the SCIM endpoint");
             }
 
             // Record usage (fire and forget - don't block authentication)
@@ -155,7 +164,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
     /// <summary>
     /// Builds the claim set for an authenticated API key principal. Extracted as an internal static so the claim
-    /// composition (identity claims, role claims, the virtual "User" role, and the infrastructure-key marker) can
+    /// composition (identity claims, role claims, the virtual "User" role, the infrastructure-key marker, and a scoped
+    /// key's scope in place of all roles) can
     /// be unit tested without spinning up the ASP.NET Core authentication pipeline.
     /// </summary>
     /// <param name="apiKey">The validated API key entity, with its <see cref="ApiKey.Roles"/> loaded.</param>
@@ -169,6 +179,17 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             new("key_prefix", apiKey.KeyPrefix)
         };
 
+        // A scoped key carries its permission and target instead of roles, not even the virtual User role, so no role
+        // check anywhere in JIM can admit it, whatever roles the stored key might wrongly hold.
+        if (ApiKeyScopeNames.For(apiKey.Scope) is { } scopeName)
+        {
+            claims.Add(new Claim(Constants.BuiltInClaims.KeyScope, scopeName));
+            if (apiKey.ScopeConnectedSystemId is { } connectedSystemId)
+                claims.Add(new Claim(Constants.BuiltInClaims.KeyScopeConnectedSystemId,
+                    connectedSystemId.ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer32));
+            return claims;
+        }
+
         // Role claims from the API key's assigned roles.
         claims.AddRange(apiKey.Roles.Select(role => new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name)));
 
@@ -181,34 +202,6 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             claims.Add(new Claim(Constants.BuiltInClaims.IsInfrastructureKey, "true"));
 
         return claims;
-    }
-
-    /// <summary>
-    /// Generates a new API key with the standard prefix.
-    /// </summary>
-    /// <returns>A tuple containing the full key and its prefix.</returns>
-    public static (string FullKey, string KeyPrefix) GenerateApiKey()
-    {
-        // Generate 32 random bytes and convert to hex (64 chars)
-        var randomBytes = new byte[32];
-        using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(randomBytes);
-        var randomPart = Convert.ToHexString(randomBytes).ToLowerInvariant();
-
-        var fullKey = $"{ApiKeyPrefix}{randomPart}";
-        var keyPrefix = fullKey[..12]; // jim_ak_ + first 4 chars of random part
-
-        return (fullKey, keyPrefix);
-    }
-
-    /// <summary>
-    /// Hashes an API key using SHA256.
-    /// </summary>
-    public static string HashApiKey(string apiKey)
-    {
-        var bytes = Encoding.UTF8.GetBytes(apiKey);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
 

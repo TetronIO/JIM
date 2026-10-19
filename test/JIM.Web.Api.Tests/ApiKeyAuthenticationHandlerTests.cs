@@ -6,9 +6,11 @@ using System.Collections.Generic;
 using System.Net;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
+using JIM.Application.Utilities;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Web.Authentication;
 using JIM.Web.Middleware.Api;
@@ -159,6 +161,59 @@ public class ApiKeyAuthenticationHandlerTests
         }
     }
 
+    [Test]
+    public async Task AuthenticateAsync_ScopedKeyOutsideScim_FailsAndIsRecordedAsync()
+    {
+        // A SCIM client's key opens its SCIM endpoint and nothing else; anywhere else it is not a credential.
+        var apiKey = StoredScopedKey(connectedSystemId: 7);
+
+        var result = await AuthenticateAsync(authorization: $"Bearer {ValidKey}", path: "/api/v1/connected-systems");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Failure, Is.Not.Null);
+            VerifyRecorded("API key is scoped to the SCIM endpoint", apiKey.KeyPrefix);
+        }
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_ScopedKeyOnScim_SucceedsWithItsScopeAndNoRolesAsync()
+    {
+        StoredScopedKey(connectedSystemId: 7);
+
+        var result = await AuthenticateAsync(authorization: $"Bearer {ValidKey}", path: "/scim/v2/7/Users");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(result.Principal!.FindFirst(Constants.BuiltInClaims.KeyScope)?.Value, Is.EqualTo(ApiKeyScopeNames.ScimServiceProviderReadWrite));
+            Assert.That(result.Principal!.FindFirst(Constants.BuiltInClaims.KeyScopeConnectedSystemId)?.Value, Is.EqualTo("7"));
+            Assert.That(result.Principal!.FindAll(Constants.BuiltInRoles.RoleClaimType), Is.Empty);
+            VerifyNothingRecorded();
+        }
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_ScopedKeyOnAPathMerelyStartingWithScim_FailsAsync()
+    {
+        // The SCIM endpoint is the /scim segment, not any path that happens to begin with those letters.
+        StoredScopedKey(connectedSystemId: 7);
+
+        var result = await AuthenticateAsync(authorization: $"Bearer {ValidKey}", path: "/scimitar");
+
+        Assert.That(result.Succeeded, Is.False);
+    }
+
+    private ApiKey StoredScopedKey(int connectedSystemId)
+    {
+        var apiKey = StoredKey();
+        apiKey.Scope = ApiKeyScope.ScimServiceProvider;
+        apiKey.ScopeConnectedSystemId = connectedSystemId;
+        apiKey.ExpiresAt = DateTime.UtcNow.AddDays(30);
+        return apiKey;
+    }
+
     private void VerifyRecorded(string reason, string apiKeyPrefix) =>
         _recorder.Verify(r => r.RecordAsync(FailedAuthenticationEventNames.ApiKey, reason, apiKeyPrefix, ClientIp), Times.Once);
 
@@ -172,7 +227,7 @@ public class ApiKeyAuthenticationHandlerTests
         {
             Id = Guid.NewGuid(),
             Name = "Automation",
-            KeyHash = ApiKeyAuthenticationHandler.HashApiKey(ValidKey),
+            KeyHash = ApiKeyMaterial.Hash(ValidKey),
             KeyPrefix = ValidKey[..12],
             IsEnabled = true,
             Roles = new List<Role> { new() { Name = "Administrator" } }
@@ -181,7 +236,7 @@ public class ApiKeyAuthenticationHandlerTests
         return apiKey;
     }
 
-    private async Task<AuthenticateResult> AuthenticateAsync(string? authorization, string? xApiKey = null)
+    private async Task<AuthenticateResult> AuthenticateAsync(string? authorization, string? xApiKey = null, string path = "/api/v1/userinfo")
     {
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepository.Object);
@@ -200,7 +255,7 @@ public class ApiKeyAuthenticationHandlerTests
             options.Object, NullLoggerFactory.Instance, UrlEncoder.Default, scopeFactory, _recorder.Object);
 
         var context = new DefaultHttpContext();
-        context.Request.Path = "/api/v1/userinfo";
+        context.Request.Path = path;
         context.Connection.RemoteIpAddress = IPAddress.Parse(ClientIp);
         if (authorization != null)
             context.Request.Headers.Authorization = authorization;

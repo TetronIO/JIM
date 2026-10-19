@@ -109,6 +109,18 @@ public class ApiKey : IAuditable
     public bool IsInfrastructureKey { get; set; }
 
     /// <summary>
+    /// What the key may be used for. A scoped key carries no roles and authenticates only on the surface its scope
+    /// names, for <see cref="ScopeConnectedSystemId"/>.
+    /// </summary>
+    public ApiKeyScope Scope { get; set; } = ApiKeyScope.None;
+
+    /// <summary>
+    /// The Connected System a scoped key is for; null for an unscoped key. Deleting the Connected System deletes its
+    /// scoped keys.
+    /// </summary>
+    public int? ScopeConnectedSystemId { get; set; }
+
+    /// <summary>
     /// The roles assigned to this API key. These determine what actions the key can perform.
     /// </summary>
     public List<Role> Roles { get; set; } = [];

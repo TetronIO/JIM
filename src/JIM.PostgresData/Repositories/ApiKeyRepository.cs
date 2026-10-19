@@ -96,6 +96,15 @@ public class ApiKeyRepository : IApiKeyRepository
         return existingKey;
     }
 
+    public async Task<int> CountActiveScopedKeysAsync(int connectedSystemId, DateTime asAt, Guid? excludingId = null)
+    {
+        return await Repository.Database.ApiKeys
+            .CountAsync(ak => ak.ScopeConnectedSystemId == connectedSystemId
+                && ak.IsEnabled
+                && (ak.ExpiresAt == null || ak.ExpiresAt > asAt)
+                && (excludingId == null || ak.Id != excludingId));
+    }
+
     public async Task DeleteAsync(Guid id)
     {
         var apiKey = await Repository.Database.ApiKeys

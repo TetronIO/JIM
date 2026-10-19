@@ -85,6 +85,7 @@ public class InfrastructureApiKeyTests
     {
         var existing = NewExistingKey(expiresAt: DateTime.UtcNow.AddDays(-3));
         _apiKeyRepo.Setup(r => r.GetByHashAsync(KeyHash)).ReturnsAsync(existing);
+        _apiKeyRepo.Setup(r => r.GetByIdAsync(existing.Id)).ReturnsAsync(existing);
 
         var outcome = await _jim.Security.EnsureInfrastructureApiKeyAsync(KeyHash, KeyPrefix);
 

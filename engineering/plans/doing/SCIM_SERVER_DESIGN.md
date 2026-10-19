@@ -1,6 +1,6 @@
 # SCIM 2.0 Service Provider Design
 
-- **Status:** Doing (Phases 1 to 3 complete: the SCIM store, the server's writes, Get and list, and the Service Provider Connector behind its feature flag)
+- **Status:** Doing (Phases 1 to 3 and 4a complete: the SCIM store, the server's writes, Get and list, the Service Provider Connector behind its feature flag, and scoped API keys)
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
 - **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
@@ -71,9 +71,9 @@ Rejected alternatives (judge panel, weighted for integrity, conformance, scope, 
 The universal SCIM credential is a static token sent as `Authorization: Bearer <token>`; every mainstream client supports it and several support nothing else. Mainstream SCIM servers issue it the same way: generated in the admin UI and shown once, usable only for SCIM and one tenant, about a year's lifetime, two at a time for rotation.
 
 - **Bearer everywhere.** JIM API keys move to `Authorization: Bearer jim_ak_...` only, across the whole product, and `X-API-Key` is removed ([#2088](https://github.com/TetronIO/JIM/issues/2088)). JIM is pre-v1.0, so there is no compatibility window.
-- **Scope is mandatory for SCIM.** A key used on `/scim/v2/{id}` must be scoped to that Connected System. A scoped key carries no role claims (not even the virtual User role) and is refused on every other path. The scope model is generic (scope type plus target) because #1566 needs scoped keys too.
+- **Scope is mandatory for SCIM.** A key used on `/scim/v2/{id}` must be scoped to that Connected System. A scoped key carries no role claims (not even the virtual User role) and is refused on every other path. The scope model is generic (scope type plus target) because #1566 needs scoped keys too. On the authenticated principal the scope is a `jim_key_scope` claim of `ScimServiceProvider.ReadWrite` (dotted `Resource.Action` in PascalCase, the convention recorded on #622 for the RBAC permission catalogue), with the target in its own `jim_key_scope_connected_system_id` claim (the `jim_` prefix every JIM claim carries), so the permission name never embeds a resource instance. Authentication refuses a scoped key anywhere outside `/scim`, and the default authorisation policy refuses a scoped principal as a second line.
 - **At most two active scoped keys per Connected System,** for overlap rotation; the portal shows each key's last-used time and address so the administrator can see the old one has gone quiet.
-- **Expiry is mandatory** for scoped keys: default 365 days, capped, with warnings as it approaches.
+- **Expiry is mandatory** for scoped keys: default 365 days, at most 730, with warnings as it approaches.
 - **Failure semantics.** Any authentication failure (missing, malformed, unknown, disabled, expired or wrong-system key) returns the same `401` with `WWW-Authenticate: Bearer realm="JIM SCIM"` (adding `error="invalid_token"` when a credential was presented) and a SCIM error body; the real reason is audited, aggregated per Connected System and key. Never a redirect. Authorisation failures return `403` with a SCIM error body.
 - **Unscoped Administrator keys are not accepted on `/scim`** (least privilege). The JIM-to-JIM tests mint a scoped key.
 - **Never on `/scim`:** HTTP Basic, the OAuth authorisation code grant, the password grant, `X-API-Key` or other custom headers, tokens in query strings, non-expiring tokens, anonymous access (discovery endpoints require authentication too).
@@ -284,7 +284,7 @@ SCIM client ◀── 201 Created · id · ETag W/"1" · Location
 
 - Endpoint policy names the API key scheme explicitly, so challenges go there and never to the OpenID Connect redirect.
 - Scope is checked from endpoint metadata and the `{connectedSystemId}` route value. As a second layer, the default authorisation policy requires an unscoped principal, so a scoped key can never satisfy a plain `[Authorize]` elsewhere.
-- **Rate limiting** is partitioned per Connected System (not per key, so rotation keys share one budget), defaulting to at least 1,500 requests a minute; unauthenticated `/scim` traffic is limited per address.
+- **Rate limiting** is partitioned per Connected System (not per key, so rotation keys share one budget), set by the Service Setting `Security.RateLimiting.ScimServiceProviderRequestsPerMinute` (default 1,500 per Connected System; "Service Provider" names the inbound role, so it cannot be mistaken for the SCIM client Connector's outbound throttling); unauthenticated `/scim` traffic is limited per address.
 - A `/scim` exception mapper returns SCIM error JSON (`400` `invalidSyntax`/`invalidValue`, `404`, `500`); automatic ProblemDetails is suppressed on SCIM controllers.
 - Secure transport is required, with a SCIM-shaped refusal; it is documented that a TLS-terminating proxy needs `JIM_TRUSTED_PROXIES`.
 - `application/scim+json` and `application/json` are both accepted and produced on request; request size and complexity limits match what the shipped client sends.
@@ -372,6 +372,18 @@ The store reader seam, the connector (Full and Delta Import), registration in `C
 - **Not surfaced yet:** the portal and the REST API do not show the two Activity columns. Whether and where to show them is open (see Phase 5).
 
 ### Phase 4: HTTP surface
+
+Two PRs: **4a** scoped API keys (the scope, its enforcement, the per-Connected-System limits, minting at the application layer; the management surfaces are Phase 5), then **4b** the `/scim` surface itself.
+
+#### 4a: Scoped API keys ✅
+
+- **Model:** `ApiKey.Scope` (`None` or `ScimServiceProvider`) and `ScopeConnectedSystemId`, with a check constraint that the two agree and a foreign key that cascades, so deleting the Connected System deletes its keys. The configuration snapshot records both.
+- **Minting** is `SecurityServer.CreateScimServiceProviderKeyAsync`, behind the flag: the Connected System must use the Service Provider Connector, the key carries no roles, expiry defaults to 365 days and is capped at 730, and a third usable key (enabled and unexpired) is refused. The generic create path refuses any scope, and an update can change no key's scope, give a scoped key a role, remove or exceed its expiry, or make it a third usable key. Secrets are generated and hashed by `ApiKeyMaterial` in JIM.Application, which the portal and REST create paths now use too.
+- **Enforcement:** a scoped key's principal carries `jim_key_scope` and `jim_key_scope_connected_system_id` and no role claims; authentication refuses it outside `/scim` (audited as "API key is scoped to the SCIM endpoint"), and the default authorisation policy refuses a scoped principal as a second line. A sweep test evaluates every controller action and hub against a scoped principal. Usage stamps were already throttled to one per key per 30 seconds, which is enough for SCIM request rates.
+- **Verified on the light stack:** a scoped key got 401 on `/api/v1/userinfo`, the Connected System list and the API key list, while an unscoped key got 200 on the first; on `/scim` it authenticated and the fallback page's default policy refused it (403), proving the second line independently. The refusal was recorded in the security audit log.
+- **Still open for 4b:** the `/scim` policy that checks the key's Connected System against the route.
+
+#### 4b: The `/scim` surface
 
 The `ApiKeys` scope column and scoped key authentication with its failure semantics (D3), the journal's actor taken from the authenticated key (D17), the `/scim` pipeline stages, discovery, Users and Groups (POST, GET, PUT, PATCH, DELETE, list with filtering and paging), error mapping, rate limiting and secure transport, behind the flag (D16).
 
