@@ -1834,8 +1834,16 @@ try {
             $ownItems = @($export.Items | Where-Object { $_.displayName -eq 'Thaddeus Merrow' })
             Add-TestResult -Name "[Keep unique] The refused User Principal Name is an ordinary UniqueValueAlreadyInUse error" `
                 -Passed ($ownItems.Count -eq 1 -and $ownItems[0].errorType -eq 'UniqueValueAlreadyInUse') -Detail $itemsDetail
-            Add-TestResult -Name "[Keep unique] Nothing is remediated" `
-                -Passed ($export.Stats.totalGeneratedValuesRemediated -eq 0) -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated)"
+            # Failing Pending Exports are retried at every export run (#2370), so Test 18's refusal, made while Collision
+            # Remediation was off, is sent again here with it back on and is remediated. That one, and nothing of this
+            # test's own, is the only remediation.
+            $remediatedItems = @($export.Items | Where-Object { $_.outcomeSummary -match 'GeneratedValueRemediated:' })
+            Add-TestResult -Name "[Keep unique] Nothing of this test's is remediated" `
+                -Passed (@($remediatedItems | Where-Object { $_.displayName -eq 'Thaddeus Merrow' }).Count -eq 0) `
+                -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated); $itemsDetail"
+            Add-TestResult -Name "[Keep unique] Test 18's refusal is retried with remediation back on, and is the only one remediated" `
+                -Passed ($remediatedItems.Count -eq 1 -and $remediatedItems[0].displayName -eq 'Osric Tamworth' -and $export.Stats.totalGeneratedValuesRemediated -eq 1) `
+                -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated); $itemsDetail"
 
             # Changing a value's Keep unique switch releases every decision held on the generated value it is built
             # from, as changing the generated flow's own settings does: Test 17's parked export is sent again, and,
