@@ -83,6 +83,38 @@ public class ScimServer
     public async Task<ScimServiceDefinitions> GetDefinitionsAsync(int connectedSystemId) =>
         ScimServiceDefinitions.Compile(await Store.GetResourceTypesAsync(connectedSystemId), await Store.GetSchemasAsync(connectedSystemId));
 
+    #region import
+    /// <summary>
+    /// A Connected System's stored resource type definitions, as the Service Provider Connector composes its schema from.
+    /// </summary>
+    public Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypeRowsAsync(int connectedSystemId, CancellationToken cancellationToken = default) =>
+        Store.GetResourceTypesAsync(connectedSystemId, cancellationToken);
+
+    /// <summary>
+    /// A Connected System's stored schema definitions.
+    /// </summary>
+    public Task<IReadOnlyList<ScimStoreSchema>> GetSchemaRowsAsync(int connectedSystemId, CancellationToken cancellationToken = default) =>
+        Store.GetSchemasAsync(connectedSystemId, cancellationToken);
+
+    /// <summary>
+    /// A Connected System's store counters: its committed change sequence (an import's horizon) and its purge floor.
+    /// </summary>
+    public Task<ScimStoreState?> GetStoreStateAsync(int connectedSystemId, CancellationToken cancellationToken = default) =>
+        Store.GetStateAsync(connectedSystemId, cancellationToken);
+
+    /// <summary>
+    /// One page of what an import reads from a Connected System's store.
+    /// </summary>
+    public Task<ScimStoreImportPage> ReadForImportAsync(int connectedSystemId, ScimStoreImportQuery query, CancellationToken cancellationToken = default) =>
+        Store.ReadForImportAsync(connectedSystemId, query, cancellationToken);
+
+    /// <summary>
+    /// Removes tombstones an import has read and that are older than the cut-off, raising the store's purge floor.
+    /// </summary>
+    public Task<int> PurgeTombstonesAsync(int connectedSystemId, long importedUpTo, DateTime deletedBefore, CancellationToken cancellationToken = default) =>
+        Store.PurgeTombstonesAsync(connectedSystemId, importedUpTo, deletedBefore, cancellationToken);
+    #endregion
+
     #region create
     /// <summary>
     /// POST: creates a resource at version 1 and returns it with <c>201</c>.

@@ -262,7 +262,101 @@ public class ImportPersistedConnectorDataTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// Every import records on its Activity the watermark it started from and the one it recorded, whatever its
+    /// Connector, so a Delta Import can be diagnosed by the range it read, and the SCIM 2.0 Service Provider can find
+    /// the requests behind a change in its journal.
+    /// </summary>
+    [TestCase(ConnectedSystemRunType.DeltaImport)]
+    [TestCase(ConnectedSystemRunType.FullImport)]
+    public async Task Import_CompletesNormally_RecordsTheWatermarkRangeOnTheActivityAsync(ConnectedSystemRunType runType)
+    {
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync(runType, "original-watermark");
+        var connector = new MockCallConnector();
+        QueueTwoPages(connector, csoType, firstPageWatermark: "new-watermark");
+
+        await NewProcessor(connector, connectedSystem, runProfile, activity).PerformImportAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ImportWatermarkFrom, Is.EqualTo("original-watermark"));
+            Assert.That(activity.ImportWatermarkTo, Is.EqualTo("new-watermark"));
+        }
+    }
+
+    [Test]
+    public async Task Import_CompletesNormallyWithNothingNew_RecordsTheSameWatermarkReachedAsync()
+    {
+        // Nothing changed since the last import, so the Connector returns the watermark it started from. The run still
+        // reached it: an empty To would read as a run that recorded nothing.
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync(ConnectedSystemRunType.DeltaImport, "same-watermark");
+        var connector = new MockCallConnector();
+        QueueTwoPages(connector, csoType, firstPageWatermark: "same-watermark");
+
+        await NewProcessor(connector, connectedSystem, runProfile, activity).PerformImportAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ImportWatermarkFrom, Is.EqualTo("same-watermark"));
+            Assert.That(activity.ImportWatermarkTo, Is.EqualTo("same-watermark"));
+        }
+    }
+
+    [Test]
+    public async Task Import_FirstImport_RecordsNoStartingWatermarkAsync()
+    {
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync(ConnectedSystemRunType.FullImport, persistedConnectorData: null);
+        var connector = new MockCallConnector();
+        QueueTwoPages(connector, csoType, firstPageWatermark: "new-watermark");
+
+        await NewProcessor(connector, connectedSystem, runProfile, activity).PerformImportAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ImportWatermarkFrom, Is.Null);
+            Assert.That(activity.ImportWatermarkTo, Is.EqualTo("new-watermark"));
+        }
+    }
+
+    [Test]
+    public async Task Import_StagingFails_RecordsWhereItStartedButNoWatermarkReachedAsync()
+    {
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync(ConnectedSystemRunType.DeltaImport, "original-watermark");
+        var connector = new MockCallConnector();
+        QueueTwoPages(connector, csoType, firstPageWatermark: "new-watermark");
+        var syncServer = FaultingSyncServerProxy.Create(
+            new SyncServer(Jim), nameof(ISyncServer.CreateConnectedSystemObjectsAsync), new InvalidOperationException("simulated staging failure"));
+        var processor = new SyncImportTaskProcessor(
+            Jim, SyncRepo, syncServer, new SyncEngine(),
+            connector, connectedSystem, runProfile, CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity), new CancellationTokenSource());
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await processor.PerformImportAsync());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ImportWatermarkFrom, Is.EqualTo("original-watermark"));
+            Assert.That(activity.ImportWatermarkTo, Is.Null, "a run that recorded no watermark must not claim one");
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_CloseImportConnectionReturnsData_RecordsThatAsTheWatermarkReachedAsync()
+    {
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync(ConnectedSystemRunType.DeltaImport, "original-watermark");
+        var connector = new MockCallConnector();
+        QueueTwoPages(connector, csoType, firstPageWatermark: "new-watermark");
+        connector.WithCloseImportConnectionReturnValue("state-returned-at-close");
+
+        await NewProcessor(connector, connectedSystem, runProfile, activity).PerformImportAsync();
+
+        Assert.That(activity.ImportWatermarkTo, Is.EqualTo("state-returned-at-close"));
+    }
+
     #region Helpers
+
+    private SyncImportTaskProcessor NewProcessor(MockCallConnector connector, ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, Activity activity) =>
+        new(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            connector, connectedSystem, runProfile, CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity), new CancellationTokenSource());
 
     private async Task<(ConnectedSystem ConnectedSystem, ConnectedSystemObjectType CsoType, ConnectedSystemRunProfile RunProfile, Activity Activity)> ArrangeImportAsync(
         ConnectedSystemRunType runType, string? persistedConnectorData)

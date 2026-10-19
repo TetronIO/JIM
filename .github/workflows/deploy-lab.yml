@@ -1,0 +1,199 @@
+# Deployment lab: installs and upgrades a bundle built from the commit the way customers do, on fresh air-gapped VMs,
+# and posts the `jim-deploy-lab` commit status the release gate reads.
+#
+# What it does: test/ci/deployment/lab/Invoke-DeploymentLab.ps1 builds a release bundle from the checked-out commit on
+# a throwaway VM, as release.yml builds one, then runs every cell of the matrix (test/ci/deployment/lab/Cells.psd1),
+# each on a fresh LXD VM on the deployment lab host: installs on Docker with both image stores and on rootful and
+# rootless Podman, on Ubuntu 24.04 and AlmaLinux 9 with SELinux enforcing; upgrades from the latest release with a
+# rollback by the guide; the installer's refusals, re-runs and certificate options; an external PostgreSQL server;
+# and a soak of restarts and reboots. The lab's README says what each cell checks. The job writes the report to its
+# summary, uploads the report and every cell's logs, and posts a commit status named `jim-deploy-lab` on the SHA it
+# tested: `success` only when every cell passed, with the count in its description. release.yml and /release require
+# `success` for the SHA being tagged (scripts/Test-DeployLabReleaseGate.ps1) once the repository variable
+# JIM_DEPLOY_LAB_GATE_ENFORCED is `true` (set after the lab's first green run here); from then on there is no
+# override, so the remedy for a red run is a fix and a dispatched run.
+#
+# Triggers: nightly on main, a push to main that changes VERSION (the release pull request's merge, so the release
+# commit is tested by itself, as pre-release.yml does), and workflow_dispatch. NEVER pull_request. Split-trust runner
+# model (see ci.yml): a pull_request runs code from anyone's fork, and the lab runner's account is in the host's lxd
+# group, which is root-equivalent on that host, so fork code must never reach it:
+#   - a schedule always runs the default branch, a push to main is merged code, and a dispatch needs write access to
+#     this repository;
+#   - the lab runner (`quay-jim-deploy-lab`, label `jim-deploy-lab`) is alone in a DEDICATED runner group named
+#     `jim-deploy-lab`, with repository access to TetronIO/JIM only and a workflow allowlist of exactly this file at
+#     refs/heads/main, so even a branch that edits this workflow cannot reach the runner. It is not in
+#     `tetron-trusted`: a runner carrying the default labels there would be offered ordinary ci.yml push jobs, which
+#     need Docker, and Docker must never be installed on the lab host (its firewall rules break the lab's bridges).
+#     Set the allowlist once, with an account holding admin:org:
+#
+#       GROUP=$(gh api orgs/TetronIO/actions/runner-groups --jq '.runner_groups[] | select(.name == "jim-deploy-lab") | .id')
+#       jq -n '{restricted_to_workflows: true, selected_workflows: ["TetronIO/JIM/.github/workflows/deploy-lab.yml@refs/heads/main"]}' \
+#         | gh api -X PATCH "orgs/TetronIO/actions/runner-groups/$GROUP" --input - --jq '.selected_workflows'
+#
+# The host: built and registered from TetronIO/ci-runners (docs/deploy-lab.md, "Building it from nothing" and
+# "Becoming a runner"). It holds no secret: the identity provider's client secret, its administrator and the test
+# directory's bind password are published development values (Lab.psd1), so this workflow needs no environment.
+#
+# One lab run at a time, on the whole host: the runs share the host's memory and name their VMs jl-<cell>, so a
+# second run (this workflow's, or one started by hand on the host) would collide with the first. The concurrency
+# group queues this workflow's runs and never cancels one (a cancelled run leaves its VMs, and its status unposted);
+# the first step refuses to start while any jl- VM exists, which is a run by hand in progress or a run that died, and
+# the last step deletes every jl- VM, which after that check can only be this run's.
+#
+# Timing: 01:00 UTC. A full run is about 40 minutes on the lab host (a bundle build, then 19 cells, several at once).
+
+name: jim-deploy-lab
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  push:
+    branches: [ "main" ]
+    paths: [ "VERSION" ]
+  workflow_dispatch:
+    inputs:
+      cells:
+        description: 'Cells to run, by name (wildcards allowed, comma-separated); empty for every cell'
+        type: string
+        default: ''
+      tags:
+        description: 'Run only cells carrying every one of these tags (comma-separated, for example rhel,upgrade); empty for no filter'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  jim-deploy-lab:
+    name: jim-deploy-lab
+    # A schedule always runs the default branch, but say so: only main's copy of this file may reach the lab.
+    if: ${{ github.event_name != 'schedule' || github.ref == 'refs/heads/main' }}
+    runs-on: [self-hosted, jim-deploy-lab]
+    timeout-minutes: 150
+    concurrency:
+      group: jim-deploy-lab
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # Fail in one place, naming what is wrong, rather than in a cell twenty minutes later.
+      - name: Check the lab host
+        run: |
+          $problems = @()
+          $vms = @(lxc list --format csv --columns n 2>&1)
+          if ($LASTEXITCODE -ne 0) {
+            $problems += "lxc does not answer for this account ($($vms -join ' ')): is it in the lxd group?"
+          }
+          else {
+            $running = @($vms | Where-Object { $_ -like 'jl-*' })
+            if ($running) {
+              $problems += "lab VMs already exist ($($running -join ', ')): a run by hand is in progress, or a run died. Delete them on the host (lxc delete -f <name>) once nothing is using them, then run this again."
+            }
+          }
+          $images = @(lxc image list 'jimlab/' --format csv --columns l 2>$null | Where-Object { $_ })
+          if ($images.Count -lt 6) {
+            $problems += "only $($images.Count) of the six jimlab/ base images exist: run build-lab-images.sh on the host (TetronIO/ci-runners)"
+          }
+          foreach ($gateway in '10.77.0.1', '10.78.0.1') {
+            $realm = curl -s --max-time 10 "http://${gateway}:8180/realms/jim"
+            if ("$realm" -notmatch '"realm"\s*:\s*"jim"') {
+              $problems += "the identity provider does not answer on ${gateway}:8180: see setup-lab-idp.sh (TetronIO/ci-runners)"
+            }
+          }
+          if ($problems.Count -gt 0) {
+            $problems | ForEach-Object { Write-Host "::error title=The deployment lab host is not ready::$_" }
+            exit 1
+          }
+
+      # The matrix. The cells and tags reach the script through env, never interpolated into it, and are split into
+      # lists here, as -File would pass each as one string.
+      - name: Run the deployment lab
+        id: lab
+        env:
+          CELLS: ${{ inputs.cells }}
+          TAGS: ${{ inputs.tags }}
+          OUTPUT_PATH: ${{ runner.temp }}/deployment-lab
+        run: |
+          $arguments = @{ Commit = 'HEAD'; OutputPath = $env:OUTPUT_PATH }
+          $cells = @("$env:CELLS" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+          $tags = @("$env:TAGS" -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+          if ($cells) { $arguments.Name = $cells }
+          if ($tags) { $arguments.Tag = $tags }
+          ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 @arguments
+          exit $LASTEXITCODE
+
+      # The report into the job summary, and its headline ("19 of 19 cells passed.") into the status description,
+      # capped at GitHub's 140 characters.
+      - name: Summarise the run
+        id: summary
+        if: ${{ always() }}
+        env:
+          REPORT: ${{ runner.temp }}/deployment-lab/report.md
+        run: |
+          if (-not (Test-Path -LiteralPath $env:REPORT)) {
+            "### Deployment lab`n`nNo report: the run stopped before any cell finished." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            exit 0
+          }
+          $report = Get-Content -LiteralPath $env:REPORT
+          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $headline = $report | Where-Object { $_ -match '^\d+ of \d+ cells passed' } | Select-Object -First 1
+          if ($headline) {
+            $description = $headline.TrimEnd('.')
+            if ($description.Length -gt 140) { $description = $description.Substring(0, 137) + '...' }
+            "description=$description" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+
+      # The report, results.json and every cell's folder (cell.log, the installer's logs, the boot check's output, a
+      # failed soak round's journal). Not the bundle: it is about a gigabyte, and can be rebuilt from the commit.
+      - name: Upload the run's artefacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: jim-deploy-lab-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/deployment-lab/
+            !${{ runner.temp }}/deployment-lab/bundle/
+            !${{ runner.temp }}/deployment-lab/**/*.tar.gz
+          if-no-files-found: warn
+          retention-days: 30
+
+      # The commit status the release gate reads. Posted on the SHA that was tested (every trigger checks out
+      # github.sha), from the run's outcome: success only when every cell passed. A cancelled run posts nothing, so it
+      # can neither open the gate nor close it on a commit it did not finish testing.
+      - name: Post the jim-deploy-lab commit status
+        if: ${{ always() && job.status != 'cancelled' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TESTED_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+          LAB_OUTCOME: ${{ steps.lab.outcome }}
+          SUMMARY_DESCRIPTION: ${{ steps.summary.outputs.description }}
+        run: |
+          $state = 'success'
+          if ($env:JOB_STATUS -ne 'success') {
+            # failure: cells ran and at least one failed; error: the run never got as far as a report.
+            if (($env:LAB_OUTCOME -eq 'failure') -and $env:SUMMARY_DESCRIPTION) { $state = 'failure' } else { $state = 'error' }
+          }
+          $description = $env:SUMMARY_DESCRIPTION
+          if (-not $description) { $description = 'the run stopped before the lab reported' }
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-deploy-lab' -f description="$description" -f target_url="$env:RUN_URL"
+          exit $LASTEXITCODE
+
+      # The runner is not ephemeral: a run that failed or timed out can leave its VMs. The first step refused to start
+      # while any jl- VM existed, so every one now is this run's.
+      - name: Delete the run's VMs
+        if: ${{ always() }}
+        run: |
+          $left = @(lxc list --format csv --columns n 2>$null | Where-Object { $_ -like 'jl-*' })
+          foreach ($vm in $left) {
+            lxc delete --force $vm
+          }
+          exit 0

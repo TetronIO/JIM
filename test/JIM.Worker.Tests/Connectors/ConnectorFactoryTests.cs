@@ -6,6 +6,7 @@ using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
+using JIM.Connectors.SCIM.ServiceProvider;
 using JIM.Connectors.Sql;
 using JIM.Models.Interfaces;
 using Moq;
@@ -66,10 +67,13 @@ public class ConnectorFactoryTests
     }
 
     [Test]
-    public void Create_ScimServiceProviderConnectorName_ThrowsNotSupportedException()
+    public void Create_ScimServiceProviderConnectorName_ReturnsScimServiceProviderConnector()
     {
-        // Act & Assert: the constant exists in ConnectorConstants but no built-in implementation exists yet (#124).
-        Assert.Throws<NotSupportedException>(() => _connectorFactory.Create(ConnectorConstants.ScimServiceProviderConnectorName));
+        // Act
+        var connector = _connectorFactory.Create(ConnectorConstants.ScimServiceProviderConnectorName);
+
+        // Assert
+        Assert.That(connector, Is.InstanceOf<ScimServiceProviderConnector>());
     }
 
     [Test]

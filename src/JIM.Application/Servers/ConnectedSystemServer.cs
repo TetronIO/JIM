@@ -61,12 +61,16 @@ public partial class ConnectedSystemServer
 
     /// <summary>
     /// Resolves the Connector implementation for a Connected System's Connector Definition, configuring it with
-    /// credential protection and certificate validation when it supports them.
+    /// credential protection and certificate validation when it supports them, and with the Connected System's SCIM
+    /// store when it reads one.
     /// </summary>
     /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
     internal IConnector CreateConnector(ConnectedSystem connectedSystem)
     {
-        return ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
+        var connector = ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
+        if (connector is IConnectorScimResourceStoreAware storeAware)
+            storeAware.SetScimResourceStore(new ScimResourceStoreService(Application, connectedSystem.Id));
+        return connector;
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -299,9 +303,23 @@ public partial class ConnectedSystemServer
     }
 
     #region Connector Definitions
+    /// <summary>
+    /// The Connector Definitions an administrator can choose from: every one, less any whose Connector is behind a
+    /// feature flag that is off (<see cref="FeatureFlagFor"/>).
+    /// </summary>
     public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
     {
-        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+        var headers = await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+
+        var hidden = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (name, featureFlag) in headers.Select(h => (h.Name, Flag: FeatureFlagFor(h.Name))).Where(h => h.Flag != null))
+        {
+            var enabled = await Application.FeatureFlags.IsEnabledAsync(featureFlag!.Key);
+            if (!enabled)
+                hidden.Add(name);
+        }
+
+        return hidden.Count == 0 ? headers : headers.Where(h => !hidden.Contains(h.Name)).ToList();
     }
 
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false)
@@ -474,48 +492,35 @@ public partial class ConnectedSystemServer
         
     public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
     {
-        if (connectedSystem == null)
-            throw new ArgumentNullException(nameof(connectedSystem));
-
-        // Fetch the ConnectorDefinition with change tracking so that EF Core recognises
-        // it and its Settings as existing entities. Without tracking, EF graph traversal
-        // during Add() would treat them as new and attempt duplicate inserts.
-        var connectorDefinition = connectedSystem.ConnectorDefinition
-            ?? await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId, withChangeTracking: true)
-            ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
-
-        connectedSystem.ConnectorDefinition = connectorDefinition;
-
-        if (connectorDefinition.Settings == null || connectorDefinition.Settings.Count == 0)
-            throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
-
-        if (!AreRunProfilesValid(connectedSystem))
-            throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
-
-        // create the Connected System setting value objects from the Connected System definition settings
-        foreach (var definitionSetting in connectorDefinition.Settings)
-            connectedSystem.SettingValues.Add(NewSettingValue(definitionSetting));
-
-        SanitiseConnectedSystemUserInput(connectedSystem);
+        await PrepareNewConnectedSystemAsync(connectedSystem);
 
         // every CRUD operation requires tracking with an activity...
-        var activity = new Activity
-        {
-            TargetName = connectedSystem.Name,
-            TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.Create
-        };
+        var activity = NewConnectedSystemCreateActivity(connectedSystem);
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetCreated(connectedSystem, initiatedBy);
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
-        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
-        await Application.Activities.CompleteActivityAsync(activity);
+        await PersistNewConnectedSystemAsync(activity, connectedSystem, changeReason);
     }
 
     /// <summary>
     /// Creates a new Connected System (initiated by API key).
     /// </summary>
     public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, string? changeReason = null)
+    {
+        await PrepareNewConnectedSystemAsync(connectedSystem);
+
+        // every CRUD operation requires tracking with an activity...
+        var activity = NewConnectedSystemCreateActivity(connectedSystem);
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        AuditHelper.SetCreated(connectedSystem, initiatedByApiKey);
+        await PersistNewConnectedSystemAsync(activity, connectedSystem, changeReason);
+    }
+
+    /// <summary>
+    /// Validates a new Connected System and gives it a setting value for each of its Connector's settings, before
+    /// anything is written.
+    /// </summary>
+    /// <exception cref="FeatureDisabledException">The Connector is behind a feature flag that is off.</exception>
+    private async Task PrepareNewConnectedSystemAsync(ConnectedSystem connectedSystem)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -529,31 +534,64 @@ public partial class ConnectedSystemServer
 
         connectedSystem.ConnectorDefinition = connectorDefinition;
 
-        if (connectorDefinition.Settings == null || connectorDefinition.Settings.Count == 0)
+        if (FeatureFlagFor(connectorDefinition.Name) is { } featureFlag)
+            await Application.FeatureFlags.EnsureEnabledAsync(featureFlag.Key);
+
+        // A definition without settings is right only for a built-in Connector that declares none; for any other it
+        // means the settings were never loaded, and the Connected System would be created with no setting values.
+        if ((connectorDefinition.Settings == null || connectorDefinition.Settings.Count == 0) && !DeclaresNoSettings(connectorDefinition.Name))
             throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
 
         if (!AreRunProfilesValid(connectedSystem))
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
         // create the Connected System setting value objects from the Connected System definition settings
-        foreach (var definitionSetting in connectorDefinition.Settings)
+        foreach (var definitionSetting in connectorDefinition.Settings ?? [])
             connectedSystem.SettingValues.Add(NewSettingValue(definitionSetting));
 
-        SanitiseConnectedSystemUserInput(connectedSystem);
+        // A Connector with no settings has nothing for an administrator to fill in or validate, so the settings are
+        // complete from the start; anything else becomes valid once its settings are saved.
+        if (connectedSystem.SettingValues.Count == 0)
+            connectedSystem.SettingValuesValid = true;
 
-        // every CRUD operation requires tracking with an activity...
-        var activity = new Activity
-        {
-            TargetName = connectedSystem.Name,
-            TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.Create
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
-        AuditHelper.SetCreated(connectedSystem, initiatedByApiKey);
+        SanitiseConnectedSystemUserInput(connectedSystem);
+    }
+
+    private static Activity NewConnectedSystemCreateActivity(ConnectedSystem connectedSystem) => new()
+    {
+        TargetName = connectedSystem.Name,
+        TargetType = ActivityTargetType.ConnectedSystem,
+        TargetOperationType = ActivityTargetOperationType.Create
+    };
+
+    /// <summary>
+    /// Writes a new Connected System, and for the SCIM 2.0 Service Provider gives its store the core User and Group
+    /// definitions, so a SCIM client can provision into it straight away.
+    /// </summary>
+    private async Task PersistNewConnectedSystemAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
+    {
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        if (IsScimServiceProvider(connectedSystem.ConnectorDefinition))
+            await Application.Scim.EnsureCoreDefinitionsAsync(connectedSystem.Id);
+
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// The feature flag a built-in Connector is behind while it is being built, if any. While the flag is off the
+    /// Connector is left out of the Connector choice and no Connected System can be created with it; while its tier is
+    /// In Development the Connector is not publicly documented either, since nothing about it is surfaced.
+    /// </summary>
+    public static FeatureFlagDefinition? FeatureFlagFor(string connectorName) =>
+        // The SCIM 2.0 Service Provider (D16 in SCIM_SERVER_DESIGN.md, #2372).
+        connectorName == ConnectorConstants.ScimServiceProviderConnectorName ? FeatureFlagCatalogue.ScimServiceProvider : null;
+
+    private static bool IsScimServiceProvider(ConnectorDefinition connectorDefinition) =>
+        connectorDefinition.Name == ConnectorConstants.ScimServiceProviderConnectorName;
+
+    private static bool DeclaresNoSettings(string connectorName) =>
+        SeedingServer.BuiltInConnectors().Any(c => c.Name == connectorName && c is IConnectorSettings settings && settings.GetSettings().Count == 0);
 
     /// <param name="previewActivityId">
     /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
@@ -2166,7 +2204,9 @@ public partial class ConnectedSystemServer
         if (connectedSystem.ConnectorDefinition == null)
             throw new ArgumentException("The supplied ConnectedSystem doesn't have a valid ConnectorDefinition.", nameof(connectedSystem));
 
-        if (connectedSystem.SettingValues == null || connectedSystem.SettingValues.Count == 0)
+        // No setting values is right only for a Connector that declares no settings; for any other it means they were
+        // never loaded.
+        if ((connectedSystem.SettingValues == null || connectedSystem.SettingValues.Count == 0) && !DeclaresNoSettings(connectedSystem.ConnectorDefinition.Name))
             throw new ArgumentException("The supplied ConnectedSystem doesn't have any valid SettingValues.", nameof(connectedSystem));
     }
 

@@ -170,6 +170,58 @@ public class ScimStoreRepository : IScimStoreRepository
         return new ScimStorePage { TotalResults = total, Resources = resources, HasMore = hasMore };
     }
 
+    public async Task<ScimStoreImportPage> ReadForImportAsync(int connectedSystemId, ScimStoreImportQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(query.Count);
+        if (query.ChangedAfter.HasValue != query.ChangedUpTo.HasValue)
+            throw new ArgumentException("A Delta Import's read needs both ends of its change sequence range.", nameof(query));
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var lease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand { Connection = connection };
+        command.Parameters.AddWithValue("system", connectedSystemId);
+        command.Parameters.AddWithValue("limit", query.Count + 1);
+
+        // A Full Import reads every live resource, whatever its sequence: stopping at the horizon would make a resource
+        // changed during the walk look absent. A Delta Import reads the range, tombstones included.
+        var where = """r."ConnectedSystemId" = @system""";
+        if (query.ChangedAfter is { } changedAfter)
+        {
+            command.Parameters.AddWithValue("changedAfter", changedAfter);
+            command.Parameters.AddWithValue("changedUpTo", query.ChangedUpTo!.Value);
+            where += """ AND r."ChangeSequence" > @changedAfter AND r."ChangeSequence" <= @changedUpTo""";
+        }
+        else
+        {
+            where += """ AND r."DeletedAt" IS NULL""";
+        }
+
+        if (query.After is { } after)
+        {
+            command.Parameters.AddWithValue("after", after);
+            where += """ AND r."Id" > @after""";
+        }
+
+        var columns = string.Join(", ", ScimStoreColumns.Resources.Select(column => $"r.\"{column}\""));
+        command.CommandText = $"""SELECT {columns} FROM "ScimStoreResources" AS r WHERE {where} ORDER BY r."Id" LIMIT @limit""";
+
+        var resources = new List<ScimStoreResource>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                resources.Add(ScimStoreReads.ReadResource(reader));
+        }
+
+        var hasMore = resources.Count > query.Count;
+        if (hasMore)
+            resources.RemoveAt(resources.Count - 1);
+
+        var live = resources.Where(r => r.DeletedAt == null).Select(r => r.Id).ToList();
+        var references = await ScimStoreReads.ReferencesBySourceAsync(connection, null, live, cancellationToken);
+        return new ScimStoreImportPage { Resources = resources, References = references, HasMore = hasMore };
+    }
+
     public async Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypesAsync(int connectedSystemId, CancellationToken cancellationToken = default)
     {
         return await Repository.Database.ScimStoreResourceTypes
