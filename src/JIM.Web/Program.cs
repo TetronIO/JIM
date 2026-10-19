@@ -415,7 +415,7 @@ try
         });
 
     // setup authorisation policies
-    builder.Services.AddAuthorization();
+    builder.Services.AddJimAuthorisation();
 
     // REST API rate limiting (issue #500, OWASP Top 10:2025 A02). Registers the settings cache and the global
     // limiter; UseRateLimiter() below wires it into the pipeline. Not needed in OpenAPI generation mode, which

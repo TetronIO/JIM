@@ -172,7 +172,43 @@ public class ApiKeyAuthenticationTests
     }
 
     [Test]
-    public void BuildApiKeyClaims_AlwaysIncludesIdentityAndVirtualUserRole()
+    public void BuildApiKeyClaims_ScopedKey_CarriesItsScopeAndNoRoleClaims()
+    {
+        // Not even the virtual User role, and not a role the key should never have been given: a scoped key's
+        // principal must satisfy no role check anywhere in JIM.
+        var apiKey = new ApiKey
+        {
+            Id = System.Guid.NewGuid(),
+            Name = "Entra provisioning",
+            KeyPrefix = "jim_ak_pqrst",
+            Scope = ApiKeyScope.ScimServiceProvider,
+            ScopeConnectedSystemId = 7,
+            Roles = [new Role { Name = Constants.BuiltInRoles.Administrator }]
+        };
+
+        var claims = ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(claims.Where(c => c.Type == Constants.BuiltInRoles.RoleClaimType), Is.Empty);
+            Assert.That(claims.Single(c => c.Type == Constants.BuiltInClaims.KeyScope).Value, Is.EqualTo(ApiKeyScopeNames.ScimServiceProviderReadWrite));
+            Assert.That(claims.Single(c => c.Type == Constants.BuiltInClaims.KeyScopeConnectedSystemId).Value, Is.EqualTo("7"));
+            Assert.That(claims.Single(c => c.Type == ClaimTypes.NameIdentifier).Value, Is.EqualTo(apiKey.Id.ToString()));
+        }
+    }
+
+    [Test]
+    public void BuildApiKeyClaims_UnscopedKey_CarriesNoScopeClaims()
+    {
+        var apiKey = new ApiKey { Id = System.Guid.NewGuid(), Name = "Some Key", KeyPrefix = "jim_ak_uvwxy" };
+
+        var claims = ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey);
+
+        Assert.That(claims.Any(c => c.Type == Constants.BuiltInClaims.KeyScope || c.Type == Constants.BuiltInClaims.KeyScopeConnectedSystemId), Is.False);
+    }
+
+    [Test]
+    public void BuildApiKeyClaims_UnscopedKey_IncludesIdentityAndVirtualUserRole()
     {
         var apiKey = new ApiKey
         {

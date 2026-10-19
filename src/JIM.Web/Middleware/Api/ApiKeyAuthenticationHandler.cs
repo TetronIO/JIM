@@ -27,6 +27,11 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     /// </summary>
     public const string SchemeName = "ApiKey";
 
+    /// <summary>
+    /// The path under which SCIM clients call JIM, the only place a scoped key is accepted.
+    /// </summary>
+    public static readonly PathString ScimPathBase = new("/scim");
+
     // IServiceScopeFactory, not IServiceProvider: authentication handlers are resolved from the request scope, so
     // an injected IServiceProvider is the request's own provider and is disposed the moment the response completes.
     // The fire-and-forget usage recording below outlives the request, and CreateScope() on the disposed request
@@ -101,6 +106,16 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
                 return AuthenticateResult.Fail("API key has expired");
             }
 
+            // A scoped key is a credential only on the endpoint it was minted for; anywhere else it opens nothing, so it
+            // fails here rather than relying on every policy downstream to refuse it. Which Connected System it may
+            // reach is the SCIM endpoint's own check.
+            if (apiKey.Scope != ApiKeyScope.None && !Request.Path.StartsWithSegments(ScimPathBase, StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Warning("ApiKeyAuthenticationHandler: Scoped API key used outside the SCIM endpoint (prefix: {KeyPrefix})", apiKey.KeyPrefix);
+                RecordFailedAuthenticationEvent("API key is scoped to the SCIM endpoint", apiKey.KeyPrefix, clientIp);
+                return AuthenticateResult.Fail("API key is scoped to the SCIM endpoint");
+            }
+
             // Record usage (fire and forget - don't block authentication)
             var ipAddress = clientIp;
             var apiKeyId = apiKey.Id;
@@ -149,7 +164,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
     /// <summary>
     /// Builds the claim set for an authenticated API key principal. Extracted as an internal static so the claim
-    /// composition (identity claims, role claims, the virtual "User" role, and the infrastructure-key marker) can
+    /// composition (identity claims, role claims, the virtual "User" role, the infrastructure-key marker, and a scoped
+    /// key's scope in place of all roles) can
     /// be unit tested without spinning up the ASP.NET Core authentication pipeline.
     /// </summary>
     /// <param name="apiKey">The validated API key entity, with its <see cref="ApiKey.Roles"/> loaded.</param>
@@ -162,6 +178,17 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             new("auth_method", "api_key"),
             new("key_prefix", apiKey.KeyPrefix)
         };
+
+        // A scoped key carries its permission and target instead of roles, not even the virtual User role, so no role
+        // check anywhere in JIM can admit it, whatever roles the stored key might wrongly hold.
+        if (ApiKeyScopeNames.For(apiKey.Scope) is { } scopeName)
+        {
+            claims.Add(new Claim(Constants.BuiltInClaims.KeyScope, scopeName));
+            if (apiKey.ScopeConnectedSystemId is { } connectedSystemId)
+                claims.Add(new Claim(Constants.BuiltInClaims.KeyScopeConnectedSystemId,
+                    connectedSystemId.ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer32));
+            return claims;
+        }
 
         // Role claims from the API key's assigned roles.
         claims.AddRange(apiKey.Roles.Select(role => new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name)));
