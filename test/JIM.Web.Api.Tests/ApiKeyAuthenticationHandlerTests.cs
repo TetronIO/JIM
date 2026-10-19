@@ -205,6 +205,27 @@ public class ApiKeyAuthenticationHandlerTests
         Assert.That(result.Succeeded, Is.False);
     }
 
+    [Test]
+    public async Task AuthenticateAsync_BareScopedKeyOnScim_SucceedsAsync()
+    {
+        // Some SCIM clients send the configured header value verbatim, with no scheme; tolerated on /scim only.
+        StoredScopedKey(connectedSystemId: 7);
+
+        var result = await AuthenticateAsync(authorization: ValidKey, path: "/scim/v2/7/Users");
+
+        Assert.That(result.Succeeded, Is.True);
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_BareKeyOutsideScim_ReturnsNoResultAsync()
+    {
+        StoredKey();
+
+        var result = await AuthenticateAsync(authorization: ValidKey, path: "/api/v1/userinfo");
+
+        Assert.That(result.None, Is.True);
+    }
+
     private ApiKey StoredScopedKey(int connectedSystemId)
     {
         var apiKey = StoredKey();

@@ -4,6 +4,7 @@
 using System.Security.Claims;
 using JIM.Models.Core;
 using JIM.Web.Extensions;
+using JIM.Web.Scim;
 
 namespace JIM.Web.Middleware.Api;
 
@@ -29,8 +30,10 @@ public static class RateLimitPartitionResolver
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(settings);
 
-        // The Blazor UI, the SignalR hub, and static assets are untouched by this feature.
-        if (!context.Request.Path.StartsWithSegments("/api"))
+        // The Blazor UI, the SignalR hub, and static assets are untouched by this feature. The SCIM 2.0 Service
+        // Provider endpoints are limited too (#124), since a SCIM client is automation reaching JIM from outside.
+        var isScim = ScimRoutes.IsScimRequest(context.Request);
+        if (!context.Request.Path.StartsWithSegments("/api") && !isScim)
             return RateLimitDecision.NoLimiter();
 
         // Load balancer and orchestrator probes must never be throttled; the endpoint is cheap and carries no data.
@@ -49,6 +52,15 @@ public static class RateLimitPartitionResolver
             // this claim (value "true") only for infrastructure keys, so an ordinary API key is never exempted.
             if (context.User.HasClaim(Constants.BuiltInClaims.IsInfrastructureKey, "true"))
                 return RateLimitDecision.NoLimiter();
+
+            // A SCIM client's budget belongs to its Connected System, not to one key, so the two keys of a rotation
+            // share it; the limit is in the key for the same reason as below.
+            if (isScim && context.User.FindFirstValue(Constants.BuiltInClaims.KeyScopeConnectedSystemId) is { } connectedSystemId)
+                return new RateLimitDecision(
+                    RateLimitPartitionKind.AuthenticatedSlidingWindow,
+                    $"scim:{connectedSystemId}:{settings.ScimServiceProviderRequestsPerMinute}",
+                    settings.ScimServiceProviderRequestsPerMinute,
+                    Window);
 
             var principalId = ResolvePrincipalId(context.User);
             // The limit is baked into the partition key: PartitionedRateLimiter.Create caches limiter instances

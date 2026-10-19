@@ -85,7 +85,10 @@ public sealed class RateLimitSettingsCache : IRateLimitSettingsCache
             var unauthenticatedLimit = await jim.ServiceSettings.GetSettingValueAsync(
                 Constants.SettingKeys.RateLimitingUnauthenticatedRequestsPerMinute, Constants.RateLimitDefaults.UnauthenticatedRequestsPerMinute);
 
-            return new RateLimitSettingsSnapshot(enabled, authenticatedLimit, unauthenticatedLimit, DateTime.UtcNow);
+            var scimServiceProviderLimit = await jim.ServiceSettings.GetSettingValueAsync(
+                Constants.SettingKeys.RateLimitingScimServiceProviderRequestsPerMinute, Constants.RateLimitDefaults.ScimServiceProviderRequestsPerMinute);
+
+            return new RateLimitSettingsSnapshot(enabled, authenticatedLimit, unauthenticatedLimit, DateTime.UtcNow, scimServiceProviderLimit);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

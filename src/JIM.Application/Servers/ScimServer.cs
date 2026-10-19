@@ -1,13 +1,16 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using JIM.Data.Repositories;
 using JIM.Models.Scim;
 using JIM.Scim;
+using JIM.Scim.Discovery;
 using JIM.Scim.Messages;
 using JIM.Scim.Resources;
 using JIM.Scim.Schema;
+using JIM.Scim.Serialisation;
 using JIM.Scim.Service;
 using JIM.Utilities;
 using Serilog;
@@ -82,6 +85,24 @@ public class ScimServer
     /// </summary>
     public async Task<ScimServiceDefinitions> GetDefinitionsAsync(int connectedSystemId) =>
         ScimServiceDefinitions.Compile(await Store.GetResourceTypesAsync(connectedSystemId), await Store.GetSchemasAsync(connectedSystemId));
+
+    /// <summary>
+    /// A Connected System's resource types and schemas as RFC 7643 documents, freshly read, for discovery to publish.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A stored definition is not a valid RFC 7643 document.</exception>
+    public async Task<(List<ScimResourceType> ResourceTypes, List<ScimSchema> Schemas)> GetDiscoveryDocumentsAsync(int connectedSystemId,
+        CancellationToken cancellationToken = default)
+    {
+        var resourceTypes = (await Store.GetResourceTypesAsync(connectedSystemId, cancellationToken))
+            .Select(row => ReadDocument<ScimResourceType>(row.Definition, row.Name)).ToList();
+        var schemas = (await Store.GetSchemasAsync(connectedSystemId, cancellationToken))
+            .Select(row => ReadDocument<ScimSchema>(row.Definition, row.Urn)).ToList();
+        return (resourceTypes, schemas);
+    }
+
+    private static T ReadDocument<T>(string definition, string name) where T : class =>
+        JsonSerializer.Deserialize<T>(definition, ScimJson.Options)
+        ?? throw new InvalidOperationException($"The stored SCIM definition '{name}' is empty.");
 
     #region import
     /// <summary>

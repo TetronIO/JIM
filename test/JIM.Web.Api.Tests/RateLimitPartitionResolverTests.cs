@@ -240,6 +240,69 @@ public class RateLimitPartitionResolverTests
         Assert.That(originalDecision.PartitionKey, Is.Not.EqualTo(changedDecision.PartitionKey));
     }
 
+    [Test]
+    public void Resolve_ScimRequestsFromTwoKeysOfOneConnectedSystem_ShareOnePartitionWithTheScimLimit()
+    {
+        // Partitioned per Connected System, not per key, so the two keys of a rotation share one budget.
+        var settings = EnabledSettings with { ScimServiceProviderRequestsPerMinute = 1500 };
+        var first = BuildContext("/scim/v2/7/Users");
+        SetScopedKey(first, keyId: Guid.NewGuid(), connectedSystemId: 7);
+        var second = BuildContext("/scim/v2/7/Groups");
+        SetScopedKey(second, keyId: Guid.NewGuid(), connectedSystemId: 7);
+
+        var firstDecision = RateLimitPartitionResolver.Resolve(first, settings);
+        var secondDecision = RateLimitPartitionResolver.Resolve(second, settings);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(firstDecision.Kind, Is.EqualTo(RateLimitPartitionKind.AuthenticatedSlidingWindow));
+            Assert.That(firstDecision.PermitLimit, Is.EqualTo(1500));
+            Assert.That(secondDecision.PartitionKey, Is.EqualTo(firstDecision.PartitionKey));
+        }
+    }
+
+    [Test]
+    public void Resolve_ScimRequestsForTwoConnectedSystems_SeparatePartitions()
+    {
+        var first = BuildContext("/scim/v2/7/Users");
+        SetScopedKey(first, keyId: Guid.NewGuid(), connectedSystemId: 7);
+        var second = BuildContext("/scim/v2/8/Users");
+        SetScopedKey(second, keyId: Guid.NewGuid(), connectedSystemId: 8);
+
+        Assert.That(RateLimitPartitionResolver.Resolve(first, EnabledSettings).PartitionKey,
+            Is.Not.EqualTo(RateLimitPartitionResolver.Resolve(second, EnabledSettings).PartitionKey));
+    }
+
+    [Test]
+    public void Resolve_UnauthenticatedScimRequest_FixedWindowByClientIp()
+    {
+        var context = BuildContext("/scim/v2/7/Users");
+        context.Connection.RemoteIpAddress = IPAddress.Parse("198.51.100.4");
+
+        var decision = RateLimitPartitionResolver.Resolve(context, EnabledSettings);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Kind, Is.EqualTo(RateLimitPartitionKind.UnauthenticatedFixedWindow));
+            Assert.That(decision.PartitionKey, Does.Contain("198.51.100.4"));
+        }
+    }
+
+    [Test]
+    public void Resolve_ScimRequestRateLimitingDisabled_ReturnsNoLimiter()
+    {
+        var context = BuildContext("/scim/v2/7/Users");
+        SetScopedKey(context, keyId: Guid.NewGuid(), connectedSystemId: 7);
+
+        Assert.That(RateLimitPartitionResolver.Resolve(context, DisabledSettings).Kind, Is.EqualTo(RateLimitPartitionKind.NoLimiter));
+    }
+
+    [Test]
+    public void Resolve_PathMerelyStartingWithScim_ReturnsNoLimiter()
+    {
+        Assert.That(RateLimitPartitionResolver.Resolve(BuildContext("/scimitar"), EnabledSettings).Kind, Is.EqualTo(RateLimitPartitionKind.NoLimiter));
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static DefaultHttpContext BuildContext(string path)
@@ -264,5 +327,16 @@ public class RateLimitPartitionResolverTests
         // A non-null authenticationType is what makes ClaimsIdentity.IsAuthenticated true.
         var identity = new ClaimsIdentity(claims, authenticationType: "Test", nameType: ClaimTypes.Name, roleType: null);
         context.User = new ClaimsPrincipal(identity);
+    }
+
+    private static void SetScopedKey(HttpContext context, Guid keyId, int connectedSystemId)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, keyId.ToString()),
+            new(Constants.BuiltInClaims.KeyScope, JIM.Models.Security.ApiKeyScopeNames.ScimServiceProviderReadWrite),
+            new(Constants.BuiltInClaims.KeyScopeConnectedSystemId, connectedSystemId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+        };
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "Test"));
     }
 }
