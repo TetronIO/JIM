@@ -104,7 +104,7 @@ Test that JIM can reach your identity provider's discovery document:
 curl https://{your-authority}/.well-known/openid-configuration
 ```
 
-You should see a JSON response with endpoints for `authorization_endpoint`, `token_endpoint`, etc.
+You should see a JSON response with endpoints for `authorization_endpoint`, `token_endpoint`, etc. If your identity provider's certificate comes from your organisation's own certificate authority, JIM has to trust it before anyone can sign in; see [Trust Your Identity Provider's Certificate](sso-setup/trusting-your-identity-provider.md).
 
 ### 2. Start JIM and Test Login
 

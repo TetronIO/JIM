@@ -137,7 +137,7 @@ To check sign-out and API access too, see [Testing Your Configuration](../sso-se
 
 ## AD FS Troubleshooting
 
-- **TLS certificate**: The JIM server must trust the TLS certificate of your AD FS federation service, because JIM fetches AD FS's discovery document and signing keys over HTTPS. The token-signing certificate needs no trust configuration: JIM reads its public keys from AD FS's published key set.
+- **Sign-in is unavailable / JIM does not trust the certificate**: JIM fetches AD FS's discovery document and signing keys over HTTPS, so it must trust the federation service's TLS certificate, which usually comes from your own certificate authority. Trust that certificate authority for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md). The token-signing certificate needs no trust configuration: JIM reads its public keys from AD FS's published key set.
 - **Claim rules**: AD FS may need claim rules to emit standard OIDC claims (see above)
 - **PKCE / PowerShell sign-in fails**: Confirm AD FS is Windows Server 2019 or later; earlier versions do not support PKCE and cannot authenticate the PowerShell module's public client
 

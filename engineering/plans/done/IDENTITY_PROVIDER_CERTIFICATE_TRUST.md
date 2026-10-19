@@ -1,6 +1,6 @@
 # Identity Provider Certificate Trust - Implementation Plan
 
-- **Status:** Doing (Phases 1-5 complete)
+- **Status:** Done
 - **Created:** 2026-10-18
 - **Issue:** [#2363](https://github.com/TetronIO/JIM/issues/2363)
 - **Related Issues:** #2362 (parent: easiest identity provider setup and maintenance), #2355 (AD FS lab), #1914 (certificate chain trust for Connectors), #2361 (AD FS troubleshooting)
@@ -131,7 +131,7 @@ Each phase is test-first (red, green, refactor) and builds and tests green befor
    - Certificates page: **Trusted for** column and dialog fields, "In use by sign-in" status, typed confirmation for delete/disable/removing Sign-in on the in-use certificate.
    - Banner and trust dialog; banner content tests.
 5. **PowerShell.** ✅ `Get-JIMIdentityProviderTrust`; `Add-JIMCertificate -FromIdentityProvider`; `-TrustedFor` on Add/Set; confirmation wording; Pester tests; reference docs regenerated.
-6. **Docs, changelog, runtime verification.**
+6. **Docs, changelog, runtime verification.** ✅
    - New how-to `docs/administration/sso-setup/trusting-your-identity-provider.md`; linked from the troubleshooting section of every identity provider guide (Entra ID gains one, for TLS-inspecting proxies) and from `sso-setup.md`; `certificates.md` gains **Trusted for**; nav entry.
    - Changelog: ✨ trust an internal-CA identity provider; ✨ Trusted for; 🐛 JIM.Web no longer fails to start when the identity provider is unreachable or untrusted.
    - Runtime: run the development Keycloak over HTTPS with a certificate from a throwaway private CA (pattern: `test/integration/docker/keycloak-scim/start-keycloak-scim.sh`), point JIM at it, and walk the first-start journey end to end (log, page, `Add-JIMCertificate -FromIdentityProvider` with the infrastructure API key, page turns green, sign-in works, no restart), then the banner, lock-out confirmation and a User-role API key being refused.
