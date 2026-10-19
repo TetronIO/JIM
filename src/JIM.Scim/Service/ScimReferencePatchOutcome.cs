@@ -25,4 +25,9 @@ public sealed class ScimReferencePatchOutcome
     /// The interoperability leniency the request needed, one line each, naming attributes and never values.
     /// </summary>
     public IReadOnlyList<string> Coercions { get; init; } = [];
+
+    /// <summary>
+    /// The attributes the request named that the resource type does not declare (D17).
+    /// </summary>
+    public IReadOnlyList<string> IgnoredAttributes { get; init; } = [];
 }

@@ -248,10 +248,10 @@ public class SyncRepositoryPendingExportTests
         exportedPe.HasUnresolvedReferences = true;
         _repo.SeedPendingExport(exportedPe);
 
-        var failedPe = CreatePe();
-        failedPe.Status = PendingExportStatus.Failed;
-        failedPe.HasUnresolvedReferences = true;
-        _repo.SeedPendingExport(failedPe);
+        var parkedPe = CreatePe();
+        parkedPe.Status = PendingExportStatus.Parked;
+        parkedPe.HasUnresolvedReferences = true;
+        _repo.SeedPendingExport(parkedPe);
 
         var otherSystemPe = CreatePe(connectedSystemId: 2);
         otherSystemPe.Status = PendingExportStatus.Pending;
@@ -309,10 +309,6 @@ public class SyncRepositoryPendingExportTests
         exportNotConfirmed.Status = PendingExportStatus.ExportNotConfirmed;
         _repo.SeedPendingExport(exportNotConfirmed);
 
-        var failed = CreatePe();
-        failed.Status = PendingExportStatus.Failed;
-        _repo.SeedPendingExport(failed);
-
         var parked = CreatePe();
         parked.Status = PendingExportStatus.Parked;
         _repo.SeedPendingExport(parked);
@@ -330,7 +326,6 @@ public class SyncRepositoryPendingExportTests
             Assert.That(pending.Status, Is.EqualTo(PendingExportStatus.Pending));
             Assert.That(exported.Status, Is.EqualTo(PendingExportStatus.Exported));
             Assert.That(exportNotConfirmed.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
-            Assert.That(failed.Status, Is.EqualTo(PendingExportStatus.Failed));
             Assert.That(parked.Status, Is.EqualTo(PendingExportStatus.Parked));
         }
     }
@@ -442,8 +437,8 @@ public class SyncRepositoryPendingExportTests
     [Test]
     public async Task GetExecutableExportCountsByChangeTypeAsync_AppliesTheSameExecutablePredicateAsTheTotalCountAsync()
     {
-        // Matches GetExecutableExportCountAsync's own filtering: excludes already-Exported
-        // Create/Delete exports, exports over max retries, and exports for another system.
+        // Matches GetExecutableExportCountAsync's own filtering: excludes already-Exported Create/Delete exports and
+        // exports for another system, and includes an export however many attempts have failed (#2119).
         var executableCreate = CreatePe();
         executableCreate.ChangeType = PendingExportChangeType.Create;
         _repo.SeedPendingExport(executableCreate);
@@ -453,10 +448,11 @@ public class SyncRepositoryPendingExportTests
         alreadyExportedDelete.Status = PendingExportStatus.Exported;
         _repo.SeedPendingExport(alreadyExportedDelete);
 
-        var overMaxRetriesDelete = CreatePe();
-        overMaxRetriesDelete.ChangeType = PendingExportChangeType.Delete;
-        overMaxRetriesDelete.ErrorCount = overMaxRetriesDelete.MaxRetries;
-        _repo.SeedPendingExport(overMaxRetriesDelete);
+        var failedManyTimesDelete = CreatePe();
+        failedManyTimesDelete.ChangeType = PendingExportChangeType.Delete;
+        failedManyTimesDelete.ErrorCount = 20;
+        failedManyTimesDelete.FailingSince = DateTime.UtcNow.AddDays(-3);
+        _repo.SeedPendingExport(failedManyTimesDelete);
 
         var otherSystemCreate = CreatePe(connectedSystemId: 2);
         otherSystemCreate.ChangeType = PendingExportChangeType.Create;
@@ -465,8 +461,8 @@ public class SyncRepositoryPendingExportTests
         var result = await _repo.GetExecutableExportCountsByChangeTypeAsync(CsId);
 
         Assert.That(result[PendingExportChangeType.Create], Is.EqualTo(1));
-        Assert.That(result.ContainsKey(PendingExportChangeType.Delete), Is.False,
-            "both Delete exports are excluded: one already Exported, one over its retry limit");
+        Assert.That(result[PendingExportChangeType.Delete], Is.EqualTo(1),
+            "the already-Exported Delete is excluded; the one that has failed many times is still due");
 
         var totalCount = await _repo.GetExecutableExportCountAsync(CsId);
         Assert.That(result.Values.Sum(), Is.EqualTo(totalCount), "the grouped counts must sum to the same total the ungrouped count query returns");

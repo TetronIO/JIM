@@ -57,8 +57,8 @@ public class PendingExportReconciliationService
         else if (result.HasChanges)
         {
             await _syncRepo.UpdatePendingExportAsync(pendingExport);
-            Log.Debug("ReconcileAsync: Updated Pending Export {ExportId} with {Confirmed} confirmed, {Retry} for retry, {Failed} failed",
-                pendingExport.Id, result.ConfirmedChanges.Count, result.RetryChanges.Count, result.FailedChanges.Count);
+            Log.Debug("ReconcileAsync: Updated Pending Export {ExportId} with {Confirmed} confirmed, {Retry} for retry",
+                pendingExport.Id, result.ConfirmedChanges.Count, result.RetryChanges.Count);
         }
 
         return result;

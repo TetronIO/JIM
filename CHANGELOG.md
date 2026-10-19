@@ -82,6 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 The LDAP Connector discovers INTEGER attributes on OpenLDAP, 389 Directory Server and other non-Active Directory directories, such as `uidNumber` and `gidNumber`, as Long Number rather than Number, so values beyond 2,147,483,647 import. Map them to Long Number Metaverse Attributes. Active Directory and Samba AD are unchanged. (#2154)
+- 🔄 JIM never gives up on a Pending Export: one the Connected System refuses, or whose value an import never confirms, is attempted again at every export run, with no waiting in between, and reported on every run until the cause is fixed. Lists show **Failing Since** and **Failing only**, the Connected System page counts **Failing Exports**, and REST and `Get-JIMPendingExport -Failing` filter them. (#2119)
 - 🔄 A Delta Import from Keycloak's SCIM API now reads every resource and says why on the Activity, whatever Change Detection is set to: Keycloak leaves a resource's last-modified date alone for most changes, so a filtered import missed them. (#2094)
 - 🔄 **Max detected deletions** and **Max detected deletions percent** can now be set on a Delta Import Run Profile, in the portal, REST API and PowerShell. A Delta Import whose Connected System reports more deletions than a limit marks none of them as deleted and warns, and each following Delta Import reports them again until you act. (#2089)
 - 🔄 API keys are now sent as a bearer token (`Authorization: Bearer jim_ak_...`), as SSO access tokens are; `X-API-Key` is no longer accepted, so update scripts that set it and upgrade the PowerShell module with JIM. Refused requests carry a `WWW-Authenticate` challenge. (#2088)
@@ -124,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ The Pending Export **Failed** status, its five-attempt limit and the wait between attempts are gone: `maxRetries` and `nextRetryAt` are removed from the REST API and PowerShell output, and `Failed` from `-Status`. Pending Exports left Failed are queued again on upgrade. (#2119)
 - 🗑️ Export, Full Synchronisation and Delta Synchronisation Run Profiles no longer take a **File Path**: an export always writes to the file the Connected System's **File Path** names, so the field did nothing. It is gone from the portal, the REST API and `-FilePath` refuse it, and any already stored is cleared on upgrade.
 - 🗑️ Example Data Template attributes can no longer name a Connected System attribute: templates generate Metaverse Attribute values only, so it produced nothing. `-ConnectedSystemObjectTypeAttributeId` and the `ConnectedSystemObjectTypeAttributeId` hashtable key are gone from the cmdlets, and `connectedSystemObjectTypeAttributeId` from the REST API.
 - 🗑️ The `CollectionContains` expression function is removed: `Eq()` is now true when any value of a Multi-Valued attribute is equal, which is what it did. (#2053)

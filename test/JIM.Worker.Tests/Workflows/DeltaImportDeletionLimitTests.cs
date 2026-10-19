@@ -257,9 +257,13 @@ public class DeltaImportDeletionLimitTests : WorkflowTestBase
         connectedSystem.PersistedConnectorData = "original-watermark";
         var held = SeedHeld(connectedSystem, type, 2);
 
-        await RunDeltaImportAsync(connectedSystem, [held.Select(cso => Delete(type, cso)).ToList()], maxCount: 1, firstPageWatermark: "new-watermark");
+        var (activity, _) = await RunDeltaImportAsync(connectedSystem, [held.Select(cso => Delete(type, cso)).ToList()], maxCount: 1, firstPageWatermark: "new-watermark");
 
-        Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("original-watermark"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("original-watermark"));
+            Assert.That(activity.ImportWatermarkTo, Is.Null, "the run recorded no watermark, so its Activity must not claim one");
+        }
     }
 
     [Test]

@@ -188,9 +188,10 @@ function Get-JimVersion {
 }
 
 function Test-ReadyCheck {
-    param([string]$When)
+    # -Trusting names the certificate authority in $caPath, for the check's name.
+    param([string]$When, [string]$Trusting = "the installer's CA")
     $seconds = Wait-Ready
-    Add-Check "${When}: ready over HTTPS from another machine, trusting only the installer's CA" ($seconds -ge 0) `
+    Add-Check "${When}: ready over HTTPS from another machine, trusting only $Trusting" ($seconds -ge 0) `
         $(if ($seconds -lt 0) { 'not within 300 s' } else { '' })
     $seconds -ge 0
 }

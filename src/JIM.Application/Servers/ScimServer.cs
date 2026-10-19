@@ -4,6 +4,7 @@
 using System.Text.Json.Nodes;
 using JIM.Data.Repositories;
 using JIM.Models.Scim;
+using JIM.Scim;
 using JIM.Scim.Messages;
 using JIM.Scim.Resources;
 using JIM.Scim.Schema;
@@ -35,6 +36,22 @@ public class ScimServer
 {
     private const string NoSuchResource = "The resource does not exist.";
 
+    /// <summary>
+    /// The most ignored attribute names one journal entry keeps.
+    /// </summary>
+    public const int MaxIgnoredAttributesJournalled = 50;
+
+    /// <summary>
+    /// The page size of a list request that gives no <c>count</c>.
+    /// </summary>
+    public const int DefaultPageSize = 100;
+
+    /// <summary>
+    /// The most resources one page of a list returns, whatever <c>count</c> asks for; what discovery publishes as
+    /// <c>filter.maxResults</c>.
+    /// </summary>
+    public const int MaxPageSize = 1000;
+
     private readonly ILogger _logger = Log.ForContext<ScimServer>();
 
     private JimApplication Application { get; }
@@ -65,6 +82,38 @@ public class ScimServer
     /// </summary>
     public async Task<ScimServiceDefinitions> GetDefinitionsAsync(int connectedSystemId) =>
         ScimServiceDefinitions.Compile(await Store.GetResourceTypesAsync(connectedSystemId), await Store.GetSchemasAsync(connectedSystemId));
+
+    #region import
+    /// <summary>
+    /// A Connected System's stored resource type definitions, as the Service Provider Connector composes its schema from.
+    /// </summary>
+    public Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypeRowsAsync(int connectedSystemId, CancellationToken cancellationToken = default) =>
+        Store.GetResourceTypesAsync(connectedSystemId, cancellationToken);
+
+    /// <summary>
+    /// A Connected System's stored schema definitions.
+    /// </summary>
+    public Task<IReadOnlyList<ScimStoreSchema>> GetSchemaRowsAsync(int connectedSystemId, CancellationToken cancellationToken = default) =>
+        Store.GetSchemasAsync(connectedSystemId, cancellationToken);
+
+    /// <summary>
+    /// A Connected System's store counters: its committed change sequence (an import's horizon) and its purge floor.
+    /// </summary>
+    public Task<ScimStoreState?> GetStoreStateAsync(int connectedSystemId, CancellationToken cancellationToken = default) =>
+        Store.GetStateAsync(connectedSystemId, cancellationToken);
+
+    /// <summary>
+    /// One page of what an import reads from a Connected System's store.
+    /// </summary>
+    public Task<ScimStoreImportPage> ReadForImportAsync(int connectedSystemId, ScimStoreImportQuery query, CancellationToken cancellationToken = default) =>
+        Store.ReadForImportAsync(connectedSystemId, query, cancellationToken);
+
+    /// <summary>
+    /// Removes tombstones an import has read and that are older than the cut-off, raising the store's purge floor.
+    /// </summary>
+    public Task<int> PurgeTombstonesAsync(int connectedSystemId, long importedUpTo, DateTime deletedBefore, CancellationToken cancellationToken = default) =>
+        Store.PurgeTombstonesAsync(connectedSystemId, importedUpTo, deletedBefore, cancellationToken);
+    #endregion
 
     #region create
     /// <summary>
@@ -116,7 +165,7 @@ public class ScimServer
         var held = Held(split.References, targets.TypeNames);
         var composed = ScimReferenceEntries.Compose(split.Payload, type, held);
         await session.AppendJournalEntriesAsync([Journal(context, id, type.Name, ScimStoreOperation.Created,
-            ScimResourceDiff.ChangedAttributes([], composed, type.Schema))]);
+            ScimResourceDiff.ChangedAttributes([], composed, type.Schema), intake.IgnoredAttributes)]);
         await session.CommitAsync();
 
         resource.LastModified = session.Timestamp;
@@ -152,6 +201,84 @@ public class ScimServer
     }
     #endregion
 
+    #region list
+    /// <summary>
+    /// GET of a resource type's endpoint (and, in Phase 4, <c>.search</c>): one page of the live resources the filter
+    /// selects, in id order. Index paging is the default; every page that has a successor carries a <c>nextCursor</c>,
+    /// whichever paging the request used, so a client can switch to cursors, which a deletion mid-walk cannot make skip
+    /// a resource.
+    /// </summary>
+    public async Task<ScimServiceResult> ListAsync(ScimRequestContext context, string endpoint, ScimListRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var definitions = await GetDefinitionsAsync(context.ConnectedSystemId);
+        var type = definitions.FindByEndpoint(endpoint);
+        if (type == null)
+            return NoSuchEndpoint();
+
+        ScimStoreFilter? filter = null;
+        if (!string.IsNullOrWhiteSpace(request.Filter))
+        {
+            var translation = ScimStoreFilterTranslator.Translate(request.Filter, type);
+            if (translation.Error != null)
+                return ScimServiceResult.Failed(translation.Error);
+            filter = translation.Filter;
+        }
+
+        Guid? after = null;
+        var useCursor = request.Cursor != null;
+        if (!string.IsNullOrEmpty(request.Cursor))
+        {
+            if (!ScimCursor.TryDecode(request.Cursor, out var lastId))
+            {
+                return ScimServiceResult.Failed(ScimError.ForStatus(400,
+                    "The cursor is not one this service provider issued; send an empty cursor to start again.", ScimErrorTypes.InvalidCursor));
+            }
+
+            after = lastId;
+        }
+
+        var count = Math.Clamp(request.Count ?? DefaultPageSize, 0, MaxPageSize);
+        var startIndex = Math.Max(request.StartIndex ?? 1, 1);
+        var page = await Store.ListLiveResourcesAsync(context.ConnectedSystemId, new ScimStoreQuery
+        {
+            ResourceTypeId = type.Id,
+            Filter = filter,
+            Count = count,
+            StartIndex = useCursor ? 1 : startIndex,
+            After = after
+        });
+
+        var references = page.Resources.Count > 0 && ReferencesWanted(type, request.Selection)
+            ? await Store.GetReferencesAsync(page.Resources.Select(r => r.Id).ToList())
+            : new Dictionary<Guid, IReadOnlyList<ScimStoreReferenceTarget>>();
+
+        var resources = new JsonArray();
+        foreach (var resource in page.Resources)
+        {
+            var held = references.TryGetValue(resource.Id, out var targets)
+                ? Held(targets, definitions)
+                : new Dictionary<string, IReadOnlyList<ScimHeldReference>>();
+            resources.Add(Respond(context, definitions, type, resource, Payload(resource), held, request.Selection));
+        }
+
+        var body = new JsonObject
+        {
+            ["schemas"] = new JsonArray(ScimUrns.ListResponse),
+            ["totalResults"] = page.TotalResults,
+            ["itemsPerPage"] = page.Resources.Count
+        };
+        if (!useCursor)
+            body["startIndex"] = startIndex;
+        if (page.HasMore)
+            body["nextCursor"] = ScimCursor.Encode(page.Resources[^1].Id);
+        body["Resources"] = resources;
+        return ScimServiceResult.List(body);
+    }
+    #endregion
+
     #region replace
     /// <summary>
     /// PUT: replaces everything a client may set on a resource.
@@ -183,7 +310,7 @@ public class ScimServer
             return NoSuchEndpoint();
 
         return await WriteWholeAsync(session, context, definitions, type, resourceId, ifMatch, ScimStoreOperation.Replaced, selection,
-            _ => Task.FromResult<(JsonObject?, ScimError?)>((intake.Resource, null)), split);
+            _ => new ScimPatchResult { Resource = intake.Resource, IgnoredAttributes = intake.IgnoredAttributes }, split);
     }
     #endregion
 
@@ -219,11 +346,11 @@ public class ScimServer
                 var applied = ScimPatchApplier.Apply(current, operations, type.Schema);
                 LogCoercions(context, type, applied.Coercions);
                 if (applied.Error != null)
-                    return Task.FromResult<(JsonObject?, ScimError?)>((null, applied.Error));
+                    return applied;
 
                 // An operation can remove a required attribute, which only the patched resource shows.
                 var missing = ScimResourceIntake.CheckRequired(applied.Resource!, type.Schema);
-                return Task.FromResult<(JsonObject?, ScimError?)>(missing == null ? (applied.Resource, null) : (null, missing));
+                return missing == null ? applied : new ScimPatchResult { Error = missing };
             }, split: null);
     }
 
@@ -270,7 +397,7 @@ public class ScimServer
             }
 
             await session.AppendJournalEntriesAsync([Journal(context, id, type.Name, ScimStoreOperation.Patched,
-                outcome.Changes.Select(c => c.Attribute).Distinct().Order(StringComparer.Ordinal))]);
+                outcome.Changes.Select(c => c.Attribute).Distinct().Order(StringComparer.Ordinal), outcome.IgnoredAttributes)]);
             await session.CommitAsync();
             current.Version = version;
             current.LastModified = session.Timestamp;
@@ -329,12 +456,12 @@ public class ScimServer
     #region shared
     /// <summary>
     /// A write that produces the whole resource (PUT, and a PATCH outside the direct path): reads the resource as it
-    /// stands, has <paramref name="produce"/> make the new one from it, and writes the payload and whichever reference
-    /// attributes changed.
+    /// stands, has <paramref name="produce"/> make the new one from it (or refuse the request), and writes the payload
+    /// and whichever reference attributes changed.
     /// </summary>
     private async Task<ScimServiceResult> WriteWholeAsync(IScimStoreWriteSession session, ScimRequestContext context,
         ScimServiceDefinitions definitions, ScimServiceResourceType type, Guid id, string? ifMatch, ScimStoreOperation operation,
-        ScimAttributeSelection? selection, Func<JsonObject, Task<(JsonObject? Resource, ScimError? Error)>> produce, ScimReferenceSplit? split)
+        ScimAttributeSelection? selection, Func<JsonObject, ScimPatchResult> produce, ScimReferenceSplit? split)
     {
         var current = await session.GetLiveResourceAsync(type.Id, id);
         if (current == null)
@@ -346,11 +473,11 @@ public class ScimServer
         var currentHeld = Held(await session.GetReferencesAsync(id), definitions);
         var before = ScimReferenceEntries.Compose(currentPayload, type, currentHeld);
 
-        var (produced, error) = await produce(before);
-        if (error != null)
-            return ScimServiceResult.Failed(error);
+        var produced = produce(before);
+        if (produced.Error != null)
+            return ScimServiceResult.Failed(produced.Error);
 
-        split ??= ScimReferenceEntries.Split(produced!, type);
+        split ??= ScimReferenceEntries.Split(produced.Resource!, type);
         if (split.Error != null)
             return ScimServiceResult.Failed(split.Error);
 
@@ -393,7 +520,7 @@ public class ScimServer
         foreach (var (attribute, ids) in changedReferences)
             version = await session.ReplaceReferencesAsync(id, attribute, ids.ToList());
 
-        await session.AppendJournalEntriesAsync([Journal(context, id, type.Name, operation, changed)]);
+        await session.AppendJournalEntriesAsync([Journal(context, id, type.Name, operation, changed, produced.IgnoredAttributes)]);
         await session.CommitAsync();
 
         current.Version = version;
@@ -504,13 +631,20 @@ public class ScimServer
     private static string Location(ScimRequestContext context, ScimServiceResourceType type, Guid id) =>
         $"{context.BaseUrl.TrimEnd('/')}/{type.Endpoint.Trim('/')}/{ScimReferenceEntries.Format(id)}";
 
+    /// <param name="ignoredAttributes">Attributes the request carried that the definitions do not declare (D17). The names
+    /// come from the client, so at most <see cref="MaxIgnoredAttributesJournalled"/> are kept, each cut to the store's
+    /// attribute name length.</param>
     private static ScimStoreJournalEntry Journal(ScimRequestContext context, Guid resourceId, string typeName, ScimStoreOperation operation,
-        IEnumerable<string> changedAttributes) => new()
+        IEnumerable<string> changedAttributes, IReadOnlyList<string>? ignoredAttributes = null) => new()
     {
         ResourceId = resourceId,
         ResourceTypeName = typeName,
         Operation = operation,
         ChangedAttributes = changedAttributes.ToList(),
+        IgnoredAttributes = (ignoredAttributes ?? [])
+            .Take(MaxIgnoredAttributesJournalled)
+            .Select(name => name.Length > ScimStoreLimits.AttributeMaxLength ? name[..ScimStoreLimits.AttributeMaxLength] : name)
+            .ToList(),
         ApiKeyId = context.ApiKeyId,
         ApiKeyName = context.ApiKeyName,
         ClientAddress = context.ClientAddress

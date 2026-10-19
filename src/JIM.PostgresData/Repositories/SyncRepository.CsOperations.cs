@@ -922,9 +922,8 @@ public partial class SyncRepository
                     tracked.Status = pe.Status;
                     tracked.ChangeType = pe.ChangeType;
                     tracked.ErrorCount = pe.ErrorCount;
-                    tracked.MaxRetries = pe.MaxRetries;
+                    tracked.FailingSince = pe.FailingSince;
                     tracked.LastAttemptedAt = pe.LastAttemptedAt;
-                    tracked.NextRetryAt = pe.NextRetryAt;
                     tracked.LastErrorMessage = pe.LastErrorMessage;
                     tracked.LastErrorStackTrace = pe.LastErrorStackTrace;
                     tracked.HasUnresolvedReferences = pe.HasUnresolvedReferences;
@@ -970,9 +969,8 @@ public partial class SyncRepository
                     "Status" int,
                     "ChangeType" int,
                     "ErrorCount" int,
-                    "MaxRetries" int,
+                    "FailingSince" timestamptz,
                     "LastAttemptedAt" timestamptz,
-                    "NextRetryAt" timestamptz,
                     "LastErrorMessage" text,
                     "LastErrorStackTrace" text,
                     "HasUnresolvedReferences" boolean
@@ -993,13 +991,12 @@ public partial class SyncRepository
                 await writer.WriteAsync((int)pe.Status, NpgsqlTypes.NpgsqlDbType.Integer);
                 await writer.WriteAsync((int)pe.ChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
                 await writer.WriteAsync(pe.ErrorCount, NpgsqlTypes.NpgsqlDbType.Integer);
-                await writer.WriteAsync(pe.MaxRetries, NpgsqlTypes.NpgsqlDbType.Integer);
-                if (pe.LastAttemptedAt.HasValue)
-                    await writer.WriteAsync(pe.LastAttemptedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                if (pe.FailingSince.HasValue)
+                    await writer.WriteAsync(pe.FailingSince.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
                 else
                     await writer.WriteNullAsync();
-                if (pe.NextRetryAt.HasValue)
-                    await writer.WriteAsync(pe.NextRetryAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                if (pe.LastAttemptedAt.HasValue)
+                    await writer.WriteAsync(pe.LastAttemptedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
                 else
                     await writer.WriteNullAsync();
                 if (pe.LastErrorMessage is not null)
@@ -1342,13 +1339,12 @@ public partial class SyncRepository
             await writer.WriteAsync((int)pe.ChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
             await writer.WriteAsync((int)pe.Status, NpgsqlTypes.NpgsqlDbType.Integer);
             await writer.WriteAsync(pe.ErrorCount, NpgsqlTypes.NpgsqlDbType.Integer);
-            await writer.WriteAsync(pe.MaxRetries, NpgsqlTypes.NpgsqlDbType.Integer);
-            if (pe.LastAttemptedAt.HasValue)
-                await writer.WriteAsync(pe.LastAttemptedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            if (pe.FailingSince.HasValue)
+                await writer.WriteAsync(pe.FailingSince.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
-            if (pe.NextRetryAt.HasValue)
-                await writer.WriteAsync(pe.NextRetryAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            if (pe.LastAttemptedAt.HasValue)
+                await writer.WriteAsync(pe.LastAttemptedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
             if (pe.LastErrorMessage is not null)

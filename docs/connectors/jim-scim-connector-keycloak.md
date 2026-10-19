@@ -53,7 +53,7 @@ Test the connection, then import the schema and select the `User` and `Group` Ob
 
 ## 4. Shape the Attribute Flows to what Keycloak keeps
 
-Keycloak changes or drops some values it is sent. JIM confirms every export by reading the value back, so a value Keycloak alters is never confirmed, and the export fails after its retries. Flow values Keycloak will keep:
+Keycloak changes or drops some values it is sent. JIM confirms every export by reading the value back, so a value Keycloak alters is never confirmed: JIM sends it again at every export run and reports it as not confirmed on every import. Flow values Keycloak will keep:
 
 - **Lowercase `userName` and email addresses.** Keycloak stores both in lower case: `Eve.Mixed` is stored as `eve.mixed`. Flow them through an [expression](../configuration/attribute-mappings.md#expression-mappings) such as `Lower(mv["Account Name"])`.
 - **Flow one email address.** Keycloak keeps one email per user and drops any others without saying so.

@@ -57,6 +57,13 @@ public class ScimStoreJournalEntry
     public List<string> ChangedAttributes { get; set; } = [];
 
     /// <summary>
+    /// The attributes the request carried that the store's definitions do not declare, and which the store therefore
+    /// did not keep (a custom extension mapped at the identity provider, for example), by SCIM name. Names only, as for
+    /// <see cref="ChangedAttributes"/>; read-only attributes are not listed.
+    /// </summary>
+    public List<string> IgnoredAttributes { get; set; } = [];
+
+    /// <summary>
     /// The API key that made the request; null once that key is deleted (see <see cref="ApiKeyName"/>).
     /// </summary>
     public Guid? ApiKeyId { get; set; }

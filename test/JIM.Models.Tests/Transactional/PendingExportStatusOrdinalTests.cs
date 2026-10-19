@@ -28,7 +28,7 @@ public class PendingExportStatusOrdinalTests
         [PendingExportStatus.Pending] = 0,
         [PendingExportStatus.ExportNotConfirmed] = 1,
         [PendingExportStatus.Executing] = 2,
-        [PendingExportStatus.Failed] = 3,
+        // 3 was Failed, retired when JIM stopped giving up on a Pending Export (#2119). Never reuse it.
         [PendingExportStatus.Exported] = 4,
 
         // Unique Value Generation (#242, release 4): the export is held back for an administrator's decision on

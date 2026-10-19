@@ -346,8 +346,9 @@ public class PendingExportPreloadDatabaseTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystemObject = cso,
             ChangeType = PendingExportChangeType.Update,
-            Status = PendingExportStatus.Failed,
+            Status = PendingExportStatus.Pending,
             ErrorCount = 5,
+            FailingSince = DateTime.UtcNow.AddDays(-1),
             CreatedAt = DateTime.UtcNow
         };
         failedExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
@@ -356,7 +357,7 @@ public class PendingExportPreloadDatabaseTests
             AttributeId = mailAttr.Id,
             StringValue = "rejected@example.com",
             ChangeType = PendingExportAttributeChangeType.Update,
-            Status = PendingExportAttributeChangeStatus.Failed
+            Status = PendingExportAttributeChangeStatus.Pending
         });
         seed.Add(failedExport);
         await seed.SaveChangesAsync();
@@ -366,14 +367,14 @@ public class PendingExportPreloadDatabaseTests
 
         var result = await repository.Sync.GetPendingExportsLightweightByConnectedSystemIdAsync(targetSystem.Id);
 
-        Assert.That(result, Does.ContainKey(cso.Id), "A Failed Pending Export must still be returned by the whole-system preload.");
+        Assert.That(result, Does.ContainKey(cso.Id), "A failing Pending Export must still be returned by the whole-system preload.");
         var loaded = result[cso.Id];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(loaded.Status, Is.EqualTo(PendingExportStatus.Failed));
+            Assert.That(loaded.FailingSince, Is.Not.Null);
             Assert.That(loaded.AttributeValueChanges, Has.Count.EqualTo(1));
             Assert.That(loaded.AttributeValueChanges[0].Attribute, Is.Not.Null,
-                "Attribute navigations must be stitched onto a Failed Pending Export's value changes too.");
+                "Attribute navigations must be stitched onto a failing Pending Export's value changes too.");
             Assert.That(loaded.AttributeValueChanges[0].Attribute!.Name, Is.EqualTo("mail"));
         }
     }

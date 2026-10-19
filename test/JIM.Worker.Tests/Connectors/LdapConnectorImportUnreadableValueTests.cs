@@ -47,7 +47,7 @@ public class LdapConnectorImportUnreadableValueTests
     [Test]
     public void ConvertEntries_NumberValueOutsideTheRangeANumberHolds_ReportsItAsAWholeNumberJimCannotHold()
     {
-        // RFC 4517 INTEGER has no upper bound, and JIM holds it as a 32-bit Number: the value is well formed, so
+        // A Number attribute holds 32 bits: a larger value is well formed, so
         // "not a whole number" would send the administrator looking for a fault in the directory that is not there.
         var imported = ConvertUser(("uidNumber", ["2147483648"]));
 

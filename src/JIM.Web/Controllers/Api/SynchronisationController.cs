@@ -1538,6 +1538,7 @@ public class SynchronisationController(
     /// <param name="page">Page number (1-based). Default: 1.</param>
     /// <param name="pageSize">Number of items per page (1-100). Default: 50.</param>
     /// <param name="search">Optional search text to filter by target object, source MVO, or error message.</param>
+    /// <param name="failing">When true, returns only the Pending Exports whose last attempt failed. Each is attempted again at every export run; its failingSince says since when it has been failing.</param>
     /// <returns>A paginated set of Pending Export headers.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports", Name = "GetPendingExports")]
     [ProducesResponseType(typeof(PaginatedResponse<PendingExportHeader>), StatusCodes.Status200OK)]
@@ -1546,14 +1547,15 @@ public class SynchronisationController(
         int connectedSystemId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] bool failing = false)
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
         if (pageSize > 100) pageSize = 100;
 
         var result = await _application.ConnectedSystems.GetPendingExportHeadersAsync(
-            connectedSystemId, page, pageSize, searchQuery: search);
+            connectedSystemId, page, pageSize, searchQuery: search, failingOnly: failing);
 
         return Ok(new PaginatedResponse<PendingExportHeader>
         {
@@ -1569,7 +1571,8 @@ public class SynchronisationController(
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="changeType">Optional change type to filter by (Create = 0, Update = 1, Delete = 2).</param>
-    /// <param name="status">Optional status to filter by (Pending = 0, ExportNotConfirmed = 1, Executing = 2, Failed = 3, Exported = 4).</param>
+    /// <param name="status">Optional status to filter by (Pending = 0, ExportNotConfirmed = 1, Executing = 2, Exported = 4, Parked = 5).</param>
+    /// <param name="failing">When true, counts only the Pending Exports whose last attempt failed.</param>
     /// <returns>The count of matching Pending Export objects.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports/count", Name = "GetPendingExportsCount")]
     [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
@@ -1577,12 +1580,13 @@ public class SynchronisationController(
     public async Task<IActionResult> GetPendingExportsCountAsync(
         int connectedSystemId,
         [FromQuery] PendingExportChangeType? changeType = null,
-        [FromQuery] PendingExportStatus? status = null)
+        [FromQuery] PendingExportStatus? status = null,
+        [FromQuery] bool failing = false)
     {
-        _logger.LogDebug("Getting Pending Exports count for Connected System {ConnectedSystemId} (ChangeType: {ChangeType}, Status: {Status})",
-            connectedSystemId, changeType, status);
+        _logger.LogDebug("Getting Pending Exports count for Connected System {ConnectedSystemId} (ChangeType: {ChangeType}, Status: {Status}, Failing: {Failing})",
+            connectedSystemId, changeType, status, failing);
         var count = await _application.ConnectedSystems.GetPendingExportsFilteredCountAsync(
-            connectedSystemId, changeType, status);
+            connectedSystemId, changeType, status, failing);
         return Ok(count);
     }
 

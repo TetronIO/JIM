@@ -13,19 +13,30 @@ namespace JIM.Models.Core;
 /// section of <c>engineering/DEVELOPER_GUIDE.md</c> for the full lifecycle.
 /// </para>
 /// <para>
-/// The catalogue is empty whenever no feature is behind a flag, which is its normal resting state: Unique Value
-/// Generation (#242, #1803) and Metaverse-Derived Attribute Flows (#1750, #1878) were the last two, and shipped. The
-/// mechanism stays, ready for the next flag, and its tests exercise it against synthetic definitions substituted
-/// through <see cref="SubstituteForTesting"/>.
+/// The catalogue is empty whenever no feature is behind a flag, which is its normal resting state. The mechanism's own
+/// tests exercise it against synthetic definitions substituted through <see cref="SubstituteForTesting"/>, so they do
+/// not depend on which real flags exist.
 /// </para>
 /// </summary>
 public static class FeatureFlagCatalogue
 {
     /// <summary>
+    /// The SCIM 2.0 Service Provider (#124): JIM's own SCIM endpoint and the Connector that imports what SCIM clients
+    /// write to it. Hidden while it is built layer by layer on <c>main</c> (design decision D16 in
+    /// <c>engineering/plans/doing/SCIM_SERVER_DESIGN.md</c>).
+    /// </summary>
+    public static readonly FeatureFlagDefinition ScimServiceProvider = new(
+        "Features.ScimServiceProvider",
+        "SCIM 2.0 Service Provider",
+        "Lets SCIM 2.0 clients, such as an identity provider, provision Users and Groups into JIM through its own SCIM endpoint, imported through the SCIM 2.0 Service Provider Connector.",
+        FeatureFlagTier.InDevelopment,
+        TrackingIssueNumber: 2372);
+
+    /// <summary>
     /// The declared flags. Add a <c>public static readonly FeatureFlagDefinition</c> field above this for each new
     /// flag (so gates can reference it by name), and list it here.
     /// </summary>
-    private static readonly IReadOnlyList<FeatureFlagDefinition> Declared = [];
+    private static readonly IReadOnlyList<FeatureFlagDefinition> Declared = [ScimServiceProvider];
 
     /// <summary>
     /// A test's substitute catalogue, scoped to its own asynchronous flow so concurrently running tests cannot see

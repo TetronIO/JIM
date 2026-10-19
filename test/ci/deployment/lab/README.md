@@ -29,7 +29,8 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 
 All cells are air-gapped: their VMs sit on a bridge with no route out, and each cell proves it cannot reach
 `github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`);
-some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`).
+some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`), and one is the Soak cell
+(`alma9-podrf-soak`).
 
 | Cells | Operating system | Runtime |
 |-------|------------------|---------|
@@ -37,7 +38,7 @@ some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-e
 | `u24-docker-classic-ag`, `-up` | Ubuntu 24.04 | Docker, classic overlay2 image store |
 | `u24-podrf-ag`, `-up`, `-cases` | Ubuntu 24.04 | Podman, rootful |
 | `u24-podrl-ag`, `-up` | Ubuntu 24.04 | Podman, rootless |
-| `alma9-podrf-ag`, `-up`, `-cases`, `-extdb` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `alma9-podrf-ag`, `-up`, `-cases`, `-extdb`, `-soak` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
 | `alma9-podrl-ag`, `-up`, `-cases` | AlmaLinux 9 | Podman, rootless |
 
 AlmaLinux stands in for Red Hat Enterprise Linux 9. The images are each distribution's cloud image with only the
@@ -118,6 +119,16 @@ installation (by checksum) and every JIM container running (by ID and image).
    on a reinstall, changing nothing and setting nothing aside (#1994), and JIM starts as documented afterwards.
 6. **Ctrl+C at a question**: the installer, waiting at a question, is sent SIGINT as a terminal sends it; everything is
    put back, and JIM starts as documented afterwards.
+7. **Looking after the certificate**, as TLS and Reverse Proxy says, last because from here the certificate authority
+   the cell trusts changes:
+   1. `--renew-certificate`, run as the page gives it: JIM serves a new certificate for a year, from the same
+      certificate authority and for the same names.
+   2. `--certificate` for one more name: the installer creates a new certificate authority and says to distribute it;
+      JIM serves the new name, and the old authority no longer vouches for it.
+   3. `--certificate` with an organisation's certificate: the lab issues one from a root and an issuing CA of its own,
+      given as the certificate followed by the issuing CA's. Trusting the root alone, the cell finds JIM ready and
+      serving exactly that certificate, which proves the whole chain is served.
+   4. `--renew-certificate` over the organisation's certificate: refused, pointing to `--certificate`, changing nothing.
 
 As every cell does, it ends by checking that nothing crashed quietly.
 
@@ -134,6 +145,24 @@ As every cell does, it ends by checking that nothing crashed quietly.
 5. **Nothing crashed quietly**, as every cell checks.
 
 The database server is a second VM, `jl-<cell>-db`, given the cell's `DatabaseMemoryGiB`, and deleted with the cell's.
+
+## What a Soak cell checks
+
+A fault that strikes one restart in a few passes a single restart most of the time: #2009 (NetworkManager unplugging
+rootful Podman pods from their bridge) failed 6 of 20 restarts, so a cell that restarts JIM once passed about two runs
+in three. Such a fault need not come from JIM: an operating system's update to NetworkManager, Podman or systemd can
+bring one back. The Soak cell, on AlmaLinux with rootful Podman where #2009 was found, repeats what the other cells do
+once:
+
+1. **Installed** with `setup.sh`, ready, and the administrator signs in.
+2. **Restarted 20 times** as Operating JIM says (`systemctl restart jim.service`): ready again within 300 s every
+   time, then the data kept and a sign-in.
+3. **The host rebooted 5 times**: JIM starts by itself every time, with its data, then a sign-in.
+4. **Nothing crashed quietly**, as every cell checks.
+
+A round that fails saves the VM's journal and container list beside `cell.log`; after three failed rounds a loop stops,
+as its check has failed. The cell takes about 7 minutes when JIM is healthy (each failed round adds 300 s), alongside
+the others.
 
 ## Running it
 
@@ -170,6 +199,19 @@ count, so a run that keeps several can leave too little for the cells after them
 cell's database server its `DatabaseMemoryGiB`), and the runner starts cells, largest first, while they fit in the
 host's memory less `ReserveGiB` (Lab.psd1). `-BudgetGiB` and
 `-MaxParallel` override that.
+
+## In GitHub Actions
+
+`.github/workflows/deploy-lab.yml` runs the whole matrix on the lab host's own runner (label `jim-deploy-lab`, alone in
+a runner group of that name): nightly on `main`, by itself when a change to `VERSION` reaches `main` (the release pull
+request's merge), and on dispatch, with optional cells and tags. It posts a `jim-deploy-lab` commit status on the
+commit it tested, which the release gate (`scripts/Test-DeployLabReleaseGate.ps1`, a job of `release.yml`) requires
+once `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`. The report is the job's summary, and every cell's folder is an artefact
+for 30 days.
+
+A run by hand on the host and a run in Actions would collide (the same VM names, the same memory), so the workflow
+refuses to start while any `jl-` VM exists, and deletes every one when it finishes. Run by hand only when no workflow
+run is in progress, and delete any VM a run by hand kept (`-KeepVm`) before the next night.
 
 ## Adding a cell
 

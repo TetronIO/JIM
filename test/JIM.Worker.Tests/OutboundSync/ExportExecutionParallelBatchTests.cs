@@ -1387,7 +1387,6 @@ public class ExportExecutionParallelBatchTests
             ChangeType = changeType,
             CreatedAt = createdAt,
             HasUnresolvedReferences = true,
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -1534,8 +1533,8 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
-    /// Seeds <paramref name="count"/> Update exports that have failed once before and are due their retry, so putting one
-    /// back has a previous attempt, a schedule and an error message to preserve.
+    /// Seeds <paramref name="count"/> Update exports that have failed once before, so putting one back has a previous
+    /// attempt, the start of its run of failures and an error message to preserve.
     /// </summary>
     private List<PendingExport> SeedExportsRetriedOnce(ConnectedSystem targetSystem, int count)
     {
@@ -1544,7 +1543,7 @@ public class ExportExecutionParallelBatchTests
         {
             pe.ErrorCount = 1;
             pe.LastAttemptedAt = DateTime.UtcNow.AddMinutes(-10);
-            pe.NextRetryAt = DateTime.UtcNow.AddMinutes(-8);
+            pe.FailingSince = DateTime.UtcNow.AddMinutes(-10);
             pe.LastErrorMessage = "An earlier attempt failed";
         }
         return exports;

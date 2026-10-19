@@ -56,6 +56,36 @@ internal static class ScimStoreReads
         return references;
     }
 
+    /// <summary>
+    /// The references several resources hold, keyed by the resource holding them; one holding none is absent.
+    /// </summary>
+    internal static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<ScimStoreReferenceTarget>>> ReferencesBySourceAsync(NpgsqlConnection connection,
+        NpgsqlTransaction? transaction, IReadOnlyCollection<Guid> sourceIds, CancellationToken cancellationToken = default)
+    {
+        var bySource = new Dictionary<Guid, List<ScimStoreReferenceTarget>>();
+        if (sourceIds.Count > 0)
+        {
+            await using var command = new NpgsqlCommand("""
+                SELECT reference."SourceId", reference."Attribute", reference."TargetId", target."ResourceTypeId"
+                FROM "ScimStoreReferences" AS reference
+                INNER JOIN "ScimStoreResources" AS target ON target."Id" = reference."TargetId"
+                WHERE reference."SourceId" = ANY(@sources)
+                """, connection, transaction);
+            command.Parameters.Add(UuidArray("sources", sourceIds));
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var source = reader.GetGuid(0);
+                if (!bySource.TryGetValue(source, out var held))
+                    bySource[source] = held = [];
+                held.Add(new ScimStoreReferenceTarget(reader.GetString(1), reader.GetGuid(2), reader.GetInt32(3)));
+            }
+        }
+
+        return bySource.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<ScimStoreReferenceTarget>)pair.Value);
+    }
+
     internal static NpgsqlParameter UuidArray(string name, IEnumerable<Guid> ids) =>
         new(name, NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() };
 

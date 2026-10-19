@@ -248,18 +248,20 @@ public class PendingExportBatchDetachDatabaseTests
         pe.ChangeType = PendingExportChangeType.Update;
         pe.Status = PendingExportStatus.Pending;
         pe.HasUnresolvedReferences = true;
-        pe.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
+        pe.ErrorCount = 2;
+        pe.FailingSince = DateTime.UtcNow.AddMinutes(-5);
         await repository.Sync.UpdatePendingExportsAsync([pe]);
 
         await using var verify = NewContext();
         var persisted = await verify.PendingExports.Where(p => p.Id == pendingExportId)
-            .Select(p => new { p.ChangeType, p.Status, p.HasUnresolvedReferences, p.NextRetryAt }).SingleAsync();
+            .Select(p => new { p.ChangeType, p.Status, p.HasUnresolvedReferences, p.ErrorCount, p.FailingSince }).SingleAsync();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
             Assert.That(persisted.Status, Is.EqualTo(PendingExportStatus.Pending));
             Assert.That(persisted.HasUnresolvedReferences, Is.True);
-            Assert.That(persisted.NextRetryAt, Is.Not.Null);
+            Assert.That(persisted.ErrorCount, Is.EqualTo(2));
+            Assert.That(persisted.FailingSince, Is.Not.Null);
         }
     }
 }

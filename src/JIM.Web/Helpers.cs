@@ -716,7 +716,6 @@ public static class Helpers
             PendingExportStatus.Pending => Color.Info,
             PendingExportStatus.Executing => Color.Primary,
             PendingExportStatus.ExportNotConfirmed => Color.Warning,
-            PendingExportStatus.Failed => Color.Error,
             PendingExportStatus.Exported => Color.Success,
             PendingExportStatus.Parked => Color.Warning,
             _ => Color.Default,

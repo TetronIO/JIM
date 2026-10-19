@@ -100,6 +100,128 @@ public class ScimStoreRepository : IScimStoreRepository
         return await ScimStoreReads.ReferencesAsync(connection, null, sourceId, null, cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<ScimStoreReferenceTarget>>> GetReferencesAsync(IReadOnlyCollection<Guid> sourceIds,
+        CancellationToken cancellationToken = default)
+    {
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var lease = await RawSqlConnectionLease.AcquireAsync(connection);
+        return await ScimStoreReads.ReferencesBySourceAsync(connection, null, sourceIds, cancellationToken);
+    }
+
+    /// <remarks>
+    /// The count and the page are two statements of one command; under concurrent writes they can see different
+    /// snapshots, which a client walking a store that is changing has to tolerate anyway. Rows come back in uuid order,
+    /// which is PostgreSQL's byte order rather than .NET's: a cursor only ever compares in SQL, so the two never meet.
+    /// </remarks>
+    public async Task<ScimStorePage> ListLiveResourcesAsync(int connectedSystemId, ScimStoreQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfNegative(query.Count);
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var lease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand { Connection = connection };
+        command.Parameters.AddWithValue("system", connectedSystemId);
+        command.Parameters.AddWithValue("type", query.ResourceTypeId);
+
+        var where = """r."ConnectedSystemId" = @system AND r."ResourceTypeId" = @type AND r."DeletedAt" IS NULL""";
+        if (query.Filter != null)
+            where += $" AND {ScimStoreFilterSql.Render(query.Filter, command)}";
+
+        var sql = $"""SELECT count(*) FROM "ScimStoreResources" AS r WHERE {where};""";
+        if (query.Count > 0)
+        {
+            var position = "";
+            if (query.After is { } after)
+            {
+                command.Parameters.AddWithValue("after", after);
+                position = """ AND r."Id" > @after""";
+            }
+            else
+            {
+                command.Parameters.AddWithValue("offset", (long)Math.Max(query.StartIndex, 1) - 1);
+            }
+
+            // One more than the page holds, to know whether another page follows.
+            command.Parameters.AddWithValue("limit", query.Count + 1);
+            var columns = string.Join(", ", ScimStoreColumns.Resources.Select(column => $"r.\"{column}\""));
+            sql += $"""
+                SELECT {columns}
+                FROM "ScimStoreResources" AS r WHERE {where}{position}
+                ORDER BY r."Id"{(query.After == null ? " OFFSET @offset" : "")} LIMIT @limit;
+                """;
+        }
+
+        command.CommandText = sql;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+        var total = reader.GetInt64(0);
+
+        var resources = new List<ScimStoreResource>();
+        if (query.Count > 0 && await reader.NextResultAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                resources.Add(ScimStoreReads.ReadResource(reader));
+        }
+
+        var hasMore = resources.Count > query.Count;
+        if (hasMore)
+            resources.RemoveAt(resources.Count - 1);
+        return new ScimStorePage { TotalResults = total, Resources = resources, HasMore = hasMore };
+    }
+
+    public async Task<ScimStoreImportPage> ReadForImportAsync(int connectedSystemId, ScimStoreImportQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(query.Count);
+        if (query.ChangedAfter.HasValue != query.ChangedUpTo.HasValue)
+            throw new ArgumentException("A Delta Import's read needs both ends of its change sequence range.", nameof(query));
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var lease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand { Connection = connection };
+        command.Parameters.AddWithValue("system", connectedSystemId);
+        command.Parameters.AddWithValue("limit", query.Count + 1);
+
+        // A Full Import reads every live resource, whatever its sequence: stopping at the horizon would make a resource
+        // changed during the walk look absent. A Delta Import reads the range, tombstones included.
+        var where = """r."ConnectedSystemId" = @system""";
+        if (query.ChangedAfter is { } changedAfter)
+        {
+            command.Parameters.AddWithValue("changedAfter", changedAfter);
+            command.Parameters.AddWithValue("changedUpTo", query.ChangedUpTo!.Value);
+            where += """ AND r."ChangeSequence" > @changedAfter AND r."ChangeSequence" <= @changedUpTo""";
+        }
+        else
+        {
+            where += """ AND r."DeletedAt" IS NULL""";
+        }
+
+        if (query.After is { } after)
+        {
+            command.Parameters.AddWithValue("after", after);
+            where += """ AND r."Id" > @after""";
+        }
+
+        var columns = string.Join(", ", ScimStoreColumns.Resources.Select(column => $"r.\"{column}\""));
+        command.CommandText = $"""SELECT {columns} FROM "ScimStoreResources" AS r WHERE {where} ORDER BY r."Id" LIMIT @limit""";
+
+        var resources = new List<ScimStoreResource>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                resources.Add(ScimStoreReads.ReadResource(reader));
+        }
+
+        var hasMore = resources.Count > query.Count;
+        if (hasMore)
+            resources.RemoveAt(resources.Count - 1);
+
+        var live = resources.Where(r => r.DeletedAt == null).Select(r => r.Id).ToList();
+        var references = await ScimStoreReads.ReferencesBySourceAsync(connection, null, live, cancellationToken);
+        return new ScimStoreImportPage { Resources = resources, References = references, HasMore = hasMore };
+    }
+
     public async Task<IReadOnlyList<ScimStoreResourceType>> GetResourceTypesAsync(int connectedSystemId, CancellationToken cancellationToken = default)
     {
         return await Repository.Database.ScimStoreResourceTypes

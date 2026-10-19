@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Utilities;
+using System;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using NUnit.Framework;
@@ -82,18 +83,41 @@ public class ConnectedSystemObjectConnectionStateResolverTests
         Assert.That(result, Is.EqualTo(ConnectedSystemObjectConnectionState.ExportNotConfirmed));
     }
 
-    [Test]
-    public void Resolve_PendingExportFailed_ReturnsExportFailedRegardlessOfChangeType()
+    /// <summary>
+    /// A failing Pending Export (#2119) stays Pending, since it is attempted again at every export run, but its failure
+    /// is the fact an administrator most needs, so it reads first whatever the export's status or change type.
+    /// </summary>
+    [TestCase(PendingExportChangeType.Update, PendingExportStatus.Pending)]
+    [TestCase(PendingExportChangeType.Create, PendingExportStatus.Pending)]
+    [TestCase(PendingExportChangeType.Delete, PendingExportStatus.Pending)]
+    [TestCase(PendingExportChangeType.Update, PendingExportStatus.ExportNotConfirmed)]
+    public void Resolve_PendingExportFailing_ReturnsExportFailedRegardlessOfChangeTypeOrStatus(PendingExportChangeType changeType, PendingExportStatus status)
     {
         var pendingExport = new PendingExport
         {
-            ChangeType = PendingExportChangeType.Update,
-            Status = PendingExportStatus.Failed
+            ChangeType = changeType,
+            Status = status,
+            FailingSince = DateTime.UtcNow.AddHours(-1)
         };
 
         var result = ConnectedSystemObjectConnectionStateResolver.Resolve(ConnectedSystemObjectStatus.Normal, pendingExport);
 
         Assert.That(result, Is.EqualTo(ConnectedSystemObjectConnectionState.ExportFailed));
+    }
+
+    [Test]
+    public void Resolve_PendingExportFailedBeforeButSinceSucceeded_IsNotExportFailed()
+    {
+        var pendingExport = new PendingExport
+        {
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending,
+            FailingSince = null
+        };
+
+        var result = ConnectedSystemObjectConnectionStateResolver.Resolve(ConnectedSystemObjectStatus.Normal, pendingExport);
+
+        Assert.That(result, Is.EqualTo(ConnectedSystemObjectConnectionState.UpdatePending));
     }
 
     [Test]

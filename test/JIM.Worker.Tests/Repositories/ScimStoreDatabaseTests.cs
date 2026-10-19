@@ -756,6 +756,7 @@ public class ScimStoreDatabaseTests
                     ResourceTypeName = "User",
                     Operation = ScimStoreOperation.Patched,
                     ChangedAttributes = ["name.givenName", "emails"],
+                    IgnoredAttributes = ["favouriteColour", "urn:example:custom:2.0:User:badge"],
                     ApiKeyId = key.Id,
                     ApiKeyName = key.Name,
                     ClientAddress = "192.0.2.10"
@@ -779,6 +780,7 @@ public class ScimStoreDatabaseTests
             Assert.That(entry.ResourceTypeName, Is.EqualTo("User"));
             Assert.That(entry.Operation, Is.EqualTo(ScimStoreOperation.Patched));
             Assert.That(entry.ChangedAttributes, Is.EqualTo(new[] { "name.givenName", "emails" }));
+            Assert.That(entry.IgnoredAttributes, Is.EqualTo(new[] { "favouriteColour", "urn:example:custom:2.0:User:badge" }));
             Assert.That(entry.ApiKeyId, Is.Null, "the deleted key's reference is cleared");
             Assert.That(entry.ApiKeyName, Is.EqualTo("Entra provisioning"), "but the entry still says who made the request");
             Assert.That(entry.ClientAddress, Is.EqualTo("192.0.2.10"));

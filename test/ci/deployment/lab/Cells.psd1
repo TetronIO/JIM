@@ -47,5 +47,6 @@
         # A PostgreSQL server of the customer's own, on a VM of its own beside JIM's.
         @{ Name = 'u24-docker-ctrd-extdb'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ExternalDatabase'; MemoryGiB = 6; DatabaseMemoryGiB = 2; Tags = @('extdb', 'airgap', 'docker', 'ubuntu') }
         @{ Name = 'alma9-podrf-extdb'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ExternalDatabase'; MemoryGiB = 6; DatabaseMemoryGiB = 2; Tags = @('extdb', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'alma9-podrf-soak'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Soak'; MemoryGiB = 6; Tags = @('soak', 'airgap', 'podman', 'rhel') }
     )
 }

@@ -5125,6 +5125,11 @@ html[lang] .jim-password-guidance.mud-alert {
     color: var(--mud-palette-warning);
 }
 
+/* Error is mixed toward the text colour, as the error chips are, so the count keeps its contrast in every theme. */
+.jim-nav-count-error {
+    color: var(--jim-chip-text-error);
+}
+
 /* ─── Synchronisation Rule identity strip ────────────────────────────────────────────────────
    The rule's Metaverse type, direction and Connected System type beneath the page's breadcrumbs
    (Shared/SyncRuleIdentityStrip.razor). The direction is drawn, not just named: the line runs

@@ -625,7 +625,6 @@ public class OptimisticExportApplyWorkflowTests
             ChangeType = PendingExportChangeType.Update,
             HasUnresolvedReferences = true,
             CreatedAt = DateTime.UtcNow,
-            MaxRetries = 3,
             AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
         };
         PendingExportsData.Add(pendingExport);
@@ -644,9 +643,7 @@ public class OptimisticExportApplyWorkflowTests
         Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending),
             "sanity check: the run A export attempt must have failed and stayed retryable");
 
-        // Simulate the retry backoff having elapsed - wall-clock time is not this test's concern.
-        crossRunRepo.PendingExports[pendingExport.Id].NextRetryAt = null;
-
+        // No backoff to wait out (#2119): the next export run attempts the export again at once.
         // Act 2 ("run B"): a fresh export attempt against the SAME repository, reading only what
         // survived the run A persist above.
         var succeedingConnector = CreateSucceedingExportConnector();
@@ -695,9 +692,8 @@ public class OptimisticExportApplyWorkflowTests
                 ChangeType = source.ChangeType,
                 CreatedAt = source.CreatedAt,
                 HasUnresolvedReferences = source.HasUnresolvedReferences,
-                MaxRetries = source.MaxRetries,
                 ErrorCount = source.ErrorCount,
-                NextRetryAt = source.NextRetryAt,
+                FailingSince = source.FailingSince,
                 LastAttemptedAt = source.LastAttemptedAt,
                 AttributeValueChanges = source.AttributeValueChanges.Select(avc => new PendingExportAttributeValueChange
                 {

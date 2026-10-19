@@ -125,7 +125,7 @@ Without a switch, the item. With `-Causes`, what caused it, and with `-Consequen
 | `ConnectedSystem` | `string` | The Connected System the consequences are attributed to. |
 | `SyncRule` | `string` | The Synchronisation Rule the cause names, where it names one. |
 | `OutcomeSummary` | `string` | The outcomes the consequences share. |
-| `PendingExportStatus` | `string` | For outstanding Pending Exports, their live status. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Failed`, `Exported` or `Parked`. |
+| `PendingExportStatus` | `string` | For outstanding Pending Exports, their live status. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
 | `Ending` | `string` | Where the branch stops: the cohort's own ending (Confirmed, WaitingForExport, WaitingForRetry, NeedsAttention, WaitingForConfirmingImport or DeletionScheduled), else how many consequences led nowhere further and why, for example "NoFurtherConsequences (2)", else FurtherThanShown where the walk reached its bound. Empty where every consequence carries on. |
 | `FirstOccurred` | `datetime` | When the earliest consequence happened, in UTC. |
 | `LastOccurred` | `datetime` | When the latest consequence happened, in UTC. |
