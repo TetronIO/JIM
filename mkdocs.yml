@@ -224,6 +224,7 @@ nav:
       - Partitions and Containers: powershell/partitions-and-containers.md
       - Connected System Objects: powershell/connected-system-objects.md
       - Pending Exports: powershell/pending-exports.md
+      - SCIM Service Provider: powershell/scim-service-provider.md
       - Run Profiles: powershell/run-profiles.md
       - Synchronisation Rules: powershell/synchronisation-rules.md
       - Attribute Mappings: powershell/attribute-mappings.md
