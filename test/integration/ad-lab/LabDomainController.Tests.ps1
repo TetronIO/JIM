@@ -946,6 +946,29 @@ Describe 'VM notes' {
     }
 }
 
+Describe 'Invoke-LabGuestPhase' {
+    BeforeAll {
+        Mock -ModuleName LabDomainController Assert-LabWindows {}
+        Mock -ModuleName LabDomainController Invoke-Command {
+            param($ArgumentList)
+            [pscustomobject]@{ Phase = $ArgumentList[1]['Phase']; Changed = $false; RebootRequired = $false; Detail = $ArgumentList[0] }
+        }
+        $script:Credential = New-Object System.Management.Automation.PSCredential('PANOPLY\Administrator', (Get-TestSecret -Value 'x'))
+    }
+
+    It 'runs a phase of another guest script from prebuilt arguments, whatever the phase is called' {
+        $result = Invoke-LabGuestPhase -VMName 'adfs-primary' -Credential $script:Credential `
+            -Arguments ([ordered]@{ Phase = 'Join'; Domain = 'PANOPLY.LOCAL' }) -GuestScript 'C:\jim-ad-lab\Initialize-LabFederationServer.ps1'
+        $result.Phase | Should -Be 'Join'
+        $result.Detail | Should -Be 'C:\jim-ad-lab\Initialize-LabFederationServer.ps1'
+    }
+
+    It 'still builds a domain controller phase from the settings' {
+        $settings = @{ ComputerName = 'dc1'; IPAddress = '10.99.0.11'; PrefixLength = 24; Gateway = '10.99.0.1' }
+        (Invoke-LabGuestPhase -VMName 'dc-primary' -Credential $script:Credential -Phase Prepare -Settings $settings).Phase | Should -Be 'Prepare'
+    }
+}
+
 Describe 'Get-LabReadinessPort' {
     It 'waits for LDAPS on a domain controller' {
         Get-LabReadinessPort -Role DomainController | Should -Be 636

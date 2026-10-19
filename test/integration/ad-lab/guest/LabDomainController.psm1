@@ -3174,18 +3174,21 @@ function Invoke-LabGuestPhase {
     )
 
     Assert-LabWindows -Feature 'Running a guest phase'
+    # Fresh variables, not $Phase: assigning to a parameter re-runs its ValidateSet, which lists only the domain
+    # controller's phases (and PowerShell names are case-insensitive, so $arguments would be $Arguments).
     if ($PSCmdlet.ParameterSetName -eq 'Arguments') {
-        $arguments = $Arguments
-        $Phase = [string]$Arguments['Phase']
+        $phaseArguments = $Arguments
+        $phaseName = [string]$Arguments['Phase']
     }
     else {
-        $arguments = Get-LabGuestPhaseArgument -Phase $Phase -Settings $Settings
+        $phaseArguments = Get-LabGuestPhaseArgument -Phase $Phase -Settings $Settings
+        $phaseName = $Phase
     }
-    Write-Verbose ('Guest: {0} {1}' -f $GuestScript, (ConvertTo-LabArgumentString -Argument $arguments))
+    Write-Verbose ('Guest: {0} {1}' -f $GuestScript, (ConvertTo-LabArgumentString -Argument $phaseArguments))
 
     # A plain Hashtable crosses the remoting boundary; SecureString values travel encrypted by the session.
     $splat = @{}
-    foreach ($key in $arguments.Keys) { $splat[$key] = $arguments[$key] }
+    foreach ($key in $phaseArguments.Keys) { $splat[$key] = $phaseArguments[$key] }
 
     $output = Invoke-Command -VMName $VMName -Credential $Credential -ErrorAction Stop -ScriptBlock {
         param($script, $splat)
@@ -3194,7 +3197,7 @@ function Invoke-LabGuestPhase {
 
     $result = @($output | Where-Object { $null -ne $_ -and $_.PSObject.Properties['RebootRequired'] }) | Select-Object -Last 1
     if ($null -eq $result) {
-        throw "Phase $Phase returned no result object."
+        throw "Phase $phaseName returned no result object."
     }
     return $result
 }
