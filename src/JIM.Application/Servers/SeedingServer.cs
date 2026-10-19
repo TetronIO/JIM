@@ -1480,6 +1480,17 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.RateLimitingScimServiceProviderRequestsPerMinute,
+            DisplayName = "SCIM Service Provider requests per minute",
+            Description = "The maximum number of requests the SCIM clients of one Connected System may make to its SCIM 2.0 Service Provider endpoint per rolling minute. Shared by all of that Connected System's keys.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = Constants.RateLimitDefaults.ScimServiceProviderRequestsPerMinute.ToString(),
+            IsReadOnly = false
+        });
+
         // UI Settings
         await SeedSettingAsync(new ServiceSetting
         {

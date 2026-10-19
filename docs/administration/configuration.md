@@ -206,6 +206,7 @@ Every Service Setting that changes how JIM behaves is listed below. The Preview 
 | `Security.RateLimiting.Enabled` | API rate limiting enabled | Security | When `true`, REST API requests are throttled per client. See [Rate Limiting](../api/rate-limiting.md). | `true` |
 | `Security.RateLimiting.AuthenticatedRequestsPerMinute` | Authenticated API requests per minute | Security | The maximum REST API requests per minute for an authenticated client (per signed-in user or API key). | `300` |
 | `Security.RateLimiting.UnauthenticatedRequestsPerMinute` | Unauthenticated API requests per minute | Security | The maximum REST API requests per minute for an unauthenticated client (per IP address). | `30` |
+| `Security.RateLimiting.ScimServiceProviderRequestsPerMinute` | SCIM Service Provider requests per minute | Security | The maximum requests per minute that the SCIM clients of one Connected System may make to its SCIM 2.0 Service Provider endpoint, shared by all of that Connected System's keys. | `1500` |
 | `UI.ProgressUpdateInterval` | Progress update interval | UI | How often JIM reports progress while it generates Example Data from a template. Format: `d.hh:mm:ss`. | `00:00:01` (1 second) |
 
 !!! tip "Editing service settings"

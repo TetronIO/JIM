@@ -13,11 +13,13 @@ namespace JIM.Web.Middleware.Api;
 /// <param name="AuthenticatedRequestsPerMinute">The per-principal limit for authenticated requests.</param>
 /// <param name="UnauthenticatedRequestsPerMinute">The per-IP limit for unauthenticated requests.</param>
 /// <param name="RetrievedUtc">When this snapshot was read (or deemed unreadable and defaulted), used by the cache to decide when to refresh.</param>
+/// <param name="ScimServiceProviderRequestsPerMinute">The per-Connected-System limit for its SCIM 2.0 Service Provider endpoint.</param>
 public sealed record RateLimitSettingsSnapshot(
     bool Enabled,
     int AuthenticatedRequestsPerMinute,
     int UnauthenticatedRequestsPerMinute,
-    DateTime RetrievedUtc)
+    DateTime RetrievedUtc,
+    int ScimServiceProviderRequestsPerMinute = Constants.RateLimitDefaults.ScimServiceProviderRequestsPerMinute)
 {
     /// <summary>
     /// The compiled-in defaults, used before the database has ever been read (for example the very first
@@ -29,5 +31,6 @@ public sealed record RateLimitSettingsSnapshot(
         Constants.RateLimitDefaults.Enabled,
         Constants.RateLimitDefaults.AuthenticatedRequestsPerMinute,
         Constants.RateLimitDefaults.UnauthenticatedRequestsPerMinute,
-        DateTime.MinValue);
+        DateTime.MinValue,
+        Constants.RateLimitDefaults.ScimServiceProviderRequestsPerMinute);
 }

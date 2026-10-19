@@ -433,6 +433,7 @@ public static class ConfigurationChangeClassifier
         [Constants.SettingKeys.RateLimitingEnabled] = C,
         [Constants.SettingKeys.RateLimitingAuthenticatedRequestsPerMinute] = C,
         [Constants.SettingKeys.RateLimitingUnauthenticatedRequestsPerMinute] = C,
+        [Constants.SettingKeys.RateLimitingScimServiceProviderRequestsPerMinute] = C,
         [Constants.SettingKeys.ProgressUpdateInterval] = C,
         [Constants.SettingKeys.ServiceName] = C,
         [Constants.SettingKeys.StaleTaskTimeout] = C,
