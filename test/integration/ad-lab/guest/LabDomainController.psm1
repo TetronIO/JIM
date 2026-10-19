@@ -583,12 +583,20 @@ function ConvertTo-LabVmNote {
         [Parameter(Mandatory)]
         [string]$NetBiosName,
 
-        [string]$IPAddress
+        [string]$IPAddress,
+
+        # What the VM is. A domain controller writes no role line, so its notes read exactly as they did before
+        # the lab had any other kind of VM.
+        [ValidateSet('DomainController', 'FederationServer')]
+        [string]$Role = 'DomainController'
     )
 
     $lines = @($script:VmNoteMarker, "domain=$Domain", "netbios=$NetBiosName", "computer=$ShortName")
     if (-not [string]::IsNullOrEmpty($IPAddress)) {
         $lines += "ip=$IPAddress"
+    }
+    if ($Role -ne 'DomainController') {
+        $lines += "role=$Role"
     }
     return ($lines -join "`n")
 }
@@ -635,12 +643,34 @@ function ConvertFrom-LabVmNote {
             $values[$line.Substring(0, $index).Trim()] = $line.Substring($index + 1).Trim()
         }
     }
+    $role = if ([string]::IsNullOrEmpty($values['role'])) { 'DomainController' } else { $values['role'] }
     return [pscustomobject][ordered]@{
         Domain       = $values['domain']
         NetBiosName  = $values['netbios']
         ComputerName = $values['computer']
         IPAddress    = $values['ip']
+        Role         = $role
     }
+}
+
+function Get-LabReadinessPort {
+    <#
+    .SYNOPSIS
+        The TCP port that proves a lab VM of a given role is serving after a revert: LDAPS on a domain controller,
+        HTTPS on a federation server.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('DomainController', 'FederationServer')]
+        [string]$Role
+    )
+
+    if ($Role -eq 'FederationServer') {
+        return 443
+    }
+    return 636
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -2787,6 +2817,203 @@ public static class LabIsoStream
 }
 
 # ---------------------------------------------------------------------------------------------
+# Windows only: creating a lab VM and installing Windows on it (host)
+# ---------------------------------------------------------------------------------------------
+#
+# Shared by New-LabDomainController.ps1 and New-LabFederationServer.ps1: every lab VM is the same Generation 2 VM
+# installed unattended from the same media. What makes it a domain controller or a federation server is its guest
+# script.
+
+function Get-LabInstallImage {
+    <#
+    .SYNOPSIS
+        Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one:
+        { ImageIndex, ImageName, Evaluation }.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$IsoPath
+    )
+
+    Assert-LabWindows -Feature 'Reading the installation media'
+    $mounted = Mount-DiskImage -ImagePath $IsoPath -PassThru
+    try {
+        $drive = ($mounted | Get-Volume).DriveLetter
+        $wim = "${drive}:\sources\install.wim"
+        if (-not (Test-Path -LiteralPath $wim)) {
+            $wim = "${drive}:\sources\install.esd"
+        }
+        $images = @(Get-WindowsImage -ImagePath $wim)
+        return (Resolve-LabInstallImage -Image $images)
+    }
+    finally {
+        $null = Dismount-DiskImage -ImagePath $IsoPath
+    }
+}
+
+function New-LabUnattendIso {
+    <#
+    .SYNOPSIS
+        Renders autounattend.xml for one VM and writes it to a small ISO of its own.
+
+    .DESCRIPTION
+        The ISO carries the Administrator password (encoded, not encrypted; Windows Setup reads it from there). The
+        staging folder is deleted at once, and the caller deletes the ISO as soon as the install has finished
+        (Complete-LabUnattendedInstall).
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$TemplatePath,
+
+        [Parameter(Mandatory)]
+        [object]$Image,
+
+        [Parameter(Mandatory)]
+        [securestring]$Password,
+
+        [Parameter(Mandatory)]
+        [string]$ComputerName,
+
+        [Parameter(Mandatory)]
+        [string]$UILanguage,
+
+        [Parameter(Mandatory)]
+        [string]$Locale,
+
+        [Parameter(Mandatory)]
+        [string]$TimeZone,
+
+        [Parameter(Mandatory)]
+        [string]$IsoPath
+    )
+
+    Assert-LabWindows -Feature 'Building the unattend ISO'
+    if (-not $PSCmdlet.ShouldProcess($IsoPath, 'Create the unattend ISO')) {
+        return
+    }
+
+    $template = Get-Content -LiteralPath $TemplatePath -Raw
+    $values = @{
+        COMPUTER_NAME              = $ComputerName
+        ADMIN_PASSWORD_ENCODED     = (ConvertTo-LabUnattendPassword -Password $Password -Kind AdministratorPassword)
+        AUTOLOGON_PASSWORD_ENCODED = (ConvertTo-LabUnattendPassword -Password $Password -Kind Password)
+        IMAGE_NAME                 = $Image.ImageName
+        UI_LANGUAGE                = $UILanguage
+        LOCALE                     = $Locale
+        TIME_ZONE                  = $TimeZone
+    }
+    if ($Image.Evaluation) {
+        # Evaluation media takes no product key; the License phase applies the AVMA key by converting the edition.
+        $template = ConvertTo-LabKeylessUnattend -Template $template
+    }
+    else {
+        $values['PRODUCT_KEY'] = Get-LabAvmaKey -Edition Datacenter
+    }
+    $xml = ConvertTo-LabUnattendXml -Template $template -Values $values
+
+    $staging = Join-Path ([System.IO.Path]::GetTempPath()) ('jim-ad-lab-' + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $staging
+    try {
+        [System.IO.File]::WriteAllText((Join-Path $staging 'autounattend.xml'), $xml, (New-Object System.Text.UTF8Encoding($false)))
+        New-LabIsoImage -SourceDirectory $staging -IsoPath $IsoPath -VolumeLabel 'UNATTEND'
+    }
+    finally {
+        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function New-LabVirtualMachine {
+    <#
+    .SYNOPSIS
+        Creates a lab VM ready for its unattended install: Generation 2, Secure Boot, static memory, production
+        checkpoints only, the Windows media and the unattend ISO attached, booting from the media.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [string]$VhdDirectory,
+
+        [Parameter(Mandatory)]
+        [uint64]$VhdSizeBytes,
+
+        [Parameter(Mandatory)]
+        [uint64]$MemoryStartupBytes,
+
+        [Parameter(Mandatory)]
+        [int]$ProcessorCount,
+
+        [Parameter(Mandatory)]
+        [string]$SwitchName,
+
+        [Parameter(Mandatory)]
+        [string]$Notes,
+
+        [Parameter(Mandatory)]
+        [string]$IsoPath,
+
+        [Parameter(Mandatory)]
+        [string]$UnattendIsoPath
+    )
+
+    Assert-LabWindows -Feature 'Creating a VM'
+    if (-not $PSCmdlet.ShouldProcess($Name, 'Create the VM')) {
+        return
+    }
+
+    $vmFolder = Join-Path $VhdDirectory $Name
+    $vhdPath = Join-Path $vmFolder "$Name.vhdx"
+    if (Test-Path -LiteralPath $vhdPath) {
+        throw "The disk '$vhdPath' exists but there is no VM called '$Name'. Remove it, or use a different -VhdDirectory."
+    }
+    $null = New-Item -ItemType Directory -Path $vmFolder -Force
+    $null = New-VHD -Path $vhdPath -SizeBytes $VhdSizeBytes -Dynamic
+
+    $null = New-VM -Name $Name -Generation 2 -MemoryStartupBytes $MemoryStartupBytes -VHDPath $vhdPath -SwitchName $SwitchName -Path $VhdDirectory
+    Set-VM -Name $Name -StaticMemory -ProcessorCount $ProcessorCount -AutomaticCheckpointsEnabled $false `
+        -CheckpointType ProductionOnly -AutomaticStartAction Nothing -AutomaticStopAction ShutDown -Notes $Notes
+
+    # Secure Boot with the default (Microsoft Windows) template, which is what a Windows guest wants.
+    Set-VMFirmware -VMName $Name -EnableSecureBoot On
+
+    $windowsDrive = Add-VMDvdDrive -VMName $Name -Path $IsoPath -Passthru
+    $null = Add-VMDvdDrive -VMName $Name -Path $UnattendIsoPath
+    Set-VMFirmware -VMName $Name -FirstBootDevice $windowsDrive
+}
+
+function Complete-LabUnattendedInstall {
+    <#
+    .SYNOPSIS
+        After the unattended install: ejects all media, deletes the unattend ISO (it carries the password) and
+        boots from the disk from now on.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [string]$UnattendIsoPath
+    )
+
+    Assert-LabWindows -Feature 'Finishing an install'
+    if (-not $PSCmdlet.ShouldProcess($Name, 'Eject the install media')) {
+        return
+    }
+
+    foreach ($drive in @(Get-VMDvdDrive -VMName $Name)) {
+        Set-VMDvdDrive -VMName $Name -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation -Path $null
+    }
+    Remove-Item -LiteralPath $UnattendIsoPath -Force -ErrorAction SilentlyContinue
+    $disk = Get-VMHardDiskDrive -VMName $Name | Select-Object -First 1
+    Set-VMFirmware -VMName $Name -FirstBootDevice $disk
+}
+
+# ---------------------------------------------------------------------------------------------
 # Windows only: talking to a guest through PowerShell Direct (host)
 # ---------------------------------------------------------------------------------------------
 
@@ -2917,9 +3144,14 @@ function Copy-LabAssetToGuest {
 function Invoke-LabGuestPhase {
     <#
     .SYNOPSIS
-        Runs one phase of Initialize-LabDomainController.ps1 in the guest and returns its result object.
+        Runs one phase of a guest build script in the guest and returns its result object.
+
+    .DESCRIPTION
+        For Initialize-LabDomainController.ps1 pass -Phase and -Settings, and the phase's arguments are built here.
+        For another guest script (Initialize-LabFederationServer.ps1) pass -GuestScript and -Arguments built by that
+        script's own phase-argument function.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Settings')]
     param(
         [Parameter(Mandatory)]
         [string]$VMName,
@@ -2927,18 +3159,28 @@ function Invoke-LabGuestPhase {
         [Parameter(Mandatory)]
         [System.Management.Automation.PSCredential]$Credential,
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'Settings')]
         [ValidateSet('License', 'Prepare', 'Promote', 'Extend', 'Configure', 'Verify')]
         [string]$Phase,
 
-        [Parameter(Mandatory)]
+        [Parameter(Mandatory, ParameterSetName = 'Settings')]
         [System.Collections.IDictionary]$Settings,
+
+        # Named arguments for the guest script, Phase among them.
+        [Parameter(Mandatory, ParameterSetName = 'Arguments')]
+        [System.Collections.IDictionary]$Arguments,
 
         [string]$GuestScript = 'C:\jim-ad-lab\Initialize-LabDomainController.ps1'
     )
 
     Assert-LabWindows -Feature 'Running a guest phase'
-    $arguments = Get-LabGuestPhaseArgument -Phase $Phase -Settings $Settings
+    if ($PSCmdlet.ParameterSetName -eq 'Arguments') {
+        $arguments = $Arguments
+        $Phase = [string]$Arguments['Phase']
+    }
+    else {
+        $arguments = Get-LabGuestPhaseArgument -Phase $Phase -Settings $Settings
+    }
     Write-Verbose ('Guest: {0} {1}' -f $GuestScript, (ConvertTo-LabArgumentString -Argument $arguments))
 
     # A plain Hashtable crosses the remoting boundary; SecureString values travel encrypted by the session.
@@ -3602,5 +3844,6 @@ Export-ModuleMember -Function @(
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
     'Get-LabRebuildBuildAction', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',
-    'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase'
+    'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase',
+    'Get-LabReadinessPort', 'Get-LabInstallImage', 'New-LabUnattendIso', 'New-LabVirtualMachine', 'Complete-LabUnattendedInstall'
 )

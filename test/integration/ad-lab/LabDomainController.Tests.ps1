@@ -927,6 +927,38 @@ Describe 'VM notes' {
         Test-LabVmNote -Notes $null | Should -BeFalse
     }
 
+    It 'reads a VM with no role line as a domain controller, so the notes already on the live VMs keep working' {
+        $notes = "jim-ad-lab v1`ndomain=PANOPLY.LOCAL`nnetbios=PANOPLY`ncomputer=dc1`nip=10.99.0.11"
+        (ConvertFrom-LabVmNote -Notes $notes).Role | Should -Be 'DomainController'
+        ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.11' | Should -Be $notes
+    }
+
+    It 'round-trips the federation server role' {
+        $notes = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'adfs1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.21' -Role FederationServer
+        $notes | Should -Match '(?m)^role=FederationServer$'
+        $parsed = ConvertFrom-LabVmNote -Notes $notes
+        $parsed.Role | Should -Be 'FederationServer'
+        $parsed.ComputerName | Should -Be 'adfs1'
+    }
+
+    It 'refuses a role it does not know' {
+        { ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'x1' -NetBiosName 'PANOPLY' -Role 'WebServer' } | Should -Throw
+    }
+}
+
+Describe 'Get-LabReadinessPort' {
+    It 'waits for LDAPS on a domain controller' {
+        Get-LabReadinessPort -Role DomainController | Should -Be 636
+    }
+
+    It 'waits for HTTPS on a federation server, where AD FS answers' {
+        Get-LabReadinessPort -Role FederationServer | Should -Be 443
+    }
+
+    It 'refuses a role it does not know' {
+        { Get-LabReadinessPort -Role 'WebServer' } | Should -Throw
+    }
+
     It 'returns nothing for notes without the marker' {
         ConvertFrom-LabVmNote -Notes 'domain=PANOPLY.LOCAL' | Should -BeNullOrEmpty
     }

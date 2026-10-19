@@ -11,6 +11,10 @@ the reasons are in [`engineering/prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md`](../../.
 | `dc-source`  | RESURGAM.LOCAL | dc1.resurgam.local | DC=resurgam,DC=local | off         |
 | `dc-target`  | GENTIAN.LOCAL  | dc1.gentian.local  | DC=gentian,DC=local  | off         |
 
+A fourth VM, `adfs-primary`, is an AD FS server joined to PANOPLY.LOCAL (`adfs1.panoply.local`, federation service
+`https://adfs.panoply.local/adfs`), so JIM's single sign-on is tested against a real AD FS before a release (#2355). See
+[The AD FS server](#the-ad-fs-server).
+
 Each forest is at the Windows Server 2016 functional level. Every domain controller carries the same directory content
 as the Samba images (`test/integration/docker/samba-ad-prebuilt/post-provision.sh`): the OUs `Corp`, `Users` and
 `Groups` under it, `TestUsers`, `TestGroups` and `Services`; the `svc-jim` account in the `JIM Connectors` group; the
@@ -34,7 +38,7 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | Path | Runs on | What it does |
 |------|---------|--------------|
 | `host/New-LabDomainController.ps1` | Hyper-V host | Builds a domain controller from the ISO, unattended, and takes the `baseline` checkpoint |
-| `host/Restore-LabDomainController.ps1` | Hyper-V host | Reverts to a named checkpoint, starts the VM, waits for the guest and LDAPS |
+| `host/Restore-LabDomainController.ps1` | Hyper-V host | Reverts to a named checkpoint, starts the VM, waits for the guest and LDAPS (HTTPS on the AD FS server) |
 | `host/Checkpoint-LabDomainController.ps1` | Hyper-V host | Takes a production checkpoint (`-Replace` to overwrite one) |
 | `host/Get-LabDomainController.ps1` | Hyper-V host | State, checkpoints and guest OS build (`-AsJson` for the runner) |
 | `host/Remove-LabDomainController.ps1` | Hyper-V host | Stops and removes the VM, its checkpoints and its disk (needs `-Force`) |
@@ -44,6 +48,10 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | `guest/autounattend.xml` | Guest (via ISO) | Template for the unattended install; rendered by the module |
 | `guest/Initialize-LabDomainController.ps1` | Guest | The build phases: `License`, `Prepare`, `Promote`, `Extend`, `Configure`, `Verify` |
 | `guest/LabDomainController.psm1` | Both | Pure functions (tested) and the Windows-only helpers |
+| `host/New-LabFederationServer.ps1` | Hyper-V host | Builds the AD FS server, a member of a domain controller's forest, and takes the `baseline` checkpoint of both; see [The AD FS server](#the-ad-fs-server) |
+| `guest/Initialize-LabFederationServer.ps1` | Guest | The AD FS server's build phases: `License`, `Prepare`, `Join`, `Farm`, `Verify` |
+| `guest/LabFederationServer.psm1` | Both | The AD FS server's pure functions (tested) |
+| `LabFederationServer.Tests.ps1` | CI (any OS) | Pester tests for `LabFederationServer.psm1` |
 | `LabDomainController.Tests.ps1` | CI (any OS) | Pester tests for every pure function, the rebuild planning included |
 | `LabDnsForwarder.Tests.ps1` | CI (any OS) | Pester tests for the optional DNS forwarder of the build scripts |
 | `Install-LabScripts.Tests.ps1` | CI (any OS) | Pester tests for the deployment layout and the settings example |
@@ -138,6 +146,7 @@ the first build below is easiest when it is driven from the same values:
 | `ntpServer` | The host's own address on the `Lab` switch (for example `10.99.0.1`): the only NTP-synchronised machine the domain controllers can reach |
 | `directoryExtensions` | The products extending every forest, in the order applied: `[{ "product": "Exchange", "isoPath": "<Exchange Server SE ISO>" }]`. Empty or absent builds plain forests |
 | `domainControllers` | Per virtual machine (`dc-primary`, `dc-source`, `dc-target`): `domain`, `ipAddress`, `prefixLength`, `gateway` (also the host's address on `Lab`, which leads nowhere by design: the switch has no uplink), `enableRecycleBin` |
+| `federationServers` | Per AD FS server (`adfs-primary`): `domainController` (the VM whose forest it joins; its domain and address come from there), `ipAddress`, `prefixLength`, `gateway`, and optionally `computerName` (default `adfs1`) and `serviceName` (default `adfs`) |
 
 There is no `dnsForwarder`: the lab network has no uplink, so a domain controller has nothing to forward DNS to and
 resolves through itself.
@@ -249,6 +258,63 @@ exists) and does nothing if so. To start again from nothing, run `Remove-LabDoma
 The guest phases can be run by hand through PowerShell Direct when investigating, for example
 `Invoke-Command -VMName dc-primary -Credential $cred -ScriptBlock { & C:\jim-ad-lab\Initialize-LabDomainController.ps1 -Phase Verify ... }`;
 run `Get-Help .\guest\Initialize-LabDomainController.ps1 -Full` for the parameters.
+
+## The AD FS server
+
+`adfs-primary` is a Windows Server 2025 member server running AD FS, joined to PANOPLY.LOCAL, so JIM's single sign-on
+is tested end to end against a real AD FS (#2355). It is built like a domain controller (the same media, unattended
+install and AVMA licensing) by `host/New-LabFederationServer.ps1`, which drives `guest/Initialize-LabFederationServer.ps1`
+through these phases:
+
+| Phase | What it does |
+|-------|--------------|
+| `License` | As for the domain controllers: converts evaluation media to full Datacenter |
+| `Prepare` | Renames the computer `adfs1`, sets its static address, resolves through `dc-primary`, switches automatic Windows Update off, and stops the machine account password changing (below) |
+| `Join` | Joins PANOPLY.LOCAL as its Administrator |
+| (on `dc-primary`) | Creates the KDS root key (back-dated ten hours, as Microsoft documents for a single-domain-controller test forest), the group managed service account `gmsa-adfs` that only `adfs1$` may use, and the DNS record `adfs.panoply.local` |
+| `Farm` | Installs AD FS, creates a self-signed TLS certificate for `adfs.panoply.local` (exported as `adfs-primary-ca.cer`, as the LDAPS certificates are), creates the farm on the Windows Internal Database running as the gMSA, and sets sign-in to forms everywhere, because a headless browser outside the domain cannot complete Windows Integrated Authentication |
+| `Verify` | Membership and secure channel, the service and its account, then the OpenID Connect discovery document and key set fetched over HTTPS by the service name, as JIM will. It also reports the `access_token_issuer` AD FS publishes, which #2355 needs to know |
+
+Nothing about JIM is configured here: the Application Group that registers JIM is created later, by the registration
+command JIM ships for administrators (#2364), so the lab tests exactly what customers run.
+
+**It depends on `dc-primary`.** Its computer account, the gMSA and the KDS root key live in `dc-primary`'s directory,
+which is reverted to its checkpoints all the time. So the two are a pair:
+
+- Building a new AD FS server first reverts `dc-primary` to `baseline`, so no test data is captured. When the server is
+  built, the script takes `baseline` of both, so the accounts are in `dc-primary`'s baseline from then on, and removes
+  `dc-primary`'s `populated-*` checkpoints, which were taken without them (the runner takes them again).
+- **They are always reverted together**, each to its own `baseline`: `dc-primary` first, then `adfs-primary`.
+- The AD FS server never changes its machine account password (`DisablePasswordChange=1`). A password changed after the
+  baseline would match neither checkpoint and break the secure channel. The gMSA needs nothing similar: its password is
+  derived from the KDS root key and the time, not stored.
+
+Build it after `dc-primary`, with nothing else running against the lab, from the values in `settings.json`:
+
+```powershell
+$settings = Get-Content C:\jim-ad-lab\settings.json -Raw | ConvertFrom-Json
+Import-Module C:\jim-ad-lab\guest\LabFederationServer.psm1
+$adfs = ConvertFrom-LabFederationSetting -Settings $settings -Name 'adfs-primary'
+$admin = Read-Host 'Administrator password' -AsSecureString
+
+$arguments = @{
+    Name = $adfs.Name; DomainControllerName = $adfs.DomainControllerName; IsoPath = $settings.isoPath
+    VhdDirectory = $settings.vhdDirectory; SwitchName = $settings.switchName
+    IPAddress = $adfs.IPAddress; PrefixLength = $adfs.PrefixLength; Gateway = $adfs.Gateway
+    ComputerName = $adfs.ComputerName; ServiceName = $adfs.ServiceName; AdministratorPassword = $admin
+}
+$update = Get-ChildItem $settings.cumulativeUpdateDirectory -Filter *.msu -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
+if ($update) { $arguments.CumulativeUpdatePath = $update.FullName }
+
+C:\jim-ad-lab\New-LabFederationServer.ps1 @arguments
+```
+
+It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB of memory while running.
+
+Not yet wired in, and to follow before the AD FS checks run (#2355): the runner reverting the pair together, the
+runner trusting `adfs-primary-ca.cer` and resolving `adfs.panoply.local`, and the monthly rebuild building and promoting
+an AD FS candidate beside the `dc-primary` candidate. Until then a monthly rebuild replaces `dc-primary` with a
+candidate that has no AD FS accounts, and the AD FS server has to be built again after it.
 
 ## Checkpoint lifecycle
 

@@ -3,13 +3,19 @@
 
 <#
 .SYNOPSIS
-    Reverts a lab domain controller to a named checkpoint, starts it, and waits until it is usable.
+    Reverts a lab VM (a domain controller or the AD FS server) to a named checkpoint, starts it, and waits until it is
+    usable.
 
 .DESCRIPTION
     Applies the named production checkpoint, starts the VM if it is stopped, then waits until the guest answers
-    PowerShell Direct and LDAPS (TCP 636) accepts a connection. Fails if the checkpoint does not exist, or the
-    timeout passes. Through PowerShell Direct it then makes sure a previous password stops working as soon as it
-    changes (OldPasswordAllowedPeriod=0, as the Configure phase sets), whatever the checkpoint was taken with.
+    PowerShell Direct and its service port accepts a connection: LDAPS (TCP 636) on a domain controller, HTTPS (TCP
+    443) on the AD FS server, as the role in the VM's Notes says. Fails if the checkpoint does not exist, or the
+    timeout passes. On a domain controller it then makes sure, through PowerShell Direct, that a previous password
+    stops working as soon as it changes (OldPasswordAllowedPeriod=0, as the Configure phase sets), whatever the
+    checkpoint was taken with.
+
+    The AD FS server is a member of dc-primary's domain, so the two are reverted together: dc-primary first, then
+    adfs-primary, each to its own baseline.
 
     A revert is a restore from backup as far as the directory is concerned: the domain controller boots fresh,
     the clock comes from the host, and it renews its invocationId, so a Delta Import watermark taken before the
@@ -82,6 +88,8 @@ try {
         throw "'$Name' was not created by this lab (its Notes carry no lab marker); refusing to touch it."
     }
     $meta = ConvertFrom-LabVmNote -Notes $vm.Notes
+    $port = Get-LabReadinessPort -Role $meta.Role
+    $service = if ($meta.Role -eq 'FederationServer') { 'HTTPS' } else { 'LDAPS' }
 
     $snapshots = @(Get-VMSnapshot -VMName $Name -Name $Checkpoint -ErrorAction SilentlyContinue)
     if ($snapshots.Count -eq 0) {
@@ -106,34 +114,38 @@ try {
         $null = Wait-LabGuestReady -VMName $Name -Credential @($credential) -TimeoutSeconds $TimeoutSeconds
         $method = 'PowerShell Direct'
 
-        # LDAPS answers a little after the guest does; check from inside, where routing cannot get in the way.
+        # The service answers a little after the guest does; check from inside, where routing cannot get in the way.
+        # AD FS binds HTTPS to its federation service name, not to the loopback address, but the TCP listener
+        # (http.sys) accepts on every address, which is all this checks.
         $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
         $listening = $false
         while ((-not $listening) -and ((Get-Date) -lt $deadline)) {
-            $listening = [bool](Invoke-Command -VMName $Name -Credential $credential -ScriptBlock {
+            $listening = [bool](Invoke-Command -VMName $Name -Credential $credential -ArgumentList $port -ScriptBlock {
+                    param($port)
                     $client = New-Object System.Net.Sockets.TcpClient
-                    try { $client.Connect('127.0.0.1', 636); $client.Connected } catch { $false } finally { $client.Close() }
+                    try { $client.Connect('127.0.0.1', $port); $client.Connected } catch { $false } finally { $client.Close() }
                 })
             if (-not $listening) { Start-Sleep -Seconds 5 }
         }
-        if (-not $listening) { throw "LDAPS (636) did not accept a connection in '$Name' within $TimeoutSeconds seconds." }
+        if (-not $listening) { throw "$service ($port) did not accept a connection in '$Name' within $TimeoutSeconds seconds." }
 
         # The Configure phase sets this, but a checkpoint taken before it did would bring the 5 minute default back,
-        # so it is applied after every revert too (#2287). It is one registry value and needs no restart.
-        if (Invoke-Command -VMName $Name -Credential $credential -ScriptBlock ${function:Set-LabOldPasswordAllowedPeriod}) {
+        # so it is applied after every revert too (#2287). It is one registry value and needs no restart. Domain
+        # controllers only: it is a directory setting.
+        if ($meta.Role -eq 'DomainController' -and (Invoke-Command -VMName $Name -Credential $credential -ScriptBlock ${function:Set-LabOldPasswordAllowedPeriod})) {
             Write-Progress-Line "Stopped the previous password working after a change in $Name (OldPasswordAllowedPeriod=0)"
         }
     }
     else {
-        Write-Progress-Line 'JIM_AD_LAB_ADMIN_PASSWORD is not set: waiting on the heartbeat and a TCP connection to LDAPS from this host instead of PowerShell Direct.' 'Yellow'
+        Write-Progress-Line "JIM_AD_LAB_ADMIN_PASSWORD is not set: waiting on the heartbeat and a TCP connection to $service from this host instead of PowerShell Direct." 'Yellow'
         $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
         while (((Get-VMIntegrationService -VMName $Name -Name 'Heartbeat').PrimaryStatusDescription -ne 'OK') -and ((Get-Date) -lt $deadline)) {
             Start-Sleep -Seconds 3
         }
-        if ([string]::IsNullOrEmpty($meta.IPAddress)) { throw "'$Name' has no address in its Notes to test LDAPS against." }
+        if ([string]::IsNullOrEmpty($meta.IPAddress)) { throw "'$Name' has no address in its Notes to test $service against." }
         $remaining = [int][math]::Max(10, ($deadline - (Get-Date)).TotalSeconds)
-        if (-not (Wait-LabTcpPort -HostName $meta.IPAddress -Port 636 -TimeoutSeconds $remaining)) {
-            throw "LDAPS ($($meta.IPAddress):636) did not accept a connection within $TimeoutSeconds seconds."
+        if (-not (Wait-LabTcpPort -HostName $meta.IPAddress -Port $port -TimeoutSeconds $remaining)) {
+            throw "$service ($($meta.IPAddress):$port) did not accept a connection within $TimeoutSeconds seconds."
         }
     }
 

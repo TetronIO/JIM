@@ -119,6 +119,17 @@ Describe 'Get-LabSettingsExample' {
         }
     }
 
+    It 'describes the AD FS server, joined to the primary forest and on the Lab switch beside it' {
+        $servers = $script:Settings.federationServers
+        @($servers.PSObject.Properties.Name) | Should -Be @('adfs-primary')
+        $adfs = $servers.'adfs-primary'
+        $adfs.domainController | Should -Be 'dc-primary'
+        $adfs.prefixLength | Should -Be 24
+        $adfs.gateway | Should -Be $script:Settings.ntpServer
+        $adfs.ipAddress | Should -Match '^\d{1,3}(\.\d{1,3}){3}$'
+        @($script:Settings.domainControllers.PSObject.Properties.Value.ipAddress) | Should -Not -Contain $adfs.ipAddress
+    }
+
     It 'holds no password or secret' {
         $script:Text | Should -Not -Match '(?i)password|secret|token|key'
     }

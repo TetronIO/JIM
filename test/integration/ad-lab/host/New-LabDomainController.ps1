@@ -234,80 +234,22 @@ function Write-Ok {
     Write-Host "  $Text" -ForegroundColor Green
 }
 
-function Get-InstallImage {
-    # Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one:
-    # { ImageIndex, ImageName, Evaluation }.
-    $mounted = Mount-DiskImage -ImagePath $IsoPath -PassThru
-    try {
-        $drive = ($mounted | Get-Volume).DriveLetter
-        $wim = "${drive}:\sources\install.wim"
-        if (-not (Test-Path -LiteralPath $wim)) {
-            $wim = "${drive}:\sources\install.esd"
-        }
-        $images = @(Get-WindowsImage -ImagePath $wim)
-        return (Resolve-LabInstallImage -Image $images)
-    }
-    finally {
-        $null = Dismount-DiskImage -ImagePath $IsoPath
-    }
-}
-
-function Invoke-UnattendIsoBuild {
-    param([object]$Image, [securestring]$Password, [string]$IsoOutputPath)
-
-    $template = Get-Content -LiteralPath (Join-Path $layout.GuestDirectory 'autounattend.xml') -Raw
-    $values = @{
-        COMPUTER_NAME              = $info.ShortName
-        ADMIN_PASSWORD_ENCODED     = (ConvertTo-LabUnattendPassword -Password $Password -Kind AdministratorPassword)
-        AUTOLOGON_PASSWORD_ENCODED = (ConvertTo-LabUnattendPassword -Password $Password -Kind Password)
-        IMAGE_NAME                 = $Image.ImageName
-        UI_LANGUAGE                = $UILanguage
-        LOCALE                     = $Locale
-        TIME_ZONE                  = $TimeZone
-    }
-    if ($Image.Evaluation) {
-        # Evaluation media takes no product key; the License phase applies the AVMA key by converting the edition.
-        $template = ConvertTo-LabKeylessUnattend -Template $template
-    }
-    else {
-        $values['PRODUCT_KEY'] = Get-LabAvmaKey -Edition Datacenter
-    }
-    $xml = ConvertTo-LabUnattendXml -Template $template -Values $values
-
-    $staging = Join-Path ([System.IO.Path]::GetTempPath()) ('jim-ad-lab-' + [guid]::NewGuid().ToString('N'))
-    $null = New-Item -ItemType Directory -Path $staging
-    try {
-        [System.IO.File]::WriteAllText((Join-Path $staging 'autounattend.xml'), $xml, (New-Object System.Text.UTF8Encoding($false)))
-        New-LabIsoImage -SourceDirectory $staging -IsoPath $IsoOutputPath -VolumeLabel 'UNATTEND'
-    }
-    finally {
-        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-
 function Invoke-VmCreation {
     param([object]$Image, [securestring]$Password)
 
-    $vmFolder = Join-Path $VhdDirectory $Name
-    $vhdPath = Join-Path $vmFolder "$Name.vhdx"
-    if (Test-Path -LiteralPath $vhdPath) {
-        throw "The disk '$vhdPath' exists but there is no VM called '$Name'. Remove it, or use a different -VhdDirectory."
+    $null = New-Item -ItemType Directory -Path (Join-Path $VhdDirectory $Name) -Force
+    New-LabUnattendIso -TemplatePath (Join-Path $layout.GuestDirectory 'autounattend.xml') -Image $Image -Password $Password `
+        -ComputerName $info.ShortName -UILanguage $UILanguage -Locale $Locale -TimeZone $TimeZone -IsoPath $script:UnattendIso
+    try {
+        New-LabVirtualMachine -Name $Name -VhdDirectory $VhdDirectory -VhdSizeBytes $VhdSizeBytes -MemoryStartupBytes $MemoryStartupBytes `
+            -ProcessorCount $ProcessorCount -SwitchName $SwitchName -IsoPath $IsoPath -UnattendIsoPath $script:UnattendIso `
+            -Notes (ConvertTo-LabVmNote -Domain $Domain -ShortName $info.ShortName -NetBiosName $info.NetBiosName -IPAddress $IPAddress.ToString())
     }
-    $null = New-Item -ItemType Directory -Path $vmFolder -Force
-    $null = New-VHD -Path $vhdPath -SizeBytes $VhdSizeBytes -Dynamic
-
-    $null = New-VM -Name $Name -Generation 2 -MemoryStartupBytes $MemoryStartupBytes -VHDPath $vhdPath -SwitchName $SwitchName -Path $VhdDirectory
-    Set-VM -Name $Name -StaticMemory -ProcessorCount $ProcessorCount -AutomaticCheckpointsEnabled $false `
-        -CheckpointType ProductionOnly -AutomaticStartAction Nothing -AutomaticStopAction ShutDown `
-        -Notes (ConvertTo-LabVmNote -Domain $Domain -ShortName $info.ShortName -NetBiosName $info.NetBiosName -IPAddress $IPAddress.ToString())
-
-    # Secure Boot with the default (Microsoft Windows) template, which is what a Windows guest wants.
-    Set-VMFirmware -VMName $Name -EnableSecureBoot On
-
-    $windowsDrive = Add-VMDvdDrive -VMName $Name -Path $IsoPath -Passthru
-    Invoke-UnattendIsoBuild -Image $Image -Password $Password -IsoOutputPath $script:UnattendIso
-    $null = Add-VMDvdDrive -VMName $Name -Path $script:UnattendIso
-    Set-VMFirmware -VMName $Name -FirstBootDevice $windowsDrive
+    catch {
+        # No VM to install, so the ISO that carries the password goes at once.
+        Remove-Item -LiteralPath $script:UnattendIso -Force -ErrorAction SilentlyContinue
+        throw
+    }
     Write-Ok "Created $Name (Generation 2, $($MemoryStartupBytes / 1GB) GB, $ProcessorCount vCPU, production checkpoints only)"
 }
 
@@ -350,7 +292,7 @@ try {
     $vm = Get-VM -Name $Name -ErrorAction SilentlyContinue
     $installPending = $false
     if ($null -eq $vm) {
-        $image = Get-InstallImage
+        $image = Get-LabInstallImage -IsoPath $IsoPath
         if ($image.Evaluation) {
             Write-Ok "Installation image: $($image.ImageName) (evaluation media: installed without a key, converted to full Datacenter by the License phase)"
         }
@@ -393,12 +335,7 @@ try {
 
     if ($installPending) {
         # The install has finished: eject the media and delete the ISO that carries the password.
-        foreach ($drive in @(Get-VMDvdDrive -VMName $Name)) {
-            Set-VMDvdDrive -VMName $Name -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation -Path $null
-        }
-        Remove-Item -LiteralPath $script:UnattendIso -Force -ErrorAction SilentlyContinue
-        $disk = Get-VMHardDiskDrive -VMName $Name | Select-Object -First 1
-        Set-VMFirmware -VMName $Name -FirstBootDevice $disk
+        Complete-LabUnattendedInstall -Name $Name -UnattendIsoPath $script:UnattendIso
         Write-Ok 'Ejected the install media and deleted the unattend ISO'
     }
 
