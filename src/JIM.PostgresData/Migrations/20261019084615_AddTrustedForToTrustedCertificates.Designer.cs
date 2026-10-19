@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261018173152_AddTrustedForToTrustedCertificates")]
+    [Migration("20261019084615_AddTrustedForToTrustedCertificates")]
     partial class AddTrustedForToTrustedCertificates
     {
         /// <inheritdoc />
@@ -171,6 +171,12 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("FirstSeen")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ImportWatermarkFrom")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ImportWatermarkTo")
+                        .HasColumnType("text");
 
                     b.Property<Guid?>("InitiatedById")
                         .HasColumnType("uuid");
@@ -2782,6 +2788,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
+                    b.PrimitiveCollection<List<string>>("IgnoredAttributes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'::text[]");
+
                     b.Property<DateTime>("Occurred")
                         .HasColumnType("timestamp with time zone");
 
@@ -4853,6 +4865,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ErrorCount")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("FailingSince")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("HasUnresolvedReferences")
                         .HasColumnType("boolean");
 
@@ -4864,12 +4879,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("LastErrorStackTrace")
                         .HasColumnType("text");
-
-                    b.Property<int>("MaxRetries")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("NextRetryAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("ProvisioningSyncRuleId")
                         .HasColumnType("integer");
