@@ -10,7 +10,7 @@ audience: automation-author
 A Connected System that uses the SCIM 2.0 Service Provider Connector has a SCIM endpoint of its own, which identity providers push Users and Groups to. These cmdlets manage the keys those identity providers call it with, and read the endpoint's base URL, what it holds and the resource types and schemas it serves. The SCIM 2.0 Service Provider is a [Preview feature](../administration/preview-features.md); every cmdlet here fails while it is turned off.
 
 !!! warning
-    A key's secret is returned once, by `New-JIMScimKey`. JIM stores only its hash, so it cannot be shown again.
+    A key's secret is shown once, by `New-JIMScimKey`, and cannot be shown again. Keep it somewhere safe; if it is lost, create a new key.
 
 A key works only on the SCIM endpoint of the Connected System it was created for, carries no Roles, and always expires. A Connected System can have at most two usable keys, so a key can be rotated with an overlap: create the new key, give it to the identity provider, then disable or remove the old one once its `LastUsedAt` stops moving.
 

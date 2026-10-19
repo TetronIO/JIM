@@ -103,6 +103,11 @@ public class ApiKey : IAuditable
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
+    /// Whether the key can authenticate at the given moment: enabled, and not past its expiry.
+    /// </summary>
+    public bool IsUsableAt(DateTime asAt) => IsEnabled && (ExpiresAt == null || ExpiresAt > asAt);
+
+    /// <summary>
     /// Whether this is an infrastructure key created automatically from the JIM_INFRASTRUCTURE_API_KEY environment variable.
     /// Infrastructure keys are intended for initial CI/CD setup and should be deleted after the environment is configured.
     /// </summary>

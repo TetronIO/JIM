@@ -49,6 +49,14 @@
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure</MudChip>
                         </MudTooltip>
                     }
+                    @if (context.Item.ScopeConnectedSystemId is { } scopedTo)
+                    {
+                        <MudTooltip Text="Works only on one Connected System's SCIM endpoint. Manage it on that Connected System's SCIM tab." Arrow="true" Placement="Placement.Top">
+                            <MudLink Href="@($"/admin/connected-systems/{scopedTo}?t=scim")">
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Icon="@Icons.Material.Filled.Link">SCIM</MudChip>
+                            </MudLink>
+                        </MudTooltip>
+                    }
                 </div>
             </CellTemplate>
         </TemplateColumn>
@@ -152,8 +160,11 @@
             </HeaderTemplate>
             <CellTemplate>
                 <div class="d-flex justify-end gap-2">
-                    <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(context.Item)" />
+                    @* A SCIM key has no Roles and must expire, which this dialog cannot respect; it is edited on its
+                       Connected System's SCIM tab instead. *@
+                    <MudTooltip Text="@(context.Item.ScopeConnectedSystemId.HasValue ? "Edit this key on its Connected System's SCIM tab" : "Edit")" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small"
+                                       Disabled="@context.Item.ScopeConnectedSystemId.HasValue" OnClick="_ => ShowEditDialog(context.Item)" />
                     </MudTooltip>
                     <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error" OnClick="_ => HandleDeleteAsync(context.Item)" />

@@ -89,7 +89,7 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     /// <remarks>
     /// Creates a key for an identity provider to call this Connected System's SCIM endpoint with. The key carries no
     /// roles, so it opens nothing else in JIM, and always expires: a year from now unless you choose otherwise, and at
-    /// most two years. The secret is returned only in this response; JIM stores only its hash. A Connected System can
+    /// most two years. The secret is returned only in this response and cannot be shown again. A Connected System can
     /// have at most two usable keys, so disable or delete one before adding a third.
     /// </remarks>
     /// <param name="connectedSystemId">The Connected System's ID.</param>

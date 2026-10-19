@@ -12,8 +12,8 @@ function New-JIMScimKey {
         and at most two years. A Connected System can have at most two usable keys, so that a key can be rotated with
         an overlap: create the new key, give it to the identity provider, then disable or remove the old one.
 
-        The secret is returned only by this cmdlet, in the Key property; JIM stores only its hash. Store it securely,
-        or give it straight to the identity provider.
+        The secret is returned only by this cmdlet, in the Key property, and cannot be shown again. Keep it somewhere
+        safe, or give it straight to the identity provider; if it is lost, create a new key.
 
     .PARAMETER ConnectedSystemId
         The ID of the Connected System, which must use the SCIM 2.0 Service Provider Connector.
