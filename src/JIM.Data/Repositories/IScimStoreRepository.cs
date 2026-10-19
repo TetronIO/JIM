@@ -70,6 +70,12 @@ public interface IScimStoreRepository
     Task<IReadOnlyList<ScimStoreSchema>> GetSchemasAsync(int connectedSystemId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Counts a Connected System's store for an administrator: live resources by type, tombstones, the resources changed
+    /// after <paramref name="importedUpTo"/> (every resource and tombstone when it is null), and the last write.
+    /// </summary>
+    Task<ScimStoreSummary> GetSummaryAsync(int connectedSystemId, long? importedUpTo, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Adds schema and resource type definitions to a Connected System's store, together or not at all: the core User,
     /// Group and Enterprise User definitions when the Connected System is created, and later any custom ones. Each
     /// row's Connected System is set from <paramref name="connectedSystemId"/>.

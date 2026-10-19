@@ -396,6 +396,14 @@ Two PRs: **4a** scoped API keys (the scope, its enforcement, the per-Connected-S
 
 ### Phase 5: Surface parity and documentation
 
+Decided 19 October 2026: three PRs, each with full surface parity for what it contains.
+
+- **5a:** SCIM key management, the store summary and the read-only definitions, across the portal, REST and PowerShell together.
+- **5b:** the SCIM summary Activity (D17) with the aggregated request rejections, the journal reachable from a Connected System Object's change history, and the Activity watermark columns (Phase 3) surfaced.
+- **5c:** the public documentation and changelog entries.
+
+Also decided: a key is rotated by creating a second key (the two-key limit allows the overlap) and disabling or deleting the old one once its last-used time goes quiet; there is no rotate verb. Key management lives under the Connected System (REST `connected-systems/{id}/scim/keys`, PowerShell `*-JIMScimKey -ConnectedSystemId`); the general API key list shows scoped keys with their scope but cannot create them.
+
 - **Portal:** the Connected System page shows the base URL permanently, manages scoped keys (create, show once, rotate, revoke, last used, expiry), and shows a store summary (resource counts, last write, changes awaiting import) plus aggregated request rejections.
 - **Portal:** the SCIM summary Activity per Connected System, key and window (D17), and on a Connected System Object's change history, the SCIM requests behind each imported change.
 - **REST API and PowerShell:** the same key management and store summary, and the journal for a resource.

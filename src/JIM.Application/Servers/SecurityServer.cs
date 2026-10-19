@@ -454,6 +454,17 @@ public class SecurityServer
     public const int MaximumActiveScopedApiKeys = 2;
 
     /// <summary>
+    /// The keys scoped to a Connected System's SCIM 2.0 Service Provider endpoint, usable or not, so an administrator
+    /// can see each one's expiry and last use and tell when an old key has gone quiet after a rotation.
+    /// </summary>
+    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
+    public async Task<List<ApiKey>> GetScimServiceProviderKeysAsync(int connectedSystemId)
+    {
+        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
+        return await Application.Repository.ApiKeys.GetByScopeConnectedSystemAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Mints a key for a SCIM client to call the SCIM 2.0 Service Provider endpoint of one Connected System. The key
     /// carries no roles, so it opens nothing else in JIM, and always expires.
     /// </summary>

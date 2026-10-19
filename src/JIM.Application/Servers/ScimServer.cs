@@ -3,7 +3,9 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using JIM.Connectors.SCIM.ServiceProvider;
 using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.Scim;
 using JIM.Scim;
 using JIM.Scim.Discovery;
@@ -85,6 +87,23 @@ public class ScimServer
     /// </summary>
     public async Task<ScimServiceDefinitions> GetDefinitionsAsync(int connectedSystemId) =>
         ScimServiceDefinitions.Compile(await Store.GetResourceTypesAsync(connectedSystemId), await Store.GetSchemasAsync(connectedSystemId));
+
+    /// <summary>
+    /// What a Connected System's store holds and how far its imports have read it, for an administrator.
+    /// </summary>
+    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
+    /// <exception cref="ArgumentException">The Connected System does not exist.</exception>
+    public async Task<ScimStoreSummary> GetStoreSummaryAsync(int connectedSystemId, CancellationToken cancellationToken = default)
+    {
+        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
+        var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId)
+            ?? throw new ArgumentException($"Connected System {connectedSystemId} was not found.", nameof(connectedSystemId));
+
+        // The watermark the Connector persisted after its last successful import; unreadable reads as none, as it does
+        // for the Connector itself.
+        var importedUpTo = ScimServiceProviderImportState.Read(connectedSystem.PersistedConnectorData, _logger)?.ChangeSequence;
+        return await Store.GetSummaryAsync(connectedSystemId, importedUpTo, cancellationToken);
+    }
 
     /// <summary>
     /// A Connected System's resource types and schemas as RFC 7643 documents, freshly read, for discovery to publish.
