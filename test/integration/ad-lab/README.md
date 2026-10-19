@@ -284,10 +284,16 @@ which is reverted to its checkpoints all the time. So the two are a pair:
 - Building a new AD FS server first reverts `dc-primary` to `baseline`, so no test data is captured. When the server is
   built, the script takes `baseline` of both, so the accounts are in `dc-primary`'s baseline from then on, and removes
   `dc-primary`'s `populated-*` checkpoints, which were taken without them (the runner takes them again).
-- **They are always reverted together**, each to its own `baseline`: `dc-primary` first, then `adfs-primary`.
+- **Their baselines are a matching pair.** `dc-primary` is reverted before every scenario, and its baseline already
+  holds the AD FS accounts, so the AD FS server keeps working without being reverted itself. It is reverted, after
+  `dc-primary`, only before the AD FS checks. A revert costs about two minutes, because AD FS is a delayed-start
+  service, and the LDAP scenarios never touch AD FS.
 - The AD FS server never changes its machine account password (`DisablePasswordChange=1`). A password changed after the
   baseline would match neither checkpoint and break the secure channel. The gMSA needs nothing similar: its password is
   derived from the KDS root key and the time, not stored.
+- **The monthly rebuild handles the pair**: it builds the AD FS candidate after, and against, the `dc-primary`
+  candidate, rebuilds it whenever that domain controller candidate is newer, and stages, promotes and rolls back each
+  domain controller before the AD FS server that depends on it. See [Monthly rebuild](#monthly-rebuild).
 
 Build it after `dc-primary`, with nothing else running against the lab, from the values in `settings.json`:
 
@@ -311,10 +317,8 @@ C:\jim-ad-lab\New-LabFederationServer.ps1 @arguments
 
 It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB of memory while running.
 
-Not yet wired in, and to follow before the AD FS checks run (#2355): the runner reverting the pair together, the
-runner trusting `adfs-primary-ca.cer` and resolving `adfs.panoply.local`, and the monthly rebuild building and promoting
-an AD FS candidate beside the `dc-primary` candidate. Until then a monthly rebuild replaces `dc-primary` with a
-candidate that has no AD FS accounts, and the AD FS server has to be built again after it.
+Not yet wired in, and to come with the AD FS checks (#2355): the runner reverting the AD FS server, trusting
+`adfs-primary-ca.cer` and resolving `adfs.panoply.local`.
 
 ## Checkpoint lifecycle
 
@@ -386,6 +390,15 @@ nightly's concurrency group, so the two never overlap, and a run is never cancel
 | `Promote` | Green: renames each live VM `dc-<name>-prev` (stamping `demoted=<UTC time>` in its Notes) and each candidate `dc-<name>`. Every candidate is checked before any is renamed, and an interrupted promotion finishes when run again |
 | `Rollback` | Not green: stops the candidates, leaves them in place for diagnosis, and starts the live VMs again from `baseline`. Also puts the live VM back if a promotion was interrupted after it was demoted |
 | `Status` | Read-only: which VMs exist, their state, and the live guest OS build |
+
+**The AD FS server is rebuilt with them** when `settings.json` lists it under `federationServers`. It comes after the
+three domain controllers in every phase:
+- **Build** stops the live `adfs-primary` and builds `adfs-primary-candidate` with `New-LabFederationServer.ps1`, joined
+  to `dc-primary-candidate`. That build retakes `dc-primary-candidate`'s baseline, so the accounts are in it.
+- Build refuses to start before `dc-primary-candidate` exists. It rebuilds an AD FS candidate older than that domain
+  controller candidate, and never resumes a part-built one.
+- **Stage, Promote and Rollback** handle it after `dc-primary`, so its domain controller is always up first.
+- The workflow reads the list of VMs from `Status`, so it builds whatever the host's settings define.
 
 **The live domain controllers are off from `Build` until `Promote` or `Rollback`.** A candidate is built with the live
 one's own address, because the checkpoints carry it and it cannot be changed afterwards, and two running domain
