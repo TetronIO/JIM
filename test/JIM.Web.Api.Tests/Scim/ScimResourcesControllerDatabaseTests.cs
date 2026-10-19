@@ -300,6 +300,20 @@ public class ScimResourcesControllerDatabaseTests
     }
 
     [Test]
+    public async Task Search_MemberOfTheWrongType_400InvalidValueAsync()
+    {
+        var search = new JsonObject { ["schemas"] = new JsonArray(ScimUrns.SearchRequest), ["count"] = "lots" };
+
+        var response = await SendAsync("POST", "Users/.search", body: search);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.Status, Is.EqualTo(StatusCodes.Status400BadRequest));
+            Assert.That(response.Body!["scimType"]?.GetValue<string>(), Is.EqualTo(ScimErrorTypes.InvalidValue));
+        }
+    }
+
+    [Test]
     public async Task Create_DuplicateUserName_409UniquenessAsync()
     {
         await CreateUserAsync("alice");

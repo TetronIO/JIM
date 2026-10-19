@@ -176,12 +176,19 @@ public class ScimResourcesController(JimApplication application) : ScimControlle
                 Text(values, "cursor"),
                 Selection(NamesOf(values, "attributes"), NamesOf(values, "excludedAttributes"))), null);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException)
+        catch (InvalidOperationException)
         {
-            return (null, ScimError(StatusCodes.Status400BadRequest, "The search request has a member of the wrong type.",
-                ScimErrorTypes.InvalidValue));
+            // A member of the wrong JSON kind: a number where a string belongs, an object where a list does.
+            return (null, WrongMemberType());
+        }
+        catch (FormatException)
+        {
+            return (null, WrongMemberType());
         }
     }
+
+    private ContentResult WrongMemberType() =>
+        ScimError(StatusCodes.Status400BadRequest, "The search request has a member of the wrong type.", ScimErrorTypes.InvalidValue);
 
     private static ScimAttributeSelection? Selection(IReadOnlyCollection<string>? attributes, IReadOnlyCollection<string>? excluded) =>
         attributes == null && excluded == null ? null : new ScimAttributeSelection(attributes, excluded);
