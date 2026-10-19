@@ -13,9 +13,8 @@ namespace JIM.Web.Models.Api;
 public class IdentityProviderTrustStatusDto
 {
     /// <summary>
-    /// <c>Trusted</c>, <c>Untrusted</c> (trusting its certificate authority for sign-in fixes it), <c>NameMismatch</c>
-    /// (the certificate does not name the host; trusting cannot fix it), <c>Unreachable</c>, <c>NotHttps</c>, or
-    /// <c>NotChecked</c>.
+    /// Whether JIM trusts the identity provider's certificate. <c>Untrusted</c> is fixed by trusting its certificate
+    /// authority for sign-in; <c>NameMismatch</c> (the certificate does not name the host) is not.
     /// </summary>
     public IdentityProviderTrustState State { get; set; }
 
@@ -25,8 +24,8 @@ public class IdentityProviderTrustStatusDto
     public string? Host { get; set; }
 
     /// <summary>
-    /// What trusts the certificate: <c>TrustedByOperatingSystem</c> or <c>TrustedByJimCertificateStore</c>. Null
-    /// unless the state is <c>Trusted</c>.
+    /// What trusts the certificate: the operating system, or the JIM certificate store. Null unless the state is
+    /// <c>Trusted</c>.
     /// </summary>
     public CertificateStoreTrustOutcome? TrustedBy { get; set; }
 
@@ -171,9 +170,7 @@ public class TrustIdentityProviderCertificateRequest
 public class TrustIdentityProviderCertificateResponse
 {
     /// <summary>
-    /// <c>Trusted</c>, <c>TrustedForSignInAsWell</c>, <c>AlreadyTrusted</c>, <c>ThumbprintNotPresented</c>,
-    /// <c>NameMismatch</c>, <c>InvalidChain</c> or <c>IdentityProviderUnavailable</c>. Only the first two change
-    /// anything.
+    /// What happened. Only <c>Trusted</c> and <c>TrustedForSignInAsWell</c> change anything.
     /// </summary>
     public IdentityProviderCertificateTrustOutcome Outcome { get; set; }
 
