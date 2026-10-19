@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Utilities;
+using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
@@ -437,10 +438,153 @@ public class SecurityServer
     }
 
     /// <summary>
+    /// How long a SCIM client's key works when no expiry is asked for.
+    /// </summary>
+    public static readonly TimeSpan ScopedApiKeyDefaultLifetime = TimeSpan.FromDays(365);
+
+    /// <summary>
+    /// The longest a SCIM client's key may work. A scoped key always expires, so a leaked secret has a bounded life.
+    /// </summary>
+    public static readonly TimeSpan ScopedApiKeyMaximumLifetime = TimeSpan.FromDays(730);
+
+    /// <summary>
+    /// How many keys a Connected System may have that can be used at once: two, so a SCIM client's key can be
+    /// rotated with an overlap, and no more, so a forgotten key cannot linger beside its replacement.
+    /// </summary>
+    public const int MaximumActiveScopedApiKeys = 2;
+
+    /// <summary>
+    /// Mints a key for a SCIM client to call the SCIM 2.0 Service Provider endpoint of one Connected System. The key
+    /// carries no roles, so it opens nothing else in JIM, and always expires.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System, which must use the SCIM 2.0 Service Provider Connector.</param>
+    /// <param name="name">The key's name.</param>
+    /// <param name="description">The key's description, if any.</param>
+    /// <param name="expiresAt">When the key stops working; a year from now when null, and at most two years.</param>
+    /// <param name="initiatedBy">Who is minting it.</param>
+    /// <param name="changeReason">Why, for the configuration change history.</param>
+    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
+    /// <exception cref="ArgumentException">The Connected System does not exist or uses another Connector, or the expiry is in the past or beyond two years.</exception>
+    /// <exception cref="InvalidOperationException">The Connected System already has two keys that can be used.</exception>
+    public async Task<CreatedApiKey> CreateScimServiceProviderKeyAsync(int connectedSystemId, string name, string? description,
+        DateTime? expiresAt, MetaverseObject? initiatedBy, string? changeReason = null)
+    {
+        var (apiKey, secret) = await PrepareScimServiceProviderKeyAsync(connectedSystemId, name, description, expiresAt);
+        var created = await CreateApiKeyCoreAsync(apiKey, changeReason,
+            activity => CreateApiKeyActivityAsync(activity, initiatedBy),
+            key => SetApiKeyCreated(key, initiatedBy));
+        return new CreatedApiKey(created, secret);
+    }
+
+    /// <summary>
+    /// Mints a key for a SCIM client to call the SCIM 2.0 Service Provider endpoint of one Connected System.
+    /// API-key initiator overload; see the other overload for the rules.
+    /// </summary>
+    public async Task<CreatedApiKey> CreateScimServiceProviderKeyAsync(int connectedSystemId, string name, string? description,
+        DateTime? expiresAt, ApiKey initiatedByApiKey, string? changeReason = null)
+    {
+        var (apiKey, secret) = await PrepareScimServiceProviderKeyAsync(connectedSystemId, name, description, expiresAt);
+        var created = await CreateApiKeyCoreAsync(apiKey, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
+            key => AuditHelper.SetCreated(key, initiatedByApiKey));
+        return new CreatedApiKey(created, secret);
+    }
+
+    private async Task<(ApiKey Key, string Secret)> PrepareScimServiceProviderKeyAsync(int connectedSystemId, string name,
+        string? description, DateTime? expiresAt)
+    {
+        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
+
+        var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId)
+            ?? throw new ArgumentException($"Connected System {connectedSystemId} was not found.", nameof(connectedSystemId));
+        if (connectedSystem.ConnectorDefinition?.Name != ConnectorConstants.ScimServiceProviderConnectorName)
+            throw new ArgumentException(
+                $"Connected System '{connectedSystem.Name}' does not use the {ConnectorConstants.ScimServiceProviderConnectorName}, so it has no SCIM endpoint to call.",
+                nameof(connectedSystemId));
+
+        var now = DateTime.UtcNow;
+        var expiry = expiresAt ?? now.Add(ScopedApiKeyDefaultLifetime);
+        ValidateScopedKeyExpiry(expiry, now);
+        await EnsureRoomForActiveScopedKeyAsync(connectedSystemId, now, excludingId: null);
+
+        var (secret, keyPrefix) = ApiKeyMaterial.Generate();
+        var apiKey = new ApiKey
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            Description = description,
+            KeyHash = ApiKeyMaterial.Hash(secret),
+            KeyPrefix = keyPrefix,
+            ExpiresAt = expiry,
+            IsEnabled = true,
+            Scope = ApiKeyScope.ScimServiceProvider,
+            ScopeConnectedSystemId = connectedSystemId
+        };
+        return (apiKey, secret);
+    }
+
+    private static void ValidateScopedKeyExpiry(DateTime? expiresAt, DateTime now)
+    {
+        if (expiresAt == null)
+            throw new ArgumentException("A SCIM client's key must expire.", nameof(expiresAt));
+        if (expiresAt <= now)
+            throw new ArgumentException("A SCIM client's key cannot expire in the past.", nameof(expiresAt));
+        if (expiresAt > now.Add(ScopedApiKeyMaximumLifetime))
+            throw new ArgumentException(
+                $"A SCIM client's key can work for at most {ScopedApiKeyMaximumLifetime.TotalDays:0} days.", nameof(expiresAt));
+    }
+
+    private async Task EnsureRoomForActiveScopedKeyAsync(int connectedSystemId, DateTime now, Guid? excludingId)
+    {
+        if (await Application.Repository.ApiKeys.CountActiveScopedKeysAsync(connectedSystemId, now, excludingId) >= MaximumActiveScopedApiKeys)
+            throw new InvalidOperationException(
+                "This Connected System already has two keys that can be used. Disable or delete one before adding another.");
+    }
+
+    /// <summary>
+    /// Refuses a scope on the generic create path: a scoped key is minted only by
+    /// <see cref="CreateScimServiceProviderKeyAsync(int, string, string?, DateTime?, MetaverseObject?, string?)"/>,
+    /// which enforces its rules.
+    /// </summary>
+    private static void RefuseScope(ApiKey apiKey)
+    {
+        if (apiKey.Scope != ApiKeyScope.None || apiKey.ScopeConnectedSystemId != null)
+            throw new ArgumentException("A scoped API key can only be created for its purpose, such as a SCIM client's key.", nameof(apiKey));
+    }
+
+    /// <summary>
+    /// Checks an update against the key as stored: no key's scope can change, and a scoped key keeps no roles, always
+    /// expires within the cap, and cannot become a third key that can be used on its Connected System.
+    /// </summary>
+    private async Task ValidateApiKeyUpdateAsync(ApiKey apiKey)
+    {
+        var stored = await Application.Repository.ApiKeys.GetByIdAsync(apiKey.Id)
+            ?? throw new ArgumentException($"API key not found: {apiKey.Id}", nameof(apiKey));
+
+        if (apiKey.Scope != stored.Scope || apiKey.ScopeConnectedSystemId != stored.ScopeConnectedSystemId)
+            throw new ArgumentException("An API key's scope cannot be changed.", nameof(apiKey));
+
+        if (stored.ScopeConnectedSystemId is not { } connectedSystemId)
+            return;
+
+        if (apiKey.Roles.Count > 0)
+            throw new ArgumentException("A SCIM client's key cannot be given roles.", nameof(apiKey));
+
+        var now = DateTime.UtcNow;
+        // An expiry left as it was is not re-checked, so an expired key can still be renamed or disabled.
+        if (apiKey.ExpiresAt != stored.ExpiresAt)
+            ValidateScopedKeyExpiry(apiKey.ExpiresAt, now);
+
+        if (apiKey.IsEnabled && apiKey.ExpiresAt > now)
+            await EnsureRoomForActiveScopedKeyAsync(connectedSystemId, now, excludingId: apiKey.Id);
+    }
+
+    /// <summary>
     /// Creates a new API key.
     /// </summary>
     public async Task<ApiKey> CreateApiKeyAsync(ApiKey apiKey, MetaverseObject? initiatedBy = null, string? changeReason = null)
     {
+        RefuseScope(apiKey);
         return await CreateApiKeyCoreAsync(apiKey, changeReason,
             activity => CreateApiKeyActivityAsync(activity, initiatedBy),
             key => SetApiKeyCreated(key, initiatedBy));
@@ -451,6 +595,7 @@ public class SecurityServer
     /// </summary>
     public async Task<ApiKey> CreateApiKeyAsync(ApiKey apiKey, ApiKey initiatedByApiKey, string? changeReason = null)
     {
+        RefuseScope(apiKey);
         return await CreateApiKeyCoreAsync(apiKey, changeReason,
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
             key => AuditHelper.SetCreated(key, initiatedByApiKey));
@@ -510,6 +655,8 @@ public class SecurityServer
     private async Task<ApiKey> UpdateApiKeyCoreAsync(ApiKey apiKey, string? changeReason,
         Func<Activity, Task> createActivityAsync, Action<ApiKey> setUpdated)
     {
+        await ValidateApiKeyUpdateAsync(apiKey);
+
         var activity = new Activity
         {
             TargetName = apiKey.Name,

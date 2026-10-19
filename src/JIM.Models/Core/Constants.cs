@@ -221,6 +221,18 @@ public static class Constants
         /// Present with the value "true" when the claim applies; absent otherwise.
         /// </summary>
         public static string IsInfrastructureKey => "jim_infra_key";
+
+        /// <summary>
+        /// The permission a scoped API key grants (see <c>ApiKeyScopeNames</c>), on a principal authenticated by one.
+        /// Absent for an unscoped key. The default authorisation policy refuses any principal carrying it.
+        /// </summary>
+        public static string KeyScope => "jim_key_scope";
+
+        /// <summary>
+        /// The Connected System a scoped API key is bound to, as an integer, alongside <see cref="KeyScope"/>. Kept
+        /// out of the scope name so the permission names stay a fixed catalogue.
+        /// </summary>
+        public static string KeyScopeConnectedSystemId => "jim_key_scope_connected_system_id";
     }
 
     /// <summary>

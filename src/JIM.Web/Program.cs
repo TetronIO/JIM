@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Utilities;
 using JIM.Application;
 using JIM.Application.Hosting;
 using JIM.Application.Diagnostics;
@@ -419,7 +420,7 @@ try
     builder.Services.AddIdentityProviderTrust();
 
     // setup authorisation policies
-    builder.Services.AddAuthorization();
+    builder.Services.AddJimAuthorisation();
 
     // REST API rate limiting (issue #500, OWASP Top 10:2025 A02). Registers the settings cache and the global
     // limiter; UseRateLimiter() below wires it into the pipeline. Not needed in OpenAPI generation mode, which
@@ -923,10 +924,10 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
     }
 
     // Validate the key format
-    if (!infrastructureApiKey.StartsWith(ApiKeyAuthenticationHandler.ApiKeyPrefix, StringComparison.Ordinal))
+    if (!infrastructureApiKey.StartsWith(ApiKeyMaterial.Prefix, StringComparison.Ordinal))
     {
         Log.Warning("InitialiseInfrastructureApiKeyAsync: {EnvVar} must start with '{Prefix}'. Key not created.",
-            Constants.Config.InfrastructureApiKey, ApiKeyAuthenticationHandler.ApiKeyPrefix);
+            Constants.Config.InfrastructureApiKey, ApiKeyMaterial.Prefix);
         return;
     }
 
@@ -937,7 +938,7 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
         return;
     }
 
-    var keyHash = ApiKeyAuthenticationHandler.HashApiKey(infrastructureApiKey);
+    var keyHash = ApiKeyMaterial.Hash(infrastructureApiKey);
     var keyPrefix = infrastructureApiKey[..12];
     var outcome = await jim.Security.EnsureInfrastructureApiKeyAsync(keyHash, keyPrefix);
     switch (outcome)

@@ -565,6 +565,15 @@ public class JimDbContext : DbContext
             .HasMany(ak => ak.Roles)
             .WithMany();
 
+        // A scoped key belongs to its Connected System (#124, D3): it is deleted with it, and the database refuses a
+        // scope without its Connected System or a Connected System without a scope.
+        modelBuilder.Entity<ApiKey>(entity =>
+        {
+            entity.HasOne<ConnectedSystem>().WithMany().HasForeignKey(k => k.ScopeConnectedSystemId).OnDelete(DeleteBehavior.Cascade);
+            entity.ToTable(t => t.HasCheckConstraint("CK_ApiKeys_ScopeNamesItsConnectedSystem",
+                $"(\"Scope\" = {(int)ApiKeyScope.None}) = (\"ScopeConnectedSystemId\" IS NULL)"));
+        });
+
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mvo => mvo.Changes)
             .WithOne(mvoc => mvoc.MetaverseObject);

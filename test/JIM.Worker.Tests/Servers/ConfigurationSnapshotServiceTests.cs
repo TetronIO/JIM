@@ -14,6 +14,7 @@ using JIM.Models.ExampleData;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
 using JIM.Models.Search;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -1441,6 +1442,37 @@ public class ConfigurationSnapshotServiceTests
         var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
 
         Assert.That(Child(snapshot.Root, "passwordSynchronisation"), Is.Null);
+    }
+
+    [Test]
+    public void CreateSnapshot_ScopedApiKey_CapturesItsScopeAndConnectedSystem()
+    {
+        var snapshot = _service.CreateSnapshot(new ApiKey
+        {
+            Id = Guid.NewGuid(),
+            Name = "Entra provisioning",
+            KeyPrefix = "jim_ak_test",
+            Scope = ApiKeyScope.ScimServiceProvider,
+            ScopeConnectedSystemId = 7
+        }, HashKey);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(snapshot.Root, "scope")?.Value, Is.EqualTo(nameof(ApiKeyScope.ScimServiceProvider)));
+            Assert.That(Child(snapshot.Root, "scopeConnectedSystemId")?.Value, Is.EqualTo("7"));
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_UnscopedApiKey_RecordsNoScope()
+    {
+        var snapshot = _service.CreateSnapshot(new ApiKey { Id = Guid.NewGuid(), Name = "Pipeline", KeyPrefix = "jim_ak_test" }, HashKey);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(snapshot.Root, "scope"), Is.Null);
+            Assert.That(Child(snapshot.Root, "scopeConnectedSystemId"), Is.Null);
+        }
     }
 
     private static ConfigurationSnapshotNode? Child(ConfigurationSnapshotNode node, string key) =>

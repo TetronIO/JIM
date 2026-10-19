@@ -1070,6 +1070,9 @@ public class ConfigurationSnapshotService
         Add(children, "expiresAt", Render(apiKey.ExpiresAt), "Expires");
         Add(children, "enabled", Render(apiKey.IsEnabled), "Enabled");
         Add(children, "infrastructureKey", Render(apiKey.IsInfrastructureKey), "Infrastructure key");
+        // Only a scoped key records a scope, so introducing it changed nothing in an ordinary key's history.
+        Add(children, "scope", apiKey.Scope == ApiKeyScope.None ? null : apiKey.Scope.ToString(), "Scope");
+        Add(children, "scopeConnectedSystemId", Render(apiKey.ScopeConnectedSystemId), "Scoped to Connected System");
         children.Add(BuildRoleAssociations(apiKey.Roles));
 
         return new ConfigurationSnapshot
