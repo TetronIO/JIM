@@ -1625,22 +1625,43 @@ function Get-LabRebuildGenerationName {
 }
 
 function Get-LabRebuildRoleEntry {
-    # Internal: one domain controller's names, and the parameters of its candidate build when there are any.
+    # Internal: one lab VM's names, what it is, what it depends on, and the parameters of its candidate build when
+    # there are any. A domain controller (dc-primary) is role Primary and JIM_AD_LAB_PRIMARY_VM; an AD FS server
+    # (adfs-primary) is role AdfsPrimary and JIM_AD_LAB_ADFS_PRIMARY_VM.
     param(
         [Parameter(Mandatory)]
         [string]$LiveName,
 
         [AllowNull()]
-        [hashtable]$BuildParameters
+        [hashtable]$BuildParameters,
+
+        [ValidateSet('DomainController', 'FederationServer')]
+        [string]$Kind = 'DomainController',
+
+        [AllowNull()]
+        [string]$DependsOn
     )
 
-    $roleName = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($LiveName.Substring(3))
+    $textInfo = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo
+    if ($Kind -eq 'DomainController') {
+        $roleName = $textInfo.ToTitleCase($LiveName.Substring(3))
+        $variable = 'JIM_AD_LAB_{0}_VM' -f $LiveName.Substring(3).ToUpperInvariant()
+    }
+    else {
+        $roleName = (($LiveName -split '-') | ForEach-Object { $textInfo.ToTitleCase($_) }) -join ''
+        $variable = 'JIM_AD_LAB_{0}_VM' -f $LiveName.Replace('-', '_').ToUpperInvariant()
+    }
+    if ([string]::IsNullOrEmpty($DependsOn)) {
+        $DependsOn = $null
+    }
     return [pscustomobject][ordered]@{
         Role                = $roleName
+        Kind                = $Kind
+        DependsOn           = $DependsOn
         LiveName            = $LiveName
         CandidateName       = (Get-LabRebuildVmName -LiveName $LiveName -Kind Candidate)
         PrevName            = (Get-LabRebuildVmName -LiveName $LiveName -Kind Prev)
-        EnvironmentVariable = ('JIM_AD_LAB_{0}_VM' -f $LiveName.Substring(3).ToUpperInvariant())
+        EnvironmentVariable = $variable
         BuildParameters     = $BuildParameters
     }
 }
@@ -1698,16 +1719,26 @@ function ConvertFrom-LabRebuildSetting {
 
     $liveNames = @('dc-primary', 'dc-source', 'dc-target')
 
+    # AD FS servers (federationServers), each a member of one of the three forests, are rebuilt after the domain
+    # controllers, against their domain controller's candidate. Sorted by name, so the order is the same every time.
+    $federation = Get-LabSettingValue -Object $Settings -Name 'federationServers'
+    $federationNames = @(Get-LabSettingName -Object $federation | Sort-Object)
+
     if ($NamesOnly) {
         $vhdDirectory = $null
         $configured = Get-LabSettingValue -Object $Settings -Name 'vhdDirectory'
         if (-not [string]::IsNullOrWhiteSpace([string]$configured)) {
             $vhdDirectory = ([string]$configured).Trim()
         }
+        $nameRoles = @($liveNames | ForEach-Object { Get-LabRebuildRoleEntry -LiveName $_ -BuildParameters $null })
+        foreach ($name in $federationNames) {
+            $dependsOn = [string](Get-LabSettingValue -Object (Get-LabSettingValue -Object $federation -Name $name) -Name 'domainController')
+            $nameRoles += Get-LabRebuildRoleEntry -LiveName $name -BuildParameters $null -Kind FederationServer -DependsOn $dependsOn
+        }
         return [pscustomobject][ordered]@{
             VhdDirectory = $vhdDirectory
             Generation   = $null
-            Roles        = @($liveNames | ForEach-Object { Get-LabRebuildRoleEntry -LiveName $_ -BuildParameters $null })
+            Roles        = $nameRoles
         }
     }
 
@@ -1819,6 +1850,62 @@ function ConvertFrom-LabRebuildSetting {
         $roles.Add((Get-LabRebuildRoleEntry -LiveName $liveName -BuildParameters $parameters))
     }
 
+    foreach ($name in $federationNames) {
+        $server = Get-LabSettingValue -Object $federation -Name $name
+        if ($liveNames -contains $name) {
+            throw "settings.json federationServers holds '$name', which is a domain controller's name."
+        }
+        $null = Get-LabRebuildVmName -LiveName $name -Kind Candidate
+
+        $dependsOn = [string](Get-LabSettingValue -Object $server -Name 'domainController')
+        if ($liveNames -notcontains $dependsOn) {
+            throw "settings.json federation server $name joins '$dependsOn'; it must be one of $($liveNames -join ', ')."
+        }
+        $address = [string](Get-LabSettingValue -Object $server -Name 'ipAddress')
+        $gateway = [string](Get-LabSettingValue -Object $server -Name 'gateway')
+        $prefixText = [string](Get-LabSettingValue -Object $server -Name 'prefixLength')
+        foreach ($pair in @(@('ipAddress', $address), @('gateway', $gateway))) {
+            $parsed = $null
+            if (($pair[1] -notmatch $ipv4) -or (-not [System.Net.IPAddress]::TryParse($pair[1], [ref]$parsed))) {
+                throw "settings.json $name '$($pair[0])' is '$($pair[1])', which is not an IPv4 address."
+            }
+        }
+        $prefix = 0
+        if ((-not [int]::TryParse($prefixText, [ref]$prefix)) -or ($prefix -lt 8) -or ($prefix -gt 30)) {
+            throw "settings.json $name 'prefixLength' is '$prefixText'; it must be a number from 8 to 30."
+        }
+        if ($addresses.ContainsKey($address)) {
+            throw "settings.json gives $name the address $address, which $($addresses[$address]) already has."
+        }
+        $addresses[$address] = $name
+
+        $computerName = 'adfs1'
+        $serviceName = 'adfs'
+        $configuredComputer = [string](Get-LabSettingValue -Object $server -Name 'computerName')
+        $configuredService = [string](Get-LabSettingValue -Object $server -Name 'serviceName')
+        if (-not [string]::IsNullOrWhiteSpace($configuredComputer)) { $computerName = $configuredComputer.Trim() }
+        if (-not [string]::IsNullOrWhiteSpace($configuredService)) { $serviceName = $configuredService.Trim() }
+
+        # New-LabFederationServer.ps1 reads the domain from the domain controller's notes, so the candidate is
+        # named and nothing else of the forest is repeated here.
+        $parameters = @{
+            Name                 = (Get-LabRebuildVmName -LiveName $name -Kind Candidate)
+            DomainControllerName = (Get-LabRebuildVmName -LiveName $dependsOn -Kind Candidate)
+            IsoPath              = $shared['isoPath']
+            VhdDirectory         = (Join-LabPathText -Root $shared['vhdDirectory'] -Child $GenerationName)
+            SwitchName           = $shared['switchName']
+            IPAddress            = $address
+            PrefixLength         = $prefix
+            Gateway              = $gateway
+            ComputerName         = $computerName
+            ServiceName          = $serviceName
+        }
+        if (-not [string]::IsNullOrEmpty($CumulativeUpdatePath)) {
+            $parameters['CumulativeUpdatePath'] = $CumulativeUpdatePath
+        }
+        $roles.Add((Get-LabRebuildRoleEntry -LiveName $name -BuildParameters $parameters -Kind FederationServer -DependsOn $dependsOn))
+    }
+
     return [pscustomobject][ordered]@{
         VhdDirectory = $shared['vhdDirectory']
         Generation   = $GenerationName
@@ -1866,6 +1953,13 @@ function Get-LabRebuildBuildAction {
           older than MaxAgeHours                     Replace (a leftover from an earlier rebuild)
           recent, has its baseline checkpoint        Reuse   (this run's, or a retry's; already built)
           recent, no baseline checkpoint yet         Resume  (a build that failed part way; the build script converges)
+
+        A dependent candidate (the AD FS server, -DependencyCreatedUtc being its domain controller candidate's
+        creation time) keeps its computer account and service account in that domain controller's directory, so:
+
+          created before its dependency              Replace (that directory never held its accounts)
+          no baseline checkpoint yet                 Replace (a part-built server and a directory checkpoint that may
+                                                              not match cannot be resumed safely)
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -1876,6 +1970,8 @@ function Get-LabRebuildBuildAction {
         [datetime]$CandidateCreatedUtc = [datetime]::MinValue,
 
         [bool]$CandidateHasBaseline = $false,
+
+        [Nullable[datetime]]$DependencyCreatedUtc,
 
         [Parameter(Mandatory)]
         [datetime]$NowUtc,
@@ -1895,6 +1991,11 @@ function Get-LabRebuildBuildAction {
     $age = $NowUtc.ToUniversalTime() - $CandidateCreatedUtc.ToUniversalTime()
     if ($age.TotalHours -gt $MaxAgeHours) {
         return 'Replace'
+    }
+    if ($null -ne $DependencyCreatedUtc) {
+        if ((-not $CandidateHasBaseline) -or ($CandidateCreatedUtc.ToUniversalTime() -lt ([datetime]$DependencyCreatedUtc).ToUniversalTime())) {
+            return 'Replace'
+        }
     }
     if ($CandidateHasBaseline) {
         return 'Reuse'
@@ -2471,10 +2572,24 @@ function Invoke-LabRebuildRole {
                 $createdUtc = [datetime]$candidate.CreatedUtc
                 $hasBaseline = [bool]$candidate.HasBaseline
             }
-            $action = Get-LabRebuildBuildAction -CandidateExists ($null -ne $candidate) -CandidateCreatedUtc $createdUtc `
-                -CandidateHasBaseline $hasBaseline -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh
 
-            # The candidate is built with the live domain controller's address, so the live one must be off first.
+            # An AD FS server joins its domain controller's candidate, so that must be built first. Checked before
+            # anything is stopped, so a wrong order changes nothing.
+            $dependencyCreatedUtc = $null
+            if (-not [string]::IsNullOrEmpty($Role.DependsOn)) {
+                $dependencyName = Get-LabRebuildVmName -LiveName $Role.DependsOn -Kind Candidate
+                $dependency = & $Adapter.GetVm $dependencyName
+                Assert-LabRebuildVm -Vm $dependency -Name $dependencyName
+                if (($null -eq $dependency) -or (-not [bool]$dependency.HasBaseline)) {
+                    throw "'$dependencyName' is not built yet; build $($Role.DependsOn) before $($Role.LiveName), which joins its domain."
+                }
+                $dependencyCreatedUtc = [datetime]$dependency.CreatedUtc
+            }
+
+            $action = Get-LabRebuildBuildAction -CandidateExists ($null -ne $candidate) -CandidateCreatedUtc $createdUtc `
+                -CandidateHasBaseline $hasBaseline -DependencyCreatedUtc $dependencyCreatedUtc -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh
+
+            # The candidate is built with the live VM's address, so the live one must be off first.
             if (($null -ne $live) -and ($live.State -ne 'Off')) {
                 & $Adapter.Log "Stopping $($Role.LiveName): its address is the candidate's."
                 & $Adapter.StopVm $Role.LiveName
@@ -2491,7 +2606,7 @@ function Invoke-LabRebuildRole {
                 elseif ($action -eq 'Resume') {
                     & $Adapter.Log "Resuming the unfinished build of $($Role.CandidateName)."
                 }
-                & $Adapter.BuildVm $Role.BuildParameters
+                & $Adapter.BuildVm $Role.BuildParameters $Role.Kind
                 $built = & $Adapter.GetVm $Role.CandidateName
                 if (($null -eq $built) -or (-not [bool]$built.HasBaseline)) {
                     throw "The build of '$($Role.CandidateName)' finished but it has no baseline checkpoint."

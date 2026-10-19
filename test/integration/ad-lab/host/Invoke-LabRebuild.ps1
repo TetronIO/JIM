@@ -31,6 +31,11 @@
     touches the runner VM or the hypervisor host: patching the host is a manual, announced event, because it restarts
     every VM.
 
+    An AD FS server in settings.json federationServers (adfs-primary) is rebuilt too, after the domain controllers, by
+    New-LabFederationServer.ps1 against its domain controller's candidate, whose baseline that build takes again. Its
+    candidate is rebuilt whenever it is older than that domain controller candidate, and never resumed part way. Stage,
+    Promote and Rollback handle it after the domain controller it joins.
+
     Each domain controller is built with the live one's own address (its checkpoints carry the address, so it cannot be
     changed afterwards). The live VM is therefore OFF from the start of Build until Promote or Rollback; the workflow
     shares the nightly's concurrency group so nothing else runs in that time. If a run is cancelled or the runner dies
@@ -53,8 +58,9 @@
     Prune, Build, Stage, Promote, Rollback or Status.
 
 .PARAMETER Role
-    Limit the phase to these live VM names (dc-primary, dc-source, dc-target; comma-separated is accepted). Default: all
-    three. The workflow builds one at a time so each is its own control-plane call.
+    Limit the phase to these live VM names (dc-primary, dc-source, dc-target, and each AD FS server in settings.json
+    federationServers, such as adfs-primary; comma-separated is accepted). Default: all of them. The workflow builds
+    one at a time so each is its own control-plane call, an AD FS server after the domain controller it joins.
 
 .PARAMETER SettingsPath
     The settings file. Default: settings.json beside this script (C:\jim-ad-lab\settings.json). Only Build reads more
@@ -298,10 +304,13 @@ function Get-RebuildAdapter {
         }
 
         BuildVm       = {
-            param($Parameters)
-            $result = Invoke-LabScript -Name 'New-LabDomainController.ps1' -Arguments (ConvertTo-LabChildArgument -Parameter $Parameters)
+            param($Parameters, $Kind)
+            # Each kind of lab VM has its own build script; both read the Administrator password from this process's
+            # environment.
+            $builder = if ($Kind -eq 'FederationServer') { 'New-LabFederationServer.ps1' } else { 'New-LabDomainController.ps1' }
+            $result = Invoke-LabScript -Name $builder -Arguments (ConvertTo-LabChildArgument -Parameter $Parameters)
             if ($result.ExitCode -ne 0) {
-                throw "New-LabDomainController.ps1 failed for $($Parameters.Name) (exit code $($result.ExitCode)): $(Get-LastLine -Line $result.Output)"
+                throw "$builder failed for $($Parameters.Name) (exit code $($result.ExitCode)): $(Get-LastLine -Line $result.Output)"
             }
         }
 

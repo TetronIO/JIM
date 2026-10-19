@@ -184,9 +184,10 @@ jobs:
           Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-prune.json') -Value $json
           (ConvertFrom-Json $json).roles | ForEach-Object { Write-Host ('{0,-8} {1,-14} {2}' -f $_.role, $_.action, $_.detail) }
 
-      # One control-plane call per domain controller (each is 40 to 60 minutes), so each is its own log group and
-      # its own timeout. From the first call the live domain controller is off: the candidate is built with its
-      # address. The newest .msu in the host's cumulativeUpdateDirectory is installed in each.
+      # One control-plane call per VM (each is 30 to 60 minutes), so each is its own log group and its own timeout.
+      # From the first call the live VM is off: the candidate is built with its address. The newest .msu in the host's
+      # cumulativeUpdateDirectory is installed in each. The VMs come from the host's settings.json, in the order the
+      # rebuild handles them: the three domain controllers, then any AD FS server, after the domain controller it joins.
       - name: 'Phase: Build the candidates'
         id: build
         env:
@@ -195,8 +196,10 @@ jobs:
           . ./test/integration/utils/Invoke-LabControl.ps1
           $extra = @()
           if ($env:FRESH -eq 'true') { $extra += '-Fresh' }
+          $vms = @((ConvertFrom-Json (Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Status', '-AsJson') -TimeoutSeconds 600)).roles | ForEach-Object { $_.live })
+          Write-Host "Building candidates for: $($vms -join ', ')"
           $built = @()
-          foreach ($role in 'dc-primary', 'dc-source', 'dc-target') {
+          foreach ($role in $vms) {
             Write-Host "::group::Build $role-candidate"
             try {
               $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments (@('-Phase', 'Build', '-Role', $role, '-AsJson') + $extra) -TimeoutSeconds 10800
@@ -330,7 +333,7 @@ jobs:
           elseif ($env:ROLLBACK_OUTCOME -eq 'success') { $outcome = 'rolled back: the previous domain controllers are live again, the candidates are left for diagnosis' }
 
           $lines = @('### Active Directory lab rebuild', '', "**Outcome: $outcome.**", '', "Suite: $($env:SUITE_OUTCOME). Probes: $($env:PROBES_OUTCOME). $(Get-LabRunStatusDescription -Summary $summary)", '')
-          $lines += '| Domain controller | Candidate | Guest OS build (candidate) | Live guest OS build now |'
+          $lines += '| VM | Candidate | Guest OS build (candidate) | Live guest OS build now |'
           $lines += '|---|---|---|---|'
           $staged = Read-Phase 'stage'
           $now = if ((Read-Phase 'promote').Count -gt 0) { Read-Phase 'promote' } else { Read-Phase 'status' }
