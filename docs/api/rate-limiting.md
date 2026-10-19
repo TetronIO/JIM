@@ -1,6 +1,6 @@
 ---
 title: Rate Limiting
-description: "How JIM limits REST API requests per client, the responses it returns when a limit is reached, and how to tune the limits."
+description: "How JIM limits REST API and SCIM requests per client, the responses it returns when a limit is reached, and how to tune the limits."
 type: reference
 audience: automation-author
 ---
@@ -11,13 +11,14 @@ JIM's REST API is protected by configurable rate limiting, so a misbehaving inte
 
 ## What is limited
 
-Only the REST API (paths under `/api/`) is throttled. The Blazor web UI, the SignalR/Blazor Server connection, and static assets are never rate limited.
+The REST API (paths under `/api/`) and the SCIM 2.0 Service Provider endpoint (paths under `/scim/`) are throttled. The Blazor web UI, the SignalR/Blazor Server connection, and static assets are never rate limited.
 
 `/api/v1/health` (and its `/ready`, `/live`, `/version` sub-routes) is exempt: load balancer and orchestrator health probes must never be throttled, and the endpoint is cheap and carries no data.
 
 ## How clients are grouped
 
 - **Authenticated requests** are limited per client, identified by a stable ID (the signed-in user's Metaverse Object ID, or the API key's ID), using a **sliding** one-minute window.
+- **SCIM requests** made with a key scoped to a Connected System are limited per Connected System, not per key, using a **sliding** one-minute window: all of that Connected System's keys share one limit, so a second key added for rotation does not double it.
 - **Unauthenticated requests**, including a request that failed API key authentication, are limited per client IP address, using a **fixed** one-minute window.
 
 Each client's limit is tracked independently: one integration hitting its limit does not affect any other client.
@@ -30,16 +31,17 @@ Ordinary API keys (those you create in the admin UI) are **not** exempt: they ar
 
 ## Service Settings
 
-Three built-in [Service Settings](../configuration/service-settings.md) (Security category) control rate limiting, and can be changed at runtime by an Administrator without restarting JIM:
+Four built-in [Service Settings](../configuration/service-settings.md) (Security category) control rate limiting, and can be changed at runtime by an Administrator without restarting JIM:
 
 | Key | Display name | Type | Default | Description |
 |-----|---------------|------|---------|-------------|
 | `Security.RateLimiting.Enabled` | API rate limiting enabled | Boolean | `true` | When `false`, no limiter is applied to any API request. |
 | `Security.RateLimiting.AuthenticatedRequestsPerMinute` | Authenticated API requests per minute | Integer | `300` | The per-client limit for authenticated requests. |
 | `Security.RateLimiting.UnauthenticatedRequestsPerMinute` | Unauthenticated API requests per minute | Integer | `30` | The per-IP limit for unauthenticated requests. |
+| `Security.RateLimiting.ScimServiceProviderRequestsPerMinute` | SCIM Service Provider requests per minute | Integer | `1500` | The limit for one Connected System's SCIM 2.0 Service Provider endpoint, shared by all of that Connected System's keys. |
 
 !!! info "Settings propagation delay"
-    The rate limiter reads these settings from a short-lived cache (TTL: 30 seconds) rather than the database on every request, so it does not add a database round trip to every API call. A change to any of the three settings above takes effect for new requests within 30 seconds, not instantly.
+    The rate limiter reads these settings from a short-lived cache (TTL: 30 seconds) rather than the database on every request, so it does not add a database round trip to every API call. A change to any of the settings above takes effect for new requests within 30 seconds, not instantly.
 
 ## When a client is rate limited
 
@@ -58,6 +60,8 @@ A request that exceeds its limit receives:
   "timestamp": "2026-07-13T12:00:00Z"
 }
 ```
+
+A throttled SCIM client receives the same status and `Retry-After` header with a SCIM error body (RFC 7644 section 3.12, `application/scim+json`) instead of the JSON shown above.
 
 Well-behaved clients should back off for the duration given in `Retry-After` before retrying.
 
