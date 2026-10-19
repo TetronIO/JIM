@@ -9,6 +9,9 @@ function Remove-JIMCertificate {
     .DESCRIPTION
         Permanently deletes a certificate from the trusted certificate store.
 
+        Deleting the only certificate sign-in depends on stops everyone signing in to JIM; the cmdlet warns before
+        asking.
+
     .PARAMETER Id
         The unique identifier (GUID) of the certificate to delete.
 
@@ -82,6 +85,10 @@ function Remove-JIMCertificate {
         catch {
             Write-Error "Certificate not found: $certId"
             return
+        }
+
+        if ($existing.signInDependsOnIt) {
+            Write-Warning "Sign-in depends on '$($existing.name)'. Deleting it stops everyone signing in to JIM, including you. Until another certificate is trusted for sign-in, only the infrastructure API key can put it right."
         }
 
         if (Confirm-JIMAction -Cmdlet $PSCmdlet -Target $existing.name -Action "Delete Certificate" -Force:$Force) {

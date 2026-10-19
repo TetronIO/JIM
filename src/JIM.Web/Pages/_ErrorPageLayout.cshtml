@@ -1,4 +1,4 @@
-@* Shared shell for JIM's standalone error pages (Error, SignInFailed): rendered outside the Blazor app, so it
+@* Shared shell for JIM's standalone error pages (Error, SignInFailed, SignInUnavailable): rendered outside the Blazor app, so it
    carries its own theme loading, styles and illustration. Pages supply ViewData["Title"] and the content. *@
 @inject JIM.Web.Models.ThemeSettings ThemeSettings
 
@@ -374,6 +374,7 @@
             .jim-err-crumb { display: none; }
         }
     </style>
+    @RenderSection("Styles", required: false)
 </head>
 <body>
     <div class="jim-error-page">
@@ -385,5 +386,6 @@
             @RenderBody()
         </div>
     </div>
+    @RenderSection("Scripts", required: false)
 </body>
 </html>

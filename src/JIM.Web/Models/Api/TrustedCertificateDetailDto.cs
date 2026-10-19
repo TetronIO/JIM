@@ -29,6 +29,22 @@ public class TrustedCertificateDetailDto
     public int DaysUntilExpiry { get; set; }
 
     /// <summary>
+    /// What the certificate is trusted for: Connectors, sign-in (the identity provider), or both.
+    /// </summary>
+    public CertificateTrustPurpose TrustedFor { get; set; }
+
+    /// <summary>
+    /// Whether the certificate vouches for the identity provider now, as of JIM's last check of it.
+    /// </summary>
+    public bool UsedBySignIn { get; set; }
+
+    /// <summary>
+    /// Whether it is the only certificate that vouches for the identity provider, so disabling it, deleting it, or no
+    /// longer trusting it for sign-in would stop everyone signing in.
+    /// </summary>
+    public bool SignInDependsOnIt { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a TrustedCertificate entity.
     /// Note: CertificateData is intentionally excluded for security.
     /// </summary>
@@ -52,7 +68,8 @@ public class TrustedCertificateDetailDto
             Notes = entity.Notes,
             IsExpired = entity.IsExpired,
             IsExpiringSoon = entity.IsExpiringSoon,
-            DaysUntilExpiry = entity.DaysUntilExpiry
+            DaysUntilExpiry = entity.DaysUntilExpiry,
+            TrustedFor = entity.TrustedFor
         };
     }
 }

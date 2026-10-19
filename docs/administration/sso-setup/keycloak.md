@@ -154,6 +154,7 @@ Earlier versions of this guide created `jim-api` with **Type: Optional** and off
 
 ## Keycloak Troubleshooting
 
+- **Sign-in is unavailable / JIM does not trust the certificate**: Keycloak's HTTPS certificate comes from a certificate authority JIM does not trust, usually your own. Trust it for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
 - **Realm name**: Ensure the realm name in `JIM_SSO_AUTHORITY` matches exactly (case-sensitive)
 - **Client scopes**: Verify `openid`, `profile`, and `email` scopes are included
 - **Token mapper**: If the `sub` claim is missing, add a mapper in Client Scopes > openid > Mappers

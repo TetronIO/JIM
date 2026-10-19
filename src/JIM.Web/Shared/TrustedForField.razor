@@ -1,0 +1,39 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What a Trusted Certificate vouches for (#2363), as two tick boxes: Connectors, sign-in, or both. One component so the
+   upload, file path and edit dialogs say it the same way. The dialogs gate their buttons on at least one being ticked;
+   this only says so. *@
+
+<div class="@Class">
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Trusted for</MudText>
+    <MudCheckBox T="bool" Value="Connectors" ValueChanged="OnConnectorsChanged" Color="Color.Primary" Dense="true"
+                 Label="Connectors: the servers Connected Systems connect to (LDAPS, HTTPS, SQL Server)" />
+    <MudCheckBox T="bool" Value="SignIn" ValueChanged="OnSignInChanged" Color="Color.Primary" Dense="true"
+                 Label="Sign-in: your identity provider (AD FS, Keycloak and the like)" />
+    @if (!SignIn && !Connectors)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Error">Choose at least one.</MudText>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public bool SignIn { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> SignInChanged { get; set; }
+
+    [Parameter]
+    public bool Connectors { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> ConnectorsChanged { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private Task OnSignInChanged(bool value) => SignInChanged.InvokeAsync(value);
+
+    private Task OnConnectorsChanged(bool value) => ConnectorsChanged.InvokeAsync(value);
+}

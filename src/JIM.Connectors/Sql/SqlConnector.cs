@@ -883,7 +883,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     /// Admin &gt; Certificates: its root, an intermediate, or the server's own certificate.
     /// </summary>
     /// <remarks>
-    /// The same rule as every other connector (<see cref="JimCertificateStoreTrust"/>), judged on what the
+    /// The same rule as every other connector (<see cref="CertificateStoreTrust"/>), judged on what the
     /// server sent rather than anything JIM downloaded. Deliberately narrower than "would this validate": the
     /// operating system's own anchors are excluded, because a certificate they already vouch for and that a
     /// driver still refused was refused for some other reason, and accepting it anyway would waive that reason.
@@ -899,7 +899,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         try
         {
             using var certificate = X509CertificateLoader.LoadCertificate(chain.Leaf.Data);
-            return JimCertificateStoreTrust.VouchesFor(certificate, sent, trustedCertificates);
+            return CertificateStoreTrust.VouchesFor(certificate, sent, trustedCertificates);
         }
         finally
         {

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ JIM signs people in through an identity provider whose HTTPS certificate comes from your own certificate authority, such as AD FS or Keycloak run on premises: trust it for sign-in with `Add-JIMCertificate -FromIdentityProvider`, REST, or the portal, and sign-in works straight away, with no image rebuild or restart. (#2363)
+- ✨ When JIM cannot trust its identity provider, opening JIM explains why on a **Sign-in is unavailable** page with the fix filled in, and signed-in administrators see a warning before new sign-ins fail, with **Review and trust**. `Get-JIMIdentityProviderTrust` reports the same. (#2363)
+- ✨ Each Trusted Certificate is trusted for Connectors, for sign-in, or both, and removing the one sign-in depends on asks first. Existing certificates stay trusted for Connectors only; set it on the Certificates page, REST or `-TrustedFor`. (#2363)
 - ✨ A Scoping Criterion can compare a value an expression computes, such as `Lower(Trim(cs["department"]))`, as the type you choose, and explanations show what it read and computed. An object it cannot decide is left as it is with an error, never scoped on a guess. (#2054)
 - ✨ Multi-valued date attributes import every value from every Connector, such as OpenLDAP's `pwdFailureTime`. Dates JIM cannot keep apart, and a true or false attribute holding both values, are reported on the Activity rather than one being chosen. (#2153)
 - ✨ Each date attribute has a **Date Resolution**, the finest step of time its Connected System keeps (whole seconds for Active Directory); JIM exports and compares dates at it, so they never re-export forever. Adjustable on the Schema tab, REST and `-DateTimeResolution`. (#2153)
@@ -79,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 The LDAP Connector discovers INTEGER attributes on OpenLDAP, 389 Directory Server and other non-Active Directory directories, such as `uidNumber` and `gidNumber`, as Long Number rather than Number, so values beyond 2,147,483,647 import. Map them to Long Number Metaverse Attributes. Active Directory and Samba AD are unchanged. (#2154)
 - 🔄 JIM never gives up on a Pending Export: one the Connected System refuses, or whose value an import never confirms, is attempted again at every export run, with no waiting in between, and reported on every run until the cause is fixed. Lists show **Failing Since** and **Failing only**, the Connected System page counts **Failing Exports**, and REST and `Get-JIMPendingExport -Failing` filter them. (#2119)
 - 🔄 A Delta Import from Keycloak's SCIM API now reads every resource and says why on the Activity, whatever Change Detection is set to: Keycloak leaves a resource's last-modified date alone for most changes, so a filtered import missed them. (#2094)
 - 🔄 **Max detected deletions** and **Max detected deletions percent** can now be set on a Delta Import Run Profile, in the portal, REST API and PowerShell. A Delta Import whose Connected System reports more deletions than a limit marks none of them as deleted and warns, and each following Delta Import reports them again until you act. (#2089)
@@ -130,6 +134,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 JIM starts when its identity provider is unreachable or its certificate is not trusted, instead of stopping after five attempts; API keys keep working while sign-in is unavailable. (#2363)
 - 🐛 After the encryption keys are lost, JIM.Worker starts and configuration changes save again, so the Connected System secrets the recovery asks for can be re-entered. JIM previously failed both on a key that records secret changes in Configuration History; it now replaces that key with a warning in the log. (#2124)
 - 🐛 SSO access tokens are now accepted by the REST API and `Connect-JIM` when `JIM_SSO_API_SCOPE` is a bare identifier such as AD FS's `api://{client-identifier}` or Okta's `api://default`. JIM previously expected the audience `api:/`, which no token carries, so every such token was refused. (#2353)
 - 🐛 Synchronisation no longer removes a Metaverse Object's references when a schema refresh has changed the source attribute to Reference and no import has read it since. The value the Connected System Object still holds under its old type is left as held, as it already was for every other data type, with a warning, until an import reads the attribute again. (#2330)

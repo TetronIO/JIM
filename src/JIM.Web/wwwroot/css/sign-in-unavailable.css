@@ -1,0 +1,118 @@
+/* The sign-in unavailable page (#2363): the certificate chain the identity provider presented, and the command that
+   trusts it. Builds on _ErrorPageLayout's tokens so it follows the theme. */
+
+.jim-idp-chain {
+    text-align: left;
+    margin: 0 0 1.5rem 0;
+}
+
+.jim-idp-chain-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary, #6c757d);
+    margin-bottom: 0.5rem;
+}
+
+.jim-idp-node {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.25rem 0.75rem;
+    align-items: center;
+    border: 1px solid var(--mud-palette-lines-default, rgba(0, 0, 0, 0.12));
+    border-radius: 8px;
+    padding: 0.625rem 0.875rem;
+}
+
+.jim-idp-node-unsent {
+    border-style: dashed;
+}
+
+.jim-idp-node-suggested {
+    border-color: var(--jim-error-shape-primary);
+    border-width: 2px;
+}
+
+.jim-idp-node-name {
+    font-weight: 600;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.jim-idp-node-meta {
+    grid-column: 1 / -1;
+    font-family: "IBM Plex Mono", "Consolas", monospace;
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary, #6c757d);
+    overflow-wrap: anywhere;
+}
+
+.jim-idp-pill {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.125rem 0.625rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    background-color: var(--mud-palette-background-grey, rgba(0, 0, 0, 0.05));
+    color: var(--mud-palette-text-secondary, #6c757d);
+}
+
+.jim-idp-link {
+    width: 2px;
+    height: 0.875rem;
+    margin-left: 1.375rem;
+    background-color: var(--mud-palette-lines-default, rgba(0, 0, 0, 0.12));
+}
+
+.jim-idp-fix {
+    text-align: left;
+    border: 1px solid var(--mud-palette-lines-default, rgba(0, 0, 0, 0.12));
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 0 0 1.5rem 0;
+}
+
+.jim-idp-fix-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 0.875rem;
+    background-color: var(--mud-palette-background-grey, rgba(0, 0, 0, 0.05));
+}
+
+.jim-idp-fix-head .jim-error-button {
+    min-height: 30px;
+    padding: 0.125rem 0.875rem;
+}
+
+.jim-idp-command {
+    margin: 0;
+    padding: 0.875rem;
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", "Consolas", monospace;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    background-color: #121b29;
+    color: #d8deea;
+}
+
+.jim-idp-fix-foot {
+    margin: 0;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary, #6c757d);
+}
+
+.jim-idp-poll {
+    align-self: center;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary, #6c757d);
+}
+
+.jim-idp-button-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+}

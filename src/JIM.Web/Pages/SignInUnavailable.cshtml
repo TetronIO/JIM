@@ -1,0 +1,115 @@
+@page "/sign-in-unavailable"
+@model JIM.Web.Pages.SignInUnavailableModel
+@using JIM.Models.Security
+@{
+    Layout = "_ErrorPageLayout";
+    ViewData["Title"] = Model.IsAvailable ? "Sign-in is available" : "Sign-in is unavailable";
+    var status = Model.Status;
+}
+
+@section Styles {
+    <link href="~/css/sign-in-unavailable.css" rel="stylesheet" asp-append-version="true" />
+}
+
+@section Illustration {
+    <svg viewBox="0 0 400 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="JIM and the identity provider, with a padlock between them that JIM cannot open">
+        <circle class="jim-err-float-shape jim-err-shape-1" cx="45" cy="40" r="7" fill="var(--jim-error-shape-tertiary)" opacity="0.6"/>
+        <circle class="jim-err-float-shape jim-err-shape-2" cx="355" cy="55" r="10" fill="var(--jim-error-shape-secondary)" opacity="0.5"/>
+        <circle class="jim-err-float-shape jim-err-shape-3" cx="70" cy="190" r="6" fill="var(--jim-error-shape-primary)" opacity="0.4"/>
+        <rect class="jim-err-float-shape jim-err-shape-5" x="340" y="170" width="12" height="12" rx="2" fill="var(--jim-error-shape-primary)" opacity="0.5" transform="rotate(30 346 176)"/>
+
+        <line x1="146" y1="110" x2="254" y2="110" stroke="var(--jim-error-shape-secondary)" stroke-width="4" stroke-dasharray="8 8" stroke-linecap="round"/>
+
+        <g>
+            <rect x="58" y="82" width="88" height="56" rx="14" fill="var(--mud-palette-primary, #764ce8)"/>
+            <text x="102" y="118" text-anchor="middle" font-family="'Space Grotesk', 'IBM Plex Sans', sans-serif" font-size="22" font-weight="600" fill="#ffffff">JIM</text>
+        </g>
+        <g>
+            <rect x="254" y="82" width="88" height="56" rx="14" fill="var(--jim-error-shape-tertiary)"/>
+            <text x="298" y="118" text-anchor="middle" font-family="'Space Grotesk', 'IBM Plex Sans', sans-serif" font-size="22" font-weight="600" fill="var(--jim-error-badge-text-dark)">IdP</text>
+        </g>
+
+        @* The padlock JIM cannot open: it does not recognise who locked it. Swapped for a tick once it is trusted. *@
+        <g class="jim-err-stop" id="sign-in-lock" style="@(Model.IsAvailable ? "display: none" : null)">
+            <path d="M188 104 v-10 a12 12 0 0 1 24 0 v10" fill="none" stroke="var(--jim-error-stop-color)" stroke-width="5" stroke-linecap="round"/>
+            <rect x="180" y="102" width="40" height="32" rx="6" fill="var(--jim-error-stop-color)" stroke="var(--mud-palette-background, #ffffff)" stroke-width="5" paint-order="stroke"/>
+            <text x="200" y="126" text-anchor="middle" font-family="'Space Grotesk', 'IBM Plex Sans', sans-serif" font-size="20" font-weight="700" fill="#ffffff">?</text>
+        </g>
+        <g id="sign-in-open" style="@(Model.IsAvailable ? null : "display: none")">
+            <circle cx="200" cy="110" r="22" fill="var(--mud-palette-success, #2d7a3e)" stroke="var(--mud-palette-background, #ffffff)" stroke-width="5" paint-order="stroke"/>
+            <path d="M189 110 l8 8 l15 -16" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+    </svg>
+}
+
+<h1 class="jim-error-title" id="sign-in-title">@(Model.IsAvailable ? "Sign-in is available" : "Sign-in is unavailable")</h1>
+<p class="jim-error-subtitle" id="sign-in-message">@status.Message</p>
+
+@if (status.PresentedChain.Count > 0 && !Model.IsAvailable)
+{
+    <div class="jim-idp-chain" id="sign-in-chain" aria-label="Certificate chain presented">
+        <div class="jim-idp-chain-label">Certificate chain presented by @status.Host</div>
+        @if (status.UnsentIssuer != null)
+        {
+            <div class="jim-idp-node jim-idp-node-unsent">
+                <span class="jim-idp-node-name" title="@status.UnsentIssuer">@status.UnsentIssuerCommonName</span>
+                <span class="jim-idp-pill">Not sent by the server</span>
+                <span class="jim-idp-node-meta">Fetch it from your certificate authority to trust it; a root outlasts every certificate it issues.</span>
+            </div>
+            <div class="jim-idp-link" aria-hidden="true"></div>
+        }
+        @foreach (var certificate in Enumerable.Reverse(status.PresentedChain))
+        {
+            var suggested = certificate.Thumbprint == status.SuggestedCertificate?.Thumbprint && Model.CanTrustFromIdentityProvider;
+            <div class="jim-idp-node @(suggested ? "jim-idp-node-suggested" : string.Empty)">
+                <span class="jim-idp-node-name">@certificate.CommonName</span>
+                <span class="jim-idp-pill">@(certificate.IsServerCertificate ? "Server certificate" : "Certificate authority")</span>
+                <span class="jim-idp-node-meta">Thumbprint @certificate.Thumbprint · valid until @certificate.ValidTo.ToString("dd MMM yyyy")</span>
+            </div>
+            @if (!certificate.IsServerCertificate)
+            {
+                <div class="jim-idp-link" aria-hidden="true"></div>
+            }
+        }
+    </div>
+}
+
+@if (Model.CanTrustFromIdentityProvider)
+{
+    <div class="jim-idp-fix" id="sign-in-fix">
+        <div class="jim-idp-fix-head">
+            <strong>Trust it with PowerShell, using the infrastructure API key</strong>
+            <button type="button" class="jim-error-button jim-error-button-outlined" id="sign-in-copy" data-copy-target="sign-in-command">Copy</button>
+        </div>
+        <pre class="jim-idp-command" id="sign-in-command">@Model.TrustCommand</pre>
+        <p class="jim-idp-fix-foot">
+            Check the thumbprint against the one your certificate authority publishes first. An administrator who is
+            already signed in can trust it from the banner in the portal instead.
+        </p>
+    </div>
+}
+
+@if (!Model.IsAvailable)
+{
+    <p class="jim-error-detail" id="sign-in-pass-on">If you do not look after this JIM deployment, pass these details to whoever does.</p>
+}
+
+<ul class="jim-error-links">
+    <li><a href="@Model.DocsUrl" target="_blank" rel="noopener noreferrer">Trusting your identity provider's certificate</a></li>
+</ul>
+
+<div class="jim-error-actions">
+    @if (!Model.IsAvailable)
+    {
+        <span class="jim-idp-poll" id="sign-in-poll" aria-live="polite">Checking again every 10 seconds</span>
+    }
+    <a href="/" id="sign-in-button" class="jim-error-button jim-error-button-filled @(Model.IsAvailable ? string.Empty : "jim-idp-button-disabled")"
+       aria-disabled="@(Model.IsAvailable ? "false" : "true")" tabindex="@(Model.IsAvailable ? "0" : "-1")">Sign in</a>
+</div>
+
+@section Scripts {
+    @if (!Model.IsAvailable)
+    {
+        <script src="~/js/sign-in-unavailable.js" asp-append-version="true"></script>
+    }
+}

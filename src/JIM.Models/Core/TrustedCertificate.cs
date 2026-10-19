@@ -8,7 +8,8 @@ namespace JIM.Models.Core;
 
 /// <summary>
 /// Represents a trusted CA certificate stored in the JIM certificate store.
-/// Used by connectors for validating secure connections (LDAPS, HTTPS, etc.).
+/// Used by Connectors for validating secure connections (LDAPS, HTTPS, etc.), and by sign-in for trusting the
+/// identity provider, according to <see cref="TrustedFor"/>.
 /// </summary>
 public class TrustedCertificate : IAuditable
 {
@@ -74,6 +75,12 @@ public class TrustedCertificate : IAuditable
     /// Whether this certificate is currently active and should be used for validation.
     /// </summary>
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// What this certificate vouches for: Connectors, sign-in (the identity provider), or both. A certificate is only
+    /// ever used for the purposes it is trusted for.
+    /// </summary>
+    public CertificateTrustPurpose TrustedFor { get; set; } = CertificateTrustPurpose.Connectors;
 
     /// <summary>
     /// When the entity was created (UTC).

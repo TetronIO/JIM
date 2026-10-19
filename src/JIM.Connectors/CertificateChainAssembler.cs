@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Connectors;
+using JIM.Utilities;
 using System.Security.Cryptography.X509Certificates;
 
 namespace JIM.Connectors;
@@ -18,7 +19,7 @@ namespace JIM.Connectors;
 /// </para>
 /// <para>
 /// Whether the chain is trusted is judged more narrowly, on what a connection would have: what the server sent and
-/// what the JIM certificate store holds (<see cref="JimCertificateStoreTrust"/>), or else the operating system's own
+/// what the JIM certificate store holds (<see cref="CertificateStoreTrust"/>), or else the operating system's own
 /// trust. A certificate JIM had to download does not count until it is in the store.
 /// </para>
 /// </remarks>
@@ -117,7 +118,7 @@ internal static class CertificateChainAssembler
     /// </summary>
     private static bool IsTrusted(X509Certificate2 leaf, IReadOnlyCollection<X509Certificate2> sentByServer, IReadOnlyCollection<X509Certificate2> trustedCertificates)
     {
-        if (JimCertificateStoreTrust.VouchesFor(leaf, sentByServer, trustedCertificates))
+        if (CertificateStoreTrust.VouchesFor(leaf, sentByServer, trustedCertificates))
             return true;
 
         using var system = new X509Chain();

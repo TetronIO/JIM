@@ -67,6 +67,7 @@ public class TrustedCertificateRepository : ITrustedCertificateRepository
         existing.Name = certificate.Name;
         existing.Notes = certificate.Notes;
         existing.IsEnabled = certificate.IsEnabled;
+        existing.TrustedFor = certificate.TrustedFor;
 
         // Copy the audit stamp too: callers (JIM.Web) query with NoTracking, so the instance the application layer
         // stamped is detached and these values would otherwise be silently dropped when this method re-loads the

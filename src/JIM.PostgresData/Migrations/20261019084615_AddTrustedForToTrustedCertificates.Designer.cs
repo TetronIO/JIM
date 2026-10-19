@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261019064808_AddApiKeyScope")]
-    partial class AddApiKeyScope
+    [Migration("20261019084615_AddTrustedForToTrustedCertificates")]
+    partial class AddTrustedForToTrustedCertificates
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1341,6 +1341,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Thumbprint")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("TrustedFor")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("ValidFrom")
                         .HasColumnType("timestamp with time zone");
@@ -3223,24 +3226,13 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Scope")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ScopeConnectedSystemId")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("KeyHash");
 
                     b.HasIndex("KeyPrefix");
 
-                    b.HasIndex("ScopeConnectedSystemId");
-
-                    b.ToTable("ApiKeys", t =>
-                        {
-                            t.HasCheckConstraint("CK_ApiKeys_ScopeNamesItsConnectedSystem", "(\"Scope\" = 0) = (\"ScopeConnectedSystemId\" IS NULL)");
-                        });
+                    b.ToTable("ApiKeys");
                 });
 
             modelBuilder.Entity("JIM.Models.Security.Role", b =>
@@ -6225,14 +6217,6 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("ParentGroup");
-                });
-
-            modelBuilder.Entity("JIM.Models.Security.ApiKey", b =>
-                {
-                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
-                        .WithMany()
-                        .HasForeignKey("ScopeConnectedSystemId")
-                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.AuxiliaryClassDiscoveryResult", b =>

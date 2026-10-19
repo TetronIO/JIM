@@ -2,7 +2,8 @@
 # Triggered by pushing a tag like v0.2.0
 #
 # This workflow first refuses the release outright (once JIM_AD_LAB_GATE_ENFORCED is true) unless the tagged commit has a green `jim-ad-lab` commit
-# status (the Active Directory lab; see the jim-ad-lab-gate job), then:
+# status (the Active Directory lab; see the jim-ad-lab-gate job), and likewise for `jim-pre-release` and `jim-deploy-lab` (the pre-release
+# integration suite and the deployment lab, each once its own *_GATE_ENFORCED variable is true), then:
 # 1. Validates the build, tests, and version consistency
 # 2. Builds, scans, smoke-tests, and pushes Docker images to ghcr.io
 # 3. Publishes PowerShell module to PSGallery
@@ -116,11 +117,51 @@ jobs:
           Write-Output "::warning title=Pre-release integration gate not enforced::$message"
           "### Pre-release integration gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+  # Job 0c: The deployment lab gate. The commit being tagged must have a `success` commit status named
+  # `jim-deploy-lab`, which .github/workflows/deploy-lab.yml posts on the SHA it tested: it builds a bundle from the
+  # commit and installs, upgrades, rolls back, re-runs and soaks it the way customers do, on fresh air-gapped VMs on
+  # the deployment lab host (Docker with both image stores, rootful and rootless Podman, Ubuntu and AlmaLinux with
+  # SELinux enforcing). It runs nightly on main, by itself when a change to VERSION reaches main (the release pull
+  # request's merge), and on dispatch. A release is refused otherwise, with a message naming the state, the run and
+  # the remedy: a fix, then a run on this commit BEFORE the tag is pushed. `validate` needs this job as well as the
+  # other two gates. scripts/Test-DeployLabReleaseGate.ps1 holds the decision (sharing scripts/ReleaseGate.ps1) and is
+  # tested in scripts/Tests.
+  #
+  # Enforced only while the repository variable JIM_DEPLOY_LAB_GATE_ENFORCED is `true`, switched on once the lab has
+  # had its first green run in Actions (gh variable set JIM_DEPLOY_LAB_GATE_ENFORCED --body true); until then the job
+  # passes with a warning on the run summary. From then on there is no override, as for the other gates.
+  jim-deploy-lab-gate:
+    name: Deployment Lab Gate
+    runs-on: self-hosted
+    # Reads commit statuses only. Job-level permissions replace the workflow's, which grant no statuses access.
+    permissions:
+      contents: read
+      statuses: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      # The SHA and repository reach the script through env, never interpolated into it.
+      - name: Require a green jim-deploy-lab status on this commit
+        if: vars.JIM_DEPLOY_LAB_GATE_ENFORCED == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
+      - name: Report that the gate is not yet enforced
+        if: vars.JIM_DEPLOY_LAB_GATE_ENFORCED != 'true'
+        shell: pwsh
+        run: |
+          $message = 'The deployment lab gate is not enforced yet (JIM_DEPLOY_LAB_GATE_ENFORCED is not true), so this release has not been proven by installing and upgrading it on fresh air-gapped hosts.'
+          Write-Output "::warning title=Deployment lab gate not enforced::$message"
+          "### Deployment lab gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
   # Job 1: Validate build, tests, and version consistency
   validate:
     name: Validate Build & Tests
     runs-on: self-hosted
-    needs: [jim-ad-lab-gate, jim-pre-release-gate]
+    needs: [jim-ad-lab-gate, jim-pre-release-gate, jim-deploy-lab-gate]
 
     steps:
       - name: Checkout
@@ -842,7 +883,7 @@ jobs:
     steps:
       - name: Mint junctional.io-scoped token
         id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
         with:
           app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
@@ -885,7 +926,7 @@ jobs:
 
       - name: Mint a token for the sites
         id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
         with:
           app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}

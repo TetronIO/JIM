@@ -3,9 +3,15 @@
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
+@using JIM.Models.Security
 @using JIM.Web
+@using JIM.Web.Authentication
 @using JIM.Web.Models
+@using JIM.Web.Services
+@implements IDisposable
 @inject IJimApplicationFactory JimFactory
+@inject TrustedCertificateChanges CertificateChanges
+@inject IIdentityProviderTrustMonitor IdentityProviderTrust
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -15,7 +21,7 @@
 <PageTitle>Trusted Certificates</PageTitle>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.EnhancedEncryption" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Trusted Certificates
     <PageInfo Title="Trusted Certificates" DocsPage="configuration/certificates.md">
-        Manage trusted CA certificates used by Connectors for secure communications (LDAPS, HTTPS, etc.). Certificates can be uploaded directly or referenced from the connector-files mount.
+        Manage the certificates JIM trusts: for Connectors' secure connections (LDAPS, HTTPS, SQL Server), for signing in through your identity provider, or both. Certificates can be uploaded directly or referenced from the connector-files mount.
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -59,6 +65,23 @@
             </HeaderTemplate>
             <CellTemplate>
                 @context.Item.Name
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Trusted for" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Trusted for" Name="trustedFor" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <div class="jim-one-line-list">
+                    @if (context.Item.TrustedFor.HasFlag(CertificateTrustPurpose.SignIn))
+                    {
+                        <MudChip T="string" Color="Color.Primary">Sign-in</MudChip>
+                    }
+                    @if (context.Item.TrustedFor.HasFlag(CertificateTrustPurpose.Connectors))
+                    {
+                        <MudChip T="string" Color="Color.Default">Connectors</MudChip>
+                    }
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Subject" Sortable="false">
@@ -110,7 +133,18 @@
                 <VirtualisedSortHeader Title="Status" Name="status" />
             </HeaderTemplate>
             <CellTemplate>
-                @if (context.Item.IsEnabled)
+                @if (context.Item.IsEnabled && _signInStatus.IsUsedBySignIn(context.Item.Id))
+                {
+                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                        <TooltipContent>
+                            <TooltipText Text="@($"Your identity provider's certificate chains to this one, so sign-in relies on it. Checked {_signInStatus.CheckedUtc.ToLocalTime().ToRelativeTime()}.")" />
+                        </TooltipContent>
+                        <ChildContent>
+                            <MudChip T="string" Color="Color.Success">In use by sign-in</MudChip>
+                        </ChildContent>
+                    </MudTooltip>
+                }
+                else if (context.Item.IsEnabled)
                 {
                     <MudChip T="string" Color="Color.Success">Enabled</MudChip>
                 }
@@ -162,13 +196,14 @@
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
             Supported formats: PEM (.pem, .crt) or DER (.cer, .der)
         </MudText>
+        <TrustedForField @bind-SignIn="_uploadForSignIn" @bind-Connectors="_uploadForConnectors" Class="mt-5" />
         <MudTextField T="string" @bind-Value="_uploadNotes" Label="Notes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
             Class="mt-5" HelperText="Optional notes about this certificate" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _uploadDialogVisible = false" DropShadow="false">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-            Disabled="@(string.IsNullOrWhiteSpace(_uploadName) || _uploadFile == null || _uploading)"
+            Disabled="@(string.IsNullOrWhiteSpace(_uploadName) || _uploadFile == null || !(_uploadForSignIn || _uploadForConnectors) || _uploading)"
             OnClick="HandleUploadAsync">
             @if (_uploading)
             {
@@ -197,13 +232,14 @@
         <MudTextField T="string" @bind-Value="_filePath" Label="File Path" Required="true"
             RequiredError="A file path is required" Immediate="true" Variant="Variant.Outlined" Class="mt-5"
             HelperText="Full path to the certificate file (e.g., /connector-files/certs/root-ca.pem)" />
+        <TrustedForField @bind-SignIn="_filePathForSignIn" @bind-Connectors="_filePathForConnectors" Class="mt-5" />
         <MudTextField T="string" @bind-Value="_filePathNotes" Label="Notes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
             Class="mt-5" HelperText="Optional notes about this certificate" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _filePathDialogVisible = false" DropShadow="false">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-            Disabled="@(string.IsNullOrWhiteSpace(_filePathName) || string.IsNullOrWhiteSpace(_filePath) || _addingFromPath)"
+            Disabled="@(string.IsNullOrWhiteSpace(_filePathName) || string.IsNullOrWhiteSpace(_filePath) || !(_filePathForSignIn || _filePathForConnectors) || _addingFromPath)"
             OnClick="HandleAddFromPathAsync">
             @if (_addingFromPath)
             {
@@ -261,6 +297,9 @@
                 <MudItem xs="6">
                     <MudField Label="Source Type" Variant="Variant.Outlined">@_selectedCertificate.SourceType</MudField>
                 </MudItem>
+                <MudItem xs="12">
+                    <MudField Label="Trusted for" Variant="Variant.Outlined">@DescribePurpose(_selectedCertificate.TrustedFor)</MudField>
+                </MudItem>
                 @if (_selectedCertificate.SourceType == CertificateSourceType.FilePath)
                 {
                     <MudItem xs="12">
@@ -293,12 +332,13 @@
             Immediate="true" Variant="Variant.Outlined" Class="mt-3" />
         <MudTextField T="string" @bind-Value="_editNotes" Label="Notes" Lines="3" MaxLines="8" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
             Class="mt-5" />
+        <TrustedForField @bind-SignIn="_editForSignIn" @bind-Connectors="_editForConnectors" Class="mt-5" />
         <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="Enabled" Class="mt-5" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _editDialogVisible = false" DropShadow="false">Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-            Disabled="@(string.IsNullOrWhiteSpace(_editName) || _saving)" OnClick="HandleSaveEditAsync">
+            Disabled="@(string.IsNullOrWhiteSpace(_editName) || !(_editForSignIn || _editForConnectors) || _saving)" OnClick="HandleSaveEditAsync">
             @if (_saving)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
@@ -333,6 +373,8 @@
     private string _uploadName = "";
     private IBrowserFile? _uploadFile;
     private string _uploadNotes = "";
+    private bool _uploadForSignIn;
+    private bool _uploadForConnectors = true;
     private bool _uploading;
 
     // File path dialog
@@ -340,6 +382,8 @@
     private string _filePathName = "";
     private string _filePath = "";
     private string _filePathNotes = "";
+    private bool _filePathForSignIn;
+    private bool _filePathForConnectors = true;
     private bool _addingFromPath;
 
     // Details dialog
@@ -352,17 +396,35 @@
     private string _editName = "";
     private string _editNotes = "";
     private bool _editEnabled;
+    private bool _editForSignIn;
+    private bool _editForConnectors;
     private bool _saving;
+
+    // The identity provider's status as last checked: which certificate sign-in relies on.
+    private IdentityProviderTrustStatus _signInStatus = new();
 
     protected override async Task OnInitializedAsync()
     {
+        CertificateChanges.Changed += OnCertificatesChangedElsewhereAsync;
         await LoadCertificatesAsync();
     }
+
+    /// <summary>
+    /// A certificate was trusted from the identity provider banner above this page; show it.
+    /// </summary>
+    private Task OnCertificatesChangedElsewhereAsync() => InvokeAsync(async () =>
+    {
+        await ReloadListAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose() => CertificateChanges.Changed -= OnCertificatesChangedElsewhereAsync;
 
     private async Task LoadCertificatesAsync()
     {
         using var jim = JimFactory.Create();
         _certificates = await jim.Certificates.GetAllAsync();
+        _signInStatus = IdentityProviderTrust.Current;
     }
 
     /// <summary>
@@ -403,6 +465,7 @@
             "source" => Order(c => c.SourceType),
             "expires" => Order(c => c.ValidTo),
             "status" => Order(c => c.IsEnabled),
+            "trustedFor" => Order(c => c.TrustedFor),
             _ => Order(c => c.Name, StringComparer.OrdinalIgnoreCase)
         };
 
@@ -432,6 +495,8 @@
         _uploadName = "";
         _uploadFile = null;
         _uploadNotes = "";
+        _uploadForSignIn = false;
+        _uploadForConnectors = true;
         _uploadDialogVisible = true;
     }
 
@@ -440,6 +505,8 @@
         _filePathName = "";
         _filePath = "";
         _filePathNotes = "";
+        _filePathForSignIn = false;
+        _filePathForConnectors = true;
         _filePathDialogVisible = true;
     }
 
@@ -455,6 +522,8 @@
         _editName = certificate.Name;
         _editNotes = certificate.Notes ?? "";
         _editEnabled = certificate.IsEnabled;
+        _editForSignIn = certificate.TrustedFor.HasFlag(CertificateTrustPurpose.SignIn);
+        _editForConnectors = certificate.TrustedFor.HasFlag(CertificateTrustPurpose.Connectors);
         _editDialogVisible = true;
     }
 
@@ -490,7 +559,7 @@
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
             // Add certificate
-            await jim.Certificates.AddFromDataAsync(_uploadName, certificateData, user, _uploadNotes, changeReason);
+            await jim.Certificates.AddFromDataAsync(_uploadName, certificateData, user, _uploadNotes, changeReason, Purpose(_uploadForSignIn, _uploadForConnectors));
 
             Snackbar.Add("Certificate uploaded successfully.", Severity.Success);
             _uploadDialogVisible = false;
@@ -523,7 +592,7 @@
 
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            await jim.Certificates.AddFromFilePathAsync(_filePathName, _filePath, user, _filePathNotes, changeReason);
+            await jim.Certificates.AddFromFilePathAsync(_filePathName, _filePath, user, _filePathNotes, changeReason, Purpose(_filePathForSignIn, _filePathForConnectors));
 
             Snackbar.Add("Certificate added successfully.", Severity.Success);
             _filePathDialogVisible = false;
@@ -549,6 +618,11 @@
 
         try
         {
+            var trustedFor = Purpose(_editForSignIn, _editForConnectors);
+            if (SignInLockoutGuard.WouldStopSignIn(_signInStatus, _editingCertificate.Id, enabledAfter: _editEnabled, trustedForAfter: trustedFor)
+                && !await ConfirmSignInLockoutAsync(_editingCertificate, "Save Changes"))
+                return;
+
             // offer an optional reason for the configuration change history; cancelling aborts the save
             var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
             if (cancelled)
@@ -562,7 +636,8 @@
             _editName,
             _editNotes,
             _editEnabled,
-            changeReason);
+            changeReason,
+            trustedFor);
 
             Snackbar.Add("Certificate updated successfully.", Severity.Success);
             _editDialogVisible = false;
@@ -586,14 +661,22 @@
 
     private async Task HandleDeleteAsync(TrustedCertificate certificate)
     {
-        var result = await DialogService.ShowMessageBoxAsync(
-        "Delete Certificate",
-        $"Are you sure you want to delete the certificate '{certificate.Name}'? This action cannot be undone.",
-        yesText: "Delete",
-        cancelText: "Cancel");
+        if (SignInLockoutGuard.WouldStopSignIn(_signInStatus, certificate.Id, deleting: true))
+        {
+            if (!await ConfirmSignInLockoutAsync(certificate, "Delete"))
+                return;
+        }
+        else
+        {
+            var result = await DialogService.ShowMessageBoxAsync(
+            "Delete Certificate",
+            $"Are you sure you want to delete the certificate '{certificate.Name}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
 
-        if (result != true)
-            return;
+            if (result != true)
+                return;
+        }
 
         // offer an optional reason for the configuration change history; cancelling aborts the delete
         var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
@@ -613,5 +696,34 @@
         {
             Snackbar.Add($"Failed to delete certificate: {ex.Message}", Severity.Error);
         }
+    }
+
+    private static CertificateTrustPurpose Purpose(bool signIn, bool connectors) =>
+        (signIn ? CertificateTrustPurpose.SignIn : CertificateTrustPurpose.None) | (connectors ? CertificateTrustPurpose.Connectors : CertificateTrustPurpose.None);
+
+    private static string DescribePurpose(CertificateTrustPurpose trustedFor) => trustedFor switch
+    {
+        CertificateTrustPurpose.SignIn => "Sign-in",
+        CertificateTrustPurpose.Connectors => "Connectors",
+        _ => "Sign-in and Connectors"
+    };
+
+    /// <summary>
+    /// Warns that the change would stop everyone signing in, and asks for the certificate's name to go ahead (#2363).
+    /// </summary>
+    private async Task<bool> ConfirmSignInLockoutAsync(TrustedCertificate certificate, string confirmText)
+    {
+        var parameters = new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            { x => x.IrreversibleWarning, SignInLockoutGuard.Warning(certificate.Name, _signInStatus.Host) },
+            { x => x.ConfirmationPhrase, certificate.Name },
+            { x => x.ConfirmButtonText, confirmText },
+            { x => x.ConfirmButtonColour, Color.Error }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+
+        var dialog = await DialogService.ShowAsync<ConsequenceConfirmationDialog>($"Stop sign-in through '{certificate.Name}'?", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
     }
 }

@@ -336,7 +336,8 @@ internal static class Rfc4512SchemaParser
             "1.3.6.1.4.1.1466.115.121.1.7" => AttributeDataType.Boolean,
 
             // Integer (RFC 4517 § 3.3.16)
-            "1.3.6.1.4.1.1466.115.121.1.27" => AttributeDataType.Number,
+            // No size limit in the RFC, so the 64-bit type (#2154)
+            "1.3.6.1.4.1.1466.115.121.1.27" => AttributeDataType.LongNumber,
 
             // Generalised Time (RFC 4517 § 3.3.13)
             "1.3.6.1.4.1.1466.115.121.1.24" => AttributeDataType.DateTime,
