@@ -281,6 +281,51 @@ public class SystemResetDatabaseTests
     }
 
     /// <summary>
+    /// The infrastructure API key is the recovery key, so the reset must keep it, with its Administrator role, in both
+    /// modes (#2389). A scoped key's foreign key to Connected Systems means the truncate cascades into the whole API key
+    /// table (TRUNCATE CASCADE empties a referencing table whole), which once took the infrastructure key with it.
+    /// Custom keys, scoped keys among them, are removed.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ResetSystemAsync_InfrastructureApiKey_IsPreservedWithItsRoleAsync(bool includeAdministrators)
+    {
+        await SeedAsync();
+        var infrastructureKeyId = Guid.NewGuid();
+        await using (var seed = NewContext())
+        {
+            var adminRole = await seed.Roles.AsTracking().SingleAsync(r => r.Name == Constants.BuiltInRoles.Administrator);
+            var connectedSystemId = await seed.ConnectedSystems.Select(cs => cs.Id).SingleAsync();
+            seed.ApiKeys.AddRange(
+                new ApiKey
+                {
+                    Id = infrastructureKeyId, Name = "Infrastructure Key", KeyHash = "infrastructure-hash", KeyPrefix = "jim_ak_infr",
+                    IsInfrastructureKey = true, Roles = [adminRole]
+                },
+                new ApiKey { Name = "Custom Key", KeyHash = "custom-hash", KeyPrefix = "jim_ak_cust", Roles = [adminRole] },
+                new ApiKey
+                {
+                    Name = "SCIM Client Key", KeyHash = "scoped-hash", KeyPrefix = "jim_ak_scim",
+                    Scope = ApiKeyScope.ScimServiceProvider, ScopeConnectedSystemId = connectedSystemId
+                });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var result = await new PostgresDataRepository(ctx).System.ResetSystemAsync(includeAdministrators);
+            Assert.That(result.CustomApiKeysRemoved, Is.EqualTo(2));
+        }
+
+        await using var verify = NewContext();
+        var keys = await verify.ApiKeys.Include(k => k.Roles).ToListAsync();
+        Assert.That(keys.Select(k => k.Id), Is.EqualTo(new[] { infrastructureKeyId }),
+            "only the infrastructure key survives a reset");
+        Assert.That(keys[0].Roles.Select(r => r.Name), Is.EqualTo(new[] { Constants.BuiltInRoles.Administrator }),
+            "the infrastructure key keeps its Administrator role");
+    }
+
+    /// <summary>
     /// Verifies the counts added to close the reporting completeness gap: Object Matching Rules,
     /// schedule executions, change history (metaverse + connected-system object changes), and custom
     /// example data templates. Built-in example data templates must be preserved (only the custom one counted).
