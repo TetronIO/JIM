@@ -20,8 +20,8 @@ BeforeAll {
     $script:Info = Get-LabFederationInfo -Domain 'PANOPLY.LOCAL' -NetBiosName 'PANOPLY' -ServerName 'adfs1' -ServiceName 'adfs'
 
     function Get-TestDiscoveryDocument {
-        # The shape AD FS on Windows Server 2025 publishes at /adfs/.well-known/openid-configuration, trimmed to the
-        # members the lab reads.
+        # The members of /adfs/.well-known/openid-configuration the lab reads, as AD FS on Windows Server 2025
+        # publishes them, plus a PKCE method list that AD FS itself leaves out (some providers publish one).
         return [pscustomobject][ordered]@{
             issuer                           = 'https://adfs.panoply.local/adfs'
             authorization_endpoint           = 'https://adfs.panoply.local/adfs/oauth2/authorize/'
@@ -209,10 +209,17 @@ Describe 'Test-LabFederationDiscovery' {
         @(Test-LabFederationDiscovery -Document $document -ServiceFqdn 'adfs.panoply.local') | Should -Match 'jwks_uri'
     }
 
-    It 'requires PKCE with S256, which Connect-JIM uses' {
+    It 'refuses a list of PKCE methods without S256, which Connect-JIM uses' {
         $document = Get-TestDiscoveryDocument
         $document.code_challenge_methods_supported = @('plain')
         @(Test-LabFederationDiscovery -Document $document -ServiceFqdn 'adfs.panoply.local') | Should -Match 'S256'
+    }
+
+    It 'accepts a document that lists no PKCE methods at all, as AD FS on Windows Server 2025 publishes it' {
+        # AD FS has supported PKCE since 2019 but does not advertise it; Connect-JIM's sign-in proves it instead.
+        $document = Get-TestDiscoveryDocument
+        $document.PSObject.Properties.Remove('code_challenge_methods_supported')
+        @(Test-LabFederationDiscovery -Document $document -ServiceFqdn 'adfs.panoply.local') | Should -BeNullOrEmpty
     }
 
     It 'compares host names without regard to case' {

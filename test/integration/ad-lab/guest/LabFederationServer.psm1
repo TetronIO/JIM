@@ -202,9 +202,9 @@ function Test-LabFederationDiscovery {
 
     .DESCRIPTION
         The issuer must be the federation service (https://<service>/adfs); the authorisation, token, key-set and
-        sign-out endpoints must be on it over HTTPS; and PKCE with S256 must be offered, because Connect-JIM signs in
-        with it. access_token_issuer is read by the caller and reported, not judged: which issuer AD FS puts in access
-        tokens is one of the things the lab exists to find out (#2355).
+        sign-out endpoints must be on it over HTTPS; and a published list of PKCE methods must include S256, because
+        Connect-JIM signs in with it. access_token_issuer is read by the caller and reported, not judged: which issuer
+        AD FS puts in access tokens is one of the things the lab exists to find out (#2355).
     #>
     [CmdletBinding()]
     [OutputType([string[]])]
@@ -236,9 +236,9 @@ function Test-LabFederationDiscovery {
         }
     }
 
-    $methods = @()
-    if ($Document.PSObject.Properties['code_challenge_methods_supported']) { $methods = @($Document.code_challenge_methods_supported) }
-    if ($methods -notcontains 'S256') {
+    # AD FS supports PKCE (2019 and later) without publishing code_challenge_methods_supported, so only a list that
+    # leaves S256 out is a problem. Connect-JIM's sign-in is what proves PKCE works.
+    if ($Document.PSObject.Properties['code_challenge_methods_supported'] -and (@($Document.code_challenge_methods_supported) -notcontains 'S256')) {
         $problems.Add('code_challenge_methods_supported does not offer S256, which Connect-JIM signs in with.')
     }
 

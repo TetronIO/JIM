@@ -285,13 +285,10 @@ function Set-FederationCertificate {
 }
 
 function Test-AdfsFarm {
-    try {
-        $null = Get-AdfsProperties -ErrorAction Stop
-        return $true
-    }
-    catch {
-        return $false
-    }
+    # The farm's configuration database on the Windows Internal Database, which Install-AdfsFarm creates. Not
+    # Get-AdfsProperties: that needs the service running, and straight after a restart the delayed-start service is
+    # not yet, which made a re-run create the farm a second time over the first.
+    return (@(Get-ChildItem -LiteralPath 'C:\Windows\WID\Data' -Filter 'AdfsConfigurationV*.mdf' -ErrorAction SilentlyContinue).Count -gt 0)
 }
 
 function Invoke-FarmPhase {
@@ -332,6 +329,7 @@ function Invoke-FarmPhase {
         Set-Changed "Created the AD FS farm $($info.ServiceFqdn), running as $($info.GmsaAccount)"
     }
     else {
+        Wait-FederationService
         $properties = Get-AdfsProperties
         if ($properties.HostName -ine $info.ServiceFqdn) {
             throw "This server already runs the AD FS farm '$($properties.HostName)', not '$($info.ServiceFqdn)'. Remove the VM and build it again."
@@ -372,10 +370,34 @@ function Add-Check {
     Write-Step ("{0} {1}: {2}" -f $mark, $Name, $detail)
 }
 
+function Wait-FederationService {
+    # AD FS is an automatic (delayed start) service: the service manager starts it a couple of minutes after boot, so
+    # straight after the restart that follows Farm it is still stopped. Wait for it rather than start it, so Verify
+    # proves it comes up on its own, as it must after every checkpoint revert.
+    param([int]$TimeoutSeconds = 600)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while (((Get-Service -Name 'adfssrv').Status -ne 'Running') -and ((Get-Date) -lt $deadline)) {
+        Start-Sleep -Seconds 10
+    }
+    # Running is not yet answering: give the service hosts a moment to open their endpoints.
+    $deadline = (Get-Date).AddSeconds(120)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $null = Get-AdfsProperties -ErrorAction Stop
+            return
+        }
+        catch {
+            Start-Sleep -Seconds 5
+        }
+    }
+}
+
 function Invoke-VerifyPhase {
     $info = Get-Info
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Import-Module ADFS -ErrorAction Stop
+    Write-Step 'Waiting for the AD FS service (delayed start) to come up on its own'
+    Wait-FederationService
 
     Add-Check 'Windows is a full Datacenter edition, not evaluation' {
         $edition = Get-EditionId
