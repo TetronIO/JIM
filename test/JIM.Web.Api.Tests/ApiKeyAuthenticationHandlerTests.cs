@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
+using JIM.Application.Utilities;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
@@ -172,7 +173,7 @@ public class ApiKeyAuthenticationHandlerTests
         {
             Id = Guid.NewGuid(),
             Name = "Automation",
-            KeyHash = ApiKeyAuthenticationHandler.HashApiKey(ValidKey),
+            KeyHash = ApiKeyMaterial.Hash(ValidKey),
             KeyPrefix = ValidKey[..12],
             IsEnabled = true,
             Roles = new List<Role> { new() { Name = "Administrator" } }

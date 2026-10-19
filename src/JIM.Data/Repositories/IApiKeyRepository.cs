@@ -36,6 +36,15 @@ public interface IApiKeyRepository
     Task<ApiKey> UpdateAsync(ApiKey apiKey);
 
     /// <summary>
+    /// Counts the keys scoped to a Connected System that can be used now: enabled, and not expired at
+    /// <paramref name="asAt"/>.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the keys are scoped to.</param>
+    /// <param name="asAt">The time expiry is judged against.</param>
+    /// <param name="excludingId">A key to leave out of the count, such as the one being updated.</param>
+    Task<int> CountActiveScopedKeysAsync(int connectedSystemId, DateTime asAt, Guid? excludingId = null);
+
+    /// <summary>
     /// Deletes an API key.
     /// </summary>
     Task DeleteAsync(Guid id);

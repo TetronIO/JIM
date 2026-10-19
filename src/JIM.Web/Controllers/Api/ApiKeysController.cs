@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Asp.Versioning;
+using JIM.Application.Utilities;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -101,8 +102,8 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
         }
 
         // Generate the API key
-        var (fullKey, keyPrefix) = ApiKeyAuthenticationHandler.GenerateApiKey();
-        var keyHash = ApiKeyAuthenticationHandler.HashApiKey(fullKey);
+        var (fullKey, keyPrefix) = ApiKeyMaterial.Generate();
+        var keyHash = ApiKeyMaterial.Hash(fullKey);
 
         // Get the roles
         var roles = new List<Role>();

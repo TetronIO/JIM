@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Utilities;
+
 namespace JIM.Web.Middleware.Api;
 
 /// <summary>
@@ -64,5 +66,5 @@ public static class BearerToken
     /// are generated in lower case, and an SSO JWT can never begin with it.
     /// </summary>
     public static bool IsApiKey(string token) =>
-        token.StartsWith(ApiKeyAuthenticationHandler.ApiKeyPrefix, StringComparison.Ordinal);
+        token.StartsWith(ApiKeyMaterial.Prefix, StringComparison.Ordinal);
 }

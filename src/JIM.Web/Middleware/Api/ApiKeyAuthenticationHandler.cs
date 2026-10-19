@@ -3,10 +3,9 @@
 
 using System.Linq;
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Encodings.Web;
 using JIM.Application;
+using JIM.Application.Utilities;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Web.Authentication;
@@ -27,11 +26,6 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     /// The name of the authentication scheme.
     /// </summary>
     public const string SchemeName = "ApiKey";
-
-    /// <summary>
-    /// The prefix for API keys (e.g., jim_ak_).
-    /// </summary>
-    public const string ApiKeyPrefix = "jim_ak_";
 
     // IServiceScopeFactory, not IServiceProvider: authentication handlers are resolved from the request scope, so
     // an injected IServiceProvider is the request's own provider and is disposed the moment the response completes.
@@ -77,7 +71,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             var jim = scope.ServiceProvider.GetRequiredService<JimApplication>();
 
             // Hash the provided key to look it up
-            var keyHash = HashApiKey(providedKey);
+            var keyHash = ApiKeyMaterial.Hash(providedKey);
             var apiKey = await jim.Security.GetApiKeyByHashAsync(keyHash);
 
             if (apiKey == null)
@@ -181,34 +175,6 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             claims.Add(new Claim(Constants.BuiltInClaims.IsInfrastructureKey, "true"));
 
         return claims;
-    }
-
-    /// <summary>
-    /// Generates a new API key with the standard prefix.
-    /// </summary>
-    /// <returns>A tuple containing the full key and its prefix.</returns>
-    public static (string FullKey, string KeyPrefix) GenerateApiKey()
-    {
-        // Generate 32 random bytes and convert to hex (64 chars)
-        var randomBytes = new byte[32];
-        using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(randomBytes);
-        var randomPart = Convert.ToHexString(randomBytes).ToLowerInvariant();
-
-        var fullKey = $"{ApiKeyPrefix}{randomPart}";
-        var keyPrefix = fullKey[..12]; // jim_ak_ + first 4 chars of random part
-
-        return (fullKey, keyPrefix);
-    }
-
-    /// <summary>
-    /// Hashes an API key using SHA256.
-    /// </summary>
-    public static string HashApiKey(string apiKey)
-    {
-        var bytes = Encoding.UTF8.GetBytes(apiKey);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
 
