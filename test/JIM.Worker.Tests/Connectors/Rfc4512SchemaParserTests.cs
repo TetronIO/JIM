@@ -576,10 +576,11 @@ public class Rfc4512SchemaParserTests
     }
 
     [Test]
-    public void GetRfcAttributeDataType_Integer_ReturnsNumber()
+    public void GetRfcAttributeDataType_Integer_ReturnsLongNumber()
     {
+        // RFC 4517 INTEGER has no size limit; a 32-bit Number cannot hold values such as a uidNumber above 2147483647 (#2154).
         var result = Rfc4512SchemaParser.GetRfcAttributeDataType("1.3.6.1.4.1.1466.115.121.1.27");
-        Assert.That(result, Is.EqualTo(AttributeDataType.Number));
+        Assert.That(result, Is.EqualTo(AttributeDataType.LongNumber));
     }
 
     [Test]
