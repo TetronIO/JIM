@@ -57,7 +57,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 ### Schema Discovery
 
 - **Automatic RFC 4512 schema parsing**<br /> Object classes and attributes are discovered directly from the directory's subschema subentry.
-- **Data types from the directory's schema**<br /> Each attribute's data type comes from its syntax, and cannot be overridden. Active Directory's Enumeration attributes (omSyntax 10), such as `sAMAccountType` and `instanceType`, are whole numbers and are discovered as Number attributes. On other directories, INTEGER attributes such as `uidNumber` and `gidNumber` are discovered as Long Number, because the syntax sets no size limit; flow them to a Long Number Metaverse Attribute.
+- **Data types from the directory's schema**<br /> Each attribute's data type comes from its syntax, and cannot be overridden. Active Directory's Enumeration attributes (omSyntax 10), such as `sAMAccountType` and `instanceType`, are whole numbers and are discovered as Number attributes. Other directories' INTEGER attributes, such as `uidNumber`, are Long Number.
 - **Structural and auxiliary class support**<br /> Optionally include auxiliary classes in schema discovery.
 - **Auxiliary class merging**<br /> Merge an auxiliary class's attributes into a structural Object Type so JIM can import and export them, with JIM composing each entry's `objectClass` itself. See [Auxiliary Object Classes](jim-ldap-connector-auxiliary-classes.md) below.
 - **Internal class classification**<br /> Classes the directory keeps for its own configuration or operation are marked internal, and the schema screen puts them out of the way. See [Internal object types](#internal-object-types) below.
