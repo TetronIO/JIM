@@ -61,11 +61,19 @@ public static class ScimServiceProviderDiscovery
     }
 
     /// <summary>
-    /// The resource types served: User, with the enterprise extension, at <c>/Users</c>, and Group at <c>/Groups</c>.
+    /// The core resource types: User, with the enterprise extension, at <c>/Users</c>, and Group at <c>/Groups</c>.
     /// </summary>
-    public static List<ScimResourceType> ResourceTypes(string baseUrl)
+    public static List<ScimResourceType> ResourceTypes(string baseUrl) => ResourceTypes(baseUrl, ScimCoreSchemas.ResourceTypes());
+
+    /// <summary>
+    /// A store's resource types as published: each given its schema URN and its location under <paramref name="baseUrl"/>.
+    /// The documents given are completed in place and returned, so pass copies the caller owns.
+    /// </summary>
+    public static List<ScimResourceType> ResourceTypes(string baseUrl, IEnumerable<ScimResourceType> stored)
     {
-        var resourceTypes = ScimCoreSchemas.ResourceTypes();
+        ArgumentNullException.ThrowIfNull(stored);
+
+        var resourceTypes = stored.ToList();
         foreach (var resourceType in resourceTypes)
         {
             resourceType.Schemas = [ScimUrns.ResourceType];
@@ -80,12 +88,21 @@ public static class ScimServiceProviderDiscovery
     }
 
     /// <summary>
-    /// The schemas the resource types are composed of, with no write-only attribute at any level.
+    /// The core schemas the core resource types are composed of, with no write-only attribute at any level.
     /// </summary>
-    public static List<ScimSchema> Schemas(string baseUrl)
+    public static List<ScimSchema> Schemas(string baseUrl) =>
+        // Each core schema is built afresh by its factory, so trimming it cannot reach anyone else's copy.
+        Schemas(baseUrl, [ScimCoreSchemas.User(), ScimCoreSchemas.EnterpriseUser(), ScimCoreSchemas.Group()]);
+
+    /// <summary>
+    /// A store's schemas as published: no write-only attribute at any level, and each located under
+    /// <paramref name="baseUrl"/>. The documents given are trimmed in place and returned, so pass copies the caller owns.
+    /// </summary>
+    public static List<ScimSchema> Schemas(string baseUrl, IEnumerable<ScimSchema> stored)
     {
-        // Each core schema is built afresh by its factory, so trimming it here cannot reach anyone else's copy.
-        List<ScimSchema> schemas = [ScimCoreSchemas.User(), ScimCoreSchemas.EnterpriseUser(), ScimCoreSchemas.Group()];
+        ArgumentNullException.ThrowIfNull(stored);
+
+        var schemas = stored.ToList();
         foreach (var schema in schemas)
         {
             RemoveWriteOnly(schema.Attributes);

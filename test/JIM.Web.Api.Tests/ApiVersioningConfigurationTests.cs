@@ -172,10 +172,16 @@ public class ApiVersioningConfigurationTests
     /// Every concrete controller that ASP.NET will route. Abstract base classes are excluded: they declare no
     /// routes of their own, and their derived types carry the attributes.
     /// </summary>
+    /// <summary>
+    /// Every REST API controller. The SCIM 2.0 Service Provider's controllers are left out: they are not
+    /// <c>[ApiController]</c>s, so API versioning does not apply to them (their URL carries SCIM's own <c>/scim/v2</c>),
+    /// and their routes were confirmed to resolve on a running stack without <c>[ApiVersion]</c>.
+    /// </summary>
     private static IEnumerable<Type> RoutableApiControllers() =>
         typeof(JIM.Web.Controllers.Api.SynchronisationController).Assembly
             .GetTypes()
-            .Where(type => type is { IsAbstract: false, IsClass: true } && typeof(ControllerBase).IsAssignableFrom(type));
+            .Where(type => type is { IsAbstract: false, IsClass: true } && typeof(ControllerBase).IsAssignableFrom(type)
+                && !typeof(JIM.Web.Scim.ScimControllerBase).IsAssignableFrom(type));
 
     /// <summary>
     /// The API explorer's endpoint metadata provider requires an <see cref="IHostEnvironment"/>. Nothing here

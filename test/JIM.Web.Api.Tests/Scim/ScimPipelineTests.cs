@@ -80,6 +80,49 @@ public class ScimPipelineTests
 
     #endregion
 
+    #region Secure transport
+
+    [Test]
+    public async Task SecureTransport_PlainHttpOutsideDevelopment_Scim403BeforeTheKeyIsReadAsync()
+    {
+        var context = Request("/scim/v2/7/Users", authorization: "Bearer jim_ak_presented");
+        context.Request.IsHttps = false;
+        var reachedNext = false;
+
+        await new ScimSecureTransportMiddleware(_ => { reachedNext = true; return Task.CompletedTask; })
+            .InvokeAsync(context, Environment(development: false));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reachedNext, Is.False);
+            Assert.That(context.Response.StatusCode, Is.EqualTo(StatusCodes.Status403Forbidden));
+            Assert.That(Body(context)?["detail"]?.GetValue<string>(), Does.Contain("JIM_TRUSTED_PROXIES"));
+        }
+    }
+
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public async Task SecureTransport_HttpsOrDevelopment_PassesTheRequestOnAsync(bool isHttps, bool development)
+    {
+        var context = Request("/scim/v2/7/Users");
+        context.Request.IsHttps = isHttps;
+        var reachedNext = false;
+
+        await new ScimSecureTransportMiddleware(_ => { reachedNext = true; return Task.CompletedTask; })
+            .InvokeAsync(context, Environment(development));
+
+        Assert.That(reachedNext, Is.True);
+    }
+
+    private static Microsoft.AspNetCore.Hosting.IWebHostEnvironment Environment(bool development)
+    {
+        var environment = new Mock<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+        environment.SetupGet(e => e.EnvironmentName).Returns(development ? "Development" : "Production");
+        return environment.Object;
+    }
+
+    #endregion
+
     #region Scope against the route
 
     [TestCase(7, true)]

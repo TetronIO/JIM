@@ -690,13 +690,14 @@ try
         appBuilder => appBuilder.UseGlobalExceptionHandler()
     );
 
-    // The SCIM 2.0 Service Provider endpoints (#124): SCIM-shaped errors for anything unhandled, and dark (404) while
-    // the feature flag is off, decided before authentication so a disabled endpoint says nothing about credentials.
+    // The SCIM 2.0 Service Provider endpoints (#124): SCIM-shaped errors for anything unhandled, dark (404) while the
+    // feature flag is off, and refused over an unconfirmed transport, all decided before authentication reads a key.
     app.UseWhen(
         context => ScimRoutes.IsScimRequest(context.Request),
         appBuilder => appBuilder
             .UseMiddleware<ScimExceptionMiddleware>()
             .UseMiddleware<ScimFeatureGateMiddleware>()
+            .UseMiddleware<ScimSecureTransportMiddleware>()
     );
 
     // A portal sign-in that cannot reach or trust the identity provider lands on a page explaining why and how to fix

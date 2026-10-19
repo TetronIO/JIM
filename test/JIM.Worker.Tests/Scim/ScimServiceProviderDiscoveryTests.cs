@@ -181,4 +181,43 @@ public class ScimServiceProviderDiscoveryTests
         var response = new ScimListResponse<T> { Resources = resources, TotalResults = resources.Count };
         return RoundTrip(response).Resources;
     }
+
+    [Test]
+    public void ResourceTypes_FromStoredDocuments_PublishesEachWithItsLocation()
+    {
+        // A store's own definitions (D18), not the core set: a custom type is published like User and Group.
+        var custom = new ScimResourceType { Id = "Device", Name = "Device", Endpoint = "/Devices", Schema = "urn:example:schemas:Device" };
+
+        var published = ScimServiceProviderDiscovery.ResourceTypes(BaseUrl, [custom]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(published.Select(t => t.Id), Is.EqualTo(new[] { "Device" }));
+            Assert.That(published[0].Schemas, Is.EqualTo(new[] { ScimUrns.ResourceType }));
+            Assert.That(published[0].Meta?.Location, Is.EqualTo(BaseUrl + "/ResourceTypes/Device"));
+        }
+    }
+
+    [Test]
+    public void Schemas_FromStoredDocuments_LeavesOutWriteOnlyAttributes()
+    {
+        var schema = new ScimSchema
+        {
+            Id = "urn:example:schemas:Device",
+            Name = "Device",
+            Attributes =
+            [
+                new ScimSchemaAttribute { Name = "serialNumber", Type = "string", Mutability = ScimMutability.ReadWrite },
+                new ScimSchemaAttribute { Name = "unlockCode", Type = "string", Mutability = ScimMutability.WriteOnly }
+            ]
+        };
+
+        var published = ScimServiceProviderDiscovery.Schemas(BaseUrl, [schema]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(published[0].Attributes.Select(a => a.Name), Is.EqualTo(new[] { "serialNumber" }));
+            Assert.That(published[0].Meta?.Location, Is.EqualTo(BaseUrl + "/Schemas/urn:example:schemas:Device"));
+        }
+    }
 }
