@@ -45,18 +45,28 @@ public abstract class ScimControllerBase(JimApplication application) : Controlle
         $"{Request.Scheme}://{Request.Host}{Request.PathBase}{ScimRoutes.PathBase}/v2/{ConnectedSystemId.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary>
-    /// A SCIM JSON response.
+    /// A SCIM JSON response, as <c>application/scim+json</c> unless the client accepts only <c>application/json</c>
+    /// (RFC 7644 section 3.1 allows either).
     /// </summary>
-    protected static ContentResult Scim(object body, int statusCode = StatusCodes.Status200OK) => new()
+    protected ContentResult Scim(object body, int statusCode = StatusCodes.Status200OK) => new()
     {
         Content = JsonSerializer.Serialize(body, body.GetType(), ScimJson.Options),
-        ContentType = $"{ScimResponses.ContentType}; charset=utf-8",
+        ContentType = $"{ResponseMediaType()}; charset=utf-8",
         StatusCode = statusCode
     };
 
     /// <summary>
     /// A SCIM error response (RFC 7644 section 3.12).
     /// </summary>
-    protected static ContentResult ScimError(int statusCode, string? detail = null, string? scimType = null) =>
+    protected ContentResult ScimError(int statusCode, string? detail = null, string? scimType = null) =>
         Scim(ScimErrorDocument.ForStatus(statusCode, detail, scimType), statusCode);
+
+    private string ResponseMediaType()
+    {
+        var accept = Request.Headers.Accept.ToString();
+        return accept.Contains("application/json", StringComparison.OrdinalIgnoreCase)
+               && !accept.Contains(ScimResponses.ContentType, StringComparison.OrdinalIgnoreCase)
+            ? "application/json"
+            : ScimResponses.ContentType;
+    }
 }
