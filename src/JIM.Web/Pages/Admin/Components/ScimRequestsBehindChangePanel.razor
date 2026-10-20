@@ -1,0 +1,114 @@
+@using JIM.Models.Scim
+@using Humanizer
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The SCIM requests behind one imported change (#124, D17): the resource's accepted writes that the import read.
+   Shown in a change's details on a SCIM 2.0 Service Provider Connected System's objects. *@
+<MudExpansionPanels Elevation="0" Class="mb-4">
+    <MudExpansionPanel Text="@Title" Expanded="true">
+        @if (!_loaded)
+        {
+            <MudSkeleton Height="48px" />
+        }
+        else if (_behind == null)
+        {
+            <MudText Class="mud-text-secondary">
+                The import behind this change recorded no point it read up to, so the requests it read cannot be shown.
+            </MudText>
+        }
+        else if (_behind.Entries.Count == 0)
+        {
+            <MudText Class="mud-text-secondary">
+                No requests to this resource fall in the range its import read. The history that recorded them may have
+                been cleared.
+            </MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Elevation="0" Hover="true">
+                <thead>
+                    <tr>
+                        <th>When</th>
+                        <th>Request</th>
+                        <th>Attributes</th>
+                        <th>Key</th>
+                        <th>From</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in _behind.Entries)
+                    {
+                        var occurred = entry.Occurred.ToLocalTime();
+                        <tr @key="entry.Id">
+                            <td>
+                                <MudTooltip Text="@occurred.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                    @occurred.ToRelativeTime()
+                                </MudTooltip>
+                            </td>
+                            <td>@entry.Operation.ToString().Humanize(LetterCasing.Sentence)</td>
+                            <td>
+                                @if (entry.ChangedAttributes.Count == 0 && entry.IgnoredAttributes.Count == 0)
+                                {
+                                    <EmptyValue />
+                                }
+                                else
+                                {
+                                    <span class="jim-text-code">@string.Join(", ", entry.ChangedAttributes)</span>
+                                    @if (entry.IgnoredAttributes.Count > 0)
+                                    {
+                                        <MudTooltip Text="Sent by the identity provider but not kept, because this Connected System's SCIM definitions do not declare them."
+                                                    Arrow="true" Placement="Placement.Top">
+                                            <span class="mud-text-secondary ml-2">ignored: @string.Join(", ", entry.IgnoredAttributes)</span>
+                                        </MudTooltip>
+                                    }
+                                }
+                            </td>
+                            <td>@(entry.ApiKeyName ?? "Deleted key")</td>
+                            <td>
+                                @if (string.IsNullOrEmpty(entry.ClientAddress))
+                                {
+                                    <EmptyValue />
+                                }
+                                else
+                                {
+                                    <span class="jim-text-code">@entry.ClientAddress</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudExpansionPanel>
+</MudExpansionPanels>
+
+@code {
+    /// <summary>
+    /// The Connected System Object change to show the requests behind.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Guid ChangeId { get; set; }
+
+    private ScimRequestsBehindChange? _behind;
+    private bool _loaded;
+    private Guid? _loadedFor;
+
+    private string Title => _behind is { Entries.Count: > 0 } behind
+        ? $"SCIM Requests ({behind.Entries.Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)})"
+        : "SCIM Requests";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == ChangeId)
+            return;
+        _loadedFor = ChangeId;
+        _loaded = false;
+
+        using var jim = JimFactory.Create();
+        _behind = await jim.Scim.GetRequestsBehindChangeAsync(ChangeId);
+        _loaded = true;
+    }
+}

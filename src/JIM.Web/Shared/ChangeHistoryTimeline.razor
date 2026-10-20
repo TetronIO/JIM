@@ -284,6 +284,12 @@ else
                                         </div>
                                     </MudPaper>
 
+                                        @* What the host page knows about this change that the timeline does not *@
+                                        @if (ChangeDetailExtra != null)
+                                        {
+                                            @ChangeDetailExtra(_selectedChange)
+                                        }
+
                                         <!-- Aggregated Summary (shown when more than 1 change) -->
                                         @if (_selectedChange.AttributeChanges.Count > 1)
                                         {
@@ -665,6 +671,13 @@ else
     [Parameter]
     public bool HistoryComplete { get; set; } = true;
 
+    /// <summary>
+    /// Shown in a change's details, below who and how: what the host page knows about the change that the timeline
+    /// does not, such as the SCIM requests behind an imported one.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<ChangeGroup>? ChangeDetailExtra { get; set; }
+
     /// <summary>One event on the timeline: a change group or a retired generated value.</summary>
     private sealed record TimelineEntry(DateTime Time, ChangeGroup? Change, RetiredGeneratedValueHeader? Retirement);
 
@@ -727,6 +740,10 @@ else
     /// </summary>
     public class ChangeGroup
     {
+        /// <summary>
+        /// The change record's id, where the host page has one (a Connected System Object's change history does).
+        /// </summary>
+        public Guid? ChangeId { get; set; }
         public ObjectChangeType ChangeType { get; set; }
         public DateTime ChangeTime { get; set; }
         /// <summary>
