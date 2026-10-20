@@ -578,6 +578,12 @@ public class ConnectedSystemAttributeDto
     public string AttributePlurality { get; set; } = null!;
 
     /// <summary>
+    /// Whether AttributePlurality was set by an administrator rather than discovered. A schema refresh keeps a
+    /// plurality an administrator set, and restates a discovered one.
+    /// </summary>
+    public bool PluralitySetByAdministrator { get; set; }
+
+    /// <summary>
     /// Whether the attribute's values are case-exact: when JIM asks whether two values identify the same thing,
     /// <c>JBloggs</c> and <c>jbloggs</c> are different values. False means they are the same value. Only Text
     /// attributes carry the declaration.
@@ -680,6 +686,7 @@ public class ConnectedSystemAttributeDto
             Type = entity.Type.ToString(),
             TypeSetByAdministrator = entity.TypeSetByAdministrator,
             AttributePlurality = entity.AttributePlurality.ToString(),
+            PluralitySetByAdministrator = entity.PluralitySetByAdministrator,
             CaseExact = entity.CaseExact,
             CaseExactSetByAdministrator = entity.CaseExactSetByAdministrator,
             DateTimeResolution = entity.DateTimeResolution?.ToString(),

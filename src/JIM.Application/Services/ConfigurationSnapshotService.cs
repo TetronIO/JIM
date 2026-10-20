@@ -1282,6 +1282,7 @@ public class ConfigurationSnapshotService
         Add(children, "supportsSecondaryExternalId", Render(definition.SupportsSecondaryExternalId), "Secondary external ID");
         Add(children, "supportsUserSelectedExternalId", Render(definition.SupportsUserSelectedExternalId), "User-selected external ID");
         Add(children, "supportsUserSelectedAttributeTypes", Render(definition.SupportsUserSelectedAttributeTypes), "User-selected attribute types");
+        Add(children, "supportsUserSelectedAttributePlurality", Render(definition.SupportsUserSelectedAttributePlurality), "User-selected attribute plurality");
         Add(children, "supportsAutoConfirmExport", Render(definition.SupportsAutoConfirmExport), "Auto-confirm export");
         Add(children, "supportsParallelExport", Render(definition.SupportsParallelExport), "Parallel export");
         Add(children, "supportsPaging", Render(definition.SupportsPaging), "Paging");

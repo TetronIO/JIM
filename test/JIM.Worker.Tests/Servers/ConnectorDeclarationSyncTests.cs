@@ -34,6 +34,7 @@ public class ConnectorDeclarationSyncTests
         public bool SupportsSecondaryExternalId { get; init; }
         public bool SupportsUserSelectedExternalId { get; init; }
         public bool SupportsUserSelectedAttributeTypes { get; init; }
+        public bool SupportsUserSelectedAttributePlurality { get; init; }
         public bool SupportsAutoConfirmExport { get; init; }
         public bool SupportsParallelExport { get; init; }
         public bool SupportsPaging { get; init; }
@@ -56,6 +57,7 @@ public class ConnectorDeclarationSyncTests
         SupportsSecondaryExternalId = true,
         SupportsUserSelectedExternalId = true,
         SupportsUserSelectedAttributeTypes = true,
+        SupportsUserSelectedAttributePlurality = true,
         SupportsAutoConfirmExport = true,
         SupportsParallelExport = true,
         SupportsPaging = true,
@@ -84,6 +86,7 @@ public class ConnectorDeclarationSyncTests
         Assert.That(definition.SupportsSecondaryExternalId, Is.True);
         Assert.That(definition.SupportsUserSelectedExternalId, Is.True);
         Assert.That(definition.SupportsUserSelectedAttributeTypes, Is.True);
+        Assert.That(definition.SupportsUserSelectedAttributePlurality, Is.True);
         Assert.That(definition.SupportsAutoConfirmExport, Is.True);
         Assert.That(definition.SupportsParallelExport, Is.True);
         Assert.That(definition.SupportsPaging, Is.True);
