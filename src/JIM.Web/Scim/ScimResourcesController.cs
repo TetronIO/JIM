@@ -123,7 +123,10 @@ public class ScimResourcesController(JimApplication application) : ScimControlle
             Response.Headers.Location = location;
 
         if (result.Error is { } error)
+        {
+            HttpContext.Items[ScimRequestOutcomes.ErrorTypeItem] = error.ScimType;
             return Scim(error, result.StatusCode);
+        }
         return result.Resource is { } resource ? Scim(resource, result.StatusCode) : new StatusCodeResult(result.StatusCode);
     }
 

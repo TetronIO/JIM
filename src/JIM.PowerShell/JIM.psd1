@@ -211,6 +211,7 @@
         'Get-JIMScimStoreSummary',
         'Get-JIMScimResourceType',
         'Get-JIMScimSchema',
+        'Get-JIMScimJournal',
 
         # API Keys
         'Get-JIMApiKey',

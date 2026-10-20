@@ -102,6 +102,25 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
             new VirtualisedWindowRequest(0, 50, searchText, "order", false, IncludeTotalCount: true),
             CancellationToken.None);
 
+    /// <summary>
+    /// The change details can carry what a host page knows about a change that the timeline does not, such as the
+    /// SCIM requests behind an imported one (#124), rendered for the change that was opened.
+    /// </summary>
+    [Test]
+    public void ChangeHistoryTimeline_ChangeDetailExtra_RenderedForTheOpenedChange()
+    {
+        var provider = Render<MudDialogProvider>();
+        var change = BuildChangeGroup();
+        change.ChangeId = System.Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
+        var timeline = Render<ChangeHistoryTimeline>(p => p
+            .Add(c => c.Changes, new List<ChangeHistoryTimeline.ChangeGroup> { change })
+            .Add(c => c.ChangeDetailExtra, opened => builder => builder.AddMarkupContent(0, $"<p class=\"extra\">{opened.ChangeId}</p>")));
+        timeline.Find(".cursor-pointer").Click();
+
+        provider.WaitForAssertion(() => Assert.That(provider.Find(".extra").TextContent, Is.EqualTo("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")));
+    }
+
     [Test]
     public void ChangeHistoryTimeline_ChangeDetails_ShowsTheAttributeChangesInAVirtualisedGrid()
     {

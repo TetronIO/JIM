@@ -280,6 +280,65 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     }
 
     /// <summary>
+    /// Get a SCIM resource's journal
+    /// </summary>
+    /// <remarks>
+    /// The resource's accepted writes, oldest first: what each did, the attributes it changed or ignored (by name,
+    /// never by value), and the key and address that made it. Optionally within a range of change numbers; at most
+    /// 1,000 entries.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System's ID.</param>
+    /// <param name="resourceId">The SCIM resource, which is the Connected System Object's external id.</param>
+    /// <param name="afterSequence">Only writes after this change number.</param>
+    /// <param name="upToSequence">Only writes up to and including this change number.</param>
+    /// <response code="200">The entries; empty when the resource has none in range.</response>
+    /// <response code="404">No such Connected System, or it does not use the SCIM 2.0 Service Provider Connector.</response>
+    [HttpGet("journal", Name = "GetScimJournal")]
+    [ProducesResponseType(typeof(IEnumerable<ScimJournalEntryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetJournalAsync(int connectedSystemId, [FromQuery] Guid resourceId, [FromQuery] long? afterSequence = null,
+        [FromQuery] long? upToSequence = null)
+    {
+        if (await RequireServiceProviderAsync(connectedSystemId) is { } refusal)
+            return refusal;
+
+        var entries = await _application.Scim.GetJournalAsync(connectedSystemId, resourceId, afterSequence, upToSequence, HttpContext.RequestAborted);
+        return Ok(entries.Select(ScimJournalEntryDto.FromEntity));
+    }
+
+    /// <summary>
+    /// Get the SCIM requests behind an imported change
+    /// </summary>
+    /// <remarks>
+    /// For a change in a Connected System Object's change history, the resource's accepted writes that the import
+    /// behind the change read: those after the point it started from, up to the point it reached.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System's ID.</param>
+    /// <param name="changeId">The Connected System Object change's ID.</param>
+    /// <response code="200">The requests.</response>
+    /// <response code="404">No such change in this Connected System, or its import recorded no range to read.</response>
+    [HttpGet("journal/changes/{changeId:guid}", Name = "GetScimRequestsBehindChange")]
+    [ProducesResponseType(typeof(ScimRequestsBehindChangeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRequestsBehindChangeAsync(int connectedSystemId, Guid changeId)
+    {
+        if (await RequireServiceProviderAsync(connectedSystemId) is { } refusal)
+            return refusal;
+
+        var behind = await _application.Scim.GetRequestsBehindChangeAsync(changeId, HttpContext.RequestAborted);
+        if (behind == null || behind.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound(
+                $"Connected System {connectedSystemId} has no imported change {changeId} with SCIM requests to show."));
+        return Ok(ScimRequestsBehindChangeDto.FromModel(behind));
+    }
+
+    /// <summary>
     /// Refuses the request while the feature is off (by throwing, which the API reports as 400), and answers 404 for a
     /// Connected System that does not exist or has no SCIM endpoint; null when the request may proceed.
     /// </summary>

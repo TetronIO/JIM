@@ -35,6 +35,9 @@ public static class ActivityTargetTypeCategories
         // belongs beside the Metaverse Object rather than in the Configuration filter.
         { ActivityTargetType.ConnectedSystemObject, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.PasswordSynchronisation, ActivityTargetCategory.PasswordSynchronisation },
+        // A SCIM client writing Users and Groups into a Connected System's store changes identity data, not JIM's
+        // configuration.
+        { ActivityTargetType.ScimRequests, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.MetaverseObjectHousekeeping, ActivityTargetCategory.SyncRuns },

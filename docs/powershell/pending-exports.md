@@ -142,7 +142,7 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 | `Id` | `guid` | The Run Profile Execution Item's id. |
 | `ActivityId` | `guid` | The Activity (run) the item belongs to. |
 | `Executed` | `datetime` | When the run executed (UTC). |
-| `TargetType` | `string` | What the run targeted. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject` or `PasswordSynchronisation`. |
+| `TargetType` | `string` | What the run targeted. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject`, `PasswordSynchronisation` or `ScimRequests`. |
 | `TargetName` | `string` | The run's name, typically the Run Profile's. |
 | `TargetContext` | `string` | Where the run happened, typically its Connected System's name. |
 | `ConnectedSystemId` | `int` | The Connected System the run was against, where it was against one. |

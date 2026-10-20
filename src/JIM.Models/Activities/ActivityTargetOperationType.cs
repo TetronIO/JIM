@@ -118,5 +118,11 @@ public enum ActivityTargetOperationType
     /// released the held export so the next export run tries the same value again. Same target types as
     /// <see cref="AllowGeneratedValueRename"/>.
     /// </summary>
-    RetryGeneratedValue = 21
+    RetryGeneratedValue = 21,
+
+    /// <summary>
+    /// A SCIM client's requests to a Connected System's SCIM 2.0 Service Provider endpoint within one window. Used
+    /// with <see cref="ActivityTargetType.ScimRequests"/>.
+    /// </summary>
+    Receive = 22
 }

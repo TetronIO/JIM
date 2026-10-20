@@ -167,7 +167,7 @@
                             <VirtualisedSortHeader Title="Type" Name="type" />
                         </HeaderTemplate>
                         <CellTemplate>
-                            @context.Item.TargetType.ToString().SplitOnCapitalLetters()
+                            @Helpers.GetActivityTargetTypeName(context.Item.TargetType)
                         </CellTemplate>
                     </TemplateColumn>
                     <TemplateColumn Title="Target" Sortable="false">

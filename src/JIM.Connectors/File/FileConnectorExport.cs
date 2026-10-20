@@ -55,14 +55,6 @@ internal class FileConnectorExport
         var delimiter = GetSettingValue("Delimiter") is { Length: > 0 } configuredDelimiter ? configuredDelimiter : FileConnector.DefaultDelimiter;
         var multiValueDelimiter = GetSettingValue("Multi-Value Delimiter") is { Length: > 0 } configuredMultiValueDelimiter ? configuredMultiValueDelimiter : "|";
 
-        // A file whose header repeats a column cannot be rewritten without losing every column after the first of that
-        // name, for every row (#2186). Refuse before reading it, so the file is left exactly as it was.
-        if (FindExistingHeaderProblem(exportFilePath, delimiter, multiValueDelimiter) is { } headerProblem)
-        {
-            _logger.Error("FileConnectorExport.Execute: {HeaderProblem}", LogSanitiser.Sanitise(headerProblem));
-            return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed(headerProblem)).ToList();
-        }
-
         // Ensure the export directory exists
         var exportDir = Path.GetDirectoryName(exportFilePath);
         if (!string.IsNullOrEmpty(exportDir) && !Directory.Exists(exportDir))
@@ -83,10 +75,20 @@ internal class FileConnectorExport
         // without it the Activity message sits on "0 of N" for the whole connector call.
         await _progress.EnterPhaseAsync(FileConnectorPhases.LoadExistingFile);
         var existingFileHeaders = new List<string>();
-        var existingRows = LoadExistingFileContent(exportFilePath, delimiter, externalIdAttributeName, existingFileHeaders);
+        var existingRows = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        var unkeyedRows = new List<Dictionary<string, string>>();
+
+        // The file is rewritten whole, so every row this run does not change must come back as it was. Where JIM cannot
+        // be sure of that, every export fails and the file is left untouched, rather than rewritten with only the rows
+        // this run touched.
+        if (LoadExistingFileContent(exportFilePath, delimiter, multiValueDelimiter, externalIdAttributeName, existingFileHeaders, existingRows, unkeyedRows) is { } fileProblem)
+        {
+            _logger.Error("FileConnectorExport.Execute: {FileProblem}", LogSanitiser.Sanitise(fileProblem));
+            return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed(fileProblem)).ToList();
+        }
 
         // Determine schema columns by merging existing file headers with the Pending Exports' attribute metadata
-        var attributeColumns = CollectAttributeColumns(existingFileHeaders);
+        var attributeColumns = CollectAttributeColumns(existingFileHeaders, externalIdAttributeName);
         if (attributeColumns.Count == 0)
         {
             _logger.Warning("FileConnectorExport.Execute: No attribute columns found in Pending Exports or existing file");
@@ -132,7 +134,7 @@ internal class FileConnectorExport
 
         // Write the full-state file
         await _progress.EnterPhaseAsync(FileConnectorPhases.Write, $"Writing {existingRows.Count:N0} rows to output file...");
-        WriteFullStateFile(exportFilePath, delimiter, attributeColumns, existingRows);
+        WriteFullStateFile(exportFilePath, delimiter, attributeColumns, existingRows, unkeyedRows);
 
         _logger.Information(
             "FileConnectorExport.Execute: Export complete. Created: {Created}, Updated: {Updated}, Deleted: {Deleted}. Total rows in file: {TotalRows}",
@@ -177,11 +179,12 @@ internal class FileConnectorExport
     /// <summary>
     /// Collects all attribute column names by merging existing file headers with the
     /// Pending Exports' attribute metadata, in alphabetical order.
-    /// This ensures updates and deletes don't lose columns that were in the original file.
+    /// This ensures updates and deletes don't lose columns that were in the original file. The External ID column is
+    /// always written, even when no change names it, since without it no later export or import can tell rows apart.
     /// </summary>
-    private List<string> CollectAttributeColumns(List<string> existingFileHeaders)
+    private List<string> CollectAttributeColumns(List<string> existingFileHeaders, string externalIdAttributeName)
     {
-        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { externalIdAttributeName };
 
         // Include columns from the existing file
         foreach (var header in existingFileHeaders)
@@ -203,37 +206,31 @@ internal class FileConnectorExport
     }
 
     /// <summary>
-    /// Why the existing file's header row cannot be rewritten, or null when it can or there is no file yet.
+    /// Loads the existing file into <paramref name="rows"/>, keyed by External ID, and <paramref name="unkeyedRows"/>,
+    /// the rows with no External ID, which are written back unchanged. Populates <paramref name="existingFileHeaders"/>
+    /// with the file's column headers. Leaves everything empty when there is no file yet.
     /// </summary>
-    private static string? FindExistingHeaderProblem(string filePath, string delimiter, string multiValueDelimiter)
+    /// <returns>
+    /// Why the file cannot be rewritten without losing rows this run was not asked to change, or null when it can: it
+    /// cannot be read, its header names a column twice (#2186), it has rows but no External ID column, or two rows claim
+    /// the same External ID.
+    /// </returns>
+    private string? LoadExistingFileContent(
+        string filePath,
+        string delimiter,
+        string multiValueDelimiter,
+        string externalIdAttributeName,
+        List<string> existingFileHeaders,
+        Dictionary<string, Dictionary<string, string>> rows,
+        List<Dictionary<string, string>> unkeyedRows)
     {
-        if (!System.IO.File.Exists(filePath))
-            return null;
-
-        using var reader = new StreamReader(filePath);
-        using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture) { Delimiter = delimiter });
-        if (!csv.Read() || !csv.ReadHeader() || csv.HeaderRecord == null)
-            return null;
-
-        return FileConnectorHeader.FindProblem(csv.HeaderRecord, Path.GetFileName(filePath), multiValueDelimiter);
-    }
-
-    /// <summary>
-    /// Loads existing file content into a dictionary keyed by External ID.
-    /// Populates existingFileHeaders with the column headers from the file.
-    /// Returns an empty dictionary if the file doesn't exist or has no data rows.
-    /// </summary>
-    private Dictionary<string, Dictionary<string, string>> LoadExistingFileContent(
-        string filePath, string delimiter, string externalIdAttributeName, List<string> existingFileHeaders)
-    {
-        var rows = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
         if (!System.IO.File.Exists(filePath))
         {
-            _logger.Debug("FileConnectorExport.LoadExistingFileContent: File does not exist, starting fresh");
-            return rows;
+            _logger.Debug("FileConnectorExport.LoadExistingFileContent: File does not exist, starting a new one");
+            return null;
         }
 
+        var fileName = Path.GetFileName(filePath);
         try
         {
             using var reader = new StreamReader(filePath);
@@ -246,36 +243,29 @@ internal class FileConnectorExport
                 PrepareHeaderForMatch = args => IdentifierKey.For(args.Header, caseExact: false)
             });
 
-            csv.Read();
-            csv.ReadHeader();
-
-            var headers = csv.HeaderRecord;
-            if (headers == null || headers.Length == 0)
+            if (!csv.Read() || !csv.ReadHeader() || csv.HeaderRecord is not { Length: > 0 } headers)
             {
                 _logger.Debug("FileConnectorExport.LoadExistingFileContent: File has no headers");
-                return rows;
+                return null;
             }
+
+            // A file whose header repeats a column cannot be rewritten without losing every column after the first of
+            // that name, for every row (#2186).
+            if (FileConnectorHeader.FindProblem(headers, fileName, multiValueDelimiter) is { } headerProblem)
+                return headerProblem;
 
             // Capture headers so the caller can merge them into the attribute columns
             existingFileHeaders.AddRange(headers);
 
-            // Check if the External ID column exists in the file
-            if (!headers.Contains(externalIdAttributeName, StringComparer.OrdinalIgnoreCase))
-            {
-                _logger.Warning(
-                    "FileConnectorExport.LoadExistingFileContent: External ID column '{ExternalIdColumn}' not found in existing file headers. Starting fresh.",
-                    externalIdAttributeName);
-                return rows;
-            }
-
+            var hasExternalIdColumn = headers.Contains(externalIdAttributeName, StringComparer.OrdinalIgnoreCase);
+            var rowNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             while (csv.Read())
             {
-                var externalId = csv.GetField(externalIdAttributeName);
-                if (string.IsNullOrEmpty(externalId))
-                {
-                    _logger.Warning("FileConnectorExport.LoadExistingFileContent: Row with empty External ID found, skipping");
-                    continue;
-                }
+                // Without the External ID column no row can be matched to its object, and rewriting would lose them all.
+                if (!hasExternalIdColumn)
+                    return $"The file '{fileName}' has rows but no '{externalIdAttributeName}' column, so JIM cannot tell which row " +
+                           "belongs to which object, and rewriting it would lose them. Add the column, or move the file aside so JIM " +
+                           "starts a new one, then run the export again.";
 
                 var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var header in headers)
@@ -285,18 +275,33 @@ internal class FileConnectorExport
                         row[header] = value;
                 }
 
+                var externalId = csv.GetField(externalIdAttributeName);
+                var rowNumber = csv.Parser.Row;
+                if (string.IsNullOrEmpty(externalId))
+                {
+                    // Not JIM's to change, and not JIM's to drop: written back as it is.
+                    _logger.Warning("FileConnectorExport.LoadExistingFileContent: Row {Row} has no External ID; keeping it unchanged", rowNumber);
+                    unkeyedRows.Add(row);
+                    continue;
+                }
+
+                if (rowNumbers.TryGetValue(externalId, out var firstRow))
+                    return $"The file '{fileName}' has more than one row for External ID '{externalId}' (rows {firstRow:N0} and " +
+                           $"{rowNumber:N0}), so JIM cannot tell which one to update. Remove the duplicate row, then run the export again.";
+
+                rowNumbers[externalId] = rowNumber;
                 rows[externalId] = row;
             }
 
-            _logger.Debug("FileConnectorExport.LoadExistingFileContent: Loaded {Count} existing rows from file", rows.Count);
+            _logger.Debug("FileConnectorExport.LoadExistingFileContent: Loaded {Count} existing rows from file", rows.Count + unkeyedRows.Count);
+            return null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CsvHelperException)
         {
-            _logger.Warning(ex, "FileConnectorExport.LoadExistingFileContent: Error reading existing file, starting fresh");
-            rows.Clear();
+            _logger.Warning(ex, "FileConnectorExport.LoadExistingFileContent: Could not read the existing file");
+            return $"The file '{fileName}' could not be read ({ex.Message.Split('\n')[0].Trim()}), so JIM cannot rewrite it without losing " +
+                   "the rows it holds. Correct or move the file, then run the export again.";
         }
-
-        return rows;
     }
 
     /// <summary>
@@ -576,37 +581,45 @@ internal class FileConnectorExport
         "so the file would read it back as more than one value. Choose a Multi-Value Delimiter that no value contains.";
 
     /// <summary>
-    /// Writes the full-state file from the merged rows dictionary.
+    /// Writes the full-state file from the merged rows dictionary, then the rows with no External ID as they were. The
+    /// file is written beside the original and then moved over it, so a write that fails part-way leaves the original
+    /// whole rather than truncated.
     /// </summary>
     private void WriteFullStateFile(
         string filePath,
         string delimiter,
         List<string> attributeColumns,
-        Dictionary<string, Dictionary<string, string>> rows)
+        Dictionary<string, Dictionary<string, string>> rows,
+        List<Dictionary<string, string>> unkeyedRows)
     {
-        _logger.Debug("FileConnectorExport.WriteFullStateFile: Writing {RowCount} rows to {Path}", rows.Count, filePath);
+        _logger.Debug("FileConnectorExport.WriteFullStateFile: Writing {RowCount} rows to {Path}", rows.Count + unkeyedRows.Count, filePath);
 
-        using var writer = new StreamWriter(filePath);
-        using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture)
+        var temporaryPath = $"{filePath}.{Guid.NewGuid():N}.tmp";
+        try
         {
-            Delimiter = delimiter
-        });
-
-        // Write header - use attribute columns only (no system columns)
-        foreach (var column in attributeColumns)
-        {
-            csv.WriteField(column);
-        }
-        csv.NextRecord();
-
-        // Write data rows
-        foreach (var row in rows.Values)
-        {
-            foreach (var column in attributeColumns)
+            using (var writer = new StreamWriter(temporaryPath))
+            using (var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture) { Delimiter = delimiter }))
             {
-                csv.WriteField(row.TryGetValue(column, out var value) ? value : string.Empty);
+                // Write header - use attribute columns only (no system columns)
+                foreach (var column in attributeColumns)
+                    csv.WriteField(column);
+                csv.NextRecord();
+
+                // Write data rows
+                foreach (var row in rows.Values.Concat(unkeyedRows))
+                {
+                    foreach (var column in attributeColumns)
+                        csv.WriteField(row.TryGetValue(column, out var value) ? value : string.Empty);
+                    csv.NextRecord();
+                }
             }
-            csv.NextRecord();
+
+            System.IO.File.Move(temporaryPath, filePath, overwrite: true);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(temporaryPath))
+                System.IO.File.Delete(temporaryPath);
         }
     }
 

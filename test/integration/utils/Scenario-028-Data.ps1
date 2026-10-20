@@ -90,8 +90,8 @@ function Write-Scenario028HrCsv {
         Writes the HR CSV to the connector-files volume: people and groups in one file, told apart by objectType.
 
     .DESCRIPTION
-        The members column is repeated in the header, which is how the File Connector learns it is multi-valued;
-        every member goes in the first of the two, separated by the connector's default multi-value delimiter (|).
+        The members column holds every member, separated by the connector's default multi-value delimiter (|). A
+        header names columns and nothing more, so the setup marks the column multi-valued on the schema.
     #>
     param(
         [Parameter(Mandatory)][object[]]$People,
@@ -99,12 +99,12 @@ function Write-Scenario028HrCsv {
     )
 
     $lines = [System.Collections.Generic.List[string]]::new()
-    $lines.Add("objectType,accountName,firstName,lastName,email,department,active,displayName,members,members")
+    $lines.Add("objectType,accountName,firstName,lastName,email,department,active,displayName,members")
     foreach ($person in $People) {
-        $lines.Add("person,$($person.AccountName),$($person.FirstName),$($person.LastName),$($person.Email),$($person.Department),$($person.Active.ToString().ToLowerInvariant()),,,")
+        $lines.Add("person,$($person.AccountName),$($person.FirstName),$($person.LastName),$($person.Email),$($person.Department),$($person.Active.ToString().ToLowerInvariant()),,")
     }
     foreach ($group in $Groups) {
-        $lines.Add("group,$($group.AccountName),,,,,,$($group.DisplayName),$($group.Members -join '|'),")
+        $lines.Add("group,$($group.AccountName),,,,,,$($group.DisplayName),$($group.Members -join '|')")
     }
 
     $localPath = Join-Path ([System.IO.Path]::GetTempPath()) "scenario-028-hr.csv"

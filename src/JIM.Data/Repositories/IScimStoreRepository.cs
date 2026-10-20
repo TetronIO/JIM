@@ -76,6 +76,19 @@ public interface IScimStoreRepository
     Task<ScimStoreSummary> GetSummaryAsync(int connectedSystemId, long? importedUpTo, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// A resource's journal entries, oldest first: those after <paramref name="afterSequence"/> (exclusive) and up to
+    /// <paramref name="upToSequence"/> (inclusive) where given, at most <paramref name="maxEntries"/>.
+    /// </summary>
+    Task<List<ScimStoreJournalEntry>> GetJournalEntriesAsync(int connectedSystemId, Guid resourceId, long? afterSequence, long? upToSequence,
+        int maxEntries, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The import behind a Connected System Object change: its Connected System, the object's external id as the
+    /// import read it, and the watermarks the import started from and reached. Null when there is no such change.
+    /// </summary>
+    Task<ScimChangeImportContext?> GetChangeImportContextAsync(Guid connectedSystemObjectChangeId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Adds schema and resource type definitions to a Connected System's store, together or not at all: the core User,
     /// Group and Enterprise User definitions when the Connected System is created, and later any custom ones. Each
     /// row's Connected System is set from <paramref name="connectedSystemId"/>.

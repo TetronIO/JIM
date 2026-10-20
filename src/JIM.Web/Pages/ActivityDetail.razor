@@ -20,8 +20,8 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Activity: @_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">Activity:</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
+<PageTitle>Activity: @_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">Activity:</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
     <PageInfo Title="Activity" DocsPage="configuration/activities.md">
         An Activity records one thing JIM did: what started it, when, and how it ended. A Run Profile's Activity also lists what the run did to each object it touched.
     </PageInfo>
@@ -86,6 +86,9 @@
                             <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
                             @(_activity.TargetName ?? "History Retention Cleanup")
                             break;
+                        case ActivityTargetType.ScimRequests:
+                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/?t=scim")">@_activity.TargetName</MudLink>
+                            break;
                         case ActivityTargetType.Authentication:
                             <MudIcon Icon="@Icons.Material.Filled.Shield" Class="mr-1" Style="vertical-align: middle;" />
                             @(_activity.TargetName ?? "Authentication")
@@ -143,7 +146,7 @@
                         @if (_parentActivity != null)
                         {
                             var parentTargetName = !string.IsNullOrEmpty(_parentActivity.TargetName) ? _parentActivity.TargetName : "(no name)";
-                            <MudChip T="string" Variant="Variant.Text" Class="mr-2">@_parentActivity.TargetType.ToString().SplitOnCapitalLetters()</MudChip>
+                            <MudChip T="string" Variant="Variant.Text" Class="mr-2">@Helpers.GetActivityTargetTypeName(_parentActivity.TargetType)</MudChip>
                             <MudLink Href="@parentActivityHref">@parentTargetName</MudLink>
                         }
                         else
@@ -151,6 +154,33 @@
                             <MudLink Href="@parentActivityHref">View parent activity</MudLink>
                         }
                     </MudText>
+                </MudItem>
+            }
+
+            @* An import's read range: where it started reading from and the point the next import starts from. *@
+            @if (_activity.ImportWatermarkFrom != null || _activity.ImportWatermarkTo != null)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Read From:</MudText>
+                    @if (_activity.ImportWatermarkFrom != null)
+                    {
+                        <MudText Class="jim-text-code">@_activity.ImportWatermarkFrom</MudText>
+                    }
+                    else
+                    {
+                        <MudText>The start</MudText>
+                    }
+                </MudItem>
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Read Up To:</MudText>
+                    @if (_activity.ImportWatermarkTo != null)
+                    {
+                        <MudText Class="jim-text-code">@_activity.ImportWatermarkTo</MudText>
+                    }
+                    else
+                    {
+                        <MudText><EmptyValue /></MudText>
+                    }
                 </MudItem>
             }
 
@@ -444,6 +474,64 @@
                     var lastSeen = _activity.LastSeen.Value;
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Last Seen:</MudText>
+                        <MudText title="@lastSeen.ToLocalTime().ToFriendlyDate()">@lastSeen.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudPaper>
+    }
+
+    @if (_activity.TargetType == ActivityTargetType.ScimRequests)
+    {
+        <MudText Typo="Typo.h5" Class="mt-5">SCIM Requests</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2 mb-4">
+            What this key's requests did to the Connected System's SCIM endpoint in one 15-minute window. Reads and
+            searches are not counted; neither are requests refused for authentication, which are security events of
+            their own.
+        </MudText>
+
+        <MudStack Row="true" Class="mt-2 flex-wrap" Spacing="3">
+            <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Created</MudText>
+                <MudText Typo="Typo.h4">@_activity.TotalAdded.ToString("N0")</MudText>
+            </MudPaper>
+            <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Updated</MudText>
+                <MudText Typo="Typo.h4">@_activity.TotalUpdated.ToString("N0")</MudText>
+            </MudPaper>
+            <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Deleted</MudText>
+                <MudText Typo="Typo.h4">@_activity.TotalDeleted.ToString("N0")</MudText>
+            </MudPaper>
+            <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Rejected</MudText>
+                <MudText Typo="Typo.h4" Class="@(_activity.TotalErrors > 0 ? "mud-warning-text" : null)">@_activity.TotalErrors.ToString("N0")</MudText>
+            </MudPaper>
+        </MudStack>
+
+        <MudPaper Class="pa-4 mt-4 mb-5" Outlined="true">
+            <MudGrid Spacing="4">
+                @if (_activity.AggregationWindowStart.HasValue)
+                {
+                    var windowStart = _activity.AggregationWindowStart.Value;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Window Start:</MudText>
+                        <MudText title="@windowStart.ToLocalTime().ToFriendlyDate()">@windowStart.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudItem>
+                }
+                @if (_activity.FirstSeen.HasValue)
+                {
+                    var firstSeen = _activity.FirstSeen.Value;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">First Request:</MudText>
+                        <MudText title="@firstSeen.ToLocalTime().ToFriendlyDate()">@firstSeen.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudItem>
+                }
+                @if (_activity.LastSeen.HasValue)
+                {
+                    var lastSeen = _activity.LastSeen.Value;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Latest Request:</MudText>
                         <MudText title="@lastSeen.ToLocalTime().ToFriendlyDate()">@lastSeen.ToLocalTime().ToRelativeTime()</MudText>
                     </MudItem>
                 }
@@ -1026,7 +1114,7 @@
                         <MudText Typo="Typo.button">Type</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        @context.Item.TargetType.ToString().SplitOnCapitalLetters()
+                        @Helpers.GetActivityTargetTypeName(context.Item.TargetType)
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="Activity" Title="Target" Sortable="false">

@@ -6,6 +6,7 @@ using JIM.Application;
 using JIM.Application.Exceptions;
 using JIM.Connectors;
 using JIM.Models.Core;
+using JIM.Models.Scim;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.PostgresData;
@@ -82,7 +83,28 @@ public class ScimStoreSummaryDatabaseTests
             Assert.That(summary.ChangesAwaitingImport, Is.Zero);
             Assert.That(summary.ImportedUpTo, Is.Null);
             Assert.That(summary.LastWrite, Is.Null);
+            Assert.That(summary.RejectedLast24Hours, Is.Zero);
         }
+    }
+
+    [Test]
+    public async Task GetStoreSummaryAsync_Rejections_CountsEveryKeysRejectionsFromTheLast24HoursAsync()
+    {
+        var first = (await WithJimAsync(jim => jim.Security.CreateScimServiceProviderKeyAsync(_systemId, "Entra key", null, null, _administrator))).Key;
+        var second = (await WithJimAsync(jim => jim.Security.CreateScimServiceProviderKeyAsync(_systemId, "Entra key 2027", null, null, _administrator))).Key;
+        var now = DateTime.UtcNow;
+        var thisWindow = new DateTime(now.Ticks - now.Ticks % TimeSpan.FromMinutes(15).Ticks, DateTimeKind.Utc);
+
+        await WithJimAsync(jim => jim.Scim.RecordRequestTalliesAsync(
+        [
+            Tally(first, thisWindow, rejected: 3),
+            Tally(second, thisWindow.AddHours(-2), rejected: 2),
+            Tally(first, thisWindow.AddDays(-2), rejected: 5)
+        ]));
+
+        var summary = await WithJimAsync(jim => jim.Scim.GetStoreSummaryAsync(_systemId));
+
+        Assert.That(summary.RejectedLast24Hours, Is.EqualTo(5), "both keys' recent windows, not the one two days ago");
     }
 
     [Test]
@@ -153,6 +175,18 @@ public class ScimStoreSummaryDatabaseTests
     }
 
     #region helpers
+
+    private ScimRequestTally Tally(ApiKey key, DateTime windowStart, int rejected) => new()
+    {
+        ConnectedSystemId = _systemId,
+        ApiKeyId = key.Id,
+        ApiKeyName = key.Name,
+        WindowStart = windowStart,
+        FirstSeen = windowStart,
+        LastSeen = windowStart,
+        Rejected = rejected,
+        LatestRejection = "409 uniqueness on POST /Users"
+    };
 
     private async Task<Guid> CreateAsync(string endpoint, JsonObject body)
     {
