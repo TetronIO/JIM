@@ -1,6 +1,6 @@
 # SCIM 2.0 Service Provider Design
 
-- **Status:** Doing (Phases 1 to 4, 5a and 5b complete: the SCIM store, the server's writes, Get and list, the Service Provider Connector behind its feature flag, scoped API keys, the `/scim` HTTP surface, key management, the store summary and the definitions, and the SCIM summary Activity and the requests behind a change, across the portal, REST and PowerShell)
+- **Status:** Doing (Phases 1 to 4, 5a, 5b and 6 complete: the SCIM store, the server's writes, Get and list, the Service Provider Connector behind its feature flag, scoped API keys, the `/scim` HTTP surface, key management, the store summary and the definitions, and the SCIM summary Activity and the requests behind a change, across the portal, REST and PowerShell, and the JIM-to-JIM acceptance scenario; 5c, the public documentation and the promotion to Preview, remains)
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
 - **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
@@ -310,7 +310,7 @@ Accepted on input, each coercion logged without values:
 - booleans sent as strings (`"False"`) on `active` and on `primary`;
 - single-element arrays for single-valued attributes, and `""` treated as absent;
 - `remove` on an unfiltered multi-valued path **with** a `value` array removes only the listed values (`remove` with no value still removes all). Strict RFC handling here would wipe a group's whole membership when the identity provider meant to remove one member;
-- unknown and read-only attributes ignored (`groups`, `roles` on input, custom URNs not declared), undeclared ones named in the journal (D17);
+- unknown and read-only attributes ignored (`groups` on input, custom URNs not declared), undeclared ones named in the journal (D17);
 - base URL with or without a trailing slash; unknown query parameters ignored;
 - the credential probe some providers send on every cycle (`GET /Users?filter=userName eq "<random>"`) returns `200` with an empty list.
 
@@ -434,9 +434,33 @@ Decided 20 October 2026, for 5b:
 - **Definitions, read-only (D19):** `Get-JIMScimResourceType` and `Get-JIMScimSchema`, their REST endpoints, and a read-only view on the Connected System page.
 - **Docs:** a connector page with per-provider setup (what to paste where), the recommended Schedule and the latency statement, the lifecycle table, and the "create a new Connected System" guidance; updates to the connectors index, architecture concepts, glossary and roadmap; changelog entries.
 
-### Phase 6: Acceptance
+### Phase 6: Acceptance ✅
 
 The JIM-to-JIM integration scenario (both directions of the round trip, scheduled Delta Import and Delta Synchronisation to the Metaverse, a client Full Import proving deletes), leniency tests, then promotion of the flag from In Development to Preview. Its removal follows after a release in Preview (D16).
+
+Decided 20 October 2026:
+
+- **Phase 6 before 5c.** The public documentation, the changelog entries and the promotion to Preview ship together in 5c, after this acceptance passes, so the docs site (deployed on every merge) never describes a feature administrators cannot turn on.
+- **One instance, looped back.** A SCIM Client Connected System points at the same JIM's `/scim` endpoint over HTTPS, and a Service Provider Connected System imports what arrives. The requests cross a real socket exactly as between two instances, at half the infrastructure, and the scenario runs in every lane.
+- **HTTPS from Kestrel itself**, as the production compose file serves it on 8443, from a certificate the runner mints for `jim.web` and the scenario trusts; no proxy and no new image.
+- **Leniency through the real pipeline in the scenario.** No SCIM test yet crosses routing, authentication and the scheme selector, so a scenario step sends what identity providers actually send (lower-case and bare bearer values, a trailing slash, unknown query parameters, the empty probe, capitalised operations, booleans as strings). The gaps below the pipeline get unit tests: `primary` as a string, a capitalised `Remove`, the path-less single-element array, and coercions logged without values.
+- **`roles` is stored, not ignored.** RFC 7643 declares it read-write and the client imports `roles.value`, so the leniency list above was wrong to name it; only `groups` (read-only) is ignored on input.
+
+As built:
+
+- **Scenario 029** (`Invoke-Scenario-029-ScimRoundTrip.ps1`, `Setup-Scenario-029.ps1`): an HR CSV projects people and a group; a SCIM Client Connected System, keyed with a scoped key and trusting the harness certificate, provisions them to `https://jim.web:8443/scim/v2/{id}`; a Service Provider Connected System joins them by userName and display name through a Manual Schedule of Delta Import and Delta Synchronisation. Steps, each asserted through JIM and against the endpoint:
+  - **Provision:** POST, a group's members added by PATCH, and a confirming Full Import paging four at a time.
+  - **Inbound:** the Schedule joins every person and the group, with its members.
+  - **Update:** PATCH with `If-Match`, confirmed by the client's `meta.lastModified` Delta Import and then by the Schedule.
+  - **Clear:** a value-less replace leaves no value at the endpoint.
+  - **IdentityProvider:** a lower-case scheme, a bare key, a trailing slash, an unknown query parameter, the empty probe, a capitalised op and Booleans as strings are all accepted. A pushed password is refused and stored nowhere, a duplicate userName gets `409 uniqueness`, and a pushed Job Title reaches the Metaverse.
+  - **Conflict:** the identity provider changes a User, and the client's export over it gets `412`, which it records as a Concurrency Conflict. After an import, both changes are kept.
+  - **Deprovision:** a DELETE, then the client's Full Import finds the leaver gone and the Schedule's Delta Import reads the deletion.
+  - **Restore:** after the Connector Space is cleared, a Full Import rebuilds it from the store, and the pushed Job Title comes back.
+  - **Summary:** per-key creates, deletes and rejections are counted.
+- **Harness:** `jim-web-https.override.yml` serves 8443 on the Docker network from a certificate `Initialize-JimWebTlsCertificate` mints once per run, before any lane. HTTPS redirection is skipped in development (as HSTS already is), since every other caller there keeps using HTTP.
+- **Unit:** `primary` as a string, a capitalised `Remove` with a value list, the path-less single-element array, and every coercion recorded without the values sent, each mutation-checked.
+- **Found:** the SCIM Client Connector sends `If-Match` only when `meta.version` is a selected attribute, which nothing selects or explains ([#2404](https://github.com/TetronIO/JIM/issues/2404)); the scenario selects it, as Scenario 015 does.
 
 ## Success Criteria
 

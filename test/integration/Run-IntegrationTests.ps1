@@ -387,6 +387,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
+. "$scriptRoot/utils/Initialize-JimWebTlsCertificate.ps1"
 . "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
 . "$scriptRoot/utils/Resolve-IntegrationScenarioName.ps1"
 # The Active Directory lab (-DirectoryType ActiveDirectory): control-plane calls over SSH, the LDAP
@@ -404,6 +405,9 @@ $script:Lane = Get-IntegrationLane
 Set-IntegrationLaneComposeEnvironment -RepoRoot $repoRoot
 $script:JimComposeArgs = @(Get-JimComposeArgs)
 $script:IntegrationComposeArgs = @(Get-IntegrationComposeArgs)
+# The certificate jim.web serves HTTPS with (jim-web-https.override.yml), before anything starts the stack. A
+# -Parallel parent mints it here before its lanes start, and each lane then finds it valid and keeps it.
+Initialize-JimWebTlsCertificate -Directory (Join-Path $scriptRoot "results" "jim-web-tls")
 # Result and log file names carry the lane's directory type, so two lanes finishing the same scenario
 # at the same template in the same second cannot overwrite each other's files. Serial names are unchanged.
 $script:ResultNameTag = if ($script:Lane.Active) { "-$($script:Lane.Name)" } else { "" }
@@ -1409,7 +1413,8 @@ $templateIrrelevantScenarioNumbers = @(
     24,  # Active Directory Password Policy - asserts against one Micro export (Active Directory lab only)
     25,  # Active Directory Delta Import Integrity - creates and deletes its own users (Active Directory lab only)
     27,  # First Synchronisation (the tested tutorial) - the tutorial's sample data is fixed at 25 people
-    28   # SCIM Connector against Keycloak - its own HR CSV, sized to put one group over Keycloak's 100-operation PATCH cap
+    28,  # SCIM Connector against Keycloak - its own HR CSV, sized to put one group over Keycloak's 100-operation PATCH cap
+    29   # JIM provisioning its own SCIM endpoint - its own small HR CSV; the question is the round trip, not the population
 )
 
 function Test-TemplateRelevant {
@@ -3049,7 +3054,7 @@ if ($DirectoryType -eq "OpenLDAP") {
     # Attribute Flows) composes the same substrate and asserts on every account it provisions.
     # S010-S013 and S015-S018 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -3149,7 +3154,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
     # verified: a snapshot baked from a stale base is stale. S026 is excluded for S023's reasons.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3724,7 +3729,7 @@ if ($adPopulateEntries.Count -gt 0) {
 # -GenerateAccountName, and every value it asserts on is generated, not sourced, so the target
 # directory must start empty exactly as it must for S001. S026 (Metaverse-Derived Attribute Flows) composes
 # the same substrate and asserts on every account it provisions, so it too needs an empty directory.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28 -and -not $script:UsingRfcDirectorySnapshots) {
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"

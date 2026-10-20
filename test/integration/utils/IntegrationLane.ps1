@@ -131,8 +131,8 @@ function Get-JimServiceContainers {
 function Get-JimComposeArgs {
     <#
     .SYNOPSIS
-        The `docker compose` arguments that address this process's JIM stack (docker-compose.yml plus
-        the development override), relative to the repository root.
+        The `docker compose` arguments that address this process's JIM stack (docker-compose.yml, the
+        development override and the harness's HTTPS override), relative to the repository root.
 
     .DESCRIPTION
         Serial runs and the Samba AD lane get exactly the arguments the runner has always used. The
@@ -144,7 +144,7 @@ function Get-JimComposeArgs {
     if ($lane.Suffix) {
         $composeArgs += @('-p', $lane.JimProject)
     }
-    $composeArgs += @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
+    $composeArgs += @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'test/integration/docker/jim-web-https.override.yml')
     if ($lane.Suffix) {
         $composeArgs += @('-f', 'test/integration/docker/jim-lane.override.yml')
     }
