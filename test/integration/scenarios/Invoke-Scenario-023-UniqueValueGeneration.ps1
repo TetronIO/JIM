@@ -779,6 +779,11 @@ Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 $stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "NeverReuse", "ProbeBrownfield", "ProbeRestrictedBind", "ProbeUnreachable", "CollisionRemediated", "CollisionDerivedUpn", "CollisionNeedsDecision", "CollisionRemediationOff", "CollisionKeepUniqueOff", "Forms")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
+# The values Tests 18 and 19 leave refused, which later export runs retry (#2370). Test 19 does not run on OpenLDAP.
+$remediationOffPerson = $null
+$remediationOffRejected = $null
+$keepUniqueOffRejected = $null
+
 try {
     # ─────────────────────────────────────────────────────────────────────────────────────
     # Joiners: import mode, baseline population
@@ -1760,6 +1765,9 @@ try {
         $collide = if ($isRfcDirectory) { 'Mail' } else { 'AccountName' }
         $person = Add-CollisionJoiner -EmployeeId "EMP900083" -FirstName "Osric" -LastName "Tamworth" -Department "Procurement" -Context "Remediation off"
         $rejected = $person.attributes.'Account Name'
+        # Test 19 retries this refusal with remediation back on, and checks it by its effect on this person.
+        $remediationOffPerson = $person
+        $remediationOffRejected = $rejected
         $clashDn = New-CollidingDirectoryAccount -Collide $collide -Value $rejected -Tag "off"
         Write-Host "  JIM staged '$rejected'; created $clashDn holding it ($collide)" -ForegroundColor Gray
 
@@ -1819,9 +1827,12 @@ try {
             $clashDn = New-CollidingDirectoryAccount -Collide UserPrincipalName -Value $rejected -Tag "ku"
             Write-Host "  JIM staged '$rejected'; created $clashDn holding userPrincipalName '$rejected@panoply.local' outside JIM" -ForegroundColor Gray
 
+            # Test 20 retries this refusal with Keep unique back on.
+            $keepUniqueOffRejected = $rejected
+
             $stepName = "CollisionKeepUniqueOff"
             Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $upnMapping.Id -KeepUnique $false
-            Add-JimExpectedError -Step $stepName -Pattern "(?i)$([regex]::Escape($rejected))|UniqueValueAlreadyInUse|nerys\.vandal|GeneratedValueCollisionUnresolved" | Out-Null
+            Add-JimExpectedError -Step $stepName -Pattern "(?i)$([regex]::Escape($rejected))|$([regex]::Escape($remediationOffRejected))|UniqueValueAlreadyInUse|nerys\.vandal|GeneratedValueCollisionUnresolved" | Out-Null
             try {
                 $export = Start-DirectoryExportForCollision -Context "Keep unique off"
             }
@@ -1836,14 +1847,20 @@ try {
                 -Passed ($ownItems.Count -eq 1 -and $ownItems[0].errorType -eq 'UniqueValueAlreadyInUse') -Detail $itemsDetail
             # Failing Pending Exports are retried at every export run (#2370), so Test 18's refusal, made while Collision
             # Remediation was off, is sent again here with it back on and is remediated. That one, and nothing of this
-            # test's own, is the only remediation.
+            # test's own, is the only remediation. The retried item is not matched by name: the refused account was
+            # never created and the retry changes no naming attribute, so the item carries no display name. Test 18's
+            # person is checked instead: their Account Name is revised, as Test 16's is.
             $remediatedItems = @($export.Items | Where-Object { $_.outcomeSummary -match 'GeneratedValueRemediated:' })
             Add-TestResult -Name "[Keep unique] Nothing of this test's is remediated" `
                 -Passed (@($remediatedItems | Where-Object { $_.displayName -eq 'Thaddeus Merrow' }).Count -eq 0) `
                 -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated); $itemsDetail"
-            Add-TestResult -Name "[Keep unique] Test 18's refusal is retried with remediation back on, and is the only one remediated" `
-                -Passed ($remediatedItems.Count -eq 1 -and $remediatedItems[0].displayName -eq 'Osric Tamworth' -and $export.Stats.totalGeneratedValuesRemediated -eq 1) `
+            Add-TestResult -Name "[Keep unique] One refusal is remediated" `
+                -Passed ($remediatedItems.Count -eq 1 -and $export.Stats.totalGeneratedValuesRemediated -eq 1) `
                 -Detail "remediated: $($export.Stats.totalGeneratedValuesRemediated); $itemsDetail"
+            $retriedAccountName = Get-MvoAttributeValue -MvoId $remediationOffPerson.id -AttributeName "Account Name"
+            Add-TestResult -Name "[Keep unique] It is Test 18's refusal, retried with remediation back on: its Account Name is revised from '$remediationOffRejected'" `
+                -Passed (-not [string]::IsNullOrEmpty($retriedAccountName) -and $retriedAccountName -ne $remediationOffRejected) `
+                -Detail "Got '$retriedAccountName'"
 
             # Changing a value's Keep unique switch releases every decision held on the generated value it is built
             # from, as changing the generated flow's own settings does: Test 17's parked export is sent again, and,
@@ -1916,11 +1933,22 @@ try {
             -Passed ($skippedDetails.Count -eq $skippedExpected -and @($skippedDetails | Where-Object { $_ -match '\(built from Account Name\)' }).Count -eq $skippedExpected) `
             -Detail ($skippedDetails -join ' | ')
 
-        $export = Start-DirectoryExportForCollision -Context "forms"
+        # Failing Pending Exports are retried at every export run (#2370), so the earlier tests' refusals are sent
+        # again here: Test 19's (Active Directory) with Keep unique back on, Test 18's on OpenLDAP, where Test 19 does
+        # not run. They may be corrected or refused again, so only this joiner's own item is checked.
+        $priorRefusals = @($remediationOffRejected, $keepUniqueOffRejected) | Where-Object { $_ } | ForEach-Object { [regex]::Escape($_) }
+        $stepName = "Forms"
+        Add-JimExpectedError -Step $stepName -Pattern "(?i)$($priorRefusals -join '|')|UniqueValueAlreadyInUse|nerys\.vandal|GeneratedValueCollisionUnresolved" | Out-Null
+        try {
+            $export = Start-DirectoryExportForCollision -Context "forms"
+        }
+        finally {
+            Complete-JimExpectedError -Step $stepName
+        }
         $ownItems = @($export.Items | Where-Object { $_.displayName -eq 'Ottoline Vex' })
         Add-TestResult -Name "[Forms] The directory accepts the export: nothing is refused or corrected" `
-            -Passed ($ownItems.Count -eq 1 -and (-not $ownItems[0].errorType -or $ownItems[0].errorType -eq 'NotSet') -and $export.Stats.totalGeneratedValuesRemediated -eq 0) `
-            -Detail "Items: $(($ownItems | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | '); remediated: $($export.Stats.totalGeneratedValuesRemediated)"
+            -Passed ($ownItems.Count -eq 1 -and (-not $ownItems[0].errorType -or $ownItems[0].errorType -eq 'NotSet') -and $ownItems[0].outcomeSummary -notmatch 'GeneratedValueRemediated:') `
+            -Detail "Items: $(($export.Items | ForEach-Object { "$($_.displayName): $($_.errorType) [$($_.outcomeSummary)]" }) -join ' | '); remediated: $($export.Stats.totalGeneratedValuesRemediated)"
         $provisioned = Get-LDAPUser -UserIdentifier $expected -DirectoryConfig $DirectoryConfig
         Add-TestResult -Name "[Forms] The joiner is provisioned to the directory as '$expected'" -Passed ($null -ne $provisioned) `
             -Detail "Directory entry: $(if ($provisioned) { $provisioned['dn'] } else { 'none' })"
