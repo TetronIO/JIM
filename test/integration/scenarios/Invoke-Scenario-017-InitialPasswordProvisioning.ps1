@@ -121,8 +121,10 @@ if ($DirectoryConfig.UserObjectClass -ne "user") {
 
 # The password the account holder chooses when put through the change. Distinct from the Initial
 # Password in every character class so that a bind succeeding with it cannot be confused with a bind
-# succeeding with the one JIM set.
-$chosenPassword = 'Foxglove-9-Harbour!'
+# succeeding with the one JIM set. It never has three letters in a row: Active Directory refuses a
+# password holding any part of the account's name of three or more characters, and the account under
+# test is whichever generated person comes first ('Foxglove' was refused for an Emily Love).
+$chosenPassword = 'Q7#xR2-mK9!wT4'
 
 # One account is what this scenario asserts against, so it always provisions at Micro no matter what
 # the runner passed. A larger template would lengthen the export and prove nothing further.
