@@ -288,6 +288,16 @@ If imported data contains garbled characters or unexpected symbols:
 - Ensure the file is saved in UTF-8 encoding. JIM reads the file as UTF-8 (or as UTF-16 or UTF-32 when the file starts with a byte order mark), and no setting changes this; the **Culture** setting only affects how numbers and dates are parsed.
 - If the file was exported from another system, check whether that system uses a different character encoding.
 
+### Export refuses to rewrite the file
+
+An export rewrites the whole file, and every row it was not asked to change must come back as it was. When JIM cannot be sure of that, every export in the run fails with an error naming the file, and the file is left exactly as it was:
+
+- **The file could not be read.**<br /> It is malformed (for example a stray quotation mark), locked by another process, or not readable by JIM. The error includes what the reader reported; correct the file or the permission (see [Access denied](#access-denied-permission-error)).
+- **The file has rows but no External ID column.**<br /> JIM matches each row to its object by the External ID attribute's column, so without it every row would be lost. Add the column, or move the file aside so JIM starts a new one.
+- **Two rows have the same External ID.**<br /> JIM cannot tell which to update. The error names the External ID and both row numbers; remove the duplicate.
+
+The exports are retried on the next run once the file is corrected. A row with no External ID at all is not JIM's to change: it is written back unchanged, after the rows JIM manages. JIM writes the new file beside the old one and then replaces it, so an export that fails part-way through writing leaves the previous file whole.
+
 ### Repeated column
 
 Schema discovery, an import and an export all fail with an error naming the column when the file's header names a column twice, such as `member,member`. Each attribute has one column: put the values in that one column, separated by the Multi-Value Delimiter, and mark the attribute multi-valued on the Schema tab (see [Multi-valued attributes](#multi-valued-attributes)). An export refuses such a file before writing anything, so the file is left as it was.
