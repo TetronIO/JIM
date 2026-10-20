@@ -136,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Export Activity items with no available name now show the Connected System Object id, including provisioning retries after a value collision. (#2397)
 - 🐛 A File Connector export no longer loses rows it was not asked to change: a file JIM cannot read, one with rows but no External ID column, or one with two rows for one External ID now fails the export and is left untouched, and rows with no External ID are kept. (#2186)
 - 🐛 File Connector exports now write every value of a multi-valued attribute, and an update adds or removes only the values that changed, instead of keeping just the last value. A value containing the Multi-Value Delimiter fails that object's export. (#2186)
 - 🐛 JIM starts when its identity provider is unreachable or its certificate is not trusted, instead of stopping after five attempts; API keys keep working while sign-in is unavailable. (#2363)
