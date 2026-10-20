@@ -61,6 +61,7 @@ With `-Preview`, what the refresh would change; with `-PassThru`, the Connected 
 | `ObjectTypesWithClassificationUpdates` | `string[]` | Existing Object Types whose classification the Connected System now reports differently in a way that cannot change which Object Type an entry resolves to (an unselected type, inheritance naming no other selected type, or a class kind change that does not make a class auxiliary or stop it being one). Applying the refresh records it; an Object Type listed in ChangedObjectTypeClassifications is not repeated here. |
 | `AttributesInUse` | `hashtable` | Attributes no longer reported that are still referenced by Synchronisation Rules. Key is the attribute name, value is the list of Synchronisation Rule names that reference it. |
 | `BlockedCredentialAttributes` | `hashtable` | Credential attributes found in the schema and blocked from management, grouped by object type name. |
+| `AttributesSelectedByConnector` | `hashtable` | Existing attributes this refresh selected and locked because the Connector cannot work without their values, grouped by object type name. |
 | `DiscoveryWarnings` | `string[]` | Discovery shortfalls the Connector worked around rather than failed on. A partial read can make entries appear removed when they are not; check these before committing a refresh. |
 | `PasswordPolicyDiscovered` | `bool` | Whether a password policy was read from the Connected System during the retrieval. |
 | `HasChanges` | `bool` | Whether there were any changes to the schema. |

@@ -45,6 +45,15 @@
             </MudAlert>
         }
 
+        @if (Result.AttributesSelectedByConnector.Count > 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
+                <strong>Selected because the Connector requires them:</strong>
+                @(string.Join(", ", Result.AttributesSelectedByConnector.SelectMany(kvp => kvp.Value).Distinct())).
+                The Connector cannot work without these attributes' values, so they are always imported and cannot be unselected.
+            </MudAlert>
+        }
+
         @if (Result.BlockedCredentialAttributeCount > 0)
         {
             <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">

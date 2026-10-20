@@ -157,9 +157,10 @@ function Get-ScimObjectTypes {
     return @{ User = $user; Group = $group }
 }
 
-# meta.version is what the client sends back as If-Match, and it sends none unless the attribute is imported (#2404).
-$userAttributes = @("id", "userName", "active", "name.givenName", "name.familyName", "emails.work", "enterpriseUser.department", "title", "meta.version")
-$groupAttributes = @("id", "displayName", "members", "meta.version")
+# meta.version is not listed: the client sends it back as If-Match, so schema import selects and locks it itself
+# where the provider supports entity tags (#2404), which Step 8 checks.
+$userAttributes = @("id", "userName", "active", "name.givenName", "name.familyName", "emails.work", "enterpriseUser.department", "title")
+$groupAttributes = @("id", "displayName", "members")
 
 # Step 3: The Service Provider
 Write-TestStep "Step 3" "Creating the Service Provider Connected System"
@@ -254,6 +255,13 @@ Import-JIMConnectedSystemSchema -Id $clientSystem.id | Out-Null
 $clientTypes = Get-ScimObjectTypes -ConnectedSystemId $clientSystem.id -Label "Client"
 Select-CsAttributes -ConnectedSystemId $clientSystem.id -ObjectType $clientTypes.User -ExternalId "id" -Names $userAttributes
 Select-CsAttributes -ConnectedSystemId $clientSystem.id -ObjectType $clientTypes.Group -ExternalId "id" -Names $groupAttributes
+# JIM's endpoint supports entity tags, so the schema import must have selected and locked meta.version (#2404).
+foreach ($type in @($clientTypes.User, $clientTypes.Group)) {
+    $metaVersion = Get-CsAttribute $type "meta.version"
+    if (-not $metaVersion.selected -or -not $metaVersion.selectionLocked) {
+        throw "The Client's '$($type.name)' meta.version is not selected and locked (selected: $($metaVersion.selected), locked: $($metaVersion.selectionLocked)), so exports would carry no If-Match."
+    }
+}
 Write-Host "  OK Client configured, connection verified and schema read from the endpoint's discovery (ID: $($clientSystem.id))" -ForegroundColor Green
 
 # Step 9: Resolve the Metaverse

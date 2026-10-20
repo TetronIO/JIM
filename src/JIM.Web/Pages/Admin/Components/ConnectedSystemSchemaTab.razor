@@ -62,6 +62,15 @@
                 Found <strong>@result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@result.TotalAttributes.ToString("N0")</strong> attribute(s).
             </MudText>
 
+            @if (result.AttributesSelectedByConnector.Count > 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
+                    <strong>Selected because the Connector requires them:</strong>
+                    @(string.Join(", ", result.AttributesSelectedByConnector.SelectMany(kvp => kvp.Value).Distinct())).
+                    The Connector cannot work without these attributes' values, so they are always imported and cannot be unselected.
+                </MudAlert>
+            }
+
             @if (result.BlockedCredentialAttributeCount > 0)
             {
                 <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
@@ -614,6 +623,12 @@
                         {
                             <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
                                 <MudSwitch Value="@context.Item.Selected" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
+                            </MudTooltip>
+                        }
+                        else if (context.Item.SelectionLocked && context.Item.Selected)
+                        {
+                            <MudTooltip Text="This attribute cannot be unselected because the Connector cannot work without its values, so it is always imported." Arrow="true" Placement="Placement.Top">
+                                <MudSwitch Value="true" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
                         else

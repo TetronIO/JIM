@@ -109,6 +109,15 @@ public class SchemaRefreshResult
     public Dictionary<string, List<string>> BlockedCredentialAttributes { get; set; } = new();
 
     /// <summary>
+    /// Existing attributes the merge selected, or locked selected, because the Connector now declares it cannot work
+    /// without them, grouped by object type name (#2404). Their selection is locked, as the External ID's is. Listed so a
+    /// refresh carrying only
+    /// these is offered for applying rather than reported as up to date; newly discovered attributes the Connector
+    /// declares are selected too, but are already reported in <see cref="AddedAttributes"/>.
+    /// </summary>
+    public Dictionary<string, List<string>> AttributesSelectedByConnector { get; set; } = new();
+
+    /// <summary>
     /// The schema as JIM held it before the merge ran: the merge rebuilds the in-memory graph from what the
     /// Connector reported, so this snapshot is the only place a removed entry's id survives, and it is what
     /// dependent detection (#1485) resolves removal names against.
@@ -140,9 +149,9 @@ public class SchemaRefreshResult
     public bool ActionRequired => AttributesInUse.Count > 0;
 
     /// <summary>
-    /// Whether there were any changes to the schema. Includes Object Type classification changes and updates, and
-    /// case-only renames, so a refresh carrying only those is offered for applying rather than reported as up to date
-    /// and discarded.
+    /// Whether there were any changes to the schema. Includes Object Type classification changes and updates, case-only
+    /// renames, and attributes the Connector now requires selected, so a refresh carrying only those is offered for
+    /// applying rather than reported as up to date and discarded.
     /// </summary>
     public bool HasChanges => AddedObjectTypes.Count > 0 ||
                               RemovedObjectTypes.Count > 0 ||
@@ -152,7 +161,8 @@ public class SchemaRefreshResult
                               RemovedAttributes.Values.Sum(v => v.Count) > 0 ||
                               ChangedAttributes.Values.Sum(v => v.Count) > 0 ||
                               HasObjectTypeClassificationChanges ||
-                              ObjectTypesWithClassificationUpdates.Count > 0;
+                              ObjectTypesWithClassificationUpdates.Count > 0 ||
+                              AttributesSelectedByConnector.Values.Sum(v => v.Count) > 0;
 
     /// <summary>
     /// Whether the refresh found changes that can invalidate existing configuration or leave stale data behind:
