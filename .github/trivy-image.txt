@@ -1,0 +1,10 @@
+# The Trivy scanner image CI's scan-images job and the release workflow scan JIM's images with, through
+# .github/scripts/Invoke-TrivyImageScan.ps1, pinned by tag and digest.
+# Docker verifies the digest; the tag is kept beside it for readability.
+#
+# It lives here rather than in the workflow because nothing would watch it there: Dependabot reads Dockerfile FROM
+# lines and workflow `uses:` references, not an image named in a job's env, and the jim-automation App that commits
+# tooling-pin-check's bumps has no permission to write .github/workflows/. tooling-pin-check
+# (.github/scripts/check-tooling-pins.ps1) watches this file weekly and raises a PR moving tag and digest together.
+# The one line that is not a comment is the image reference.
+aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
