@@ -23,7 +23,7 @@
     -PreRelease expand to (the lab needs its host, so they never include it).
 
     Test-ScenarioIsDirectoryAgnostic answers a different one: does the scenario use a directory at
-    all. Scenarios 011, 015, 016, 027 and 028 accept -DirectoryConfig for runner compatibility but never
+    all. Scenarios 011, 015, 016, 027, 028 and 029 accept -DirectoryConfig for runner compatibility but never
     read it (all but 011 explicitly discard it with `$null = $DirectoryConfig`), so their results are
     identical regardless of directory type; a -DirectoryType All run should execute them once, not
     once per directory type with identical results each time.
@@ -149,9 +149,9 @@ function Test-ScenarioIsDirectoryAgnostic {
     )
 
     # Scenarios 011 (Scoping Criteria Matrix), 015 (SCIM Connector), 016 (JIM SQL Connector matrix),
-    # 027 (the tested tutorial, which uses the File Connector only) and 028 (SCIM Connector against
-    # Keycloak) accept -DirectoryConfig for runner compatibility but never read it (015, 016, 027 and
-    # 028 explicitly discard it with `$null = $DirectoryConfig`); their results are identical on every
-    # directory type.
-    return $ScenarioNumber -in 11, 15, 16, 27, 28
+    # 027 (the tested tutorial, which uses the File Connector only), 028 (SCIM Connector against
+    # Keycloak) and 029 (JIM provisioning its own SCIM endpoint) accept -DirectoryConfig for runner
+    # compatibility but never read it (015, 016, 027, 028 and 029 explicitly discard it with
+    # `$null = $DirectoryConfig`); their results are identical on every directory type.
+    return $ScenarioNumber -in 11, 15, 16, 27, 28, 29
 }
