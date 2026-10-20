@@ -225,7 +225,9 @@ function Invoke-ScimRequest {
         $parameters.ContentType = "application/scim+json"
     }
     $response = Invoke-WebRequest @parameters
-    $json = if ($response.Content) { $response.Content | ConvertFrom-Json -Depth 20 } else { $null }
+    # PowerShell treats application/scim+json as binary, so the body arrives as bytes rather than text.
+    $content = if ($response.Content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($response.Content) } else { [string]$response.Content }
+    $json = if ($content) { $content | ConvertFrom-Json -Depth 20 } else { $null }
     return [pscustomobject]@{ Status = [int]$response.StatusCode; Json = $json }
 }
 
