@@ -283,11 +283,12 @@ $hrPersonType = $hrObjectTypes | Where-Object { $_.name -eq "person" }
 $hrGroupType = $hrObjectTypes | Where-Object { $_.name -eq "group" }
 if (-not $hrPersonType -or -not $hrGroupType) { throw "The HR schema did not produce both 'person' and 'group' object types." }
 
-# A delimited file names no types, so the members column is declared a Reference: its values are the accountName of
-# the people in the same file. The repeated header has already made it multi-valued.
+# A delimited file names no types and no plurality, so the members column is declared both: multi-valued, its members
+# separated by the Multi-Value Delimiter, and a Reference, its values the accountName of the people in the same file.
 $membersAttribute = Get-CsAttribute $hrGroupType "members"
-if ($membersAttribute.attributePlurality -ne "MultiValued") {
-    throw "The HR 'members' column was not discovered as multi-valued; the CSV header must repeat it."
+$multiValued = Set-JIMConnectedSystemAttribute -ConnectedSystemId $hrSystem.id -ObjectTypeId $hrGroupType.id -AttributeId $membersAttribute.id -Plurality MultiValued -PassThru
+if ($multiValued.attributePlurality -ne "MultiValued") {
+    throw "The HR 'members' column is not multi-valued after setting it (found '$($multiValued.attributePlurality)')."
 }
 Set-JIMConnectedSystemAttribute -ConnectedSystemId $hrSystem.id -ObjectTypeId $hrGroupType.id -AttributeId $membersAttribute.id -Type Reference | Out-Null
 
