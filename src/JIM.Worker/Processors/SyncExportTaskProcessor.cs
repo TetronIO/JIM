@@ -425,6 +425,12 @@ public class SyncExportTaskProcessor
                 exportItem.AttributeValueChanges.Select(avc => (avc.Attribute?.Name, avc.StringValue)),
                 ObjectNaming.ConnectedSystemNameRank);
 
+            // A provisioning retry may carry only corrected values and no naming attributes (#2397).
+            // Preserve the internal Connected System Object id as the final label, including when
+            // processing removed the object and its foreign key must remain null.
+            if (exportItem.ConnectedSystemObject is { Id: var csoId } && csoId != Guid.Empty)
+                executionItem.DisplayNameSnapshot ??= csoId.ToString();
+
             // Set error information if the export failed
             if (exportItem.GeneratedValueCollision?.Handling == GeneratedValueCollisionHandling.NeedsDecision)
             {

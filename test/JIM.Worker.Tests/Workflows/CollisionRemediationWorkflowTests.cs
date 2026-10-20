@@ -35,6 +35,48 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
 
     #region Remediation, import mode (Scenario 5)
 
+    [TestCase(null)]
+    [TestCase("cn")]
+    public async Task Export_RejectedProvisioningWithoutCsoName_RecordsExportNameOrCsoIdAsync(string? namingAttribute)
+    {
+        var ctx = await SetUpAsync();
+        if (namingAttribute != null)
+            GeneratedMapping(ctx).Generation!.CollisionRemediation = false;
+        await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncAsync(ctx.Hr);
+        var export = DirectoryExport(ctx);
+        var cso = SyncRepo.ConnectedSystemObjects[export.ConnectedSystemObjectId!.Value];
+        Assert.That(cso.Name, Is.Null, "the unconfirmed provisioning has no naming attributes");
+
+        if (namingAttribute != null)
+        {
+            var attribute = new ConnectedSystemObjectTypeAttribute
+            {
+                Id = 9999, Name = namingAttribute, Type = AttributeDataType.Text,
+                ConnectedSystemObjectType = cso.Type!, Selected = true
+            };
+            export.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id,
+                StringValue = "Directory Joe", ChangeType = PendingExportAttributeChangeType.Add
+            });
+        }
+
+        var activity = await RunExportAsync(ctx.Directory, RejectFirst("sAMAccountName"));
+        var item = ExecutionItems(activity).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            if (namingAttribute == null)
+                Assert.That(item.SyncOutcomes.Select(o => o.OutcomeType),
+                    Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated));
+            else
+                Assert.That(item.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.UniqueValueAlreadyInUse));
+            Assert.That(item.DisplayNameSnapshot, Is.EqualTo(namingAttribute == null ? cso.Id.ToString() : "Directory Joe"));
+            Assert.That(item.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+        }
+    }
+
     [Test]
     public async Task Export_UnanchoredGeneratedValueRejected_RevisesTheMetaverseValueAndLeavesTheExportQueuedAsync()
     {
