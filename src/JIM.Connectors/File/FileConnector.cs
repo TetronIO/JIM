@@ -234,6 +234,16 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                     columnInfo: null,
                     suggestion: "Ensure the first row of your CSV file contains column headers.");
 
+            // Each column names a different attribute (#2186). A repeated column was once read as a multi-valued
+            // attribute, but nothing could then read or write past its first occurrence.
+            if (FileConnectorHeader.FindProblem(columnNames, reader.FileName, GetMultiValueDelimiterSetting(settingValues)) is { } headerProblem)
+                throw new CsvParsingException(
+                    headerProblem,
+                    rowNumber: 1,
+                    rawRow: string.Join(reader.CsvReader.Configuration.Delimiter, columnNames),
+                    columnInfo: null,
+                    suggestion: "Give each attribute one column. A multi-valued attribute holds its values in that one column, separated by the Multi-Value Delimiter.");
+
             // start building the schema by inspecting the file!
             var schema = new ConnectorSchema();
 
@@ -294,20 +304,12 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             // now determine the attributes from the file headers.
             // at this point we don't know what attributes are for what object type. so all object types get the same attributes.
             // later, the user can refine the per-object type attribute lists.
+            // Every attribute is discovered single-valued: a delimiter in a cell could as easily be part of one value,
+            // so whether an attribute holds several is the administrator's to say on the Schema tab (#2186).
             foreach (var schemaObjectType in schema.ObjectTypes)
             {
                 foreach (var columnName in columnNames)
                 {
-                    // has this attribute already been added? if it has, this indicates it's a multivalued attribute
-                    var existingSchemaAttribute = schemaObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-                    if (existingSchemaAttribute != null)
-                    {
-                        if (existingSchemaAttribute.AttributePlurality != AttributePlurality.MultiValued)
-                            existingSchemaAttribute.AttributePlurality = AttributePlurality.MultiValued;
-
-                        continue;
-                    }
-
                     // initially set the attributes with just a name. we'll work out their data types next.
                     schemaObjectType.Attributes.Add(new ConnectorSchemaAttribute(columnName, AttributeDataType.NotSet, AttributePlurality.SingleValued));
                 }

@@ -53,7 +53,15 @@ internal class FileConnectorExport
             throw new InvalidSettingValuesException("File Path setting is required for export operations.");
 
         var delimiter = GetSettingValue("Delimiter") is { Length: > 0 } configuredDelimiter ? configuredDelimiter : FileConnector.DefaultDelimiter;
-        var multiValueDelimiter = GetSettingValue("Multi-Value Delimiter") ?? "|";
+        var multiValueDelimiter = GetSettingValue("Multi-Value Delimiter") is { Length: > 0 } configuredMultiValueDelimiter ? configuredMultiValueDelimiter : "|";
+
+        // A file whose header repeats a column cannot be rewritten without losing every column after the first of that
+        // name, for every row (#2186). Refuse before reading it, so the file is left exactly as it was.
+        if (FindExistingHeaderProblem(exportFilePath, delimiter, multiValueDelimiter) is { } headerProblem)
+        {
+            _logger.Error("FileConnectorExport.Execute: {HeaderProblem}", LogSanitiser.Sanitise(headerProblem));
+            return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed(headerProblem)).ToList();
+        }
 
         // Ensure the export directory exists
         var exportDir = Path.GetDirectoryName(exportFilePath);
@@ -195,6 +203,22 @@ internal class FileConnectorExport
     }
 
     /// <summary>
+    /// Why the existing file's header row cannot be rewritten, or null when it can or there is no file yet.
+    /// </summary>
+    private static string? FindExistingHeaderProblem(string filePath, string delimiter, string multiValueDelimiter)
+    {
+        if (!System.IO.File.Exists(filePath))
+            return null;
+
+        using var reader = new StreamReader(filePath);
+        using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture) { Delimiter = delimiter });
+        if (!csv.Read() || !csv.ReadHeader() || csv.HeaderRecord == null)
+            return null;
+
+        return FileConnectorHeader.FindProblem(csv.HeaderRecord, Path.GetFileName(filePath), multiValueDelimiter);
+    }
+
+    /// <summary>
     /// Loads existing file content into a dictionary keyed by External ID.
     /// Populates existingFileHeaders with the column headers from the file.
     /// Returns an empty dictionary if the file doesn't exist or has no data rows.
@@ -305,12 +329,11 @@ internal class FileConnectorExport
                         LogSanitiser.Sanitise(externalId));
                 }
 
-                // Build the row from attribute changes
+                // Build the row from attribute changes, then the CSO's full state (for attributes not in changes)
                 var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                ApplyAttributeChanges(row, pendingExport, multiValueDelimiter);
-
-                // Include full state from CSO if available (for attributes not in changes)
-                ApplyCsoFullState(row, pendingExport, multiValueDelimiter);
+                var problem = ApplyAttributeChanges(row, pendingExport, multiValueDelimiter) ?? ApplyCsoFullState(row, pendingExport, multiValueDelimiter);
+                if (problem != null)
+                    return ConnectedSystemExportResult.Failed(problem);
 
                 existingRows[externalId] = row;
 
@@ -330,13 +353,15 @@ internal class FileConnectorExport
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Update for '{ExternalId}' but no existing row found. Creating new row.",
                         LogSanitiser.Sanitise(externalId));
                     existingRow = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    existingRows[externalId] = existingRow;
                 }
 
-                ApplyAttributeChanges(existingRow, pendingExport, multiValueDelimiter);
+                // Changes are applied to a copy, so an export refused part-way leaves the row as the file held it.
+                var updatedRow = new Dictionary<string, string>(existingRow, StringComparer.OrdinalIgnoreCase);
+                var problem = ApplyAttributeChanges(updatedRow, pendingExport, multiValueDelimiter) ?? ApplyCsoFullState(updatedRow, pendingExport, multiValueDelimiter);
+                if (problem != null)
+                    return ConnectedSystemExportResult.Failed(problem);
 
-                // Include full state from CSO if available (for attributes not in changes)
-                ApplyCsoFullState(existingRow, pendingExport, multiValueDelimiter);
+                existingRows[externalId] = updatedRow;
 
                 return ConnectedSystemExportResult.Succeeded(externalId);
             }
@@ -394,55 +419,161 @@ internal class FileConnectorExport
     }
 
     /// <summary>
-    /// Applies attribute value changes from a Pending Export to a row dictionary.
+    /// Applies attribute value changes from a Pending Export to a row dictionary, returning why the export cannot be
+    /// written, or null once it is applied.
     /// </summary>
-    private static void ApplyAttributeChanges(
+    /// <remarks>
+    /// A single-valued attribute's change is its whole cell. A multi-valued attribute's changes are each one value
+    /// added or removed (on an Update, only the values that changed), so its cell is the set the changes leave behind:
+    /// the cell as the file holds it (or, where the file has no row, the Connected System Object's values), less what
+    /// is removed, plus what is added (#2186).
+    /// </remarks>
+    private static string? ApplyAttributeChanges(
         Dictionary<string, string> row,
         PendingExport pendingExport,
         string multiValueDelimiter)
     {
-        foreach (var attrChange in pendingExport.AttributeValueChanges)
-        {
-            if (attrChange.Attribute?.Name == null)
-                continue;
+        var changesByAttribute = pendingExport.AttributeValueChanges
+            .Where(change => change.Attribute?.Name != null)
+            .GroupBy(change => change.Attribute.Name, StringComparer.OrdinalIgnoreCase);
 
-            if (attrChange.ChangeType == PendingExportAttributeChangeType.Remove ||
-                attrChange.ChangeType == PendingExportAttributeChangeType.RemoveAll)
+        foreach (var changes in changesByAttribute)
+        {
+            var attribute = changes.First().Attribute;
+            if (attribute.AttributePlurality != AttributePlurality.MultiValued)
             {
-                row[attrChange.Attribute.Name] = string.Empty;
+                foreach (var attrChange in changes)
+                {
+                    row[attribute.Name] = attrChange.ChangeType is PendingExportAttributeChangeType.Remove or PendingExportAttributeChangeType.RemoveAll
+                        ? string.Empty
+                        : FormatAttributeValue(attrChange, multiValueDelimiter);
+                }
+
+                continue;
             }
-            else
+
+            var values = row.TryGetValue(attribute.Name, out var cell)
+                ? SplitCell(cell, attribute, multiValueDelimiter)
+                : CsoValues(pendingExport, attribute, multiValueDelimiter);
+            var comparer = ValueComparer(attribute);
+
+            if (changes.Any(change => change.ChangeType == PendingExportAttributeChangeType.RemoveAll))
+                values.Clear();
+
+            foreach (var removed in changes.Where(change => change.ChangeType == PendingExportAttributeChangeType.Remove))
             {
-                row[attrChange.Attribute.Name] = FormatAttributeValue(attrChange, multiValueDelimiter);
+                var value = Canonicalise(FormatAttributeValue(removed, multiValueDelimiter), attribute.Type);
+                values.RemoveAll(held => comparer.Equals(held, value));
             }
+
+            foreach (var added in changes.Where(change => change.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update))
+            {
+                var value = Canonicalise(FormatAttributeValue(added, multiValueDelimiter), attribute.Type);
+                if (value.Contains(multiValueDelimiter, StringComparison.Ordinal))
+                    return DelimiterInValue(attribute.Name, multiValueDelimiter);
+
+                if (value.Length > 0 && !values.Contains(value, comparer))
+                    values.Add(value);
+            }
+
+            row[attribute.Name] = string.Join(multiValueDelimiter, values);
         }
+
+        return null;
     }
 
     /// <summary>
     /// Applies full state from the CSO's current attribute values to the row,
     /// for any attributes not already present from the Pending Export changes.
-    /// This ensures the file has complete attribute data for each row.
+    /// This ensures the file has complete attribute data for each row. Returns why the export cannot be written, or
+    /// null once it is applied.
     /// </summary>
-    private void ApplyCsoFullState(
+    private static string? ApplyCsoFullState(
         Dictionary<string, string> row,
         PendingExport pendingExport,
         string multiValueDelimiter)
     {
         if (pendingExport.ConnectedSystemObject?.AttributeValues == null)
-            return;
+            return null;
 
-        foreach (var attrValue in pendingExport.ConnectedSystemObject.AttributeValues)
-        {
-            if (attrValue.Attribute?.Name == null)
-                continue;
-
+        var valuesByAttribute = pendingExport.ConnectedSystemObject.AttributeValues
+            .Where(attrValue => attrValue.Attribute?.Name != null)
+            .GroupBy(attrValue => attrValue.Attribute.Name, StringComparer.OrdinalIgnoreCase)
             // Don't overwrite values that were explicitly set by the Pending Export changes
-            if (row.ContainsKey(attrValue.Attribute.Name))
-                continue;
+            .Where(attrValues => !row.ContainsKey(attrValues.Key));
 
-            row[attrValue.Attribute.Name] = FormatCsoAttributeValue(attrValue, multiValueDelimiter);
+        foreach (var attrValues in valuesByAttribute)
+        {
+            var attribute = attrValues.First().Attribute;
+            if (attribute.AttributePlurality != AttributePlurality.MultiValued)
+            {
+                row[attribute.Name] = FormatCsoAttributeValue(attrValues.First(), multiValueDelimiter);
+                continue;
+            }
+
+            var values = CsoValues(pendingExport, attribute, multiValueDelimiter);
+            if (values.Any(value => value.Contains(multiValueDelimiter, StringComparison.Ordinal)))
+                return DelimiterInValue(attribute.Name, multiValueDelimiter);
+
+            row[attribute.Name] = string.Join(multiValueDelimiter, values);
         }
+
+        return null;
     }
+
+    /// <summary>
+    /// The Connected System Object's values of a multi-valued attribute, in their cell form, without duplicates.
+    /// </summary>
+    private static List<string> CsoValues(PendingExport pendingExport, ConnectedSystemObjectTypeAttribute attribute, string multiValueDelimiter)
+    {
+        var values = new List<string>();
+        var comparer = ValueComparer(attribute);
+        var held = pendingExport.ConnectedSystemObject?.AttributeValues
+            .Where(attrValue => attrValue.Attribute?.Name != null && attrValue.Attribute.Name.Equals(attribute.Name, StringComparison.OrdinalIgnoreCase))
+            .Select(attrValue => Canonicalise(FormatCsoAttributeValue(attrValue, multiValueDelimiter), attribute.Type))
+            ?? [];
+
+        values.AddRange(held.Where(value => value.Length > 0).Distinct(comparer));
+        return values;
+    }
+
+    /// <summary>
+    /// A multi-valued cell's values, each put in the form JIM writes, so a value written by hand in another form
+    /// (<c>1.50</c>, a date with no fraction) is still recognised when a change removes or re-adds it. Every value a
+    /// multi-valued cell is built from passes through <see cref="Canonicalise"/>, so the set is compared in one form.
+    /// </summary>
+    private static List<string> SplitCell(string cell, ConnectedSystemObjectTypeAttribute attribute, string multiValueDelimiter) =>
+        cell.Split(multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(value => Canonicalise(value, attribute.Type))
+            .Distinct(ValueComparer(attribute))
+            .ToList();
+
+    private static string Canonicalise(string value, AttributeDataType type) => type switch
+    {
+        AttributeDataType.Number when int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) =>
+            number.ToString(CultureInfo.InvariantCulture),
+        AttributeDataType.LongNumber when long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longNumber) =>
+            longNumber.ToString(CultureInfo.InvariantCulture),
+        AttributeDataType.Decimal when DecimalAttributeValue.TryParse(value, out var decimalValue) =>
+            DecimalAttributeValue.ToCanonicalString(decimalValue),
+        AttributeDataType.DateTime when DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dateTime) =>
+            dateTime.ToString("O"),
+        AttributeDataType.Guid when Guid.TryParse(value, out var guid) => guid.ToString(),
+        _ => value
+    };
+
+    /// <summary>
+    /// How two values of the attribute are told apart: text and references ignoring case unless the attribute is
+    /// case-exact, every other type by its written form, which is already canonical.
+    /// </summary>
+    private static StringComparer ValueComparer(ConnectedSystemObjectTypeAttribute attribute) =>
+        attribute.Type is AttributeDataType.Text or AttributeDataType.Reference && !attribute.CaseExact
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+
+    private static string DelimiterInValue(string attributeName, string multiValueDelimiter) =>
+        $"A value of the multi-valued attribute '{attributeName}' contains the Multi-Value Delimiter ({multiValueDelimiter}), " +
+        "so the file would read it back as more than one value. Choose a Multi-Value Delimiter that no value contains.";
 
     /// <summary>
     /// Writes the full-state file from the merged rows dictionary.
