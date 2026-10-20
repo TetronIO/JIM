@@ -3873,9 +3873,10 @@ html[lang] .jim-kv-table td:first-child {
 
    A filled inner surface rather than a border, so the panel's outline stays the
    only line. A tile asking for action (.jim-stat-tile--attention) takes a primary
-   tint and a primary figure; only one figure on a panel should.
+   tint and a primary figure, and only while its figure asks for something.
    --------------------------------------------------------------------------- */
-/* Flex rather than grid: tiles grow to fill their row, so five tiles wrap as 3 + 2 rather than leaving one alone. */
+/* Flex rather than grid, at most three to a row: tiles grow to fill their row, so six tiles sit 3 + 3 and five 3 + 2,
+   never leaving one alone on a row of its own. Below 200px a tile wraps instead of shrinking. */
 .jim-stat-tiles {
     display: flex;
     flex-wrap: wrap;
@@ -3883,11 +3884,11 @@ html[lang] .jim-kv-table td:first-child {
 }
 
 .jim-stat-tile {
-    flex: 1 1 200px;
+    flex: 1 1 calc((100% - 2 * 16px) / 3);
+    min-width: 200px;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    min-width: 0;
     padding: 16px;
     border-radius: var(--mud-default-borderradius);
     background-color: var(--jim-inner-surface, var(--mud-palette-action-default-hover));

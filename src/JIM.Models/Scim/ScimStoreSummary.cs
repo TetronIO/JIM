@@ -38,4 +38,10 @@ public class ScimStoreSummary
     /// When a SCIM client last wrote to the store; null when none has.
     /// </summary>
     public DateTime? LastWrite { get; set; }
+
+    /// <summary>
+    /// Requests the store refused, other than for authentication, across every key, in the 15-minute windows that
+    /// began in the last 24 hours.
+    /// </summary>
+    public int RejectedLast24Hours { get; set; }
 }

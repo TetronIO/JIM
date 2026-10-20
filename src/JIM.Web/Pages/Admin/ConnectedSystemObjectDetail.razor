@@ -357,7 +357,9 @@
             }
             else
             {
-                <ChangeHistoryTimeline Changes="@_changeHistoryRows" />
+                @* A SCIM 2.0 Service Provider object's imported changes also show the SCIM requests behind them (#124). *@
+                <ChangeHistoryTimeline Changes="@_changeHistoryRows"
+                                       ChangeDetailExtra="@(_showScimRequests ? ScimRequestsFor : null)" />
                 @if (_changeHistoryRows.Count < _changeHistoryTotal)
                 {
                     <div class="d-flex justify-center mt-3">
@@ -398,6 +400,21 @@
     public string CsoId { get; set; } = null!;
 
     private ConnectedSystemHeader? ConnectedSystemHeader { get; set; }
+
+    /// <summary>
+    /// Whether this object's changes can show the SCIM requests behind them: its Connected System uses the SCIM 2.0
+    /// Service Provider Connector and the feature is on.
+    /// </summary>
+    private bool _showScimRequests;
+
+    private RenderFragment ScimRequestsFor(ChangeHistoryTimeline.ChangeGroup change) => builder =>
+    {
+        if (change.ChangeId is not { } changeId)
+            return;
+        builder.OpenComponent<JIM.Web.Pages.Admin.Components.ScimRequestsBehindChangePanel>(0);
+        builder.AddAttribute(1, nameof(JIM.Web.Pages.Admin.Components.ScimRequestsBehindChangePanel.ChangeId), changeId);
+        builder.CloseComponent();
+    };
 
     private ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
@@ -559,6 +576,8 @@
             NavManager.NavigateTo($"/admin/connected-systems/");
             return;
         }
+        _showScimRequests = ConnectedSystemHeader.ConnectorName == JIM.Connectors.ConnectorConstants.ScimServiceProviderConnectorName
+            && await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
 
         var csoIdValid = Guid.TryParse(CsoId, out var connectedSystemObjectId);
         if (!csoIdValid)
@@ -674,6 +693,7 @@
     {
         return new ChangeHistoryTimeline.ChangeGroup
         {
+            ChangeId = dto.Id,
             ChangeType = dto.ChangeType,
             ChangeTime = dto.ChangeTime,
             ChangeInitiatorType = MapInitiatorType(dto.InitiatedByType),

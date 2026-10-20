@@ -508,6 +508,16 @@ public static class Helpers
         };
     }
 
+    /// <summary>
+    /// An Activity target type's name as the portal shows it: its enum name split into words, except where that would
+    /// spell an acronym as a word.
+    /// </summary>
+    public static string GetActivityTargetTypeName(ActivityTargetType targetType) => targetType switch
+    {
+        ActivityTargetType.ScimRequests => "SCIM Requests",
+        _ => targetType.ToString().SplitOnCapitalLetters()
+    };
+
     public static Color GetActivityMudBlazorColorForOperation(ActivityTargetOperationType operation)
     {
         return operation switch
