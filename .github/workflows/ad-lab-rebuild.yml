@@ -20,7 +20,8 @@
 #             live set again
 #
 # Schedule: GitHub cron treats day-of-month and day-of-week as OR when both are restricted, so "the Wednesday after
-# the second Tuesday" cannot be written in cron. It runs every Wednesday at 03:00 UTC and the first job decides:
+# the second Tuesday" cannot be written in cron. It runs every Wednesday at 03:37 UTC (off the hour, which GitHub's
+# scheduler delays least; see ad-lab.yml's Timing) and the first job decides:
 # it lets the rebuild proceed only when the UTC day of the month is 9 to 15 (the day after the second Tuesday,
 # which falls on the 8th to 14th, is always the 9th to 15th). workflow_dispatch does the same unless `force` is set.
 # The decision is its own job on a GitHub-hosted runner, so an ordinary Wednesday neither occupies the lab runner
@@ -38,7 +39,7 @@ name: jim-ad-lab-rebuild
 
 on:
   schedule:
-    - cron: '0 3 * * 3'
+    - cron: '37 3 * * 3'
   workflow_dispatch:
     inputs:
       force:

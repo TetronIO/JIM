@@ -45,15 +45,17 @@
 #   optional  repository variable JIM_BENCH_API_URL and secret JIM_BENCH_API_KEY, which the runner reads to stream
 #             results to the metrics API (as for every integration run); unset, results stay local
 #
-# Timing: 02:00 UTC. The non-functional requirement is a full nightly inside four hours (a 1 to 2 minute revert per
+# Timing: 01:23 UTC. The non-functional requirement is a full nightly inside four hours (a 1 to 2 minute revert per
 # scenario per domain controller at the Medium template), so it is finished well before the working day, and the
 # job's timeout is a little over that. ad-lab-rebuild.yml (after Patch Tuesday) shares the concurrency group.
+# The minute is deliberately off the hour: GitHub delays scheduled runs under load, most at the top of the hour, and at
+# '0 2 * * *' the nightly was created between 06:31 and 07:16 UTC every day, finishing mid-morning.
 
 name: jim-ad-lab
 
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '23 1 * * *'
   workflow_dispatch:
     inputs:
       scenario:

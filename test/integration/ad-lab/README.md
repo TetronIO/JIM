@@ -388,7 +388,7 @@ phase at a time. It builds a candidate set beside the live one, runs the whole s
 only if that passes lets the nightly adopt them. Because the guest OS build is recorded with every run, a failure after
 a rebuild is attributable to the Windows update or to JIM.
 
-**When.** GitHub's cron treats day-of-month and day-of-week as OR, so the workflow fires every Wednesday at 03:00 UTC
+**When.** GitHub's cron treats day-of-month and day-of-week as OR, so the workflow fires every Wednesday at 03:37 UTC
 and its first job lets the rebuild proceed only when the UTC day of the month is 9 to 15 (the day after the second
 Tuesday). On any other Wednesday it ends with a notice and touches nothing. `workflow_dispatch` applies the same rule
 unless `force` is set; `fresh` replaces a candidate that already exists instead of reusing a recent one. It shares the
