@@ -240,6 +240,33 @@ public class ScimStoreRepository : IScimStoreRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<ScimStoreSummary> GetSummaryAsync(int connectedSystemId, long? importedUpTo, CancellationToken cancellationToken = default)
+    {
+        var context = Repository.Database;
+        var resources = context.ScimStoreResources.AsNoTracking().Where(r => r.ConnectedSystemId == connectedSystemId);
+        var after = importedUpTo ?? 0;
+
+        var counts = await context.ScimStoreResourceTypes
+            .AsNoTracking()
+            .Where(t => t.ConnectedSystemId == connectedSystemId)
+            .OrderBy(t => t.Id)
+            .Select(t => new ScimResourceTypeCount(t.Name, resources.Count(r => r.ResourceTypeId == t.Id && r.DeletedAt == null)))
+            .ToListAsync(cancellationToken);
+
+        return new ScimStoreSummary
+        {
+            ResourceCounts = counts,
+            Tombstones = await resources.CountAsync(r => r.DeletedAt != null, cancellationToken),
+            LastChangeSequence = (await GetStateAsync(connectedSystemId, cancellationToken))?.LastChangeSequence ?? 0,
+            ImportedUpTo = importedUpTo,
+            ChangesAwaitingImport = await resources.CountAsync(r => r.ChangeSequence > after, cancellationToken),
+            LastWrite = await context.ScimStoreJournalEntries
+                .AsNoTracking()
+                .Where(e => e.ConnectedSystemId == connectedSystemId)
+                .MaxAsync(e => (DateTime?)e.Occurred, cancellationToken)
+        };
+    }
+
     public async Task AddDefinitionsAsync(int connectedSystemId, IReadOnlyCollection<ScimStoreSchema> schemas,
         IReadOnlyCollection<ScimStoreResourceType> resourceTypes, CancellationToken cancellationToken = default)
     {

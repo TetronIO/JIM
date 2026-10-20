@@ -47,11 +47,13 @@ Each API Key. The key itself is never returned; KeyPrefix identifies it.
 | `Description` | `string` | Optional description of the key's purpose. |
 | `KeyPrefix` | `string` | Prefix of the key (e.g., "jim_ak_7f3a") for identification. |
 | `CreatedAt` | `datetime` | When the API key was created. |
-| `ExpiresAt` | `datetime` | Optional expiry date. Empty means the key never expires. |
+| `ExpiresAt` | `datetime` | When the key stops working. Always set for a SCIM client's key; empty only for an ordinary API key that never expires. |
 | `LastUsedAt` | `datetime` | When the API key was last used for authentication. |
 | `LastUsedFromIp` | `string` | IP address from which the key was last used. |
 | `IsEnabled` | `bool` | Whether the API key is currently enabled. |
 | `Roles` | `object[]` | The roles assigned to this API key. Each has `Id`, `Name`, `BuiltIn`, `Created` and `StaticMemberCount`. |
+| `Scope` | `string` | What the key may be used for: `None` for an ordinary API key authorised by its roles, or `ScimServiceProvider` for a SCIM client's key, which works only on the SCIM endpoint of one Connected System and carries no roles. One of `None` or `ScimServiceProvider`. |
+| `ScopeConnectedSystemId` | `int` | The Connected System a scoped key works for; empty for an ordinary API key. |
 <!-- END GENERATED: Get-JIMApiKey -->
 
 ### Examples
@@ -104,11 +106,13 @@ With `-PassThru`, the API Key created, with the key itself in Key; otherwise not
 | `Description` | `string` | Optional description of the key's purpose. |
 | `KeyPrefix` | `string` | Prefix of the key (e.g., "jim_ak_7f3a") for identification. |
 | `CreatedAt` | `datetime` | When the API key was created. |
-| `ExpiresAt` | `datetime` | Optional expiry date. Empty means the key never expires. |
+| `ExpiresAt` | `datetime` | When the key stops working. Always set for a SCIM client's key; empty only for an ordinary API key that never expires. |
 | `LastUsedAt` | `datetime` | When the API key was last used for authentication. |
 | `LastUsedFromIp` | `string` | IP address from which the key was last used. |
 | `IsEnabled` | `bool` | Whether the API key is currently enabled. |
 | `Roles` | `object[]` | The roles assigned to this API key. Each has `Id`, `Name`, `BuiltIn`, `Created` and `StaticMemberCount`. |
+| `Scope` | `string` | What the key may be used for: `None` for an ordinary API key authorised by its roles, or `ScimServiceProvider` for a SCIM client's key, which works only on the SCIM endpoint of one Connected System and carries no roles. One of `None` or `ScimServiceProvider`. |
+| `ScopeConnectedSystemId` | `int` | The Connected System a scoped key works for; empty for an ordinary API key. |
 <!-- END GENERATED: New-JIMApiKey -->
 
 ### Examples

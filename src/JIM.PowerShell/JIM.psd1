@@ -203,6 +203,15 @@
         'Set-JIMMetaverseAttributePriority',
         'Move-JIMMetaverseAttributePriority',
 
+        # SCIM 2.0 Service Provider
+        'Get-JIMScimKey',
+        'New-JIMScimKey',
+        'Set-JIMScimKey',
+        'Remove-JIMScimKey',
+        'Get-JIMScimStoreSummary',
+        'Get-JIMScimResourceType',
+        'Get-JIMScimSchema',
+
         # API Keys
         'Get-JIMApiKey',
         'New-JIMApiKey',

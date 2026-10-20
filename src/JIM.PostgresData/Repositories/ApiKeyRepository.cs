@@ -96,6 +96,15 @@ public class ApiKeyRepository : IApiKeyRepository
         return existingKey;
     }
 
+    public async Task<List<ApiKey>> GetByScopeConnectedSystemAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ApiKeys
+            .Include(ak => ak.Roles)
+            .Where(ak => ak.ScopeConnectedSystemId == connectedSystemId)
+            .OrderBy(ak => ak.Name)
+            .ToListAsync();
+    }
+
     public async Task<int> CountActiveScopedKeysAsync(int connectedSystemId, DateTime asAt, Guid? excludingId = null)
     {
         return await Repository.Database.ApiKeys

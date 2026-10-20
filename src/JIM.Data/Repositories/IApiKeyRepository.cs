@@ -36,6 +36,11 @@ public interface IApiKeyRepository
     Task<ApiKey> UpdateAsync(ApiKey apiKey);
 
     /// <summary>
+    /// Gets the keys scoped to a Connected System, whether or not they can be used now, ordered by name.
+    /// </summary>
+    Task<List<ApiKey>> GetByScopeConnectedSystemAsync(int connectedSystemId);
+
+    /// <summary>
     /// Counts the keys scoped to a Connected System that can be used now: enabled, and not expired at
     /// <paramref name="asAt"/>.
     /// </summary>
