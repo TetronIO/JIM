@@ -21,10 +21,7 @@
         }
         else if (_behind.Entries.Count == 0)
         {
-            <MudText Class="mud-text-secondary">
-                No requests to this resource fall in the range its import read. The history that recorded them may have
-                been cleared.
-            </MudText>
+            <MudText Class="mud-text-secondary">@EmptyText</MudText>
         }
         else
         {
@@ -99,6 +96,21 @@
     private string Title => _behind is { Entries.Count: > 0 } behind
         ? $"SCIM Requests ({behind.Entries.Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)})"
         : "SCIM Requests";
+
+    /// <summary>
+    /// Why no requests are listed, naming what the import read so an administrator can tell an import that read
+    /// nothing new from requests whose history has been cleared.
+    /// </summary>
+    private string EmptyText => _behind switch
+    {
+        { AfterSequence: { } after } behind when after >= behind.UpToSequence =>
+            $"The import behind this change read no new requests: it started and finished at change {after:N0}. The requests that made this resource were read by an earlier import.",
+        { AfterSequence: { } after } behind =>
+            $"No requests to this resource fall in what its import read (changes {after + 1:N0} to {behind.UpToSequence:N0}). They were read by an earlier import, or the history that recorded them has been cleared.",
+        { } behind =>
+            $"No requests to this resource fall in what its import read (changes up to {behind.UpToSequence:N0}). The history that recorded them has been cleared.",
+        _ => string.Empty
+    };
 
     protected override async Task OnParametersSetAsync()
     {
