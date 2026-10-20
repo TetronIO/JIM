@@ -196,6 +196,55 @@ public class ScimServer
     }
 
 
+    /// <summary>
+    /// The most journal entries one read returns, so a resource rewritten every few seconds for a year cannot make a
+    /// page load unbounded.
+    /// </summary>
+    public const int MaxJournalEntries = 1000;
+
+    /// <summary>
+    /// A resource's accepted writes (D17), oldest first: after <paramref name="afterSequence"/> (exclusive) and up to
+    /// <paramref name="upToSequence"/> (inclusive) where given, at most <see cref="MaxJournalEntries"/>.
+    /// </summary>
+    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
+    public async Task<List<ScimStoreJournalEntry>> GetJournalAsync(int connectedSystemId, Guid resourceId, long? afterSequence, long? upToSequence,
+        CancellationToken cancellationToken = default)
+    {
+        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
+        return await Store.GetJournalEntriesAsync(connectedSystemId, resourceId, afterSequence, upToSequence, MaxJournalEntries, cancellationToken);
+    }
+
+    /// <summary>
+    /// The SCIM requests behind one imported change to a Connected System Object (D17): the resource's journal entries
+    /// between the watermark the import started from (exclusive; from the start when it had none) and the one it
+    /// reached (inclusive). Null when the change is unknown, was not recorded against an import, or its import reached
+    /// no watermark (it failed or was cancelled), since then there is no range to read.
+    /// </summary>
+    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
+    public async Task<ScimRequestsBehindChange?> GetRequestsBehindChangeAsync(Guid connectedSystemObjectChangeId,
+        CancellationToken cancellationToken = default)
+    {
+        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
+
+        var context = await Store.GetChangeImportContextAsync(connectedSystemObjectChangeId, cancellationToken);
+        if (context == null || !Guid.TryParse(context.ExternalId, out var resourceId))
+            return null;
+
+        var upTo = ScimServiceProviderImportState.Read(context.WatermarkTo, _logger)?.ChangeSequence;
+        if (upTo == null)
+            return null;
+        var after = ScimServiceProviderImportState.Read(context.WatermarkFrom, _logger)?.ChangeSequence;
+
+        return new ScimRequestsBehindChange
+        {
+            ConnectedSystemId = context.ConnectedSystemId,
+            ResourceId = resourceId,
+            AfterSequence = after,
+            UpToSequence = upTo.Value,
+            Entries = await Store.GetJournalEntriesAsync(context.ConnectedSystemId, resourceId, after, upTo, MaxJournalEntries, cancellationToken)
+        };
+    }
+
     #region import
     /// <summary>
     /// A Connected System's stored resource type definitions, as the Service Provider Connector composes its schema from.
