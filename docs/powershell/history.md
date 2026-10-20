@@ -58,7 +58,7 @@ The list returns one record per change, newest first. `-Version` returns that ch
 |----------|------|-------------|
 | `ActivityId` | `guid` | The Activity that recorded the change. |
 | `Version` | `int` | The object's version this change produced, counting from 1 for its creation. |
-| `Operation` | `string` | What the change did: Create, Update or Delete. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename` or `RetryGeneratedValue`. |
+| `Operation` | `string` | What the change did: Create, Update or Delete. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue` or `ReceiveScimRequests`. |
 | `InitiatedByType` | `string` | What made the change: a User, an API key, or JIM itself (System). One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedById` | `guid` | The security principal's id, where one applies (User / API key); empty for System or unattributed changes. |
 | `InitiatedByName` | `string` | The name of whoever made the change, as it was when they made it. |
@@ -74,7 +74,7 @@ The list returns one record per change, newest first. `-Version` returns that ch
 |----------|------|-------------|
 | `ActivityId` | `guid` | The Activity that recorded the change. |
 | `Version` | `int` | The object's version this change produced, counting from 1 for its creation. |
-| `Operation` | `string` | What the change did: Create, Update or Delete. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename` or `RetryGeneratedValue`. |
+| `Operation` | `string` | What the change did: Create, Update or Delete. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue` or `ReceiveScimRequests`. |
 | `InitiatedByType` | `string` | What made the change: a User, an API key, or JIM itself (System). One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedByName` | `string` | The name of whoever made the change, as it was when they made it. |
 | `When` | `datetime` | When the change was made (UTC). |

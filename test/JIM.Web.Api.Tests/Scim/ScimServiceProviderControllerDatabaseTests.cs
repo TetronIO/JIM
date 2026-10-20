@@ -302,6 +302,56 @@ public class ScimServiceProviderControllerDatabaseTests
     }
 
     [Test]
+    public async Task GetJournalAsync_TheResourcesAcceptedWritesAsync()
+    {
+        var alice = await CreateUserAsync(_systemId, "alice");
+        await CreateUserAsync(_systemId, "bob");
+
+        var entries = Value<IEnumerable<ScimJournalEntryDto>>(await CallAsync(c => c.GetJournalAsync(_systemId, alice, null, null))).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entries.Select(e => (e.ResourceId, e.Operation)), Is.EqualTo(new[] { (alice, JIM.Models.Scim.ScimStoreOperation.Created) }));
+            Assert.That(entries[0].ResourceTypeName, Is.EqualTo("User"));
+            Assert.That(entries[0].ApiKeyName, Is.EqualTo("Administrator"));
+            Assert.That(entries[0].ClientAddress, Is.EqualTo("203.0.113.9"));
+        }
+    }
+
+    [Test]
+    public async Task GetRequestsBehindChangeAsync_ImportedChange_TheRequestsItReadAsync()
+    {
+        var alice = await CreateUserAsync(_systemId, "alice");
+        var changeId = await RecordImportChangeAsync(_systemId, alice, from: null, to: await LastSequenceAsync(_systemId));
+
+        var behind = Value<ScimRequestsBehindChangeDto>(await CallAsync(c => c.GetRequestsBehindChangeAsync(_systemId, changeId)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(behind.ResourceId, Is.EqualTo(alice));
+            Assert.That(behind.AfterSequence, Is.Null);
+            Assert.That(behind.Entries.Select(e => e.Operation), Is.EqualTo(new[] { JIM.Models.Scim.ScimStoreOperation.Created }));
+        }
+    }
+
+    [Test]
+    public async Task GetRequestsBehindChangeAsync_UnknownChangeOrAnotherSystemsChange_404Async()
+    {
+        var other = await CreateServiceProviderSystemAsync();
+        var bob = await CreateUserAsync(other, "bob");
+        var othersChange = await RecordImportChangeAsync(other, bob, from: null, to: await LastSequenceAsync(other));
+
+        var unknown = await CallAsync(c => c.GetRequestsBehindChangeAsync(_systemId, Guid.NewGuid()));
+        var elsewhere = await CallAsync(c => c.GetRequestsBehindChangeAsync(_systemId, othersChange));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(unknown, Is.InstanceOf<NotFoundObjectResult>());
+            Assert.That(elsewhere, Is.InstanceOf<NotFoundObjectResult>());
+        }
+    }
+
+    [Test]
     public async Task Endpoints_FlagOff_RefusedAsync()
     {
         var created = Value<ApiKeyCreateResponseDto>(await CallAsync(c => c.CreateKeyAsync(_systemId, new ScimKeyCreateRequestDto { Name = "Entra key" })));
@@ -318,6 +368,8 @@ public class ScimServiceProviderControllerDatabaseTests
                 Assert.That(() => CallAsync(c => c.GetSummaryAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
                 Assert.That(() => CallAsync(c => c.GetResourceTypesAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
                 Assert.That(() => CallAsync(c => c.GetSchemasAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
+                Assert.That(() => CallAsync(c => c.GetJournalAsync(_systemId, Guid.NewGuid(), null, null)), Throws.InstanceOf<FeatureDisabledException>());
+                Assert.That(() => CallAsync(c => c.GetRequestsBehindChangeAsync(_systemId, Guid.NewGuid())), Throws.InstanceOf<FeatureDisabledException>());
             }
         }
         finally
@@ -327,6 +379,62 @@ public class ScimServiceProviderControllerDatabaseTests
     }
 
     #region helpers
+
+    private async Task<Guid> CreateUserAsync(int connectedSystemId, string userName)
+    {
+        var body = new System.Text.Json.Nodes.JsonObject
+        {
+            ["schemas"] = new System.Text.Json.Nodes.JsonArray(JIM.Scim.ScimUrns.User), ["userName"] = userName
+        };
+        var context = new JIM.Scim.Service.ScimRequestContext(connectedSystemId, "https://jim.example.com/scim/v2", _administrator.Id, _administrator.Name, "203.0.113.9");
+        var result = await WithJimAsync(jim => jim.Scim.CreateAsync(context, "/Users", body));
+        Assert.That(result.StatusCode, Is.EqualTo(201), result.Error?.Detail);
+        return Guid.Parse(result.Resource!["id"]!.GetValue<string>());
+    }
+
+    private async Task<long> LastSequenceAsync(int connectedSystemId) =>
+        (await WithJimAsync(jim => jim.Scim.GetStoreStateAsync(connectedSystemId)))!.LastChangeSequence;
+
+    /// <summary>
+    /// What an import leaves behind for a change: its Activity with the watermarks, the execution item naming the
+    /// resource, and the Connected System Object change.
+    /// </summary>
+    private async Task<Guid> RecordImportChangeAsync(int connectedSystemId, Guid resourceId, long? from, long to)
+    {
+        await using var ctx = NewContext();
+        var activity = new JIM.Models.Activities.Activity
+        {
+            TargetType = JIM.Models.Activities.ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = JIM.Models.Activities.ActivityTargetOperationType.Execute,
+            TargetName = "Delta Import",
+            ConnectedSystemId = connectedSystemId,
+            Status = JIM.Models.Activities.ActivityStatus.Complete,
+            InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System,
+            InitiatedByName = "System",
+            ImportWatermarkFrom = from.HasValue ? $"{{\"changeSequence\":{from.Value}}}" : null,
+            ImportWatermarkTo = $"{{\"changeSequence\":{to}}}"
+        };
+        ctx.Activities.Add(activity);
+        var item = new JIM.Models.Activities.ActivityRunProfileExecutionItem
+        {
+            Activity = activity,
+            ObjectChangeType = JIM.Models.Enums.ObjectChangeType.Updated,
+            ExternalIdSnapshot = resourceId.ToString("D")
+        };
+        ctx.ActivityRunProfileExecutionItems.Add(item);
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = connectedSystemId,
+            ActivityRunProfileExecutionItem = item,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = JIM.Models.Enums.ObjectChangeType.Updated,
+            InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System,
+            InitiatedByName = "System"
+        };
+        ctx.ConnectedSystemObjectChanges.Add(change);
+        await ctx.SaveChangesAsync();
+        return change.Id;
+    }
 
     private static T Value<T>(IActionResult result) where T : class
     {
