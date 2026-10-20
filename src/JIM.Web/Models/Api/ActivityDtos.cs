@@ -242,21 +242,30 @@ public class ActivityHeader
     public int? AttemptCount { get; set; }
 
     /// <summary>
-    /// Failed authentication events only: when the first attempt this Activity counts was made (UTC).
+    /// Failed authentication events and SCIM request summaries only: when the first attempt or request this Activity
+    /// counts was made (UTC).
     /// </summary>
     public DateTime? FirstSeen { get; set; }
 
     /// <summary>
-    /// Failed authentication events only: when the most recent attempt this Activity counts was made (UTC). It
-    /// advances as further attempts arrive, so a poller can pick up a changed count by watching it.
+    /// Failed authentication events and SCIM request summaries only: when the most recent attempt or request this
+    /// Activity counts was made (UTC). It advances as more arrive, so a poller can pick up a changed count by watching
+    /// it.
     /// </summary>
     public DateTime? LastSeen { get; set; }
 
     /// <summary>
-    /// Failed authentication events only: the start of the 15-minute UTC window this Activity aggregates. Attempts
-    /// after the window ends are counted on a new Activity, so once the window has passed this one no longer changes.
+    /// Failed authentication events and SCIM request summaries only: the start of the 15-minute UTC window this
+    /// Activity aggregates. Anything after the window ends is counted on a new Activity, so once the window has passed
+    /// this one no longer changes.
     /// </summary>
     public DateTime? AggregationWindowStart { get; set; }
+
+    /// <summary>
+    /// SCIM request summaries only: what a SCIM client's requests did within the window. Empty for every other
+    /// Activity.
+    /// </summary>
+    public ScimRequestCountsDto? ScimRequests { get; set; }
 
     /// <summary>
     /// Creates a header DTO from an Activity entity.
@@ -324,7 +333,8 @@ public class ActivityHeader
             AttemptCount = activity.AttemptCount,
             FirstSeen = activity.FirstSeen,
             LastSeen = activity.LastSeen,
-            AggregationWindowStart = activity.AggregationWindowStart
+            AggregationWindowStart = activity.AggregationWindowStart,
+            ScimRequests = ScimRequestCountsDto.FromActivity(activity)
         };
     }
 
@@ -630,21 +640,44 @@ public class ActivityDetailDto
     public int? AttemptCount { get; set; }
 
     /// <summary>
-    /// Failed authentication events only: when the first attempt this Activity counts was made (UTC).
+    /// Failed authentication events and SCIM request summaries only: when the first attempt or request this Activity
+    /// counts was made (UTC).
     /// </summary>
     public DateTime? FirstSeen { get; set; }
 
     /// <summary>
-    /// Failed authentication events only: when the most recent attempt this Activity counts was made (UTC). It
-    /// advances as further attempts arrive, so a poller can pick up a changed count by watching it.
+    /// Failed authentication events and SCIM request summaries only: when the most recent attempt or request this
+    /// Activity counts was made (UTC). It advances as more arrive, so a poller can pick up a changed count by watching
+    /// it.
     /// </summary>
     public DateTime? LastSeen { get; set; }
 
     /// <summary>
-    /// Failed authentication events only: the start of the 15-minute UTC window this Activity aggregates. Attempts
-    /// after the window ends are counted on a new Activity, so once the window has passed this one no longer changes.
+    /// Failed authentication events and SCIM request summaries only: the start of the 15-minute UTC window this
+    /// Activity aggregates. Anything after the window ends is counted on a new Activity, so once the window has passed
+    /// this one no longer changes.
     /// </summary>
     public DateTime? AggregationWindowStart { get; set; }
+
+    /// <summary>
+    /// SCIM request summaries only: what a SCIM client's requests did within the window. Empty for every other
+    /// Activity.
+    /// </summary>
+    public ScimRequestCountsDto? ScimRequests { get; set; }
+
+    /// <summary>
+    /// Imports only: the point the import started reading from, as its Connector records it (for example
+    /// <c>{"changeSequence":8}</c>). Empty for an import with nothing to start from, such as a Connected System's
+    /// first, and for every other Activity.
+    /// </summary>
+    public string? ImportWatermarkFrom { get; set; }
+
+    /// <summary>
+    /// Imports only: the point the import read up to, which the next import starts from. Empty when the import
+    /// recorded none (it failed or was cancelled first, or its Connector keeps no such point) and for every other
+    /// Activity.
+    /// </summary>
+    public string? ImportWatermarkTo { get; set; }
 
     /// <summary>
     /// Creates a detail DTO from an Activity entity.
@@ -710,7 +743,11 @@ public class ActivityDetailDto
             AttemptCount = activity.AttemptCount,
             FirstSeen = activity.FirstSeen,
             LastSeen = activity.LastSeen,
-            AggregationWindowStart = activity.AggregationWindowStart
+            AggregationWindowStart = activity.AggregationWindowStart,
+            ScimRequests = ScimRequestCountsDto.FromActivity(activity),
+
+            ImportWatermarkFrom = activity.ImportWatermarkFrom,
+            ImportWatermarkTo = activity.ImportWatermarkTo
         };
     }
 }

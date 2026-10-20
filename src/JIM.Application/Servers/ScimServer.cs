@@ -104,7 +104,10 @@ public class ScimServer
         // The watermark the Connector persisted after its last successful import; unreadable reads as none, as it does
         // for the Connector itself.
         var importedUpTo = ScimServiceProviderImportState.Read(connectedSystem.PersistedConnectorData, _logger)?.ChangeSequence;
-        return await Store.GetSummaryAsync(connectedSystemId, importedUpTo, cancellationToken);
+        var summary = await Store.GetSummaryAsync(connectedSystemId, importedUpTo, cancellationToken);
+        summary.RejectedLast24Hours = await Application.Repository.Activity.GetScimRequestRejectionsSinceAsync(connectedSystemId,
+            DateTime.UtcNow.AddHours(-24), cancellationToken);
+        return summary;
     }
 
     /// <summary>
@@ -165,7 +168,7 @@ public class ScimServer
         var activity = new Activity
         {
             TargetType = ActivityTargetType.ScimRequests,
-            TargetOperationType = ActivityTargetOperationType.ReceiveScimRequests,
+            TargetOperationType = ActivityTargetOperationType.Receive,
             TargetName = connectedSystem.Name,
             Message = $"SCIM requests from '{tally.ApiKeyName}'",
             ConnectedSystemId = tally.ConnectedSystemId,

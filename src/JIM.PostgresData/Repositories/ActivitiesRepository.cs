@@ -131,6 +131,16 @@ public partial class ActivityRepository : IActivityRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task<int> GetScimRequestRejectionsSinceAsync(int connectedSystemId, DateTime since, CancellationToken cancellationToken = default)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.TargetType == ActivityTargetType.ScimRequests
+                && a.ConnectedSystemId == connectedSystemId
+                && a.AggregationWindowStart >= since)
+            .SumAsync(a => a.TotalErrors, cancellationToken);
+    }
+
     /// <summary>
     /// Atomically increments AttemptCount and advances LastSeen on the aggregated failed-authentication Activity row
     /// matching the given window bucket. On relational providers this issues a single atomic SQL UPDATE

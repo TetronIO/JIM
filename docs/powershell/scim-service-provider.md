@@ -233,6 +233,7 @@ The summary.
 | `ImportedUpTo` | `long` | The change the last successful import read up to; empty when the store has never been imported. |
 | `ChangesAwaitingImport` | `int` | Resources changed since the last import, which the next import will read. |
 | `LastWrite` | `datetime` | When a SCIM client last wrote to the store; empty when none has. |
+| `RejectedLast24Hours` | `int` | Requests the endpoint refused in the last 24 hours, across every key, other than for authentication. Each key's SCIM request Activities name the latest rejection and count the rest. |
 <!-- END GENERATED: Get-JIMScimStoreSummary -->
 
 ### Examples

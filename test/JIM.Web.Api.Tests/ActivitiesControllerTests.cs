@@ -1479,6 +1479,67 @@ public class ActivitiesControllerTests
         AttemptCount = 500
     };
 
+    private static Activity ScimRequestsActivity() => new()
+    {
+        Id = Guid.NewGuid(),
+        TargetType = ActivityTargetType.ScimRequests,
+        TargetOperationType = ActivityTargetOperationType.Receive,
+        TargetName = "Entra provisioning",
+        ConnectedSystemId = 7,
+        Status = ActivityStatus.CompleteWithWarning,
+        WarningMessage = "Latest rejection: 409 uniqueness on POST /Users",
+        AggregationWindowStart = new DateTime(2026, 10, 20, 9, 15, 0, DateTimeKind.Utc),
+        FirstSeen = new DateTime(2026, 10, 20, 9, 16, 0, DateTimeKind.Utc),
+        LastSeen = new DateTime(2026, 10, 20, 9, 29, 0, DateTimeKind.Utc),
+        TotalAdded = 120,
+        TotalUpdated = 30,
+        TotalDeleted = 2,
+        TotalErrors = 4
+    };
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_ScimRequests_CarriesTheCounts()
+    {
+        var dto = ActivityDetailDto.FromEntity(ScimRequestsActivity());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ScimRequests, Is.Not.Null);
+            Assert.That((dto.ScimRequests!.Created, dto.ScimRequests.Updated, dto.ScimRequests.Deleted, dto.ScimRequests.Rejected),
+                Is.EqualTo((120, 30, 2, 4)));
+            Assert.That(dto.AggregationWindowStart, Is.EqualTo(new DateTime(2026, 10, 20, 9, 15, 0, DateTimeKind.Utc)));
+        }
+    }
+
+    [Test]
+    public void ActivityHeader_FromEntity_ScimRequests_CarriesTheCountsAndOtherActivitiesNone()
+    {
+        var scim = ActivityHeader.FromEntity(ScimRequestsActivity());
+        var other = ActivityHeader.FromEntity(FailedAuthenticationActivity(apiKeyPrefix: string.Empty));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(scim.ScimRequests!.Rejected, Is.EqualTo(4));
+            Assert.That(other.ScimRequests, Is.Null);
+        }
+    }
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_Import_CarriesTheWatermarksItReadBetween()
+    {
+        var import = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            ImportWatermarkFrom = "{\"changeSequence\":8}",
+            ImportWatermarkTo = "{\"changeSequence\":10}"
+        };
+
+        var dto = ActivityDetailDto.FromEntity(import);
+
+        Assert.That((dto.ImportWatermarkFrom, dto.ImportWatermarkTo), Is.EqualTo(("{\"changeSequence\":8}", "{\"changeSequence\":10}")));
+    }
+
     [Test]
     public void ActivityDetailDto_FromEntity_FailedAuthentication_CarriesTheAuditDetails()
     {

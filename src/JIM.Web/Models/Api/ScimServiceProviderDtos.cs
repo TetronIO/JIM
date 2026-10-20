@@ -109,6 +109,12 @@ public class ScimServiceProviderSummaryDto
     public DateTime? LastWrite { get; set; }
 
     /// <summary>
+    /// Requests the endpoint refused in the last 24 hours, across every key, other than for authentication. Each key's
+    /// SCIM request Activities name the latest rejection and count the rest.
+    /// </summary>
+    public int RejectedLast24Hours { get; set; }
+
+    /// <summary>
     /// Creates the DTO from a store summary and the endpoint's base URL.
     /// </summary>
     public static ScimServiceProviderSummaryDto FromSummary(ScimStoreSummary summary, string baseUrl) => new()
@@ -119,7 +125,8 @@ public class ScimServiceProviderSummaryDto
         LastChangeSequence = summary.LastChangeSequence,
         ImportedUpTo = summary.ImportedUpTo,
         ChangesAwaitingImport = summary.ChangesAwaitingImport,
-        LastWrite = summary.LastWrite
+        LastWrite = summary.LastWrite,
+        RejectedLast24Hours = summary.RejectedLast24Hours
     };
 }
 

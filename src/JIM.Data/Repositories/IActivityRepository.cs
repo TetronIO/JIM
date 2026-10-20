@@ -613,6 +613,12 @@ public interface IActivityRepository
     public Task<bool> AddToScimRequestSummaryAsync(JIM.Models.Scim.ScimRequestTally tally, string? warningMessage);
 
     /// <summary>
+    /// The requests a Connected System's SCIM endpoint rejected, across every key, in the SCIM request summary
+    /// windows that began at or after <paramref name="since"/>.
+    /// </summary>
+    public Task<int> GetScimRequestRejectionsSinceAsync(int connectedSystemId, DateTime since, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns, for each of the given Connected Systems that has one, the <see cref="Activity.Executed"/> time of its
     /// most recent successfully completed Full Synchronisation. Systems that have never completed one are absent from
     /// the dictionary rather than carrying a sentinel date, so callers must distinguish "never" from "long ago".

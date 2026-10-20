@@ -124,5 +124,5 @@ public enum ActivityTargetOperationType
     /// A SCIM client's requests to a Connected System's SCIM 2.0 Service Provider endpoint within one window. Used
     /// with <see cref="ActivityTargetType.ScimRequests"/>.
     /// </summary>
-    ReceiveScimRequests = 22
+    Receive = 22
 }

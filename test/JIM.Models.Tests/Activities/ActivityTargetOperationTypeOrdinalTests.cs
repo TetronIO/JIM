@@ -52,7 +52,7 @@ public class ActivityTargetOperationTypeOrdinalTests
         [ActivityTargetOperationType.RestartGeneratedValues] = 19,
         [ActivityTargetOperationType.AllowGeneratedValueRename] = 20,
         [ActivityTargetOperationType.RetryGeneratedValue] = 21,
-        [ActivityTargetOperationType.ReceiveScimRequests] = 22
+        [ActivityTargetOperationType.Receive] = 22
     };
 
     [Test]

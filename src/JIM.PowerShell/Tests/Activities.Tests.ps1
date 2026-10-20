@@ -186,6 +186,17 @@ Describe 'Get-JIMActivity' {
             }
         }
 
+        It 'Accepts Receive, so SCIM request summaries can be listed' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -Operation Receive | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -match 'operation=Receive' }
+            }
+        }
+
         It 'Sends the Outcome filter in the query string' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

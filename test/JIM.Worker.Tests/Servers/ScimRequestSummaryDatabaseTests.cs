@@ -82,7 +82,7 @@ public class ScimRequestSummaryDatabaseTests
         {
             Assert.That(activity.ConnectedSystemId, Is.EqualTo(_systemId));
             Assert.That(activity.TargetName, Is.EqualTo("Entra provisioning"));
-            Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.ReceiveScimRequests));
+            Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Receive));
             Assert.That(activity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
             Assert.That(activity.InitiatedById, Is.EqualTo(_key.Id));
             Assert.That(activity.InitiatedByName, Is.EqualTo("Entra key"));

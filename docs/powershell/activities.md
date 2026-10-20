@@ -40,7 +40,7 @@ Get-JIMActivity -Id <guid>
 | `Search` | `string` | No (List) |  | Return only the Activities whose target name or type contains this text; "Active Directory", for example, finds the Activities of that Connected System. |
 | `Page` | `int` | No (List) | `1` | The page of Activities to return. At least 1. |
 | `PageSize` | `int` | No (List) | `20` | How many Activities per page. From 1 to 100. |
-| `Operation` | `string[]` | No (List) |  | Return only the Activities that performed one of these operations, for example Execute for a Run Profile execution. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate` or `Preview`. |
+| `Operation` | `string[]` | No (List) |  | Return only the Activities that performed one of these operations, for example Execute for a Run Profile execution, or Receive for the requests a SCIM client sent to a Connected System's SCIM endpoint. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview` or `Receive`. |
 | `Outcome` | `string[]` | No (List) |  | Return only the Activities that recorded at least one of these outcomes, for example Errors for runs that recorded an error. One of `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlows`, `Disconnected`, `DriftCorrections`, `Provisioned`, `Exported`, `Deprovisioned`, `Created`, `PendingExports` or `Errors`. |
 | `Status` | `string[]` | No (List) |  | Return only the Activities with one of these statuses. One of `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
 | `InitiatedById` | `guid` | No (List) |  | Return only the Activities initiated by this principal (a Metaverse Object or API key). `-InitiatedBy` matches on the recorded name instead. |
@@ -70,7 +70,7 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `Executed` | `datetime` | When the Activity started executing. |
 | `Status` | `string` | The current status of the Activity. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
 | `TargetType` | `string` | The type of target this Activity operates on. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject`, `PasswordSynchronisation` or `ScimRequests`. |
-| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue` or `ReceiveScimRequests`. |
+| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue` or `Receive`. |
 | `TargetName` | `string` | The name of the target object. |
 | `TargetContext` | `string` | Additional context for the target, such as the parent entity name. For example, for a Run Profile Activity this would be the Connected System name. |
 | `Message` | `string` | Progress message for the Activity. |
@@ -107,9 +107,10 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ClientIpAddress` | `string` | Security audit events only: the client IP address the attempt came from, where one was available. |
 | `ApiKeyPrefix` | `string` | Security audit events only: the identifying prefix of the API key involved, for example `jim_ak_7f3a`. Never the key itself. Empty when no API key was involved. |
 | `AttemptCount` | `int` | Failed authentication events only: how many matching attempts (same reason, client IP and API key prefix) this Activity counts within its 15-minute window. |
-| `FirstSeen` | `datetime` | Failed authentication events only: when the first attempt this Activity counts was made (UTC). |
-| `LastSeen` | `datetime` | Failed authentication events only: when the most recent attempt this Activity counts was made (UTC). It advances as further attempts arrive, so a poller can pick up a changed count by watching it. |
-| `AggregationWindowStart` | `datetime` | Failed authentication events only: the start of the 15-minute UTC window this Activity aggregates. Attempts after the window ends are counted on a new Activity, so once the window has passed this one no longer changes. |
+| `FirstSeen` | `datetime` | Failed authentication events and SCIM request summaries only: when the first attempt or request this Activity counts was made (UTC). |
+| `LastSeen` | `datetime` | Failed authentication events and SCIM request summaries only: when the most recent attempt or request this Activity counts was made (UTC). It advances as more arrive, so a poller can pick up a changed count by watching it. |
+| `AggregationWindowStart` | `datetime` | Failed authentication events and SCIM request summaries only: the start of the 15-minute UTC window this Activity aggregates. Anything after the window ends is counted on a new Activity, so once the window has passed this one no longer changes. |
+| `ScimRequests` | `object` | SCIM request summaries only: what a SCIM client's requests did within the window. Empty for every other Activity. It has `Created`, `Updated`, `Deleted` and `Rejected`. |
 
 **With `-Id` or `-Follow`**:
 
@@ -121,7 +122,7 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `Executed` | `datetime` | When the Activity started executing. |
 | `Status` | `string` | The current status of the Activity. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
 | `TargetType` | `string` | The type of target this Activity operates on. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject`, `PasswordSynchronisation` or `ScimRequests`. |
-| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue` or `ReceiveScimRequests`. |
+| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue` or `Receive`. |
 | `TargetName` | `string` | The name of the target object. |
 | `TargetContext` | `string` | Additional context for the target, such as the parent entity name. For example, for a Run Profile Activity this would be the Connected System name. |
 | `Message` | `string` | Progress message for the Activity. |
@@ -165,9 +166,12 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ClientIpAddress` | `string` | Security audit events only: the client IP address the attempt came from, where one was available. |
 | `ApiKeyPrefix` | `string` | Security audit events only: the identifying prefix of the API key involved, for example `jim_ak_7f3a`. Never the key itself. Empty when no API key was involved. |
 | `AttemptCount` | `int` | Failed authentication events only: how many matching attempts (same reason, client IP and API key prefix) this Activity counts within its 15-minute window. |
-| `FirstSeen` | `datetime` | Failed authentication events only: when the first attempt this Activity counts was made (UTC). |
-| `LastSeen` | `datetime` | Failed authentication events only: when the most recent attempt this Activity counts was made (UTC). It advances as further attempts arrive, so a poller can pick up a changed count by watching it. |
-| `AggregationWindowStart` | `datetime` | Failed authentication events only: the start of the 15-minute UTC window this Activity aggregates. Attempts after the window ends are counted on a new Activity, so once the window has passed this one no longer changes. |
+| `FirstSeen` | `datetime` | Failed authentication events and SCIM request summaries only: when the first attempt or request this Activity counts was made (UTC). |
+| `LastSeen` | `datetime` | Failed authentication events and SCIM request summaries only: when the most recent attempt or request this Activity counts was made (UTC). It advances as more arrive, so a poller can pick up a changed count by watching it. |
+| `AggregationWindowStart` | `datetime` | Failed authentication events and SCIM request summaries only: the start of the 15-minute UTC window this Activity aggregates. Anything after the window ends is counted on a new Activity, so once the window has passed this one no longer changes. |
+| `ScimRequests` | `object` | SCIM request summaries only: what a SCIM client's requests did within the window. Empty for every other Activity. It has `Created`, `Updated`, `Deleted` and `Rejected`. |
+| `ImportWatermarkFrom` | `string` | Imports only: the point the import started reading from, as its Connector records it (for example `{"changeSequence":8}`). Empty for an import with nothing to start from, such as a Connected System's first, and for every other Activity. |
+| `ImportWatermarkTo` | `string` | Imports only: the point the import read up to, which the next import starts from. Empty when the import recorded none (it failed or was cancelled first, or its Connector keeps no such point) and for every other Activity. |
 
 **With `-ExecutionItems`**:
 
