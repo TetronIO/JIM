@@ -79,10 +79,4 @@ internal static class MvoBulkInsertColumns
         "UnresolvedReferenceValueId", "ContributedBySystemId",
         "ContributedBySyncRuleId", "NullValue"
     ];
-
-    /// <summary>
-    /// Renders a column list as quoted, comma-separated SQL identifiers, e.g. "Id", "Created".
-    /// </summary>
-    internal static string ToQuotedList(string[] columns) =>
-        string.Join(", ", columns.Select(c => $"\"{c}\""));
 }

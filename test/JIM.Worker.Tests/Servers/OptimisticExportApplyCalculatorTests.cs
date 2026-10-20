@@ -16,6 +16,82 @@ namespace JIM.Worker.Tests.Servers;
 /// </summary>
 public class OptimisticExportApplyCalculatorTests
 {
+    [TestCase(PendingExportAttributeChangeType.Add)]
+    [TestCase(PendingExportAttributeChangeType.Update)]
+    public void CalculateDelta_DecimalValue_CreatesAddition(PendingExportAttributeChangeType operation)
+    {
+        var change = CreateChange(1, AttributeDataType.Decimal, operation);
+        change.DecimalValue = 12.34m;
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(CreateCso(), change)]);
+        Assert.That(delta.Additions.Select(v => v.DecimalValue), Is.EqualTo(new[] { 12.34m }));
+        Assert.That(delta.SkippedChangeCount, Is.Zero);
+    }
+
+    [TestCase(PendingExportAttributeChangeType.Update)]
+    [TestCase(PendingExportAttributeChangeType.Remove)]
+    [TestCase(PendingExportAttributeChangeType.RemoveAll)]
+    public void CalculateDelta_DecimalExistingValue_RemovesOldValue(PendingExportAttributeChangeType operation)
+    {
+        var cso = CreateCso();
+        var existing = AddCsoValue(cso, 1, AttributeDataType.Decimal);
+        existing.DecimalValue = 5.00m;
+        var change = CreateChange(1, AttributeDataType.Decimal, operation);
+        change.DecimalValue = operation == PendingExportAttributeChangeType.Update ? 6m : 5.0m;
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+        Assert.That(delta.RemovalValueIds, Is.EqualTo(new[] { existing.Id }));
+        Assert.That(delta.Additions.Select(v => v.DecimalValue), Is.EqualTo(
+            operation == PendingExportAttributeChangeType.Update ? new decimal?[] { 6m } : Array.Empty<decimal?>()));
+    }
+
+    [TestCase(PendingExportAttributeChangeType.Add)]
+    [TestCase(PendingExportAttributeChangeType.Update)]
+    public void CalculateDelta_DecimalScaleOnlyDifference_SkipsChange(PendingExportAttributeChangeType operation)
+    {
+        var cso = CreateCso();
+        AddCsoValue(cso, 1, AttributeDataType.Decimal).DecimalValue = 5.00m;
+        var change = CreateChange(1, AttributeDataType.Decimal, operation);
+        change.DecimalValue = 5.0m;
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+        Assert.That(delta.Additions, Is.Empty);
+        Assert.That(delta.RemovalValueIds, Is.Empty);
+        Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+    }
+
+    [TestCase(PendingExportAttributeChangeType.Remove)]
+    [TestCase(PendingExportAttributeChangeType.RemoveAll)]
+    public void CalculateDelta_DecimalChangesInOneBatch_IndexFollowsMutations(PendingExportAttributeChangeType removal)
+    {
+        var cso = CreateCso();
+        var existing = AddCsoValue(cso, 1, AttributeDataType.Decimal);
+        existing.DecimalValue = 5.00m;
+        PendingExportAttributeValueChange Change(PendingExportAttributeChangeType operation, decimal value)
+        {
+            var change = CreateChange(1, AttributeDataType.Decimal, operation);
+            change.DecimalValue = value;
+            return change;
+        }
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso,
+            Change(removal, 5m),
+            Change(PendingExportAttributeChangeType.Add, 5.0m),
+            Change(PendingExportAttributeChangeType.Add, 5.00m))]);
+        Assert.That(delta.Additions.Select(v => v.DecimalValue), Is.EqualTo(new[] { 5m }));
+        Assert.That(delta.RemovalValueIds, Is.EqualTo(new[] { existing.Id }));
+        Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CalculateDelta_AllDeclaredDataTypes_SupportsEverySetType()
+    {
+        foreach (var type in Enum.GetValues<AttributeDataType>().Where(t => t != AttributeDataType.NotSet))
+        {
+            var cso = CreateCso();
+            var existing = AddCsoValue(cso, 1, type);
+            var change = CreateChange(1, type, PendingExportAttributeChangeType.RemoveAll);
+            var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+            Assert.That(delta.RemovalValueIds, Does.Contain(existing.Id), $"Unsupported data type: {type}");
+        }
+    }
+
     #region Add
 
     [Test]
@@ -485,7 +561,7 @@ public class OptimisticExportApplyCalculatorTests
 
     /// <summary>
     /// Orchestrator review finding #2: an Add/Update change whose Attribute.Type is NotSet (or any
-    /// other value outside the eight supported types) must not create a row with an Id, CSO and
+    /// other value outside the supported types) must not create a row with an Id, CSO and
     /// AttributeId but no populated value field. IsPendingChangeEmpty only inspects the typed value
     /// fields, so a change with a payload (e.g. StringValue set) but an unrecognised Type is not
     /// "empty", and ValueExistsOnCso's default arm returns false regardless of CSO state - both

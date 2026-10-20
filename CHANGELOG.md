@@ -136,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Decimal values are recorded after export, so clearing or reverting a value still reaches an auto-confirmed File Connector target. (#2185)
 - 🐛 File Connector exports now write every value of a multi-valued attribute, and an update adds or removes only the values that changed, instead of keeping just the last value. A value containing the Multi-Value Delimiter fails that object's export. (#2186)
 - 🐛 JIM starts when its identity provider is unreachable or its certificate is not trusted, instead of stopping after five attempts; API keys keep working while sign-in is unavailable. (#2363)
 - 🐛 After the encryption keys are lost, JIM.Worker starts and configuration changes save again, so the Connected System secrets the recovery asks for can be re-entered. JIM previously failed both on a key that records secret changes in Configuration History; it now replaces that key with a warning in the log. (#2124)
