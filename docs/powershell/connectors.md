@@ -79,6 +79,7 @@ The Connectors, or with `-Id` or `-Name` the one Connector, with its settings an
 | `SupportsSecondaryExternalId` | `bool` | Whether the Connector gives each object a second identifier, such as an LDAP Distinguished Name, beside its unchanging external ID. |
 | `SupportsUserSelectedExternalId` | `bool` | Whether the administrator chooses which attribute is the external ID. |
 | `SupportsUserSelectedAttributeTypes` | `bool` | Whether the administrator can change the data type the Connector found for an attribute. |
+| `SupportsUserSelectedAttributePlurality` | `bool` | Whether the administrator can say whether an attribute holds one value or several, where the Connected System's schema cannot state it (a delimited file). |
 | `SupportsAutoConfirmExport` | `bool` | Whether the Connector confirms an export as soon as it is made, rather than at the next import. |
 | `SupportsParallelExport` | `bool` | Whether the Connector can export batches in parallel. |
 | `SupportsPaging` | `bool` | Whether the Connector imports and exports a page at a time. |
