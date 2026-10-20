@@ -40,6 +40,23 @@ BeforeAll {
         }
     }
 
+    function Get-TestFederationConfig {
+        return @{
+            DirectoryType      = 'ActiveDirectoryFederation'
+            Instance           = 'AdfsPrimary'
+            ContainerName      = $null
+            Host               = 'adfs.panoply.local'
+            Address            = '10.20.30.41'
+            VmName             = 'adfs-primary'
+            Port               = 443
+            Authority          = 'https://adfs.panoply.local/adfs'
+            DiscoveryPath      = '/adfs/.well-known/openid-configuration'
+            Issuer             = 'https://adfs.panoply.local/adfs'
+            AccessTokenIssuer  = 'http://adfs.panoply.local/adfs/services/trust'
+            CheckpointBaseline = 'baseline'
+        }
+    }
+
     function Get-StateJson {
         param([string]$Name, [string[]]$Checkpoint = @('baseline'), [string]$Build = '26100.1742', [switch]$NoGuest)
         $guest = if ($NoGuest) { $null } else {
@@ -80,12 +97,30 @@ Describe 'Get-JimComposeArgument' {
     }
 
     It 'names a file that exists' {
-        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory'
+        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 29
         $repoRoot = Join-Path $PSScriptRoot '..' '..' '..'
 
         foreach ($file in $composeArgs | Where-Object { $_ -ne '-f' }) {
             Join-Path $repoRoot $file | Should -Exist
         }
+    }
+
+    It 'adds the AD FS overlay after the lab overlay for a scenario that signs in through AD FS, so JIM''s identity provider is adfs-primary' {
+        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 29
+
+        $composeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml',
+            '-f', 'test/integration/docker/docker-compose.ad-lab.yml', '-f', 'test/integration/docker/docker-compose.ad-lab-adfs.yml')
+    }
+
+    It 'leaves JIM''s identity provider alone for every other scenario, and for no scenario number' {
+        foreach ($number in 1, 8, 25, $null) {
+            Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber $number |
+                Should -Not -Contain 'test/integration/docker/docker-compose.ad-lab-adfs.yml'
+        }
+    }
+
+    It 'never adds the AD FS overlay outside the Active Directory lab' {
+        Get-JimComposeArgument -DirectoryType 'SambaAD' -ScenarioNumber 29 | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
     }
 }
 
@@ -107,6 +142,25 @@ Describe 'Get-ActiveDirectoryLabInstance' {
 
     It 'is Primary alone when there is no scenario number' {
         @(Get-ActiveDirectoryLabInstance -ScenarioNumber $null) | Should -Be @('Primary')
+    }
+
+    It 'is Primary then the AD FS server for Scenario 29, so the pair is reverted domain controller first' {
+        @(Get-ActiveDirectoryLabInstance -ScenarioNumber 29) | Should -Be @('Primary', 'AdfsPrimary')
+    }
+
+    It 'reverts the AD FS server for no other scenario: it takes minutes, and its baseline pairs with dc-primary''s' {
+        foreach ($number in 1, 2, 8, 24, 25, 28, $null) {
+            @(Get-ActiveDirectoryLabInstance -ScenarioNumber $number) | Should -Not -Contain 'AdfsPrimary'
+        }
+    }
+}
+
+Describe 'Test-ActiveDirectoryLabFederationScenario' {
+    It 'is true for Scenario 29 only' {
+        Test-ActiveDirectoryLabFederationScenario -ScenarioNumber 29 | Should -BeTrue
+        foreach ($number in 1, 8, 25, 28, $null) {
+            Test-ActiveDirectoryLabFederationScenario -ScenarioNumber $number | Should -BeFalse
+        }
     }
 }
 
@@ -267,6 +321,14 @@ Describe 'Select-ActiveDirectoryLabCheckpoint' {
         }
     }
 
+    It 'reverts the AD FS server to baseline and never asks for population' {
+        $pick = Select-ActiveDirectoryLabCheckpoint -Instance 'AdfsPrimary' -ScenarioNumber 29 -Template 'Nano' -Hash $script:hash `
+            -AvailableCheckpoint @('baseline')
+
+        $pick.Checkpoint | Should -Be 'baseline'
+        $pick.NeedsPopulation | Should -BeFalse
+    }
+
     It 'reverts Scenario 25 Source to baseline and never asks for population, even when a populated checkpoint exists' {
         foreach ($instance in 'Primary', 'Source') {
             $pick = Select-ActiveDirectoryLabCheckpoint -Instance $instance -ScenarioNumber 25 -Template 'Nano' -Hash $script:hash `
@@ -344,6 +406,156 @@ Describe 'Get-ActiveDirectoryLabState' {
         Mock Invoke-LabControl { throw 'ssh: connect to host lab port 22: Connection refused' }
 
         { Get-ActiveDirectoryLabState -DirectoryConfig @{ Primary = (Get-TestConfig 'Primary') } } | Should -Throw '*Connection refused*'
+    }
+
+    It 'asks about the AD FS server after the domain controller it pairs with' {
+        $configs = @{ AdfsPrimary = (Get-TestFederationConfig); Primary = (Get-TestConfig 'Primary') }
+
+        $states = @(Get-ActiveDirectoryLabState -DirectoryConfig $configs)
+
+        ($states | ForEach-Object { $_.Instance }) | Should -Be @('Primary', 'AdfsPrimary')
+        ($states | ForEach-Object { $_.VmName }) | Should -Be @('dc-primary', 'adfs-primary')
+    }
+
+    It 'names the AD FS server''s own build script when its baseline checkpoint is missing' {
+        Mock Invoke-LabControl { return (Get-StateJson -Name 'adfs-primary' -Checkpoint @()) }
+
+        { Get-ActiveDirectoryLabState -DirectoryConfig @{ AdfsPrimary = (Get-TestFederationConfig) } } |
+            Should -Throw "*adfs-primary*'baseline'*New-LabFederationServer.ps1*"
+    }
+}
+
+Describe 'Get-ActiveDirectoryLabFederationRequest' {
+    It 'asks for the discovery document by the service name, closing the connection after one response, in printf''s escapes' {
+        $request = Get-ActiveDirectoryLabFederationRequest -FederationConfig (Get-TestFederationConfig)
+
+        $request | Should -Be "GET /adfs/.well-known/openid-configuration HTTP/1.1\r\nHost: adfs.panoply.local\r\nConnection: close\r\n\r\n"
+    }
+}
+
+Describe 'Test-ActiveDirectoryLabFederationDiscovery' {
+    BeforeAll {
+        function Get-TestResponse {
+            param([string]$Status = 'HTTP/1.1 200 OK', [string]$Issuer = 'https://adfs.panoply.local/adfs',
+                [string]$Authorize = 'https://adfs.panoply.local/adfs/oauth2/authorize/')
+            # The shape adfs-primary publishes (checked against it): the issuer is the authority, and access tokens
+            # name the federation service identifier instead.
+            $body = [ordered]@{
+                issuer = $Issuer; authorization_endpoint = $Authorize; jwks_uri = 'https://adfs.panoply.local/adfs/discovery/keys'
+                access_token_issuer = 'http://adfs.panoply.local/adfs/services/trust'
+            } |
+                ConvertTo-Json -Compress
+            return @($Status, 'Content-Type: application/json;charset=UTF-8', 'Connection: close', '', $body)
+        }
+    }
+
+    It 'is ready when AD FS answers 200 with its own issuer and endpoints on the service' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response (Get-TestResponse) -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeTrue
+    }
+
+    It 'is not ready, saying so, while AD FS is still starting and answers 503' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response @('HTTP/1.1 503 Service Unavailable', '', 'Service Unavailable') `
+            -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match '503'
+    }
+
+    It 'is not ready when nothing came back' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response @() -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match 'no response'
+    }
+
+    It 'is not ready, naming both, when the issuer is not the one JIM will be told to expect' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response (Get-TestResponse -Issuer 'https://other.example/adfs') `
+            -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match 'other\.example'
+        $result.Reason | Should -Match 'https://adfs\.panoply\.local/adfs'
+    }
+
+    It 'is not ready when the endpoints are not on the service name, as a server built for another name would publish' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response (Get-TestResponse -Authorize 'https://adfs1.panoply.local/adfs/oauth2/authorize/') `
+            -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match 'authorization_endpoint'
+    }
+
+    It 'is not ready when the body is not JSON' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response @('HTTP/1.1 200 OK', '', '<html>sign in</html>') `
+            -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match 'JSON'
+    }
+}
+
+Describe 'Wait-ActiveDirectoryLabFederationReady' {
+    BeforeAll {
+        function docker { }
+        # A stand-in with the real one's parameters (it lives in Test-Helpers.ps1), so Mock can replace it.
+        function Save-ActiveDirectoryCertificate { param($DirectoryConfig, $CertificateDirectory) $null = $DirectoryConfig, $CertificateDirectory }
+        $script:ok = @('HTTP/1.1 200 OK', '', ([ordered]@{
+            issuer = 'https://adfs.panoply.local/adfs'
+            authorization_endpoint = 'https://adfs.panoply.local/adfs/oauth2/authorize/'
+        } | ConvertTo-Json -Compress))
+    }
+
+    BeforeEach {
+        $script:dockerCalls = [System.Collections.Generic.List[object]]::new()
+        $script:responses = [System.Collections.Generic.Queue[object]]::new()
+        Mock Start-Sleep { }
+        Mock Save-ActiveDirectoryCertificate { }
+        Mock docker {
+            $script:dockerCalls.Add(@($args))
+            $global:LASTEXITCODE = 0
+            if ($script:responses.Count -gt 0) { return $script:responses.Dequeue() }
+            return $script:ok
+        }
+    }
+
+    It 'saves the certificate first, then asks for discovery over TLS verified against that certificate and the service name' {
+        Wait-ActiveDirectoryLabFederationReady -FederationConfig (Get-TestFederationConfig) -TimeoutSeconds 60 | Should -BeTrue
+
+        Should -Invoke Save-ActiveDirectoryCertificate -Times 1 -Exactly
+        $text = @($script:dockerCalls[0]) -join ' '
+        $text | Should -Match 'exec jim-ldap-toolbox sh -c'
+        $text | Should -Match 'openssl s_client -quiet -connect 10\.20\.30\.41:443 -servername adfs\.panoply\.local'
+        $text | Should -Match '-verify_return_error -verify_hostname adfs\.panoply\.local -CAfile /certs/adfs-primary\.pem'
+    }
+
+    It 'keeps asking while AD FS is starting, and is ready once discovery answers' {
+        $script:responses.Enqueue(@('HTTP/1.1 503 Service Unavailable', ''))
+        $script:responses.Enqueue(@())
+
+        Wait-ActiveDirectoryLabFederationReady -FederationConfig (Get-TestFederationConfig) -TimeoutSeconds 60 -PollSeconds 5 | Should -BeTrue
+
+        $script:dockerCalls.Count | Should -Be 3
+    }
+
+    It 'keeps trying to save the certificate until the server answers on 443 at all' {
+        $script:saveAttempts = 0
+        Mock Save-ActiveDirectoryCertificate {
+            $script:saveAttempts++
+            if ($script:saveAttempts -lt 3) { throw 'No certificate was found in the openssl s_client output.' }
+        }
+
+        Wait-ActiveDirectoryLabFederationReady -FederationConfig (Get-TestFederationConfig) -TimeoutSeconds 60 -PollSeconds 5 | Should -BeTrue
+
+        $script:saveAttempts | Should -Be 3
+    }
+
+    It 'gives up after the timeout, returning false with the last reason written' {
+        Mock docker { $global:LASTEXITCODE = 0; return @('HTTP/1.1 503 Service Unavailable', '') }
+
+        Wait-ActiveDirectoryLabFederationReady -FederationConfig (Get-TestFederationConfig) -TimeoutSeconds 10 -PollSeconds 5 |
+            Should -BeFalse
     }
 }
 

@@ -1568,8 +1568,10 @@ if ($scenarioNumber -eq 23) {
 # One list, used at every call site, so that compose always sees the same project. An Active Directory run
 # adds the lab overlay, which gives jim.web, jim.worker and jim.scheduler extra_hosts entries for the
 # domain controllers' FQDNs (their names are in no DNS the containers can see, and their LDAPS certificates
-# name the FQDN). Decided here, after the directory type has been chosen by parameter, menu or coercion.
-$script:JimComposeArgs = Get-JimComposeArgument -DirectoryType $DirectoryType -BaseArguments (Get-JimComposeArgs)
+# name the FQDN). Decided here, after the directory type has been chosen by parameter, menu or coercion. A
+# scenario that signs in through the lab's AD FS server adds the AD FS overlay, making it JIM's identity provider
+# (each scenario of an "All" sweep is its own invocation, so this is decided per scenario).
+$script:JimComposeArgs = Get-JimComposeArgument -DirectoryType $DirectoryType -BaseArguments (Get-JimComposeArgs) -ScenarioNumber $scenarioNumber
 
 # ---------------------------------------------------------------------------
 # Handle "-DirectoryType All": run the suite for each directory type
@@ -1817,7 +1819,12 @@ function Get-ActiveDirectoryLabRunContext {
 
     $configs = @{}
     foreach ($instance in (Get-ActiveDirectoryLabInstance -ScenarioNumber $ScenarioNumber)) {
-        $configs[$instance] = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $instance
+        $configs[$instance] = if ($instance -eq 'AdfsPrimary') {
+            Get-ActiveDirectoryLabFederationConfig
+        }
+        else {
+            Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $instance
+        }
     }
     return @{ Configs = $configs; States = (Get-ActiveDirectoryLabState -DirectoryConfig $configs) }
 }
@@ -1873,6 +1880,16 @@ function Invoke-ActiveDirectoryLabReady {
         & "$scriptRoot/Wait-ActiveDirectoryReady.ps1" -DirectoryConfig $Configs[$instance] -TimeoutSeconds ([Math]::Max($TimeoutSeconds, 300))
         if ($LASTEXITCODE -ne 0) {
             Write-Failure "Active Directory ($($Configs[$instance].VmName)) did not become ready in time"
+            return $false
+        }
+    }
+
+    # The AD FS server, for the scenarios that sign in through it: its discovery document, verified against its
+    # own certificate and service name. AD FS is a delayed-start service, a couple of minutes after the machine
+    # answers, so the wait is never shorter than 600.
+    if ($Configs.ContainsKey("AdfsPrimary")) {
+        if (-not (Wait-ActiveDirectoryLabFederationReady -FederationConfig $Configs["AdfsPrimary"] -TimeoutSeconds ([Math]::Max($TimeoutSeconds, 600)))) {
+            Write-Failure "The AD FS server ($($Configs["AdfsPrimary"].VmName)) did not become ready in time"
             return $false
         }
     }

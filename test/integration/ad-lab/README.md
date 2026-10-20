@@ -317,8 +317,23 @@ C:\jim-ad-lab\New-LabFederationServer.ps1 @arguments
 
 It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB of memory while running.
 
-Not yet wired in, and to come with the AD FS checks (#2355): the runner reverting the AD FS server, trusting
-`adfs-primary-ca.cer` and resolving `adfs.panoply.local`.
+**How a run uses it.** Only the scenarios that sign in through AD FS use the AD FS server (Scenario 029 so far;
+`$script:AdLabFederationScenarios` in `test/integration/utils/ActiveDirectoryLab-Helpers.ps1`). For those, the runner:
+
+1. reverts `dc-primary`, then `adfs-primary`, to `baseline`;
+2. starts JIM with `docker-compose.ad-lab-adfs.yml` as well, which makes `https://adfs.panoply.local/adfs` its identity
+   provider and maps `adfs.panoply.local` to `JIM_AD_LAB_ADFS_PRIMARY_ADDRESS` inside `jim.web`;
+3. reads the AD FS server's HTTPS certificate off the wire into `test/integration/ad-lab-certs/adfs-primary.pem`, and
+   waits until it publishes its discovery document, verified against that certificate and the service name (AD FS
+   answers 503 for a minute or two after the machine starts).
+
+The runner does not give JIM the certificate: the scenario trusts it the way an administrator would, with
+`Add-JIMCertificate -FromIdentityProvider`. It reads the certificate off the wire rather than copying
+`adfs-primary-ca.cer` from the guest, the same way it reads the domain controllers'.
+
+The run needs the variable `JIM_AD_LAB_ADFS_PRIMARY_ADDRESS` (10.99.0.21 in the example settings) in the `jim-ad-lab`
+environment. `JIM_AD_LAB_ADFS_PRIMARY_HOST` (default `adfs.panoply.local`) and `JIM_AD_LAB_ADFS_PRIMARY_VM` (default
+`adfs-primary`) are optional.
 
 ## Checkpoint lifecycle
 
