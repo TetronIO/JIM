@@ -404,6 +404,12 @@ Decided 19 October 2026: three PRs, each with full surface parity for what it co
 
 Also decided: a key is rotated by creating a second key (the two-key limit allows the overlap) and disabling or deleting the old one once its last-used time goes quiet; there is no rotate verb. Key management lives under the Connected System (REST `connected-systems/{id}/scim/keys`, PowerShell `*-JIMScimKey -ConnectedSystemId`); the general API key list shows scoped keys with their scope but cannot create them.
 
+Decided 20 October 2026, for 5b:
+
+- **The summary Activity reuses the aggregation columns** the failed sign-in audit already has (window start, first and last seen) and the existing `TotalCreated`, `TotalUpdated`, `TotalDeleted` and `TotalErrors` counters, as a new Activity target type; no new table. Its unique key adds the Connected System, so each (Connected System, key, window) has one row.
+- **Counts are buffered in memory and flushed** about every ten seconds and at shutdown, one statement per window rather than one per request, so a parallel initial load does not queue on one row. A crash can lose up to about ten seconds of counts; accepted writes stay journalled transactionally, so only those seconds' rejection counts are truly lost.
+- **A rejection is any 4xx answer except authentication** (`400`, `404`, `409`, `412`), reads included, with the latest error's type and detail kept on the Activity. A `401` stays with the security audit, so nothing is counted twice.
+
 #### 5a: Keys, store summary and definitions ✅
 
 - **Application:** `SecurityServer.GetScimServiceProviderKeysAsync` and `ScimServer.GetStoreSummaryAsync` (resource counts by type, tombstones, the last change sequence, the import watermark read from the Connector's persisted data, changes awaiting import, last write), both behind the flag. `ApiKey.IsUsableAt` is the "usable" rule the two-key limit counts, shared with the portal.
