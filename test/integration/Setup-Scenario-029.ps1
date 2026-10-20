@@ -157,8 +157,9 @@ function Get-ScimObjectTypes {
     return @{ User = $user; Group = $group }
 }
 
-$userAttributes = @("id", "userName", "active", "name.givenName", "name.familyName", "emails.work", "enterpriseUser.department", "title")
-$groupAttributes = @("id", "displayName", "members")
+# meta.version is what the client sends back as If-Match, and it sends none unless the attribute is imported (#2404).
+$userAttributes = @("id", "userName", "active", "name.givenName", "name.familyName", "emails.work", "enterpriseUser.department", "title", "meta.version")
+$groupAttributes = @("id", "displayName", "members", "meta.version")
 
 # Step 3: The Service Provider
 Write-TestStep "Step 3" "Creating the Service Provider Connected System"
