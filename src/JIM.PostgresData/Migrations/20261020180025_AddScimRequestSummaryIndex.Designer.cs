@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261020071502_AddScimRequestSummaryIndex")]
+    [Migration("20261020180025_AddScimRequestSummaryIndex")]
     partial class AddScimRequestSummaryIndex
     {
         /// <inheritdoc />
@@ -3937,6 +3937,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("PluralitySetByAdministrator")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("ReferencedObjectTypeId")
                         .HasColumnType("integer");
 
@@ -4381,6 +4384,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsUniquenessRejectionClassification")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsUserSelectedAttributePlurality")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsUserSelectedAttributeTypes")
