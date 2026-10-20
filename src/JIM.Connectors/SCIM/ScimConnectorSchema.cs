@@ -73,7 +73,7 @@ public class ScimConnectorSchema
 
         var schema = new ConnectorSchema();
         foreach (var resourceType in resourceTypes.Where(r => !string.IsNullOrWhiteSpace(r.Name)))
-            schema.ObjectTypes.Add(BuildObjectType(resourceType, composition.FlattenedAttributes[resourceType.Name!]));
+            schema.ObjectTypes.Add(BuildObjectType(resourceType, composition.FlattenedAttributes[resourceType.Name!], capabilities.SupportsETag));
 
         _logger.Debug("SCIM discovery found {ObjectTypeCount} object type(s) and raised {WarningCount} warning(s).",
             schema.ObjectTypes.Count, warnings.Count);
@@ -122,8 +122,21 @@ public class ScimConnectorSchema
     /// <summary>
     /// Builds one Connected System Object Type from a resource type's flattened attributes.
     /// </summary>
-    private static ConnectorSchemaObjectType BuildObjectType(ScimResourceType resourceType, List<ScimFlattenedAttribute> flattened)
+    /// <param name="resourceType">The resource type the Object Type represents.</param>
+    /// <param name="flattened">The resource type's flattened attributes.</param>
+    /// <param name="supportsEntityTags">Whether the provider supports entity tags, which export sends back as If-Match.</param>
+    private static ConnectorSchemaObjectType BuildObjectType(ScimResourceType resourceType, List<ScimFlattenedAttribute> flattened, bool supportsEntityTags)
     {
+        var attributes = flattened.Select(a => a.ToConnectorSchemaAttribute()).ToList();
+
+        // Export reads the If-Match tag from the imported meta.version, so with it unselected every conditional
+        // update would quietly go unconditional and a concurrent change be overwritten (#2404).
+        if (supportsEntityTags)
+        {
+            foreach (var metaVersion in attributes.Where(a => a.Name == ScimCommonAttributes.MetaVersion))
+                metaVersion.AlwaysImported = true;
+        }
+
         return new ConnectorSchemaObjectType(resourceType.Name!)
         {
             // The provider assigns id and never lets a client change it, which is exactly what an
@@ -131,7 +144,7 @@ public class ScimConnectorSchema
             RecommendedExternalIdAttribute = ScimCommonAttributes.For(resourceType.Schema ?? string.Empty)
                 .Single(a => a.Name == ScimCommonAttributes.Id)
                 .ToConnectorSchemaAttribute(),
-            Attributes = flattened.Select(a => a.ToConnectorSchemaAttribute()).ToList()
+            Attributes = attributes
         };
     }
 

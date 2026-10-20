@@ -314,14 +314,15 @@ Write-TestStep "Step 10" "Selecting SCIM object types and attributes"
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $scimSystem.id -ObjectTypeId $userType.id -Selected $true | Out-Null
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $scimSystem.id -ObjectTypeId $groupType.id -Selected $true | Out-Null
 
-$userAttributeNames = @("id", "userName", "active", "displayName", "name.givenName", "name.familyName", "emails.work", "meta.version", $badgesScimAttributeName, $rolesScimAttributeName)
+# meta.version is selected and locked by the schema import where the provider supports entity tags (#2404).
+$userAttributeNames = @("id", "userName", "active", "displayName", "name.givenName", "name.familyName", "emails.work", $badgesScimAttributeName, $rolesScimAttributeName)
 $userAttributeUpdates = @{}
 foreach ($attribute in $userType.attributes | Where-Object { $_.name -in $userAttributeNames }) {
     $userAttributeUpdates[$attribute.id] = @{ selected = $true; isExternalId = ($attribute.name -eq "id") }
 }
 Set-JIMConnectedSystemAttribute -ConnectedSystemId $scimSystem.id -ObjectTypeId $userType.id -AttributeUpdates $userAttributeUpdates | Out-Null
 
-$groupAttributeNames = @("id", "displayName", "members", "meta.version")
+$groupAttributeNames = @("id", "displayName", "members")
 $groupAttributeUpdates = @{}
 foreach ($attribute in $groupType.attributes | Where-Object { $_.name -in $groupAttributeNames }) {
     $groupAttributeUpdates[$attribute.id] = @{ selected = $true; isExternalId = ($attribute.name -eq "id") }

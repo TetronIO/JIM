@@ -311,14 +311,11 @@ public class SynchronisationController(
                 "Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
         }
 
-        // Validate: Cannot unselect an External ID or Secondary External ID attribute
-        if (request.Selected.HasValue && !request.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
+        // Validate: an anchor, or an attribute the Connector cannot work without, must stay selected (#2404).
+        if (request.Selected == false && JIM.Application.Servers.ConnectedSystemServer.GetDeselectionRefusal(attribute) is { } deselectionRefusal)
         {
-            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-            _logger.LogWarning("Attempted to unselect {IdType} attribute {AttributeId} ({Name})", idType, attributeId, attribute.Name);
-            return BadRequest(ApiErrorResponse.BadRequest(
-                $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. " +
-                "These attributes must remain selected to ensure sync operations function correctly."));
+            _logger.LogWarning("Attempted to unselect attribute {AttributeId} ({Name}), which must stay selected", attributeId, LogSanitiser.Sanitise(attribute.Name));
+            return BadRequest(ApiErrorResponse.BadRequest(deselectionRefusal));
         }
 
         // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact.

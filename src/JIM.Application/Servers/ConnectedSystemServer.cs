@@ -3183,6 +3183,8 @@ public partial class ConnectedSystemServer
             if (existingObjectType != null && classificationUpdated && !result.ChangedObjectTypeClassifications.ContainsKey(connectedSystemObjectType.Name))
                 result.ObjectTypesWithClassificationUpdates.Add(connectedSystemObjectType.Name);
 
+            ApplyConnectorRequiredSelections(connectedSystemObjectType, schemaObjectType, result);
+
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
             // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
             var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
@@ -3534,6 +3536,49 @@ public partial class ConnectedSystemServer
         if (result.BlockedCredentialAttributeCount > 0)
             Log.Information("Blocked {Count} credential attribute(s) while importing the schema for Connected System {ConnectedSystem}. Passwords are handled by JIM's dedicated password channel, not Attribute Flow.",
                 result.BlockedCredentialAttributeCount, LogSanitiser.Sanitise(connectedSystem.Name));
+    }
+
+    /// <summary>
+    /// Selects and locks every attribute the Connector declares it cannot work without (#2404), as the External ID is,
+    /// and releases the lock on any it no longer declares, leaving that attribute's selection to the administrator. The
+    /// lock is the Connector's to give, so it is restated on every merge; the External ID and credential rules run
+    /// afterwards and lock what they own again. An existing attribute this newly selects or locks is reported, so a
+    /// refresh carrying only that is offered for applying rather than discarded as up to date.
+    /// </summary>
+    private static void ApplyConnectorRequiredSelections(
+        ConnectedSystemObjectType connectedSystemObjectType,
+        ConnectorSchemaObjectType schemaObjectType,
+        SchemaRefreshResult result)
+    {
+        var additions = result.AddedAttributes.GetValueOrDefault(schemaObjectType.Name) ?? [];
+        var mergedAttributesByName = connectedSystemObjectType.Attributes
+            .GroupBy(a => a.Name)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var (schemaAttribute, mergedAttribute) in schemaObjectType.Attributes
+                     .Where(a => mergedAttributesByName.ContainsKey(a.Name))
+                     .Select(a => (a, mergedAttributesByName[a.Name])))
+        {
+            if (!schemaAttribute.AlwaysImported)
+            {
+                mergedAttribute.SelectionLocked = false;
+                continue;
+            }
+
+            var changed = !mergedAttribute.Selected || !mergedAttribute.SelectionLocked;
+            mergedAttribute.Selected = true;
+            mergedAttribute.SelectionLocked = true;
+
+            if (changed && !additions.Contains(schemaAttribute.Name))
+            {
+                if (!result.AttributesSelectedByConnector.TryGetValue(schemaObjectType.Name, out var selected))
+                {
+                    selected = [];
+                    result.AttributesSelectedByConnector[schemaObjectType.Name] = selected;
+                }
+                selected.Add(schemaAttribute.Name);
+            }
+        }
     }
 
     /// <summary>
@@ -5329,6 +5374,28 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Why an attribute may not be deselected, or null when it may: an External ID or Secondary External ID, and an
+    /// attribute whose selection is locked selected because the Connector cannot work without it (#2404). A locked
+    /// credential attribute is held deselected, so deselecting it again is allowed. Shared by every attribute update
+    /// path so the portal, the REST API and PowerShell cannot disagree.
+    /// </summary>
+    public static string? GetDeselectionRefusal(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        if (attribute.IsExternalId || attribute.IsSecondaryExternalId)
+        {
+            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+            return $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. " +
+                   "These attributes must remain selected to ensure sync operations function correctly.";
+        }
+
+        if (attribute.SelectionLocked && attribute.Selected)
+            return $"Cannot unselect attribute '{attribute.Name}' because the Connector cannot work without its values, " +
+                   "so it is always imported.";
+
+        return null;
+    }
+
+    /// <summary>
     /// Validates and applies one attribute's part of a bulk update, returning why it was refused, or null once it is
     /// applied. Shared by both bulk overloads so the user and API key paths cannot disagree on a rule.
     /// </summary>
@@ -5341,12 +5408,8 @@ public partial class ConnectedSystemServer
             (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
             return $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.";
 
-        // Validate: Cannot unselect an External ID or Secondary External ID attribute
-        if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
-        {
-            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-            return $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected.";
-        }
+        if (updates.Selected == false && GetDeselectionRefusal(attribute) is { } deselectionRefusal)
+            return deselectionRefusal;
 
         // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact (#2051).
         if (updates.CaseExact == true && attribute.Type != AttributeDataType.Text)
