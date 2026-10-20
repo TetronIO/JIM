@@ -310,7 +310,7 @@ Accepted on input, each coercion logged without values:
 - booleans sent as strings (`"False"`) on `active` and on `primary`;
 - single-element arrays for single-valued attributes, and `""` treated as absent;
 - `remove` on an unfiltered multi-valued path **with** a `value` array removes only the listed values (`remove` with no value still removes all). Strict RFC handling here would wipe a group's whole membership when the identity provider meant to remove one member;
-- unknown and read-only attributes ignored (`groups`, `roles` on input, custom URNs not declared), undeclared ones named in the journal (D17);
+- unknown and read-only attributes ignored (`groups` on input, custom URNs not declared), undeclared ones named in the journal (D17);
 - base URL with or without a trailing slash; unknown query parameters ignored;
 - the credential probe some providers send on every cycle (`GET /Users?filter=userName eq "<random>"`) returns `200` with an empty list.
 
@@ -437,6 +437,14 @@ Decided 20 October 2026, for 5b:
 ### Phase 6: Acceptance
 
 The JIM-to-JIM integration scenario (both directions of the round trip, scheduled Delta Import and Delta Synchronisation to the Metaverse, a client Full Import proving deletes), leniency tests, then promotion of the flag from In Development to Preview. Its removal follows after a release in Preview (D16).
+
+Decided 20 October 2026:
+
+- **Phase 6 before 5c.** The public documentation, the changelog entries and the promotion to Preview ship together in 5c, after this acceptance passes, so the docs site (deployed on every merge) never describes a feature administrators cannot turn on.
+- **One instance, looped back.** A SCIM Client Connected System points at the same JIM's `/scim` endpoint over HTTPS, and a Service Provider Connected System imports what arrives. The requests cross a real socket exactly as between two instances, at half the infrastructure, and the scenario runs in every lane.
+- **HTTPS from Kestrel itself**, as the production compose file serves it on 8443, from a certificate the runner mints for `jim.web` and the scenario trusts; no proxy and no new image.
+- **Leniency through the real pipeline in the scenario.** No SCIM test yet crosses routing, authentication and the scheme selector, so a scenario step sends what identity providers actually send (lower-case and bare bearer values, a trailing slash, unknown query parameters, the empty probe, capitalised operations, booleans as strings). The gaps below the pipeline get unit tests: `primary` as a string, a capitalised `Remove`, the path-less single-element array, and coercions logged without values.
+- **`roles` is stored, not ignored.** RFC 7643 declares it read-write and the client imports `roles.value`, so the leniency list above was wrong to name it; only `groups` (read-only) is ignored on input.
 
 ## Success Criteria
 
