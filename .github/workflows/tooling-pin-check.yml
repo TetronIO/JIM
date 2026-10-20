@@ -13,8 +13,9 @@
 #     in scripts/Test-DocsSite.ps1, which `docker run`s it. Not a Dockerfile FROM
 #     line, so Dependabot's docker ecosystem never sees it. Tag and digest move
 #     together.
-#   - aquasec/trivy, the scanner ci.yml's scan-images job runs, pinned by tag and
-#     digest in .github/trivy-image.txt, which the job reads. Named in a workflow
+#   - aquasec/trivy, the scanner CI and the release run over every production
+#     image, pinned by tag and digest in .github/trivy-image.txt, which
+#     .github/scripts/Invoke-TrivyImageScan.ps1 reads. Named in a workflow
 #     it would be invisible to Dependabot, and this workflow's App could not
 #     commit a bump to it (it has no `workflows` permission, deliberately: with
 #     it, the bot could rewrite CI). Hence the data file.

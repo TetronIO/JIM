@@ -387,94 +387,29 @@ jobs:
         cache-from: type=gha,scope=${{ matrix.image_name }}
         cache-to: type=gha,scope=${{ matrix.image_name }},mode=max
 
-    - name: Scan image for vulnerabilities
-      id: trivy
-      # Run Trivy from its pinned container image rather than via
-      # aquasecurity/trivy-action + setup-trivy. The action path re-downloaded
-      # the Trivy binary from the GitHub releases API on every run, which failed
-      # intermittently on GitHub-hosted runners ("unable to find 'vX.Y.Z'"), and
-      # the action wrapper independently exited 1 without writing a SARIF
-      # (phantom failure). Both flakes blocked unrelated PRs at random. Calling
-      # the pinned binary directly removes the release-API lookup entirely and
-      # lets us own the exit code. See PR #520 and #800.
-      #
-      # The vuln-DB download is the one external dependency left on the hot path, so
-      # it runs as its own retried phase before the scan, which then reads that DB
-      # with --skip-db-update. Trivy's built-in repository fallback does not cover
-      # every failure: on run 36450669448 mirror.gcr.io answered the manifest but
-      # 404'd a layer, Trivy exited FATAL without trying the next repository, and
-      # main went red on two of three images. GHCR is listed first because
-      # github.token authenticates it (no anonymous rate limit); mirror.gcr.io
-      # stays as the fallback.
-      #
-      # No severity filter on the scan: we emit every finding to the SARIF and
-      # apply our own CVSS-based gate in the next step (more reliable than the
-      # action's filter, and uses the same score GitHub Code Scanning shows).
-      # ignore-unfixed stays on: no value blocking on CVEs with no upstream fix.
-      #
-      # The scanner image is pinned by tag and digest in .github/trivy-image.txt, not
-      # here: tooling-pin-check watches that file and proposes bumps, which it could
-      # not do in a workflow file (its App has no permission to write one). A line
-      # that is not a digest pin fails the scan rather than running an unpinned scanner.
-      #
-      # The image tag is passed via env, not interpolated into the run script, to
-      # avoid GitHub Actions expression-injection (flagged by CodeQL actions).
+    # Scan and gate in one: .github/scripts/Invoke-TrivyImageScan.ps1, which release.yml
+    # runs too, so the release scans with the same scanner and the same gate as this job
+    # (#2075). It runs Trivy from the image pinned in .github/trivy-image.txt (watched by
+    # tooling-pin-check) rather than via aquasecurity/trivy-action + setup-trivy: the action
+    # path re-downloaded the Trivy binary from the GitHub releases API on every run, which
+    # failed intermittently on GitHub-hosted runners ("unable to find 'vX.Y.Z'"), and the
+    # wrapper independently exited 1 without writing a SARIF (phantom failure). Both flakes
+    # blocked unrelated PRs at random (PR #520 and #800). The script retries the vuln-DB
+    # download as its own phase, writes every finding to the SARIF (ignore-unfixed on, with
+    # .trivyignore applied), and fails on any finding with a CVSS score of 7.0 or more, the
+    # same score GitHub Code Scanning shows. The steps after it upload the SARIF whether or
+    # not the gate passed.
+    #
+    # The image tag is passed via env, not interpolated into the run script, to
+    # avoid GitHub Actions expression-injection (flagged by CodeQL actions).
+    - name: Scan image and fail on fixable HIGH/CRITICAL findings
       env:
         IMAGE_REF: ${{ matrix.image_name }}:scan
         GITHUB_TOKEN: ${{ github.token }}
-        DB_REPOSITORIES: 'ghcr.io/aquasecurity/trivy-db:2,mirror.gcr.io/aquasec/trivy-db:2'
-      run: |
-        TRIVY_IMAGE="$(grep -Ev '^[[:space:]]*(#|$)' .github/trivy-image.txt)"
-        if ! [[ "$TRIVY_IMAGE" =~ ^aquasec/trivy:[0-9][0-9.]*@sha256:[0-9a-f]{64}$ ]]; then
-          echo "::error title=Trivy image not pinned::.github/trivy-image.txt must hold one digest-pinned aquasec/trivy reference; found '$TRIVY_IMAGE'."
-          exit 1
-        fi
-        echo "Scanner: $TRIVY_IMAGE"
-
-        CACHE_DIR="$RUNNER_TEMP/trivy-cache"
-        mkdir -p "$CACHE_DIR"
-
-        for attempt in 1 2 3; do
-          # As the runner's own user, so the runner can empty RUNNER_TEMP afterwards.
-          if docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "$CACHE_DIR:/trivy-cache" \
-            -e GITHUB_TOKEN \
-            "$TRIVY_IMAGE" image \
-            --cache-dir /trivy-cache \
-            --db-repository "$DB_REPOSITORIES" \
-            --no-progress \
-            --download-db-only; then
-            break
-          fi
-          if [ "$attempt" -eq 3 ]; then
-            echo "::error title=Trivy DB download failed::Could not download the vulnerability DB after $attempt attempts."
-            exit 1
-          fi
-          echo "::warning title=Trivy DB download failed::Attempt $attempt failed; retrying in $((attempt * 15))s."
-          sleep $((attempt * 15))
-        done
-
-        docker run --rm \
-          -v /var/run/docker.sock:/var/run/docker.sock \
-          -v "$GITHUB_WORKSPACE:/workspace" \
-          -v "$CACHE_DIR:/trivy-cache" \
-          -w /workspace \
-          -e TRIVY_IGNORE_UNFIXED=true \
-          "$TRIVY_IMAGE" image \
-          --cache-dir /trivy-cache \
-          --cache-backend memory \
-          --skip-db-update \
-          --scanners vuln \
-          --format sarif \
-          --output trivy-results.sarif \
-          --ignorefile .trivyignore \
-          --image-src docker \
-          --exit-code 0 \
-          "$IMAGE_REF"
+      run: pwsh -File ./.github/scripts/Invoke-TrivyImageScan.ps1 -ImageRef "$IMAGE_REF"
 
     # Keep the raw SARIF for two weeks. The Security tab is the only other copy, it is not
-    # readable through the API from every environment, and the counts below cannot say which
+    # readable through the API from every environment, and the gate's counts above cannot say which
     # CVEs they are; a finding that a local rebuild cannot reproduce is undiagnosable without it.
     - name: Upload Trivy SARIF as a workflow artifact
       if: always() && hashFiles('trivy-results.sarif') != ''
@@ -483,75 +418,6 @@ jobs:
         name: trivy-sarif-${{ matrix.image_name }}
         path: trivy-results.sarif
         retention-days: 14
-
-    - name: Fail build on fixable HIGH/CRITICAL Trivy findings
-      shell: pwsh
-      run: |
-        if (-not (Test-Path 'trivy-results.sarif')) {
-          Write-Error "Trivy did not produce a SARIF file."
-          exit 1
-        }
-
-        $sarif = Get-Content 'trivy-results.sarif' -Raw | ConvertFrom-Json
-
-        # Build a ruleId -> CVSS score map from the SARIF rules catalogue.
-        # Trivy writes the CVSS base score to rule.properties.'security-severity'
-        # as a decimal string (e.g. "7.5"). This is the same field GitHub Code
-        # Scanning reads to classify alerts as low/medium/high/critical.
-        $severityByRule = @{}
-        foreach ($r in $sarif.runs) {
-          foreach ($rule in $r.tool.driver.rules) {
-            $score = 0.0
-            $raw = $rule.properties.'security-severity'
-            if ($raw) { [void][double]::TryParse($raw, [ref]$score) }
-            $severityByRule[$rule.id] = $score
-          }
-        }
-
-        # Walk results, classify by CVSS, and count only HIGH (>= 7.0) and
-        # CRITICAL (>= 9.0). Also collect a sample for the log.
-        $critical = 0
-        $high     = 0
-        $medium   = 0
-        $low      = 0
-        $blocking = @()
-        foreach ($r in $sarif.runs) {
-          foreach ($result in @($r.results)) {
-            if (-not $result) { continue }
-            $ruleId = $result.ruleId
-            $score  = [double]$severityByRule[$ruleId]
-            if ($score -ge 9.0) {
-              $critical++
-              $blocking += "$ruleId (CVSS $score)"
-            } elseif ($score -ge 7.0) {
-              $high++
-              $blocking += "$ruleId (CVSS $score)"
-            } elseif ($score -ge 4.0) {
-              $medium++
-            } else {
-              $low++
-            }
-          }
-        }
-
-        Write-Host "Trivy findings for ${{ matrix.image_name }} (${{ matrix.dockerfile }}):"
-        Write-Host "  CRITICAL: $critical"
-        Write-Host "  HIGH:     $high"
-        Write-Host "  MEDIUM:   $medium  (not blocking)"
-        Write-Host "  LOW:      $low  (not blocking)"
-        Write-Host ''
-
-        $blockingCount = $critical + $high
-        if ($blockingCount -gt 0) {
-          Write-Host "Blocking CVEs (CVSS >= 7.0):"
-          $blocking | Sort-Object -Unique | ForEach-Object { Write-Host "  $_" }
-          Write-Host ''
-          Write-Host 'Fixable CRITICAL/HIGH vulnerabilities found. Failing build.'
-          Write-Host 'See the GitHub Security tab for details:'
-          Write-Host '  https://github.com/TetronIO/JIM/security/code-scanning'
-          exit 1
-        }
-        Write-Host 'No fixable CRITICAL/HIGH vulnerabilities found.'
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''

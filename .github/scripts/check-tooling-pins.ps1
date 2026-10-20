@@ -23,9 +23,9 @@
         digest Docker Hub gives it. A pinned release pushed again upstream (same
         tag, new digest; a rebuild over a fixed base image, say) is proposed as
         a bump too, since the pin no longer pulls what its tag names.
-      - `aquasec/trivy` (the scanner CI's scan-images job runs over every
+      - `aquasec/trivy` (the scanner CI and the release run over every
         production image) is pinned the same way in `.github/trivy-image.txt`,
-        which the job reads. It is kept out of the workflow file so that this
+        which `.github/scripts/Invoke-TrivyImageScan.ps1` reads. It is kept out of the workflow file so that this
         check's bump PRs can change it: the App that commits them cannot write
         `.github/workflows/`. A stale scanner misses advisories a newer one
         would catch, so this is the pin that matters most.

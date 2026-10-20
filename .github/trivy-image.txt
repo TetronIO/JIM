@@ -1,4 +1,5 @@
-# The Trivy scanner image the scan-images job in .github/workflows/ci.yml runs, pinned by tag and digest.
+# The Trivy scanner image CI's scan-images job and the release workflow scan JIM's images with, through
+# .github/scripts/Invoke-TrivyImageScan.ps1, pinned by tag and digest.
 # Docker verifies the digest; the tag is kept beside it for readability.
 #
 # It lives here rather than in the workflow because nothing would watch it there: Dependabot reads Dockerfile FROM

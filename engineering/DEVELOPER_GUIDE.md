@@ -1334,7 +1334,7 @@ Ranges (e.g. the `mkdocs>=1.6,<2` pins in `setup.sh`) are deliberately out of sc
 
 ##### When the scan-images gate blocks on an upstream-only CVE
 
-The `scan-images` CI job fails the build whenever Trivy reports a fixable HIGH or CRITICAL CVE (CVSS >= 7.0) in any built production image. "Fixable" means an upstream-patched version of the affected package exists.
+The `scan-images` CI job fails the build whenever Trivy reports a fixable HIGH or CRITICAL CVE (CVSS >= 7.0) in any built production image. "Fixable" means an upstream-patched version of the affected package exists. The release workflow runs the same scan before it pushes each image: both call `.github/scripts/Invoke-TrivyImageScan.ps1`, with the scanner pinned in `.github/trivy-image.txt`, so a release blocks on exactly what CI blocks on (#2075).
 
 Because every production stage runs `apt-get upgrade` at build time, and the CI and release builds date that layer's cache key so it is rebuilt daily, an Ubuntu fix reaches the image on the next build, whether or not Microsoft has rebuilt the base image yet. The gap that remains is between the advisory being published and the fix reaching the noble archive (Trivy does not count a CVE as fixable until then), and, for the .NET runtime itself, between the advisory and Microsoft's servicing release. In that gap Trivy can correctly flag a CVE as "fixable upstream" even though no build of ours can apply the fix.
 
@@ -1346,7 +1346,7 @@ When this happens, every PR and every push to `main` will fail the `scan-images`
 
 2. **Suppress the CVE via [`.trivyignore`](../.trivyignore)** when the reported CVE is a verified false positive (the image is already patched but Trivy over-reports) or when the vulnerability is already mitigated at the application layer (e.g., a NuGet pin overrides the in-box assembly). See "Trivy CVE suppressions" below for the required justification format. This is preferable to option 3 because it scopes the suppression to specific CVEs rather than lowering the entire threshold.
 
-3. **Temporarily lower the gate threshold from HIGH to CRITICAL** in `.github/workflows/ci.yml` (the `Fail build on fixable HIGH/CRITICAL Trivy findings` step) if the blocking CVE is HIGH but not CRITICAL and the work jam is unacceptable. Two-line change. **Revert as soon as the underlying CVE is resolved.**
+3. **Temporarily lower the gate threshold from HIGH to CRITICAL** in `.github/scripts/Invoke-TrivyImageScan.ps1` (the `7.0` in the gate section) if the blocking CVE is HIGH but not CRITICAL and the work jam is unacceptable. It lowers the release gate too, since the release runs the same script. **Revert as soon as the underlying CVE is resolved.**
 
 4. **Dismiss the specific alert** in the GitHub Security tab with a "won't fix - upstream dependency" reason and a comment explaining why. This requires the alert to first reach the Security tab via SARIF upload, which it will on every CI run. Dismissal only suppresses the specific alert; if the same CVE is detected against a different package or a new image, it reappears.
 

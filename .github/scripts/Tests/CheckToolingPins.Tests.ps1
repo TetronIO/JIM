@@ -358,16 +358,6 @@ Describe 'check-tooling-pins.ps1' {
                 $script:Output | Should -Match ([regex]::Escape($name))
             }
         }
-
-        It 'is the only place the scan job takes its scanner image from' {
-            # Dependabot does not read an image named in a workflow's env, and the App that commits the pin check's
-            # bumps cannot write .github/workflows/, so a scanner pin back in ci.yml would go unwatched again (#2075).
-            $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..')).Path
-            $ci = Get-Content (Join-Path $repoRoot '.github/workflows/ci.yml') -Raw
-
-            $ci | Should -Not -Match 'aquasec/trivy:\d[\w.\-]*@sha256:[0-9a-f]{64}'
-            $ci | Should -Match ([regex]::Escape('.github/trivy-image.txt'))
-        }
     }
 
     Context 'when a registry cannot be reached' {
