@@ -387,6 +387,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
+. "$scriptRoot/utils/Initialize-JimWebTlsCertificate.ps1"
 . "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
 . "$scriptRoot/utils/Resolve-IntegrationScenarioName.ps1"
 # The Active Directory lab (-DirectoryType ActiveDirectory): control-plane calls over SSH, the LDAP
@@ -404,6 +405,9 @@ $script:Lane = Get-IntegrationLane
 Set-IntegrationLaneComposeEnvironment -RepoRoot $repoRoot
 $script:JimComposeArgs = @(Get-JimComposeArgs)
 $script:IntegrationComposeArgs = @(Get-IntegrationComposeArgs)
+# The certificate jim.web serves HTTPS with (jim-web-https.override.yml), before anything starts the stack. A
+# -Parallel parent mints it here before its lanes start, and each lane then finds it valid and keeps it.
+Initialize-JimWebTlsCertificate -Directory (Join-Path $scriptRoot "results" "jim-web-tls")
 # Result and log file names carry the lane's directory type, so two lanes finishing the same scenario
 # at the same template in the same second cannot overwrite each other's files. Serial names are unchanged.
 $script:ResultNameTag = if ($script:Lane.Active) { "-$($script:Lane.Name)" } else { "" }
