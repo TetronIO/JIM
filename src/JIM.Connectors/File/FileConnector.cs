@@ -32,6 +32,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsSecondaryExternalId => false;
     public bool SupportsUserSelectedExternalId => true;
     public bool SupportsUserSelectedAttributeTypes => true;
+    // A header names columns and nothing more, so only the administrator knows which hold delimited sets (#2186).
+    public bool SupportsUserSelectedAttributePlurality => true;
     public bool SupportsAutoConfirmExport => true;
     public bool SupportsParallelExport => false;
     public bool SupportsPaging => false;

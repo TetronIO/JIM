@@ -3929,6 +3929,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("PluralitySetByAdministrator")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("ReferencedObjectTypeId")
                         .HasColumnType("integer");
 
@@ -4373,6 +4376,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsUniquenessRejectionClassification")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsUserSelectedAttributePlurality")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsUserSelectedAttributeTypes")

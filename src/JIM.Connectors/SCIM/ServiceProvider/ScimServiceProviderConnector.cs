@@ -84,6 +84,7 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
     public bool SupportsUserSelectedExternalId => false;
 
     public bool SupportsUserSelectedAttributeTypes => false;
+    public bool SupportsUserSelectedAttributePlurality => false;
     public bool SupportsAutoConfirmExport => false;
     public bool SupportsParallelExport => false;
     public bool SupportsPaging => true;

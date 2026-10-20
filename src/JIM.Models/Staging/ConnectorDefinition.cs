@@ -113,6 +113,11 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     public bool SupportsUserSelectedAttributeTypes { get; set; }
 
     /// <summary>
+    /// Some connectors require the user to say whether an attribute holds several values, where the schema cannot state it, i.e. a delimited file.
+    /// </summary>
+    public bool SupportsUserSelectedAttributePlurality { get; set; }
+
+    /// <summary>
     /// Does the Connector support auto-confirming exports? When true, the connector can provide an "Auto-Confirm Exports"
     /// setting that, when enabled, causes PendingExports to be deleted (confirmed) immediately after a successful export
     /// rather than waiting for reconciliation via the next import cycle.

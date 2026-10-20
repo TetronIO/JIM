@@ -23,6 +23,7 @@ public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorI
     public bool SupportsSecondaryExternalId => false;
     public bool SupportsUserSelectedExternalId => true;
     public bool SupportsUserSelectedAttributeTypes => true;
+    public bool SupportsUserSelectedAttributePlurality => true;
     public bool SupportsAutoConfirmExport => false;
     public bool SupportsParallelExport => false;
     public bool SupportsPaging => false;

@@ -39,13 +39,26 @@ public class ConnectedSystemObjectTypeAttribute
     /// It would also be a way around the rule that an override is refused once an attribute holds values.
     /// </para>
     /// <para>
-    /// It pins the type alone. Writability, plurality and the description remain the Connector's to state,
-    /// so an override cannot freeze an attribute in the past.
+    /// It pins the type alone. Writability and the description remain the Connector's to state, so an override
+    /// cannot freeze an attribute in the past; plurality has its own flag, <see cref="PluralitySetByAdministrator"/>.
     /// </para>
     /// </remarks>
     public bool TypeSetByAdministrator { get; set; }
 
     public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
+
+    /// <summary>
+    /// Whether <see cref="AttributePlurality"/> was set by an administrator rather than discovered, so a schema
+    /// refresh keeps it (#2186).
+    /// </summary>
+    /// <remarks>
+    /// Offered only where the Connector declares <see cref="ConnectorDefinition.SupportsUserSelectedAttributePlurality"/>:
+    /// a delimited file's header names columns and nothing more, so every column is discovered single-valued and only
+    /// the administrator knows which hold delimited sets. Without the flag, every refresh would put a multi-valued
+    /// column back to single-valued, and the next import would read each delimited cell as one value. The Boolean rule
+    /// (#2153) still applies: a Boolean is single-valued whatever is set here.
+    /// </remarks>
+    public bool PluralitySetByAdministrator { get; set; }
 
     /// <summary>
     /// Whether this attribute's values are case-exact: when JIM asks whether two values identify the same thing,

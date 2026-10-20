@@ -1280,6 +1280,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
         public bool SupportsSecondaryExternalId => false;
         public bool SupportsUserSelectedExternalId => true;
         public bool SupportsUserSelectedAttributeTypes => true;
+        public bool SupportsUserSelectedAttributePlurality => false;
         public bool SupportsAutoConfirmExport { get; } = supportsAutoConfirmExport;
         public bool SupportsParallelExport => false;
         public bool SupportsPaging => false;
