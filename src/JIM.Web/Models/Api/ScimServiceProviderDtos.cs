@@ -109,6 +109,12 @@ public class ScimServiceProviderSummaryDto
     public DateTime? LastWrite { get; set; }
 
     /// <summary>
+    /// Requests the endpoint refused in the last 24 hours, across every key, other than for authentication. Each key's
+    /// SCIM request Activities name the latest rejection and count the rest.
+    /// </summary>
+    public int RejectedLast24Hours { get; set; }
+
+    /// <summary>
     /// Creates the DTO from a store summary and the endpoint's base URL.
     /// </summary>
     public static ScimServiceProviderSummaryDto FromSummary(ScimStoreSummary summary, string baseUrl) => new()
@@ -119,7 +125,8 @@ public class ScimServiceProviderSummaryDto
         LastChangeSequence = summary.LastChangeSequence,
         ImportedUpTo = summary.ImportedUpTo,
         ChangesAwaitingImport = summary.ChangesAwaitingImport,
-        LastWrite = summary.LastWrite
+        LastWrite = summary.LastWrite,
+        RejectedLast24Hours = summary.RejectedLast24Hours
     };
 }
 
@@ -137,4 +144,117 @@ public class ScimResourceTypeCountDto
     /// How many resources of the type the store holds, not counting deleted ones.
     /// </summary>
     public int Count { get; set; }
+}
+
+/// <summary>
+/// One accepted write to a Connected System's SCIM store, as its journal records it: which resource, what the write
+/// did, which attributes it changed or ignored (by name, never by value), and the key and address that made it.
+/// </summary>
+public class ScimJournalEntryDto
+{
+    /// <summary>
+    /// The store's change number for the write; an import reads every write after the one it last read.
+    /// </summary>
+    public long ChangeSequence { get; set; }
+
+    /// <summary>
+    /// When the write was accepted.
+    /// </summary>
+    public DateTime Occurred { get; set; }
+
+    /// <summary>
+    /// The resource written, which is the Connected System Object's external id.
+    /// </summary>
+    public Guid ResourceId { get; set; }
+
+    /// <summary>
+    /// The resource's type, for example <c>User</c>.
+    /// </summary>
+    public string ResourceTypeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// What the write did: <c>Created</c>, <c>Replaced</c>, <c>Patched</c>, <c>Deleted</c>, or
+    /// <c>ReferenceRemovedByDeletion</c> for a membership removed because the resource it pointed to was deleted.
+    /// </summary>
+    public ScimStoreOperation Operation { get; set; }
+
+    /// <summary>
+    /// The SCIM attributes the write changed, by name.
+    /// </summary>
+    public List<string> ChangedAttributes { get; set; } = [];
+
+    /// <summary>
+    /// Attributes the request sent that the store does not keep, by name.
+    /// </summary>
+    public List<string> IgnoredAttributes { get; set; } = [];
+
+    /// <summary>
+    /// The key the write was made with; empty once that key has been deleted.
+    /// </summary>
+    public Guid? ApiKeyId { get; set; }
+
+    /// <summary>
+    /// The key's name when the write was made.
+    /// </summary>
+    public string? ApiKeyName { get; set; }
+
+    /// <summary>
+    /// The address the request came from.
+    /// </summary>
+    public string? ClientAddress { get; set; }
+
+    /// <summary>
+    /// Creates the DTO from a journal entry.
+    /// </summary>
+    public static ScimJournalEntryDto FromEntity(ScimStoreJournalEntry entry) => new()
+    {
+        ChangeSequence = entry.ChangeSequence,
+        Occurred = entry.Occurred,
+        ResourceId = entry.ResourceId,
+        ResourceTypeName = entry.ResourceTypeName,
+        Operation = entry.Operation,
+        ChangedAttributes = entry.ChangedAttributes,
+        IgnoredAttributes = entry.IgnoredAttributes,
+        ApiKeyId = entry.ApiKeyId,
+        ApiKeyName = entry.ApiKeyName,
+        ClientAddress = entry.ClientAddress
+    };
+}
+
+/// <summary>
+/// The SCIM requests behind one imported change to a Connected System Object: the resource's accepted writes between
+/// the point its import started from and the point it read up to.
+/// </summary>
+public class ScimRequestsBehindChangeDto
+{
+    /// <summary>
+    /// The resource, which is the Connected System Object's external id.
+    /// </summary>
+    public Guid ResourceId { get; set; }
+
+    /// <summary>
+    /// The change number the import started after; empty for an import that read from the start.
+    /// </summary>
+    public long? AfterSequence { get; set; }
+
+    /// <summary>
+    /// The change number the import read up to, inclusive.
+    /// </summary>
+    public long UpToSequence { get; set; }
+
+    /// <summary>
+    /// The resource's accepted writes in that range, oldest first.
+    /// </summary>
+    public List<ScimJournalEntryDto> Entries { get; set; } = [];
+
+    /// <summary>
+    /// Creates the DTO.
+    /// </summary>
+    public static ScimRequestsBehindChangeDto FromModel(ScimRequestsBehindChange behind) => new()
+    {
+        ResourceId = behind.ResourceId,
+        AfterSequence = behind.AfterSequence,
+        UpToSequence = behind.UpToSequence,
+        Entries = behind.Entries.Select(ScimJournalEntryDto.FromEntity).ToList()
+    };
 }

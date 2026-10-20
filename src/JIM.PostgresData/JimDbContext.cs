@@ -1186,6 +1186,19 @@ public class JimDbContext : DbContext
             .HasFilter("\"AggregationWindowStart\" IS NOT NULL")
             .HasDatabaseName("IX_Activities_SecurityAggregation_Unique");
 
+        // SCIM summary Activities (#124, D17): one row per (Connected System, key, 15-minute window), added to by every
+        // flush of the web tier's request tallies. The partial unique index makes the add-or-create race-safe across
+        // concurrent flushes, exactly as the index above does for failed authentication. Scoped by target type, since
+        // the key column (InitiatedById) means something else on every other Activity. A SCIM row leaves ApiKeyPrefix
+        // null, so the index above, which treats NULLs as distinct, never matches it. The key leads, not the Connected
+        // System: EF treats an index led by a foreign key as covering that key, filter or not, and would drop
+        // IX_Activities_ConnectedSystemId, which every other Activity's lookups need.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => new { a.InitiatedById, a.ConnectedSystemId, a.AggregationWindowStart })
+            .IsUnique()
+            .HasFilter("\"TargetType\" = 26 AND \"AggregationWindowStart\" IS NOT NULL")
+            .HasDatabaseName("IX_Activities_ScimRequestAggregation_Unique");
+
         // Supports the security-event retention cleanup (TargetType == Authentication && Created < cutoff) and the
         // Activities list/API filter by target type over a time range.
         modelBuilder.Entity<Activity>()

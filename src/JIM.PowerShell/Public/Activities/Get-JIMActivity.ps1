@@ -26,7 +26,7 @@ function Get-JIMActivity {
 
     .PARAMETER Operation
         Return only the Activities that performed one of these operations, for example Execute for a Run Profile
-        execution.
+        execution, or Receive for the requests a SCIM client sent to a Connected System's SCIM endpoint.
 
     .PARAMETER Outcome
         Return only the Activities that recorded at least one of these outcomes, for example Errors for runs that
@@ -173,7 +173,7 @@ function Get-JIMActivity {
 
         [Parameter(ParameterSetName = 'List')]
         [ValidateSet('Create', 'Read', 'Update', 'Delete', 'Clear', 'Execute', 'ImportHierarchy', 'ImportSchema',
-            'Revert', 'Reset', 'Authenticate', 'Preview')]
+            'Revert', 'Reset', 'Authenticate', 'Preview', 'Receive')]
         [string[]]$Operation,
 
         [Parameter(ParameterSetName = 'List')]
