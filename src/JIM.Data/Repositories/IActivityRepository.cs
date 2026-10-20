@@ -605,6 +605,14 @@ public interface IActivityRepository
     public Task<bool> IncrementAggregatedFailedAuthenticationAsync(string apiKeyPrefix, string clientIp, string reason, DateTime windowStart, DateTime lastSeen);
 
     /// <summary>
+    /// Adds a SCIM request tally to its window's summary Activity, in one atomic update: the counts are added, the
+    /// first and last seen times widened, the latest rejection replaced when the tally has one, and the status raised
+    /// to complete-with-warning once anything has been rejected.
+    /// </summary>
+    /// <returns>True if the window's Activity existed and was updated; false if the caller must create it.</returns>
+    public Task<bool> AddToScimRequestSummaryAsync(JIM.Models.Scim.ScimRequestTally tally, string? warningMessage);
+
+    /// <summary>
     /// Returns, for each of the given Connected Systems that has one, the <see cref="Activity.Executed"/> time of its
     /// most recent successfully completed Full Synchronisation. Systems that have never completed one are absent from
     /// the dictionary rather than carrying a sentinel date, so callers must distinguish "never" from "long ago".

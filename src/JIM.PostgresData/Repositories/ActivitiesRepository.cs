@@ -166,6 +166,58 @@ public partial class ActivityRepository : IActivityRepository
         return true;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// One atomic UPDATE, so concurrent flushes from several web instances add rather than overwrite; the in-memory
+    /// test provider does not support <c>ExecuteUpdateAsync</c>, so it falls back to a tracked load and save.
+    /// </remarks>
+    public async Task<bool> AddToScimRequestSummaryAsync(JIM.Models.Scim.ScimRequestTally tally, string? warningMessage)
+    {
+        var query = Repository.Database.Activities
+            .Where(a => a.TargetType == ActivityTargetType.ScimRequests
+                && a.ConnectedSystemId == tally.ConnectedSystemId
+                && a.InitiatedById == tally.ApiKeyId
+                && a.AggregationWindowStart == tally.WindowStart);
+
+        if (Repository.Database.Database.IsRelational())
+        {
+            var rowsAffected = await query.ExecuteUpdateAsync(setters =>
+            {
+                setters
+                    .SetProperty(a => a.TotalAdded, a => a.TotalAdded + tally.Created)
+                    .SetProperty(a => a.TotalUpdated, a => a.TotalUpdated + tally.Updated)
+                    .SetProperty(a => a.TotalDeleted, a => a.TotalDeleted + tally.Deleted)
+                    .SetProperty(a => a.TotalErrors, a => a.TotalErrors + tally.Rejected)
+                    .SetProperty(a => a.FirstSeen, a => a.FirstSeen < tally.FirstSeen ? a.FirstSeen : tally.FirstSeen)
+                    .SetProperty(a => a.LastSeen, a => a.LastSeen > tally.LastSeen ? a.LastSeen : tally.LastSeen);
+                if (warningMessage != null)
+                    setters
+                        .SetProperty(a => a.WarningMessage, warningMessage)
+                        .SetProperty(a => a.Status, ActivityStatus.CompleteWithWarning);
+            });
+            return rowsAffected > 0;
+        }
+
+        // InMemory provider (tests): ExecuteUpdateAsync not supported.
+        var existing = await query.AsTracking().SingleOrDefaultAsync();
+        if (existing == null)
+            return false;
+
+        existing.TotalAdded += tally.Created;
+        existing.TotalUpdated += tally.Updated;
+        existing.TotalDeleted += tally.Deleted;
+        existing.TotalErrors += tally.Rejected;
+        existing.FirstSeen = existing.FirstSeen < tally.FirstSeen ? existing.FirstSeen : tally.FirstSeen;
+        existing.LastSeen = existing.LastSeen > tally.LastSeen ? existing.LastSeen : tally.LastSeen;
+        if (warningMessage != null)
+        {
+            existing.WarningMessage = warningMessage;
+            existing.Status = ActivityStatus.CompleteWithWarning;
+        }
+        await Repository.Database.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
         var counts = await Repository.Database.ActivityRunProfileExecutionItems

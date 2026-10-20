@@ -93,4 +93,12 @@ public class ActivityTargetCategoryTests
         Assert.That(allGroupedTypes, Is.EquivalentTo(Enum.GetValues<ActivityTargetType>()),
             "the categories must partition the full set of target types");
     }
+
+    [Test]
+    public void ScimRequests_KeepsTheOrdinalItsUniqueIndexFiltersOn()
+    {
+        // IX_Activities_ScimRequestAggregation_Unique (JimDbContext) filters on "TargetType" = 26; the enum is stored by
+        // ordinal, so the two must not drift apart.
+        Assert.That((int)ActivityTargetType.ScimRequests, Is.EqualTo(26));
+    }
 }

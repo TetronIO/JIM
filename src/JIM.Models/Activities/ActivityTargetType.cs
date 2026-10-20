@@ -135,5 +135,15 @@ public enum ActivityTargetType
     /// not appear among the changes to them.
     /// </para>
     /// </summary>
-    PasswordSynchronisation = 25
+    PasswordSynchronisation = 25,
+
+    /// <summary>
+    /// What a SCIM client did to a Connected System's SCIM 2.0 Service Provider endpoint (#124, D17): one Activity
+    /// per Connected System, key and 15-minute UTC window (<see cref="Activity.AggregationWindowStart"/>), counting
+    /// the resources created (<see cref="Activity.TotalAdded"/>), updated (<see cref="Activity.TotalUpdated"/>) and
+    /// deleted (<see cref="Activity.TotalDeleted"/>), and the requests refused (<see cref="Activity.TotalErrors"/>),
+    /// so an initial load of thousands of Users is one row rather than thousands. Attributed to the key; the journal
+    /// holds the request-by-request detail.
+    /// </summary>
+    ScimRequests = 26
 }

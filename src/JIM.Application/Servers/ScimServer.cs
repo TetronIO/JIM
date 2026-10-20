@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using JIM.Connectors.SCIM.ServiceProvider;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Scim;
 using JIM.Scim;
@@ -15,6 +16,7 @@ using JIM.Scim.Schema;
 using JIM.Scim.Serialisation;
 using JIM.Scim.Service;
 using JIM.Utilities;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -122,6 +124,77 @@ public class ScimServer
     private static T ReadDocument<T>(string definition, string name) where T : class =>
         JsonSerializer.Deserialize<T>(definition, ScimJson.Options)
         ?? throw new InvalidOperationException($"The stored SCIM definition '{name}' is empty.");
+
+    /// <summary>
+    /// Adds a batch of request tallies to their windows' summary Activities, creating each window's Activity on its
+    /// first tally. A tally for a Connected System that no longer exists is dropped.
+    /// </summary>
+    /// <remarks>
+    /// Each tally is recorded on its own, so one that fails is logged and the rest still land: these are counts for an
+    /// administrator's view, and the requests they count are already journalled.
+    /// </remarks>
+    public async Task RecordRequestTalliesAsync(IReadOnlyCollection<ScimRequestTally> tallies)
+    {
+        foreach (var tally in tallies)
+        {
+            try
+            {
+                await RecordRequestTallyAsync(tally);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.Error(ex, "Could not record a SCIM request tally for Connected System {ConnectedSystemId}, window {WindowStart}",
+                    tally.ConnectedSystemId, tally.WindowStart);
+            }
+        }
+    }
+
+    private async Task RecordRequestTallyAsync(ScimRequestTally tally)
+    {
+        var warningMessage = tally.LatestRejection == null ? null : $"Latest rejection: {tally.LatestRejection}";
+        if (await Application.Repository.Activity.AddToScimRequestSummaryAsync(tally, warningMessage))
+            return;
+
+        var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(tally.ConnectedSystemId);
+        if (connectedSystem == null)
+        {
+            _logger.Warning("Dropped a SCIM request tally for Connected System {ConnectedSystemId}, which no longer exists", tally.ConnectedSystemId);
+            return;
+        }
+
+        var activity = new Activity
+        {
+            TargetType = ActivityTargetType.ScimRequests,
+            TargetOperationType = ActivityTargetOperationType.ReceiveScimRequests,
+            TargetName = connectedSystem.Name,
+            Message = $"SCIM requests from '{tally.ApiKeyName}'",
+            ConnectedSystemId = tally.ConnectedSystemId,
+            AggregationWindowStart = tally.WindowStart,
+            FirstSeen = tally.FirstSeen,
+            LastSeen = tally.LastSeen,
+            TotalAdded = tally.Created,
+            TotalUpdated = tally.Updated,
+            TotalDeleted = tally.Deleted,
+            TotalErrors = tally.Rejected,
+            WarningMessage = warningMessage
+        };
+
+        try
+        {
+            // One terminal insert, never create-then-complete: a second full-row write would erase what a concurrent
+            // flush added between the two (the lost update SecurityAuditServer guards against the same way).
+            await Application.Activities.CreateCompletedActivityWithTriadAsync(activity, ActivityInitiatorType.ApiKey, tally.ApiKeyId, tally.ApiKeyName,
+                warningMessage == null ? ActivityStatus.Complete : ActivityStatus.CompleteWithWarning);
+        }
+        catch (DbUpdateException)
+        {
+            // Another flush created this window's Activity first (the partial unique index refused ours); add to it.
+            Application.Repository.ClearChangeTracker();
+            if (!await Application.Repository.Activity.AddToScimRequestSummaryAsync(tally, warningMessage))
+                throw;
+        }
+    }
+
 
     #region import
     /// <summary>
