@@ -282,7 +282,7 @@ try {
         Invoke-HrImportAndSync -Label "baseline"
         Invoke-ClientExportAndConfirm -Label "provision"
 
-        $clientUsers = Get-LiveObjects -ConnectedSystemId $clientSystem.id -ObjectTypeId $clientUserTypeId
+        $clientUsers = @(Get-LiveObjects -ConnectedSystemId $clientSystem.id -ObjectTypeId $clientUserTypeId)
         Assert-Equal -Actual $clientUsers.Count -Expected $UserCount -Message "Users the client read back from the endpoint"
         $summary = Get-JIMScimStoreSummary -ConnectedSystemId $serviceProviderId
         $storedUsers = ($summary.resourceCounts | Where-Object { $_.resourceTypeName -eq "User" }).count
@@ -308,7 +308,7 @@ try {
         Write-TestStep "Inbound" "Bringing what arrived into the Metaverse through the Schedule"
         Invoke-InboundSchedule -Label "inbound"
 
-        $inboundUsers = Get-LiveObjects -ConnectedSystemId $serviceProviderId -ObjectTypeId $serviceProviderUserTypeId
+        $inboundUsers = @(Get-LiveObjects -ConnectedSystemId $serviceProviderId -ObjectTypeId $serviceProviderUserTypeId)
         Assert-Equal -Actual $inboundUsers.Count -Expected $UserCount -Message "Users the Service Provider imported"
         $mvUser = Get-MetaverseUser -AccountName (Get-Scenario029AccountName 1)
         $joined = @($mvUser.connectedSystemObjects | Where-Object { $_.connectedSystemId -eq $serviceProviderId })
@@ -450,7 +450,7 @@ try {
         Invoke-ClientExportAndConfirm -Label "deprovision"
 
         Assert-Condition -Condition ($null -eq (Get-StoredUser -UserName $leaver.AccountName)) -Message "The endpoint no longer returns the leaver"
-        $clientUsers = Get-LiveObjects -ConnectedSystemId $clientSystem.id -ObjectTypeId $clientUserTypeId
+        $clientUsers = @(Get-LiveObjects -ConnectedSystemId $clientSystem.id -ObjectTypeId $clientUserTypeId)
         Assert-Equal -Actual $clientUsers.Count -Expected ($UserCount - 1) -Message "Users the client's Full Import finds"
 
         Invoke-InboundSchedule -Label "deprovision"
@@ -463,13 +463,13 @@ try {
     # --- Restore ---
     if ($Step -in @("Restore", "All")) {
         Write-TestStep "Restore" "Clearing the Service Provider's Connector Space and rebuilding it from the store"
-        $before = (Get-LiveObjects -ConnectedSystemId $serviceProviderId -ObjectTypeId $serviceProviderUserTypeId).Count
+        $before = @(Get-LiveObjects -ConnectedSystemId $serviceProviderId -ObjectTypeId $serviceProviderUserTypeId).Count
         Clear-JIMConnectedSystem -Id $serviceProviderId -Wait -Force | Out-Null
-        Assert-Equal -Actual (Get-LiveObjects -ConnectedSystemId $serviceProviderId -ObjectTypeId $serviceProviderUserTypeId).Count -Expected 0 `
+        Assert-Equal -Actual (@(Get-LiveObjects -ConnectedSystemId $serviceProviderId -ObjectTypeId $serviceProviderUserTypeId).Count) -Expected 0 `
             -Message "The Connector Space is empty after clearing"
         Invoke-RunProfile -ConnectedSystemId $serviceProviderId -RunProfileName "Full Import" -Label "Service Provider Full Import (restore)" | Out-Null
         Invoke-RunProfile -ConnectedSystemId $serviceProviderId -RunProfileName "Full Synchronisation" -Label "Service Provider Full Synchronisation (restore)" | Out-Null
-        Assert-Equal -Actual (Get-LiveObjects -ConnectedSystemId $serviceProviderId -ObjectTypeId $serviceProviderUserTypeId).Count -Expected $before `
+        Assert-Equal -Actual (@(Get-LiveObjects -ConnectedSystemId $serviceProviderId -ObjectTypeId $serviceProviderUserTypeId).Count) -Expected $before `
             -Message "Users rebuilt from the store, with nothing re-sent"
         $mvUser = Get-MetaverseUser -AccountName (Get-Scenario029AccountName 3)
         $jobTitle = @($mvUser.attributeValues | Where-Object { $_.attributeName -eq "Job Title" })
