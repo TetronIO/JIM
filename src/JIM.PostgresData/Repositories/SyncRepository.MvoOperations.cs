@@ -236,7 +236,7 @@ public partial class SyncRepository
         IReadOnlyList<MetaverseObject> objects)
     {
         await using var writer = await connection.BeginBinaryImportAsync(
-            $"""COPY "MetaverseObjects" ({MvoBulkInsertColumns.ToQuotedList(MvoBulkInsertColumns.MetaverseObjects)}) FROM STDIN (FORMAT binary)""");
+            $"""COPY "MetaverseObjects" ({BulkSqlHelpers.ToQuotedList(MvoBulkInsertColumns.MetaverseObjects)}) FROM STDIN (FORMAT binary)""");
 
         foreach (var mvo in objects)
         {
@@ -305,7 +305,7 @@ public partial class SyncRepository
         List<(Guid MvoId, MetaverseObjectAttributeValue Value)> attributeValues)
     {
         await using var writer = await connection.BeginBinaryImportAsync(
-            $"""COPY "MetaverseObjectAttributeValues" ({MvoBulkInsertColumns.ToQuotedList(MvoBulkInsertColumns.MetaverseObjectAttributeValues)}) FROM STDIN (FORMAT binary)""");
+            $"""COPY "MetaverseObjectAttributeValues" ({BulkSqlHelpers.ToQuotedList(MvoBulkInsertColumns.MetaverseObjectAttributeValues)}) FROM STDIN (FORMAT binary)""");
 
         foreach (var (mvoId, av) in attributeValues)
         {
@@ -383,7 +383,7 @@ public partial class SyncRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append($@"INSERT INTO ""MetaverseObjectAttributeValues"" ({MvoBulkInsertColumns.ToQuotedList(MvoBulkInsertColumns.MetaverseObjectAttributeValues)}) VALUES ");
+            sql.Append($@"INSERT INTO ""MetaverseObjectAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoBulkInsertColumns.MetaverseObjectAttributeValues)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)

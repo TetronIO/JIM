@@ -514,6 +514,7 @@ public partial class SyncRepository
         // concurrent creation that loses the race on the filtered unique index is a harmless no-op (DO NOTHING
         // leaves the winner's row alone): this INSERT never advances an existing counter, only the UPDATE below
         // does, which is what makes two concurrent reservations against the same attribute never overlap.
+        // bulk-sql-column-exemption: seed only an absent counter at the requested floor; never overwrite its movement history.
         var insertSql = $@"INSERT INTO ""GeneratedValueSequences""
                             (""MetaverseAttributeId"", ""ConnectedSystemObjectTypeAttributeId"", ""NextValue"", ""AssignedCount"", ""Created"")
                             VALUES ({{0}}, {{1}}, {{2}}, 0, now())

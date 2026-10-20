@@ -34,12 +34,6 @@ namespace JIM.PostgresData.Repositories;
 internal static class RetiredGeneratedValueSql
 {
     /// <summary>
-    /// The register columns, in <see cref="RetiredGeneratedValueBulkColumns.RetiredGeneratedValues"/> order. The
-    /// <c>SELECT</c> in <see cref="RetireAsync"/> MUST project its values in exactly this order.
-    /// </summary>
-    private static readonly string InsertColumns = BulkSqlHelpers.ToQuotedList(RetiredGeneratedValueBulkColumns.RetiredGeneratedValues);
-
-    /// <summary>
     /// A Connected System Object's display name, chosen exactly as <see cref="ObjectNaming.ConnectedSystemNameAttributes"/>
     /// orders its candidates (case-insensitive attribute names, first present value wins), so a deleted account is
     /// named in the register the way the portal named it while it existed.
@@ -142,7 +136,7 @@ internal static class RetiredGeneratedValueSql
         var sql = $@"
             WITH doomed AS ({source}),
             retired AS (
-                INSERT INTO ""RetiredGeneratedValues"" ({InsertColumns})
+                INSERT INTO ""RetiredGeneratedValues"" ({BulkSqlHelpers.ToQuotedList(RetiredGeneratedValueBulkColumns.RetiredGeneratedValues)})
                 SELECT d.""MetaverseAttributeId"",
                        d.""ConnectedSystemObjectTypeAttributeId"",
                        d.""Value"",

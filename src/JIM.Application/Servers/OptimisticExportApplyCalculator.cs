@@ -126,7 +126,7 @@ public static class OptimisticExportApplyCalculator
     }
 
     /// <summary>
-    /// The eight attribute data types this calculator (and <see cref="SyncEngine.ValueExistsOnCso"/>,
+    /// The supported attribute data types this calculator (and <see cref="SyncEngine.ValueExistsOnCso"/>,
     /// whose switch this mirrors) knows how to map onto a <see cref="ConnectedSystemObjectAttributeValue"/>
     /// column. <see cref="AttributeDataType.NotSet"/> and any future type not yet added here are
     /// deliberately excluded so callers skip rather than silently create an unpopulated row.
@@ -136,6 +136,7 @@ public static class OptimisticExportApplyCalculator
         AttributeDataType.Text => true,
         AttributeDataType.Number => true,
         AttributeDataType.LongNumber => true,
+        AttributeDataType.Decimal => true,
         AttributeDataType.DateTime => true,
         AttributeDataType.Binary => true,
         AttributeDataType.Boolean => true,
@@ -309,6 +310,7 @@ public static class OptimisticExportApplyCalculator
         public Dictionary<string, List<ConnectedSystemObjectAttributeValue>>? ReferenceValues { get; init; }
         public Dictionary<int, List<ConnectedSystemObjectAttributeValue>>? NumberValues { get; init; }
         public Dictionary<long, List<ConnectedSystemObjectAttributeValue>>? LongNumberValues { get; init; }
+        public Dictionary<decimal, List<ConnectedSystemObjectAttributeValue>>? DecimalValues { get; init; }
         public Dictionary<Guid, List<ConnectedSystemObjectAttributeValue>>? GuidValues { get; init; }
         public Dictionary<bool, List<ConnectedSystemObjectAttributeValue>>? BooleanValues { get; init; }
         public Dictionary<long, List<ConnectedSystemObjectAttributeValue>>? DateTimeTicksValues { get; init; }
@@ -369,6 +371,15 @@ public static class OptimisticExportApplyCalculator
                     .ToDictionary(g => g.Key, g => g.ToList())
             },
 
+            AttributeDataType.Decimal => new CalculatorAttributeIndex
+            {
+                AttributeType = attrType,
+                DecimalValues = existing
+                    .Where(v => v.DecimalValue.HasValue)
+                    .GroupBy(v => v.DecimalValue!.Value)
+                    .ToDictionary(g => g.Key, g => g.ToList())
+            },
+
             AttributeDataType.Guid => new CalculatorAttributeIndex
             {
                 AttributeType = attrType,
@@ -422,6 +433,9 @@ public static class OptimisticExportApplyCalculator
             case AttributeDataType.LongNumber:
                 if (value.LongValue.HasValue) AddToKeyedIndex(index.LongNumberValues!, value.LongValue.Value, value);
                 break;
+            case AttributeDataType.Decimal:
+                if (value.DecimalValue.HasValue) AddToKeyedIndex(index.DecimalValues!, value.DecimalValue.Value, value);
+                break;
             case AttributeDataType.Guid:
                 if (value.GuidValue.HasValue) AddToKeyedIndex(index.GuidValues!, value.GuidValue.Value, value);
                 break;
@@ -468,6 +482,9 @@ public static class OptimisticExportApplyCalculator
             case AttributeDataType.LongNumber:
                 if (value.LongValue.HasValue) RemoveFromKeyedIndex(index.LongNumberValues!, value.LongValue.Value, value);
                 break;
+            case AttributeDataType.Decimal:
+                if (value.DecimalValue.HasValue) RemoveFromKeyedIndex(index.DecimalValues!, value.DecimalValue.Value, value);
+                break;
             case AttributeDataType.Guid:
                 if (value.GuidValue.HasValue) RemoveFromKeyedIndex(index.GuidValues!, value.GuidValue.Value, value);
                 break;
@@ -504,6 +521,7 @@ public static class OptimisticExportApplyCalculator
         index.ReferenceValues?.Clear();
         index.NumberValues?.Clear();
         index.LongNumberValues?.Clear();
+        index.DecimalValues?.Clear();
         index.GuidValues?.Clear();
         index.BooleanValues?.Clear();
         index.DateTimeTicksValues?.Clear();
@@ -538,6 +556,10 @@ public static class OptimisticExportApplyCalculator
             case AttributeDataType.LongNumber:
                 if (!change.LongValue.HasValue) return [];
                 return index.LongNumberValues!.TryGetValue(change.LongValue.Value, out var longMatches) ? longMatches.ToList() : [];
+
+            case AttributeDataType.Decimal:
+                if (!change.DecimalValue.HasValue) return [];
+                return index.DecimalValues!.TryGetValue(change.DecimalValue.Value, out var decimalMatches) ? decimalMatches.ToList() : [];
 
             case AttributeDataType.Guid:
                 if (!change.GuidValue.HasValue) return [];
@@ -633,7 +655,7 @@ public static class OptimisticExportApplyCalculator
     /// Maps a Pending Export attribute change's typed payload onto a new
     /// <see cref="ConnectedSystemObjectAttributeValue"/> (data-type mapping mirrors
     /// <see cref="SyncEngine.ValueExistsOnCso"/>: Text-&gt;StringValue, Number-&gt;IntValue,
-    /// LongNumber-&gt;LongValue, DateTime-&gt;DateTimeValue, Binary-&gt;ByteValue,
+    /// LongNumber-&gt;LongValue, Decimal-&gt;DecimalValue, DateTime-&gt;DateTimeValue, Binary-&gt;ByteValue,
     /// Boolean-&gt;BoolValue, Guid-&gt;GuidValue, Reference-&gt;UnresolvedReferenceValue). The row's
     /// Id is pre-generated (raw SQL bulk insert bypasses EF's value generation).
     /// <para>
@@ -670,6 +692,10 @@ public static class OptimisticExportApplyCalculator
 
             case AttributeDataType.LongNumber:
                 value.LongValue = change.LongValue;
+                break;
+
+            case AttributeDataType.Decimal:
+                value.DecimalValue = change.DecimalValue;
                 break;
 
             case AttributeDataType.DateTime:

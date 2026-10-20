@@ -106,6 +106,53 @@ public class OptimisticExportApplyDatabaseTests
         return (mailAttr, cso.Id);
     }
 
+    [Test]
+    public async Task ApplyExportedAttributeValuesAsync_AllValueColumns_RoundTripAsync()
+    {
+        var (attr, csoId) = await SeedCsoAsync();
+        await using var ctx = NewContext();
+        var cso = await ctx.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == csoId);
+        var values = Enum.GetValues<AttributeDataType>().Where(t => t != AttributeDataType.NotSet)
+            .Select(t => new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = attr.Id,
+                StringValue = t == AttributeDataType.Text ? "text" : null,
+                IntValue = t == AttributeDataType.Number ? 42 : null,
+                LongValue = t == AttributeDataType.LongNumber ? 1234567890123L : null,
+                DecimalValue = t == AttributeDataType.Decimal ? 123.456m : null,
+                DateTimeValue = t == AttributeDataType.DateTime ? new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc) : null,
+                ByteValue = t == AttributeDataType.Binary ? new byte[] { 0, 127, 255 } : null,
+                BoolValue = t == AttributeDataType.Boolean ? false : null,
+                GuidValue = t == AttributeDataType.Guid ? Guid.NewGuid() : null,
+                ReferenceValueId = t == AttributeDataType.Reference ? csoId : null,
+                UnresolvedReferenceValue = t == AttributeDataType.Reference ? "CN=Reference,DC=test" : null
+            }).ToList();
+        await new PostgresDataRepository(ctx).Sync.ApplyExportedAttributeValuesAsync(values, [], [csoId]);
+        await using var verify = NewContext();
+        var stored = await verify.ConnectedSystemObjectAttributeValues.AsNoTracking()
+            .Include(v => v.ConnectedSystemObject).ToDictionaryAsync(v => v.Id);
+        Assert.That(stored, Has.Count.EqualTo(values.Count));
+        foreach (var expected in values)
+        {
+            var actual = stored[expected.Id];
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(actual.ConnectedSystemObject.Id, Is.EqualTo(csoId));
+                Assert.That(actual.AttributeId, Is.EqualTo(expected.AttributeId));
+                Assert.That(actual.StringValue, Is.EqualTo(expected.StringValue));
+                Assert.That(actual.IntValue, Is.EqualTo(expected.IntValue));
+                Assert.That(actual.LongValue, Is.EqualTo(expected.LongValue));
+                Assert.That(actual.DecimalValue, Is.EqualTo(expected.DecimalValue));
+                Assert.That(actual.DateTimeValue, Is.EqualTo(expected.DateTimeValue));
+                Assert.That(actual.ByteValue, Is.EqualTo(expected.ByteValue));
+                Assert.That(actual.BoolValue, Is.EqualTo(expected.BoolValue));
+                Assert.That(actual.GuidValue, Is.EqualTo(expected.GuidValue));
+                Assert.That(actual.ReferenceValueId, Is.EqualTo(expected.ReferenceValueId));
+                Assert.That(actual.UnresolvedReferenceValue, Is.EqualTo(expected.UnresolvedReferenceValue));
+            }
+        }
+    }
+
     /// <summary>
     /// (1) Apply inserts and deletes real rows, and leaves the parent CSO's LastUpdated and Status
     /// untouched (D2: re-arms the Full Synchronisation unchanged-object watermark).
