@@ -1,6 +1,6 @@
 ---
 title: Connected System Attributes
-description: "How JIM records whether it can write each attribute, what data type it holds, how finely it holds dates, and why credential attributes are never managed."
+description: "How JIM records whether it can write each attribute, its data type and plurality, how finely it holds dates, and why credentials are never managed."
 type: object
 audience: administrator
 ---
@@ -86,10 +86,33 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeI
 
 The same field is available on the REST API's attribute update, `PUT api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}`.
 
-An override survives a schema refresh. JIM records that the type was chosen rather than inferred, so a refresh restates everything the Connector discovered (writability, plurality, the source column type) and leaves your choice alone. The plurality follows the type you chose, so an attribute you overrode to Boolean stays single-valued. To go back to the inferred type, set it back yourself; a refresh will not do it for you.
+An override survives a schema refresh. JIM records that the type was chosen rather than inferred, so a refresh restates everything else the Connector discovered (writability, the source column type, and plurality unless you set it too) and leaves your choice alone. The plurality follows the type you chose, so an attribute you overrode to Boolean stays single-valued. To go back to the inferred type, set it back yourself; a refresh will not do it for you.
 
 !!! note "Existing Connected Systems"
     Improvements to how JIM infers a type apply when a schema is next retrieved. An existing Connected System keeps the types it already holds until you refresh its schema.
+
+## Plurality
+
+Each attribute is either **single-valued** or **multi-valued**, shown in the Schema tab's **Plurality** column. Most Connectors read this from the Connected System's schema: a directory declares which attributes hold several values, and the SQL Connector treats a column gathered from a related table as multi-valued.
+
+A delimited file cannot say. Its header names columns and nothing more, so the File Connector discovers every column as single-valued, and you say which columns hold several values. A multi-valued column holds them in one cell, separated by the **Multi-Value Delimiter** (`CN=Alice|CN=Bob`); see [JIM File Connector](../connectors/jim-file-connector.md#multi-valued-attributes).
+
+### Changing the plurality
+
+On a File Connector Connected System, open the attribute's **Edit** control on the Schema tab, choose **Values per object**, confirm, and save the schema. The tooltip on the **Plurality** column says whether the value was discovered or set by an administrator.
+
+From PowerShell:
+
+```powershell
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 2 -ObjectTypeId 6 -AttributeId 30 -Plurality MultiValued
+```
+
+Through the REST API, the attribute update takes `plurality` (`PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}`). The bulk attribute update refuses it, as it refuses a data type, so a scripted build cannot appear to succeed having changed nothing. A Boolean holds one value, so it cannot be made multi-valued, and a request sending both a Boolean type and multi-valued is refused.
+
+!!! warning "Set the plurality before you build on it"
+    Like a data type override, a change is refused once the attribute is referenced by a Synchronisation Rule or already holds values, because reading a cell as several values instead of one reinterprets data already imported. Set it straight after the schema is first retrieved.
+
+Your choice survives a schema refresh. JIM records that the plurality was set rather than discovered, so a refresh leaves it alone, even though the file itself never declares it.
 
 ## Case-exact values
 

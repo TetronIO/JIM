@@ -3014,10 +3014,12 @@ public partial class ConnectedSystemServer
 
                         // The Boolean rule (#2153): the plurality follows the attribute's effective type, which is
                         // the administrator's where they overrode it, so a Boolean is single-valued whatever the
-                        // Connected System declares.
+                        // Connected System declares. A plurality the administrator set is kept, as their type is: a
+                        // delimited file discovers every column single-valued, so restating discovery would undo every
+                        // multi-valued column on each refresh (#2186).
                         var effectivePlurality = AttributeDataTypeCapabilities.Constrain(
                             existingAttribute.TypeSetByAdministrator ? existingAttribute.Type : schemaAttribute.Type,
-                            schemaAttribute.AttributePlurality);
+                            existingAttribute.PluralitySetByAdministrator ? existingAttribute.AttributePlurality : schemaAttribute.AttributePlurality);
                         if (existingAttribute.AttributePlurality != effectivePlurality)
                         {
                             result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
@@ -7136,6 +7138,52 @@ public partial class ConnectedSystemServer
         attribute.AttributePlurality = plurality;
 
         return AttributeTypeOverrideResult.Applied(madeSingleValued);
+    }
+
+    /// <summary>
+    /// Validates and applies an administrator's choice of whether a Connected System attribute holds one value or
+    /// several, the one rule set the portal's Schema tab and the REST API (and so PowerShell) share. The attribute is
+    /// changed in memory only; the caller persists it through its own audited save.
+    /// </summary>
+    /// <remarks>
+    /// Plurality may only be set where the Connector says its schema cannot state it: a delimited file's header names
+    /// columns and nothing more, so only the administrator knows which hold delimited sets (#2186). It follows the same
+    /// lock as a data type override, since reading a cell as several values instead of one (or the reverse)
+    /// reinterprets what was imported and what a Synchronisation Rule was validated against. By the Boolean rule
+    /// (#2153) a Boolean holds one value, so it cannot be made multi-valued. Call this after any type override in the
+    /// same edit, so the type checked is the one the attribute will have.
+    /// </remarks>
+    public async Task<AttributePluralityOverrideResult> OverrideAttributePluralityAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectTypeAttribute attribute,
+        AttributePlurality newPlurality)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        // An absent Connector Definition is treated as not supporting the override, as for a type override.
+        if (connectedSystem.ConnectorDefinition?.SupportsUserSelectedAttributePlurality != true)
+            return AttributePluralityOverrideResult.Refused(
+                $"The '{connectedSystem.ConnectorDefinition?.Name ?? connectedSystem.Name}' Connector states whether each attribute holds one value " +
+                "or several from the Connected System's own schema, so it cannot be overridden.");
+
+        if (!AttributeDataTypeCapabilities.IsPermitted(attribute.Type, newPlurality))
+            return AttributePluralityOverrideResult.Refused(
+                $"Attribute '{attribute.Name}' cannot be made multi-valued. {AttributeDataTypeCapabilities.MultiValuedBooleanRule}");
+
+        if (newPlurality != attribute.AttributePlurality && await IsObjectTypeAttributeBeingReferencedAsync(attribute))
+            return AttributePluralityOverrideResult.Refused(
+                $"Whether attribute '{attribute.Name}' holds one value or several cannot be changed because it is referenced by a Synchronisation Rule, " +
+                "or already holds values. Changing it would reinterpret data already imported. Remove the references, or clear the Connected System " +
+                "Objects, and try again.");
+
+        attribute.AttributePlurality = newPlurality;
+
+        // Recorded, not inferred from the value being different, for the same reason as a type override: a schema
+        // refresh must leave the administrator's choice alone even where it matches what discovery found.
+        attribute.PluralitySetByAdministrator = true;
+
+        return AttributePluralityOverrideResult.Applied();
     }
     #endregion
 

@@ -189,6 +189,7 @@ public class ConnectorCapabilityMirrorTests
         public bool SupportsUserSelectedExternalId => Get<bool>(nameof(SupportsUserSelectedExternalId));
 
         public bool SupportsUserSelectedAttributeTypes => Get<bool>(nameof(SupportsUserSelectedAttributeTypes));
+        public bool SupportsUserSelectedAttributePlurality => Get<bool>(nameof(SupportsUserSelectedAttributePlurality));
 
         public bool SupportsAutoConfirmExport => Get<bool>(nameof(SupportsAutoConfirmExport));
 

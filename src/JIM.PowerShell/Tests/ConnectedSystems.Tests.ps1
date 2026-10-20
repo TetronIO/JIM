@@ -458,6 +458,41 @@ Describe 'Set-JIMConnectedSystemAttribute' {
         }
     }
 
+    Context 'Plurality' {
+
+        It 'Sends plurality when -Plurality is given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3; attributePlurality = 'MultiValued'; pluralitySetByAdministrator = $true } }
+
+                $result = Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Plurality MultiValued -PassThru -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/1/object-types/2/attributes/3' -and
+                    $Body.plurality -eq 'MultiValued'
+                }
+                $result.pluralitySetByAdministrator | Should -BeTrue
+            }
+        }
+
+        It 'Leaves plurality out when -Plurality is not given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Selected $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { -not $Body.ContainsKey('plurality') }
+            }
+        }
+
+        It 'Refuses a plurality JIM does not know' {
+            { Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 2 -AttributeId 3 -Plurality Several -Confirm:$false } |
+                Should -Throw
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {
