@@ -113,7 +113,7 @@ When a customer needs more, choose by their driver; B (then C) is the preferred 
 
 The server consumes `src/JIM.Scim` from JIM.Web and JIM.Application and adds no typed `ScimUser` or `ScimGroup` DTOs: request bodies bind as JSON and map through the same flattened attributes the client uses, so attribute names are identical in both directions (`emails.work`, `name.givenName`, `enterpriseUser.department`). What exists today is client-oriented; the server work adds:
 
-- **A PATCH applier** that is the exact inverse of the shipped `ScimPatchBuilder`, including the non-strict forms the builder emits (a value-less `replace` to clear, a filtered `replace` on a missing entry, scalar adds to multi-valued attributes, unquoted `primary eq true`), tested as `Apply(Build(x)) == x`.
+- **A PATCH applier** that is the exact inverse of the shipped `ScimPatchBuilder`, including the non-strict forms the builder emits (a value-less `replace` to clear, a filtered `replace` on a missing entry, scalar adds to multi-valued attributes (no longer emitted since #2215, but still sent by other clients), unquoted `primary eq true`), tested as `Apply(Build(x)) == x`.
 - **One filter grammar** shared by the client's query builders and the server's parser.
 - **A server mode for the resource reader and writer** that honours `mutability` and `returned` (ignore client-supplied `id` and `meta`; emit `id` and `meta` in responses; never return write-only attributes).
 - **ETag helpers** with SCIM's weak comparison.

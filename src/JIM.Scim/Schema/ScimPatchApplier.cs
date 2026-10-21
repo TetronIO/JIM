@@ -461,7 +461,7 @@ public static class ScimPatchApplier
                 return;
             }
 
-            // A multi-valued attribute takes an array; the builder sends a scalar add or replace for one value.
+            // A multi-valued attribute takes an array; a lone scalar, which some identity providers send, is one value.
             var items = (value is JsonArray array ? array.ToList() : [value])
                 .Where(item => !IsAbsent(item))
                 .Select(item => Element(item!, attribute, label))
