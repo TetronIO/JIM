@@ -127,6 +127,58 @@ public class ScimPatchBuilderTests
     }
 
     [Test]
+    public void Build_AddingAValueToAMultiValuedSimpleAttribute_SendsTheValueAsAnArray()
+    {
+        // RFC 7644 section 3.5.2.1 gives a multi-valued target's value as an array; a strict provider refuses a scalar
+        // (#2215).
+        var operation = Single(new ScimAttributeChange("custom.badges", ScimPatchOperations.Add, "gold"), UserSchema());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(operation.Path, Is.EqualTo($"{CustomUrn}:badges"));
+            Assert.That(operation.Value?.ToJsonString(), Is.EqualTo("""["gold"]"""));
+        }
+    }
+
+    [Test]
+    public void Build_ReplacingAMultiValuedSimpleAttribute_SendsTheSetOfOneAsAnArray()
+    {
+        // An Update against a multi-valued target means the set is exactly this value (#2182); section 3.5.2.3 replaces
+        // every value when no filter is given, so the value has to be that set.
+        var operation = Single(new ScimAttributeChange("custom.scores", ScimPatchOperations.Replace, 42L), UserSchema());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(operation.Op, Is.EqualTo(ScimPatchOperations.Replace));
+            Assert.That(operation.Value?.ToJsonString(), Is.EqualTo("[42]"));
+        }
+    }
+
+    [Test]
+    public void Build_SeveralValuesAddedToAMultiValuedSimpleAttribute_AreOneOperationCarryingEveryValue()
+    {
+        var operations = ScimPatchBuilder.Build(
+        [
+            new ScimAttributeChange("badges", ScimPatchOperations.Add, "gold"),
+            new ScimAttributeChange("badges", ScimPatchOperations.Add, "silver")
+        ], BaseSchema()).Operations;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(operations, Has.Count.EqualTo(1));
+            Assert.That(operations[0].Value?.ToJsonString(), Is.EqualTo("""["gold","silver"]"""));
+        }
+    }
+
+    [Test]
+    public void Build_ReplacingASingleValuedSimpleAttribute_SendsAScalar()
+    {
+        var operation = Single(new ScimAttributeChange("title", ScimPatchOperations.Replace, "Engineer"), UserSchema());
+
+        Assert.That(operation.Value?.ToJsonString(), Is.EqualTo("\"Engineer\""));
+    }
+
+    [Test]
     public void Build_RemovingASingleValuedSimpleAttribute_RemovesItByItsPathAlone()
     {
         var operation = Single(new ScimAttributeChange("title", ScimPatchOperations.Remove, "Engineer"), UserSchema());

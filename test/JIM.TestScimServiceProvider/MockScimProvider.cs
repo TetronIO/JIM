@@ -616,6 +616,9 @@ public sealed class MockScimProvider
         if (request.Method == HttpMethod.Patch && Options.MaximumPatchOperations is { } maximum && CountPatchOperations(request) > maximum)
             return Error(HttpStatusCode.BadRequest, ScimErrorTypes.TooMany, $"PATCH request exceeds maximum allowed number of {maximum} operations");
 
+        if (request.Method == HttpMethod.Patch && ScalarForMultiValuedAttribute(request) is { } scalarPath)
+            return Error(HttpStatusCode.BadRequest, ScimErrorTypes.InvalidValue, $"The attribute '{scalarPath}' is multi-valued and takes an array.");
+
         if (request.Method == HttpMethod.Patch)
             ApplyPatchOperations(resource, request);
 
@@ -781,6 +784,30 @@ public sealed class MockScimProvider
 
             SetMember(resource, extension, name, value?.DeepClone());
         }
+    }
+
+    /// <summary>
+    /// The path of the first add or replace giving a multi-valued simple attribute a scalar value, or null. RFC 7644
+    /// section 3.5.2 gives a multi-valued target's value as an array, and a provider validating against its schema
+    /// refuses anything else; refusing it here keeps the export tests and Scenario 15 from passing against a request a
+    /// strict provider would not take (#2215). The custom extension holds the only such attributes this provider has:
+    /// every multi-valued attribute of the core schemas is complex.
+    /// </summary>
+    private static string? ScalarForMultiValuedAttribute(HttpRequestMessage request)
+    {
+        if (ReadBody(request)?.GetValueOrDefault("Operations") is not JsonArray operations)
+            return null;
+
+        var multiValued = CustomUserExtension().Attributes
+            .Where(a => a.MultiValued && !string.Equals(a.Type, ScimAttributeTypes.Complex, StringComparison.OrdinalIgnoreCase))
+            .Select(a => $"{CustomUserExtensionUrn}:{a.Name}")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return operations.OfType<JsonObject>()
+            .Where(o => o["op"]?.GetValue<string>()?.ToLowerInvariant() is "add" or "replace")
+            .Where(o => o["value"] is not null and not JsonArray)
+            .Select(o => o["path"]?.GetValue<string>())
+            .FirstOrDefault(path => path != null && multiValued.Contains(path));
     }
 
     /// <summary>

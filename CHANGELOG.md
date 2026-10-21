@@ -136,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The SCIM 2.0 Client Connector now sends a value added to, or set on, a multi-valued attribute such as a list of strings in a schema extension as a list, as SCIM requires. Service providers that check values against their schema refused it. (#2215)
 - 🐛 The SCIM 2.0 Client Connector now always imports `meta.version` where the provider supports entity tags, so updates carry `If-Match` and cannot overwrite a change made in the provider. Schema import selects it and keeps it selected; a refresh selects it on existing Connected Systems. (#2404)
 - 🐛 Decimal values are recorded after export, so clearing or reverting a value still reaches an auto-confirmed File Connector target. (#2185)
 - 🐛 Export Activity items with no available name now show the Connected System Object id, including provisioning retries after a value collision. (#2397)
