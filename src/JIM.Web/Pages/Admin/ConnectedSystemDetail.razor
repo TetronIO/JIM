@@ -344,11 +344,14 @@ else if (_drift is { TrackingDisabled: true })
         </MudTabPanel>
 
         @* The SCIM endpoint's own tab, beside Details: only a Connected System using the SCIM 2.0 Service Provider
-           Connector has one, and only while the Preview feature is on. *@
+           Connector has one, and only while the Preview feature is on, so its label carries the Preview chip. *@
         @if (_hasScimEndpoint)
         {
             <MudTabPanel Text="SCIM">
-                <ConnectedSystemScimTab ConnectedSystem="_connectedSystem" />
+                <TabContent>SCIM <PreviewChip Class="ml-1" /></TabContent>
+                <ChildContent>
+                    <ConnectedSystemScimTab ConnectedSystem="_connectedSystem" />
+                </ChildContent>
             </MudTabPanel>
         }
 

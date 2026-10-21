@@ -201,6 +201,9 @@ nav:
       - JIM SCIM 2.0 Client Connector:
           - connectors/jim-scim-connector.md
           - Keycloak: connectors/jim-scim-connector-keycloak.md
+      - JIM SCIM 2.0 Service Provider Connector:
+          - connectors/jim-scim-service-provider-connector.md
+          - Identity Providers: connectors/jim-scim-service-provider-connector-identity-providers.md
       - JIM SQL Connector:
           - connectors/jim-sql-connector.md
           - "Delta Import: Change-Log Table": connectors/jim-sql-connector-delta-import-change-log.md
