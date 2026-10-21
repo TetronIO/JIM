@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 complete; awaiting the client architecture and dependency decision)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -22,7 +22,7 @@ This spike decides whether JIM can own a native, managed .NET WinRM/PSRP client 
 |---|---|---|
 | Q0 | Is there already a mature, maintained, managed .NET WinRM/PSRP client that works on Linux and that we could adopt instead? | Survey of NuGet and GitHub. For any candidate: licence, maintainer, last release, Linux support, Kerberos message encryption support, known CVEs. Adoption goes through dependency governance. |
 | Q1 | Can the Worker container authenticate to an `HTTP/<host>` SPN with Kerberos using .NET `NegotiateAuthentication`, from a username and password (no keytab), with the `libgssapi-krb5-2` already in the image and a `krb5.conf` that JIM generates (see "Kerberos configuration" below)? | A passing authentication from the Worker image against the lab DC, using only a generated `krb5.conf` and an in-memory credential cache. |
-| Q2 | Can we produce and consume WinRM Kerberos message encryption over HTTP (`multipart/encrypted`, `application/HTTP-Kerberos-session-encrypted`) with `NegotiateAuthentication.Wrap`/`Unwrap`? | A round-tripped WinRM `Identify` and `Create` exchange over plain HTTP on port 5985, with message encryption on. |
+| Q2 | Can we produce and consume WinRM Kerberos message encryption over HTTP (`multipart/encrypted`, `application/HTTP-Kerberos-session-encrypted`)? Phase 0 found this needs `gss_wrap_iov`, which `NegotiateAuthentication` does not expose; see Spike Results. | A round-tripped WinRM `Identify` and `Create` exchange over plain HTTP on port 5985, with message encryption on. |
 | Q3 | Does HTTPS with Kerberos authentication (no message encryption) work, with TLS 1.2 minimum and normal certificate validation? | The same exchange over 5986 or HTTPS `/PowerShell`. |
 | Q4 | Can the minimal PSRP subset open a runspace pool, run one command with bound parameters, and return typed output and error records? | `Get-Date`, `Get-Service -Name WinRM`, and a deliberately failing command against the lab DC's default `Microsoft.PowerShell` endpoint, all parsed into property bags. |
 | Q5 | Does the same client work against Exchange's `Microsoft.Exchange` endpoint, including Exchange's restricted (no-language) runspace and its serialisation payload signing (on by default since the November 2023 SU)? | `Get-Recipient`, `Get-MailboxDatabase`, `Enable-Mailbox` with and without `-Database`, and `Disable-Mailbox`, each with `-DomainController`, against a real Exchange server. |
@@ -94,7 +94,7 @@ Operators do not mount a `krb5.conf`. JIM generates one from the settings of eve
 
 ## Implementation Phases
 
-### Phase 0: Prior-art survey (day 1)
+### Phase 0: Prior-art survey (day 1) ✅
 
 - Answer Q0. If a candidate passes, present the comparison and stop for the user's dependency decision before writing protocol code.
 - Read MS-WSMV, MS-PSRP and the WinRM message encryption details. Note which sections the minimal subset needs.
@@ -168,4 +168,53 @@ It is a **no-go** when Kerberos message encryption cannot be made to work from t
 
 ## Spike Results
 
-_To be completed at the end of Phase 4._
+### Phase 0: prior-art survey (2026-10-21)
+
+**Q0: nothing is adoptable as a dependency, but there is a much better route than writing PSRP ourselves.**
+
+| Candidate | What it is | Verdict |
+|---|---|---|
+| [PSWSMan](https://github.com/jborean93/PSWSMan) 3.x (MIT, Jordan Borean, who also wrote pypsrp) | Managed .NET 8 WinRM client for PowerShell 7.4+: WSMan, Kerberos/NTLM/CredSSP/certificate authentication, and WinRM message encryption over GSSAPI. It plugs into **PowerShell's own PSRP implementation** through the public custom remoting transport API (`RunspaceConnectionInfo` and `ClientSessionTransportManagerBase`, public since PowerShell 7.3). Active (last commit 2026-10-14), but self-described as "currently an unreleased project", with no releases | **Not adoptable**: unreleased, a PowerShell module rather than a library, single maintainer, and it pulls in MonoMod and Devolutions.Sspi. **The best available reference**, and proof that the architecture below works. |
+| [WinRm.NET](https://github.com/CodyBatt/WinRm.NET) (MIT) | .NET WinRM client. WinRS command execution, not PSRP | Not adoptable: "not suitable for production use", 0.0.2-pre1, 0 stars |
+| [WinRMSharp](https://github.com/adstep/WinRMSharp) (MIT) | .NET WinRM client. WinRS command execution, not PSRP | Not adoptable: preview only, 1 star, no PSRP |
+| Naos.WinRM | Wrapper over Windows' own WSMan client | Not applicable: .NET Framework, Windows only |
+| [libpsrp](https://github.com/Hugne/libpsrp) | C implementation of MS-PSRP | Not applicable: native C |
+| PowerShell's built-in WSMan remoting on Linux | Depended on OMI's `libmi`/`libpsrpclient` | Dead: Microsoft documents that the OMI-based client no longer supports PowerShell remoting |
+
+**Finding 1: PowerShell itself can be the PSRP layer.** PowerShell 7.3 and later let a host supply its own transport under PowerShell's PSRP, runspace and serialisation code. Hosting `System.Management.Automation` 7.6.x (Microsoft, MIT, targets `net10.0`, matching JIM) would mean:
+
+- JIM writes only the WinRM transport and authentication (MS-WSMV envelopes, Kerberos, message encryption) as a `ClientSessionTransportManagerBase`.
+- Microsoft's code handles PSRP fragments, runspace pools, CLIXML serialisation, error records and Exchange's PowerShell behaviour. That removes the largest and riskiest part of the original option A. It probably also settles the serialisation payload signing question (Q5), since the client side is Microsoft's own code; Phase 3 still confirms it.
+- Commands become ordinary `PowerShell.Create().AddCommand("Enable-Mailbox").AddParameter(...)` calls against a remote runspace, returning `PSObject`s.
+
+**Finding 2: Kerberos message encryption over HTTP needs native GSSAPI interop.** WinRM's `HTTP-Kerberos-session-encrypted` framing sends the wrap header separately from the encrypted data. PSWSMan gets that from `gss_wrap_iov` (`GSS_IOV_BUFFER_TYPE_HEADER`, plus a padding buffer). .NET's `NegotiateAuthentication.Wrap` returns one combined token and has no IOV equivalent. So the plan's earlier assumption that `NegotiateAuthentication` covers message encryption was wrong. The options are:
+
+- **HTTPS (TLS 1.2+) with Kerberos authentication through `NegotiateAuthentication`, and no message encryption.** Managed only, no interop. Exchange serves `/PowerShell` on the Default Web Site over 443 as well as 80, so this should be available on every Exchange server; Q3 confirms it. **Recommended as the default.**
+- **HTTP with message encryption, through P/Invoke to `libgssapi_krb5`** (`gss_wrap_iov`, `gss_unwrap_iov`). The library is already in the Worker image, so there's no new package, but we'd own native interop code. Offer it only if HTTPS proves impractical for customers.
+
+Two notes from PSWSMan's implementation:
+- Heimdal has a `gss_unwrap_iov` bug with WinRM payloads, so PSWSMan uses plain unwrap there. The Worker image uses MIT Kerberos, which is unaffected.
+- RC4 Kerberos needs the IOV path because of its padding. JIM's generated `krb5.conf` allows AES only, which avoids it.
+
+**Finding 3: the dependency cost of hosting PowerShell.** `System.Management.Automation` 7.6.7 is an 8 MB package with direct dependencies on:
+- `Newtonsoft.Json`, `Microsoft.ApplicationInsights` (PowerShell's telemetry), `Microsoft.Management.Infrastructure` and `Microsoft.PowerShell.Native` (native `libpsl-native`);
+- about ten `System.*` packages at 10.0.5.
+
+Points to weigh:
+- **Its major version is tied to .NET's** (7.6 is .NET 10, 7.7 is .NET 11), so a .NET upgrade carries a PowerShell upgrade.
+- **Telemetry:** `POWERSHELL_TELEMETRY_OPTOUT=1` must be set in the Worker image.
+- **Trivy:** every one of these packages adds to the Worker image's scan surface.
+- **Remote runspaces only:** JIM never creates a local runspace or runs local script, and the code would enforce that.
+
+**Revised options for the library**
+
+| | A1: own everything (original) | A2: host PowerShell, own the transport (proposed) |
+|---|---|---|
+| We write | WinRM, PSRP, CLIXML, authentication and encryption | WinRM and authentication only, as a PowerShell custom transport |
+| Rough size | 3,000 to 5,000 lines | Roughly 1,500 to 2,500 lines (PSWSMan's comparable parts, without CredSSP, SSPI and certificate authentication) |
+| Correctness risk | High: PSRP and serialisation edge cases are ours | Lower: the protocol state machine and serialisation are Microsoft's |
+| New dependencies | None | `System.Management.Automation` and its tree (dependency governance approval needed) |
+| Ties | None | PowerShell's major version is tied to .NET's |
+| Later open-source split | Clean | Clean. The library would depend on `System.Management.Automation`, which is fine for a public package. |
+
+**Recommendation: A2, HTTPS-first.** The Phase 1 spike should start with HTTPS plus Kerberos through `NegotiateAuthentication`, under PowerShell's PSRP, against the lab DC. HTTP with message encryption over `gss_wrap_iov` follows only if HTTPS turns out to be impractical. This needs the user's approval of `System.Management.Automation` under dependency governance before Phase 1 starts.
