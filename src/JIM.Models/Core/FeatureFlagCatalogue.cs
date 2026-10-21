@@ -22,14 +22,15 @@ public static class FeatureFlagCatalogue
 {
     /// <summary>
     /// The SCIM 2.0 Service Provider (#124): JIM's own SCIM endpoint and the Connector that imports what SCIM clients
-    /// write to it. Hidden while it is built layer by layer on <c>main</c> (design decision D16 in
+    /// write to it. Built hidden, layer by layer on <c>main</c>, then promoted to Preview once the JIM-to-JIM acceptance
+    /// scenario passed, for at least one release before the flag is removed (design decision D16 in
     /// <c>engineering/plans/doing/SCIM_SERVER_DESIGN.md</c>).
     /// </summary>
     public static readonly FeatureFlagDefinition ScimServiceProvider = new(
         "Features.ScimServiceProvider",
         "SCIM 2.0 Service Provider",
         "Lets SCIM 2.0 clients, such as an identity provider, provision Users and Groups into JIM through its own SCIM endpoint, imported through the SCIM 2.0 Service Provider Connector.",
-        FeatureFlagTier.InDevelopment,
+        FeatureFlagTier.Preview,
         TrackingIssueNumber: 2372);
 
     /// <summary>

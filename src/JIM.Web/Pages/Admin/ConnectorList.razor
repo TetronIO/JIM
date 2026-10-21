@@ -32,7 +32,10 @@
                 <VirtualisedSortHeader Title="Name" Name="name" />
             </HeaderTemplate>
             <CellTemplate>
-                <span class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Item.Id)">@context.Item.Name</MudLink></span>
+                <span class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Item.Id)">@context.Item.Name</MudLink>@if (Helpers.IsPreviewConnector(context.Item.Name))
+                {
+                    <PreviewChip Class="ml-1" />
+                }</span>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Description" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">

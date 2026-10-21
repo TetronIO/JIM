@@ -12,7 +12,7 @@ The JIM SCIM 2.0 Client Connector synchronises identities with any system that e
 JIM acts as the **SCIM client**: it connects out to the service provider, discovers what it can do, imports its resources, and exports provisioning changes to it. One standards-based connector therefore reaches every system that speaks SCIM, without a separate connector per product.
 
 !!! note "Direction matters"
-    This connector is for systems that **publish** a SCIM interface for JIM to call. The reverse arrangement, where an external system pushes changes into JIM, is a separate capability and is not covered here.
+    This connector is for systems that **publish** a SCIM interface for JIM to call. For the reverse arrangement, where an identity provider pushes Users and Groups to JIM, use the [JIM SCIM 2.0 Service Provider Connector](jim-scim-service-provider-connector.md).
 
 ## Supported Service Providers
 
