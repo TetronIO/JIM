@@ -507,7 +507,7 @@ As built:
 - **SCIM inbound password channel** ([#2099](https://github.com/TetronIO/JIM/issues/2099)).
 - **Reset SCIM store** ([#2098](https://github.com/TetronIO/JIM/issues/2098)).
 - **Push-triggered runs** and immediate processing (#123).
-- **SCIM Delta Query** (publishing a change feed to downstream pullers via `draft-sehgal-scim-delta-query`). Deferred, not planned: the draft is an expired individual Internet-Draft never adopted by the working group, no client ecosystem consumes `/.delta`, and it needs durable change-feed retention, token issue and expiry, and per-resource authorisation re-checks on replay. Revisit on working-group adoption plus concrete demand. The store's change sequence would be the natural basis.
+- **SCIM Delta Query** (publishing a change feed to downstream pullers via `draft-sehgal-scim-delta-query`). Deferred, not planned, and reviewed on 21 October 2026. A Connected System's endpoint serves only what one identity provider pushed into its store (the Connector does not export), so a delta feed here would hand a downstream puller that identity provider's own data, not the hub's. "JIM as a SCIM source others synchronise from" is a different feature: a SCIM endpoint publishing Metaverse objects (or an export target), needing its own design. The store's change sequence, journal and tombstones would carry much of a feed if one were ever wanted. The draft is still an expired individual Internet-Draft (-02, January 2025) never adopted, and the SCIM working group has no change-feed document; the nearest standard, RFC 9967 (SCIM profile for Security Event Tokens, May 2026), is event push, which belongs with #123.
 
 ## References
 
