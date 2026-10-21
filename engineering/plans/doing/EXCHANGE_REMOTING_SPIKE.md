@@ -39,7 +39,7 @@ This spike proves that architecture end to end and measures its cost. It is time
 - There is no WinRM, PSRP or Exchange code in JIM, and no reference to `System.Management.Automation`.
 - The Worker image ships `libgssapi-krb5-2` (`src/JIM.Worker/Dockerfile`). Today that's only for PostgreSQL and LDAP.
 - The LDAP connector does not use Kerberos or SASL. The AD lab PRD (`engineering/prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md`) lists that as a non-goal, so Kerberos from the container is new ground for this spike.
-- The AD lab provides Windows Server 2025 domain controllers with Exchange schema preparation only. The Exchange server comes with #2412.
+- The AD lab provides Windows Server 2025 domain controllers with Exchange schema preparation only. The Exchange servers come with #2412.
 
 ### Spike layout
 
@@ -168,7 +168,7 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 
 - **NuGet (approved 2026-10-21):** `System.Management.Automation` 7.6.x and its transitive dependencies, pinned per `engineering/DEPENDENCY_PINNING.md`. It is added to the remoting library only, and reaches the Worker through the LDAP connector.
 - **Sandbox:** Docker, the Samba AD image and `pwsh`, all already provisioned by the SessionStart hook.
-- **Lab:** Windows Server 2025 DC WinRM listeners (enabled by default on domain controllers; an HTTPS listener may need configuring as part of #2412's lab work). The Exchange Server SE VM from [#2412](https://github.com/TetronIO/JIM/issues/2412) for Phase 3.
+- **Lab:** Windows Server 2025 DC WinRM listeners (enabled by default on domain controllers; an HTTPS listener may need configuring as part of #2412's lab work). `exchange-primary` from [#2412](https://github.com/TetronIO/JIM/issues/2412) for Phase 3. The spike needs only that one; #2412's second server is for #2021's GAL sync tests.
 - **Runtime:** `libgssapi-krb5-2` in the Worker image (already present).
 - **Network:** the lab network is reachable only from the lab's Linux runner VM, so Phases 1b to 3 run there. Phase 1a runs in the sandbox and in CI.
 - **Specifications:** MS-WSMV (Microsoft Open Specifications). PSWSMan (MIT) and pypsrp (MIT) are used to compare behaviour. Anything derived from them is attributed in `third-party-notices`.
@@ -189,7 +189,7 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 
 ## Decisions
 
-1. **Exchange in the lab:** the AD lab gains an Exchange Server SE mailbox server, `exchange-primary`, joined to PANOPLY.LOCAL ([#2412](https://github.com/TetronIO/JIM/issues/2412); #2021 is blocked by it).
+1. **Exchange in the lab:** the AD lab gains two Exchange Server SE mailbox servers, `exchange-primary` in PANOPLY.LOCAL and `exchange-source` in RESURGAM.LOCAL ([#2412](https://github.com/TetronIO/JIM/issues/2412); #2021 is blocked by it). The spike uses `exchange-primary`; the second server exists for #2021's two-way GAL sync tests.
 2. **Kerberos configuration:** JIM generates `krb5.conf` from Connected System settings; operators never mount one. See "Kerberos configuration" above.
 3. **Client architecture (2026-10-21):** option A2. JIM hosts `System.Management.Automation` 7.6.x and writes only the WinRM transport and Kerberos authentication. The dependency is approved under dependency governance.
 4. **Transport security (2026-10-21):** HTTPS first. HTTP with message encryption only if Q3 shows it is needed.
