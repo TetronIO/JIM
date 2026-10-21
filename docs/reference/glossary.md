@@ -120,6 +120,9 @@ Schedule { #schedule }
 Scoping { #scoping }
 :   The Scoping Criteria that decide which objects a Synchronisation Rule applies to. An object outside the criteria is left alone by that rule, whatever its Attribute Flows and Object Matching Rules say. Configured per Synchronisation Rule as a filter over the object's attributes.
 
+SCIM endpoint { #scim-endpoint }
+:   The address an identity provider pushes Users and Groups to, over SCIM 2.0, with a key JIM gives it. Each Connected System that uses the JIM SCIM 2.0 Service Provider Connector has its own, shown on its **SCIM** tab; JIM keeps what arrives and imports it on the Connected System's Schedule. See [JIM SCIM 2.0 Service Provider Connector](../connectors/jim-scim-service-provider-connector.md).
+
 Service Health { #service-health }
 :   Whether JIM's background services, the Worker and the Scheduler, are alive and what each is doing, read from a heartbeat each service writes every few seconds. Shown at the top of **Administration > Operations** and available through the REST API and `Get-JIMServiceHealth`. See [Operations > Service Health](../configuration/operations.md#service-health).
 

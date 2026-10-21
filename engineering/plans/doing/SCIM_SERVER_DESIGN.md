@@ -1,6 +1,6 @@
 # SCIM 2.0 Service Provider Design
 
-- **Status:** Doing (Phases 1 to 4, 5a, 5b and 6 complete: the SCIM store, the server's writes, Get and list, the Service Provider Connector behind its feature flag, scoped API keys, the `/scim` HTTP surface, key management, the store summary and the definitions, and the SCIM summary Activity and the requests behind a change, across the portal, REST and PowerShell, and the JIM-to-JIM acceptance scenario; 5c, the public documentation and the promotion to Preview, remains)
+- **Status:** Doing (Phases 1 to 6 complete, and the feature is in Preview: the SCIM store, the server's writes, Get and list, the Service Provider Connector, scoped API keys, the `/scim` HTTP surface, key management, the store summary and the definitions, the SCIM summary Activity and the requests behind a change, across the portal, REST and PowerShell, the JIM-to-JIM acceptance scenario, and the public documentation; removing the flag after a release in Preview (D16) remains)
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
 - **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
@@ -394,7 +394,7 @@ Two PRs: **4a** scoped API keys (the scope, its enforcement, the per-Connected-S
 - **Verified on the light stack:** every authentication and scope case above; discovery; a create, a duplicate (`409 uniqueness`), a read, a stale and a current `If-Match` (`412`, then `200` with `W/"2"`), a filter, malformed JSON and a pushed password (`400`), a delete (`204`, then `404`); the journal naming the key and address; and the rate limit refusing the sixth request a minute with a SCIM `429` once lowered to five.
 - **Not in 4b:** request size and complexity limits are the framework's defaults until the JIM-to-JIM scenario (Phase 6) measures what the shipped client sends; `/Bulk` and `/Me` are not served.
 
-### Phase 5: Surface parity and documentation
+### Phase 5: Surface parity and documentation ✅
 
 Decided 19 October 2026: three PRs, each with full surface parity for what it contains.
 
@@ -433,6 +433,13 @@ Decided 20 October 2026, for 5b:
 - **REST API and PowerShell:** the same key management and store summary, and the journal for a resource.
 - **Definitions, read-only (D19):** `Get-JIMScimResourceType` and `Get-JIMScimSchema`, their REST endpoints, and a read-only view on the Connected System page.
 - **Docs:** a connector page with per-provider setup (what to paste where), the recommended Schedule and the latency statement, the lifecycle table, and the "create a new Connected System" guidance; updates to the connectors index, architecture concepts, glossary and roadmap; changelog entries.
+
+#### 5c: Public documentation and promotion to Preview ✅
+
+- **Promotion:** `Features.ScimServiceProvider` is Preview. The Connector wears the Preview chip in the Connector choice, the Connectors list and its own page, and so does the SCIM tab; `Helpers.IsPreviewConnector` decides which Connectors do. The docs coverage check (COV-6) then required the Connector's page, which is how the promotion and the docs land together.
+- **Docs:** `connectors/jim-scim-service-provider-connector.md` (object: from request to Metaverse, features, what the endpoint accepts and its leniency, the lifecycle table, the tasks, the endpoint's limits, troubleshooting by response) and `connectors/jim-scim-service-provider-connector-identity-providers.md` (how-to: what any identity provider needs, Microsoft Entra ID and another JIM). Also the connectors index, the roadmap, a glossary entry for the SCIM endpoint, and the SCIM 2.0 Client Connector page's direction note.
+- **Written against the code where it differs from this document:** ignored attributes are journalled but not counted on the summary Activity; every key or scope refusal is the same `401` (no `403`; `403` is for plain HTTP and a filter on a discovery endpoint); clearing the Connector Space leaves the import watermark, so the docs say to run a Full Import after clearing; `roles` is stored.
+- **Per-provider setup is deliberately thin:** only Microsoft Entra ID's field names and the JIM-to-JIM setup (Scenario 029) are given, as nothing else has been tried against the endpoint; Preview feedback decides which identity providers get more.
 
 ### Phase 6: Acceptance ✅
 
