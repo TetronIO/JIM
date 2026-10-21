@@ -21,7 +21,7 @@ This spike decides whether JIM can own a native, managed .NET WinRM/PSRP client 
 | # | Question | Evidence that answers it |
 |---|---|---|
 | Q0 | Is there already a mature, maintained, managed .NET WinRM/PSRP client that works on Linux and that we could adopt instead? | Survey of NuGet and GitHub. For any candidate: licence, maintainer, last release, Linux support, Kerberos message encryption support, known CVEs. Adoption goes through dependency governance. |
-| Q1 | Can the Worker container authenticate to an `HTTP/<host>` SPN with Kerberos using .NET `NegotiateAuthentication`, from a username and password (no keytab), with the `libgssapi-krb5-2` already in the image? | A passing authentication from the Worker image against the lab DC. Records what Kerberos configuration (realm, KDC, `krb5.conf`) JIM has to provide and how: generated at runtime from Connected System settings, or a mounted file. |
+| Q1 | Can the Worker container authenticate to an `HTTP/<host>` SPN with Kerberos using .NET `NegotiateAuthentication`, from a username and password (no keytab), with the `libgssapi-krb5-2` already in the image and a `krb5.conf` that JIM generates (see "Kerberos configuration" below)? | A passing authentication from the Worker image against the lab DC, using only a generated `krb5.conf` and an in-memory credential cache. |
 | Q2 | Can we produce and consume WinRM Kerberos message encryption over HTTP (`multipart/encrypted`, `application/HTTP-Kerberos-session-encrypted`) with `NegotiateAuthentication.Wrap`/`Unwrap`? | A round-tripped WinRM `Identify` and `Create` exchange over plain HTTP on port 5985, with message encryption on. |
 | Q3 | Does HTTPS with Kerberos authentication (no message encryption) work, with TLS 1.2 minimum and normal certificate validation? | The same exchange over 5986 or HTTPS `/PowerShell`. |
 | Q4 | Can the minimal PSRP subset open a runspace pool, run one command with bound parameters, and return typed output and error records? | `Get-Date`, `Get-Service -Name WinRM`, and a deliberately failing command against the lab DC's default `Microsoft.PowerShell` endpoint, all parsed into property bags. |
@@ -74,6 +74,16 @@ var result = await session.InvokeAsync(
 
 Commands are always a command name plus bound parameters, never script text. This matches Exchange's restricted endpoint and rules out injection by construction.
 
+### Kerberos configuration (decided: JIM generates `krb5.conf`)
+
+Operators do not mount a `krb5.conf`. JIM generates one from the settings of every Connected System that uses Kerberos. This follows the "admin UI over environment variables" principle, and means a new Connected System works without touching the container. The spike proves the approach; #2021 builds the settings UI for it.
+
+- **Inputs per Connected System:** the realm, and optionally explicit KDCs (default: DNS SRV lookup). The realm is derived from the service account's UPN suffix where possible.
+- **One file per Worker process, holding every realm.** `KRB5_CONFIG` is process-wide, so the Worker writes a single file with one `[realms]` entry and `[domain_realm]` mappings per configured realm, and points `KRB5_CONFIG` at it before any GSSAPI call. The spike confirms that MIT Kerberos picks up a rewritten file without a restart (its profile library checks the file's modification time), so adding a Connected System needs no Worker restart.
+- **Hardened defaults:** AES encryption types only (no RC4 or DES), `dns_canonicalize_hostname = false` and `rdns = false` (the SPN is built from the configured host name, never from reverse DNS), and `forwardable = false`.
+- **No tickets or secrets on disk.** The file holds no secrets and is written owner-only (`0600`) to a private directory. The credential cache is in memory (`KRB5CCNAME=MEMORY:`), and credentials come from the encrypted Connected System settings through `NegotiateAuthentication` with an explicit `NetworkCredential`.
+- **Clock skew is the most likely operator fault.** The spike records what the failure looks like, so "Test connection" can name it plainly.
+
 ### Out of scope for the spike
 
 - Any LDAP connector, JIM model, UI, REST API or PowerShell module changes. The Exchange cmdlet façade and the staged Exchange step are #2021's first-release phase.
@@ -105,7 +115,7 @@ Commands are always a command name plus bound parameters, never script text. Thi
 
 ### Phase 3: Exchange (days 8 to 9)
 
-**Prerequisite:** an Exchange Server (2019 CU latest or Subscription Edition) joined to the lab forest. See open question 1.
+**Prerequisite:** the lab's Exchange Server SE mailbox server, `exchange-primary` (`ex1.panoply.local`), built by [#2412](https://github.com/TetronIO/JIM/issues/2412).
 
 - Run Q5's cmdlets against `Microsoft.Exchange`, including with serialisation payload signing on.
 - Collect Q6's failure catalogue and Q7's timings.
@@ -135,9 +145,9 @@ It is a **no-go** when Kerberos message encryption cannot be made to work from t
 
 ## Dependencies
 
-- **Lab:** Windows Server 2025 DC WinRM listeners (enabled by default on domain controllers). An Exchange server in the lab forest for Phase 3.
+- **Lab:** Windows Server 2025 DC WinRM listeners (enabled by default on domain controllers). The Exchange Server SE VM from [#2412](https://github.com/TetronIO/JIM/issues/2412) for Phase 3.
 - **Runtime:** `libgssapi-krb5-2` in the Worker image (already present). No new apt or NuGet packages are expected. Any that the spike finds necessary go through dependency governance first.
-- **Network:** the spike runs where the lab is reachable (the devcontainer on the lab network). Cloud sandbox sessions cannot reach the lab, so they are limited to offline unit tests against recorded fixtures.
+- **Network:** the lab network is reachable only from the lab's Linux runner VM, which also runs the JIM stack, so Q1 to Q5 run there, from the Worker image. Cloud sandbox sessions cannot reach the lab, so they are limited to Phase 0 and offline unit tests against recorded fixtures.
 - **Specifications:** MS-WSMV and MS-PSRP (Microsoft Open Specifications). pypsrp (MIT) is used only to compare behaviour. No code is copied from it; anything derived would be attributed in `third-party-notices`.
 
 ## Risks & Mitigations
@@ -146,15 +156,15 @@ It is a **no-go** when Kerberos message encryption cannot be made to work from t
 |---|---|
 | Kerberos configuration inside the container is fragile (realm, KDC discovery, clock skew, SPN) | Make it a first-class finding of Q1. Plan a "Test connection" action with plain-language diagnostics for #2021. |
 | Exchange serialisation payload signing rejects non-Microsoft clients | Test it explicitly in Phase 3. If it blocks, it is a no-go trigger, not something to work around. |
-| No Exchange server available for Phase 3 | Phases 0 to 2 run against the lab DC alone and still answer most of the risk. Phase 3 slips until Exchange is in the lab; the decision waits for it. |
+| The lab Exchange server (#2412) is not ready for Phase 3 | Phases 0 to 2 run against the lab DC alone and still answer most of the risk. Phase 3 slips until Exchange is in the lab; the decision waits for it. |
 | The protocol subset grows beyond "minimal" | The out-of-scope list above is binding for the spike. Anything else needed is recorded as hardening effort, not built. |
 | A security-sensitive protocol stack becomes ours to maintain | Keep the scope to what Exchange needs, with no general-purpose remoting. Keep the library behind a no-`JIM.*` boundary so it could be split out and opened later. |
 | Microsoft changes or retires on-premises Remote PowerShell | The cmdlet façade (command plus parameters) has the same shape as the Exchange Online Admin API, so a future REST transport could sit behind the same interface. |
 
-## Open Questions
+## Decisions
 
-1. **Exchange in the lab:** is there an existing Exchange server we can use, or does the AD lab gain an Exchange Subscription Edition VM? The latter would be a sub-task of #2036 and needs sizing on the lab host.
-2. **Kerberos configuration ownership:** should JIM generate `krb5.conf` from Connected System settings (realm, KDCs), or should operators mount one? Q1 should inform this, but it is a product decision.
+1. **Exchange in the lab:** the AD lab gains an Exchange Server SE mailbox server, `exchange-primary`, joined to PANOPLY.LOCAL ([#2412](https://github.com/TetronIO/JIM/issues/2412); #2021 is blocked by it).
+2. **Kerberos configuration:** JIM generates `krb5.conf` from Connected System settings; operators never mount one. See "Kerberos configuration" above.
 
 ## Spike Results
 
