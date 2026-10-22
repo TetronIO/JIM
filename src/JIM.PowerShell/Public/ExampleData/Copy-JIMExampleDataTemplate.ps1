@@ -31,7 +31,7 @@ function Copy-JIMExampleDataTemplate {
         With -PassThru, the new Data Generation Template; otherwise nothing.
 
     .EXAMPLE
-        Copy-JIMExampleDataTemplate -Name "Users & Groups - Small" -NewName "Contoso Demo"
+        Copy-JIMExampleDataTemplate -Name "Users & Groups" -NewName "Contoso Demo"
 
         Copies the built-in template so it can be customised.
 

@@ -450,7 +450,7 @@ Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 ### Examples
 
 ```powershell title="Copy a built-in template to customise it"
-Copy-JIMExampleDataTemplate -Name "Users & Groups - Small" -NewName "Contoso Demo"
+Copy-JIMExampleDataTemplate -Name "Users & Groups" -NewName "Contoso Demo"
 ```
 
 ```powershell title="Copy a template, record why, and keep the new template"
