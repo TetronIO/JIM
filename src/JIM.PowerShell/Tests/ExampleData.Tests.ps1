@@ -1,4 +1,4 @@
-# Copyright (c) Tetron Limited. All rights reserved.
+﻿# Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 #Requires -Modules Pester
@@ -1021,6 +1021,138 @@ Describe 'Set-JIMExampleDataTemplate' {
 
         It 'Should have related links' {
             $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Copy-JIMExampleDataTemplate' {
+
+    Context 'Parameter Sets' {
+
+        BeforeAll {
+            $command = Get-Command Copy-JIMExampleDataTemplate
+        }
+
+        It 'Should have a ById parameter set as default' {
+            $command.DefaultParameterSet | Should -Be 'ById'
+        }
+
+        It 'Should have a ByName parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ByName'
+        }
+
+        It 'Should require NewName' {
+            $param = $command.Parameters['NewName']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Request composition' {
+
+        BeforeEach {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'POST') {
+                        return [PSCustomObject]@{ id = 42; name = $Body.name; builtIn = $false; Warnings = @() }
+                    }
+                    switch -Wildcard ($Endpoint) {
+                        '/api/v1/example-data/templates/*' {
+                            return [PSCustomObject]@{ id = 7; name = 'Users & Groups' }
+                        }
+                        '/api/v1/example-data/templates*' {
+                            return [PSCustomObject]@{ items = @([PSCustomObject]@{ id = 7; name = 'Users & Groups' }) }
+                        }
+                    }
+                    return $null
+                }
+            }
+        }
+
+        It 'POSTs the new name to the source template''s copy endpoint' {
+            InModuleScope JIM {
+                Copy-JIMExampleDataTemplate -Id 7 -NewName 'My Users'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/example-data/templates/7/copy' -and $Method -eq 'POST' -and $Body.name -eq 'My Users' -and -not $Body.ContainsKey('changeReason')
+                }
+            }
+        }
+
+        It 'Sends changeReason in the body when specified' {
+            InModuleScope JIM {
+                Copy-JIMExampleDataTemplate -Id 7 -NewName 'My Users' -ChangeReason 'Customising (CHG0300)'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'POST' -and $Body.changeReason -eq 'Customising (CHG0300)'
+                }
+            }
+        }
+
+        It 'Resolves -Name to the source template id' {
+            InModuleScope JIM {
+                Copy-JIMExampleDataTemplate -Name 'Users & Groups' -NewName 'My Users'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/example-data/templates/7/copy' -and $Method -eq 'POST'
+                }
+            }
+        }
+
+        It 'Accepts a piped template and copies it' {
+            InModuleScope JIM {
+                [PSCustomObject]@{ id = 7; name = 'Users & Groups' } | Copy-JIMExampleDataTemplate -NewName 'My Users'
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/example-data/templates/7/copy' -and $Method -eq 'POST'
+                }
+            }
+        }
+
+        It 'Returns the new template only with -PassThru' {
+            InModuleScope JIM {
+                Copy-JIMExampleDataTemplate -Id 7 -NewName 'My Users' | Should -BeNullOrEmpty
+                (Copy-JIMExampleDataTemplate -Id 7 -NewName 'My Users' -PassThru).id | Should -Be 42
+            }
+        }
+
+        It 'Sends no POST when -WhatIf is specified' {
+            InModuleScope JIM {
+                Copy-JIMExampleDataTemplate -Id 7 -NewName 'My Users' -WhatIf
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'POST' }
+            }
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Copy-JIMExampleDataTemplate -Id 7 -NewName 'Copy' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Copy-JIMExampleDataTemplate -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
     }
 }

@@ -237,6 +237,7 @@
 
         # Data Generation
         'Add-JIMExampleDataTemplateAttribute',
+        'Copy-JIMExampleDataTemplate',
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',

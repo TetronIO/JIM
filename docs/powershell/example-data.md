@@ -415,6 +415,51 @@ Set-JIMExampleDataTemplate -Id 7 -NewName "Demo Users v2" -WhatIf
 
 ---
 
+## Copy-JIMExampleDataTemplate
+
+Creates a new Data Generation Template with the same Object Types and generation rules as an existing one. Built-in templates can be copied, which is how to customise one: the copy is never built in, so it can be changed and removed.
+
+<!-- BEGIN GENERATED: Copy-JIMExampleDataTemplate -->
+### Syntax
+
+```powershell
+# ById (default)
+Copy-JIMExampleDataTemplate -Id <int> -NewName <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+
+# ByName
+Copy-JIMExampleDataTemplate -Name <string> -NewName <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `int` | Yes (ById) |  | The Data Generation Template to copy. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes (ByName) |  | The name of the Data Generation Template to copy. |
+| `NewName` | `string` | Yes |  | The name of the new Data Generation Template. It must not already be in use by another template. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the new Data Generation Template's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the new Data Generation Template. |
+
+### Output
+
+With `-PassThru`, the new Data Generation Template; otherwise nothing.
+
+Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
+<!-- END GENERATED: Copy-JIMExampleDataTemplate -->
+
+### Examples
+
+```powershell title="Copy a built-in template to customise it"
+Copy-JIMExampleDataTemplate -Name "Users & Groups - Small" -NewName "Contoso Demo"
+```
+
+```powershell title="Copy a template, record why, and keep the new template"
+$copy = Copy-JIMExampleDataTemplate -Id 3 -NewName "Contoso Demo" -ChangeReason "Demo for Contoso (CHG0300)" -PassThru
+Set-JIMExampleDataTemplate -Id $copy.Id -NewName "Contoso Demo (2k staff)"
+```
+
+---
+
 ## Remove-JIMExampleDataTemplate
 
 Deletes a Data Generation Template, including its whole per-Object-Type attribute configuration. Built-in templates cannot be removed. This action cannot be undone; objects the template has already generated are unaffected.
