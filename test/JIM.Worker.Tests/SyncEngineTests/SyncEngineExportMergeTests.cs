@@ -160,7 +160,7 @@ public class SyncEngineExportMergeTests
         // A staged "set B" is stale once the target already holds the value the Metaverse now wants ("A").
         var pe = PendingExportWith(SingleValuedChange(attributeId: 1, "B"));
 
-        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")]);
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")], objectType: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -175,7 +175,7 @@ public class SyncEngineExportMergeTests
         var keep = SingleValuedChange(attributeId: 2, "Architect");
         var pe = PendingExportWith(SingleValuedChange(attributeId: 1, "B"), keep);
 
-        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")]);
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")], objectType: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -192,7 +192,7 @@ public class SyncEngineExportMergeTests
         // remove, or the export would take cn=alice out of the group.
         var pe = PendingExportWith(MultiValuedRemove(attributeId: 7, "cn=alice"));
 
-        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [MultiValuedAdd(attributeId: 7, "cn=alice")]);
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [MultiValuedAdd(attributeId: 7, "cn=alice")], objectType: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -207,7 +207,7 @@ public class SyncEngineExportMergeTests
         var keep = MultiValuedAdd(attributeId: 7, "cn=bob");
         var pe = PendingExportWith(keep);
 
-        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [MultiValuedAdd(attributeId: 7, "cn=alice")]);
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [MultiValuedAdd(attributeId: 7, "cn=alice")], objectType: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -228,7 +228,7 @@ public class SyncEngineExportMergeTests
         };
         var pe = PendingExportWith(MultiValuedAdd(attributeId: 7, "cn=alice"), MultiValuedAdd(attributeId: 7, "cn=bob"));
 
-        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [removeAll]);
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [removeAll], objectType: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -246,7 +246,7 @@ public class SyncEngineExportMergeTests
         sent.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
         var pe = PendingExportWith(sent);
 
-        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")]);
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")], objectType: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -260,7 +260,7 @@ public class SyncEngineExportMergeTests
     {
         var pe = PendingExportWith(SingleValuedChange(attributeId: 1, "B"));
 
-        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, []);
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [], objectType: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -276,7 +276,7 @@ public class SyncEngineExportMergeTests
         var stale = SingleValuedChange(attributeId: 1, "B");
         var pe = PendingExportWith(stale, SingleValuedChange(attributeId: 2, "Architect"));
 
-        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")]);
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")], objectType: null);
 
         Assert.That(withdrawn, Is.EqualTo(new[] { stale }));
     }
@@ -340,6 +340,93 @@ public class SyncEngineExportMergeTests
         Assert.That(withdrawn, Is.Empty, "a change replaced by a new one is not a withdrawal");
     }
 
+    // ---- A class add goes with the attribute changes that obliged it (#492) ----
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_TheOnlyMergedClassAttributeWithdrawn_WithdrawsTheClassAddToo()
+    {
+        // Left behind, the class add asks the directory for a class whose required attributes nothing writes, and every
+        // export of the object is refused (Scenario 019).
+        var badgeColour = SingleValuedChange(attributeId: BadgeColourId, "Yellow");
+        var classAdd = MultiValuedAdd(attributeId: ObjectClassId, "badgeHolder");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
+            [], [badgeColour, classAdd], [ClearOf(BadgeColourId)], ObjectTypeWithMergedBadgeHolder());
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { badgeColour, classAdd }));
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_AnotherMergedClassAttributeStillQueued_KeepsTheClassAdd()
+    {
+        var badgeColour = SingleValuedChange(attributeId: BadgeColourId, "Yellow");
+        var badgeNumber = SingleValuedChange(attributeId: BadgeNumberId, "B19-3");
+        var classAdd = MultiValuedAdd(attributeId: ObjectClassId, "badgeHolder");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
+            [], [badgeColour, badgeNumber, classAdd], [ClearOf(BadgeColourId)], ObjectTypeWithMergedBadgeHolder());
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { badgeColour }), "the queued Badge Number still obliges the class");
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_TheEvaluationStagesAnotherMergedClassAttribute_KeepsTheClassAdd()
+    {
+        // The merge path: the evaluation's own new change carries an attribute of the same class.
+        var badgeColour = SingleValuedChange(attributeId: BadgeColourId, "Yellow");
+        var classAdd = MultiValuedAdd(attributeId: ObjectClassId, "badgeHolder");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
+            [SingleValuedChange(attributeId: BadgeNumberId, "B19-3")], [badgeColour, classAdd], [ClearOf(BadgeColourId)],
+            ObjectTypeWithMergedBadgeHolder());
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { badgeColour }));
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_ClassAddAlreadySentAndAwaitingConfirmation_IsKept()
+    {
+        var badgeColour = SingleValuedChange(attributeId: BadgeColourId, "Yellow");
+        var classAdd = MultiValuedAdd(attributeId: ObjectClassId, "badgeHolder");
+        classAdd.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
+            [], [badgeColour, classAdd], [ClearOf(BadgeColourId)], ObjectTypeWithMergedBadgeHolder());
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { badgeColour }), "it is the confirmation of what the target was told, not a stale instruction");
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_QueuedChangesReadWithoutTheirAttributes_StillWithdrawsTheClassAdd()
+    {
+        // A Pending Export read lightweight from the database carries attribute ids, not the attributes themselves.
+        var badgeColour = SingleValuedChange(attributeId: BadgeColourId, "Yellow");
+        var classAdd = MultiValuedAdd(attributeId: ObjectClassId, "badgeHolder");
+        var structural = SingleValuedChange(attributeId: DisplayNameId, "Dora");
+        badgeColour.Attribute = null!;
+        classAdd.Attribute = null!;
+        structural.Attribute = null!;
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
+            [], [badgeColour, structural, classAdd], [ClearOf(BadgeColourId)], ObjectTypeWithMergedBadgeHolder());
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { badgeColour, classAdd }),
+            "a change for an attribute of the structural class obliges no auxiliary class");
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_ConnectedSystemWithoutClassMembership_LeavesOtherChangesAlone()
+    {
+        var objectType = ObjectTypeWithMergedBadgeHolder();
+        objectType.Tags.Clear();
+        var badgeColour = SingleValuedChange(attributeId: BadgeColourId, "Yellow");
+        var multiValued = MultiValuedAdd(attributeId: ObjectClassId, "badgeHolder");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], [badgeColour, multiValued], [ClearOf(BadgeColourId)], objectType);
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { badgeColour }), "with no class membership attribute, no change is a class add");
+    }
+
     [Test]
     public void SelectSurvivingDriftChanges_ChangeTheEvaluationFoundAlreadyCurrent_DoesNotSurvive()
     {
@@ -401,6 +488,45 @@ public class SyncEngineExportMergeTests
         change.AwaitsInitialPassword = true;
         return change;
     }
+
+    private const int DisplayNameId = 31;
+    private const int BadgeNumberId = 32;
+    private const int BadgeColourId = 33;
+    private const int ObjectClassId = 39;
+
+    /// <summary>
+    /// A "person" Object Type composing objectClass, with a merged "badgeHolder" auxiliary class contributing Badge
+    /// Number and Badge Colour, as an RFC 4512 directory's schema reads once the auxiliary class is merged.
+    /// </summary>
+    private static ConnectedSystemObjectType ObjectTypeWithMergedBadgeHolder()
+    {
+        var badgeHolder = new ConnectedSystemObjectType { Id = 2, Name = "badgeHolder" };
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "person",
+            Attributes =
+            [
+                new() { Id = DisplayNameId, Name = "displayName", ClassName = "person" },
+                new() { Id = BadgeNumberId, Name = "badgeNumber", ClassName = "badgeHolder" },
+                new() { Id = BadgeColourId, Name = "badgeColour", ClassName = "badgeHolder" },
+                new() { Id = ObjectClassId, Name = "objectClass", ClassName = "top", AttributePlurality = AttributePlurality.MultiValued }
+            ]
+        };
+        objectType.Tags.Add(new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassMembershipAttribute, Value = "objectClass" });
+        objectType.Extensions.Add(new ConnectedSystemObjectTypeExtension
+        {
+            BaseObjectTypeId = objectType.Id,
+            ExtensionObjectTypeId = badgeHolder.Id,
+            ExtensionObjectType = badgeHolder
+        });
+        return objectType;
+    }
+
+    /// <summary>
+    /// The change an evaluation skips as already current when the Metaverse no longer has a value the target never held.
+    /// </summary>
+    private static PendingExportAttributeValueChange ClearOf(int attributeId) => SingleValuedChange(attributeId, value: null!);
 
     private static PendingExport PendingExportWith(params PendingExportAttributeValueChange[] changes)
     {

@@ -363,14 +363,18 @@ public interface ISyncEngine
     /// Withdraws the changes staged on a Pending Export that an export evaluation has just found unnecessary,
     /// because the target already holds what the evaluation's skipped (no-net-change) changes would set: the same
     /// supersede rule as <see cref="MergeAttributeChangesIntoPendingExport"/>, applied when the answer for an
-    /// attribute is "no change". A change already sent and awaiting confirmation is kept. Pure in-memory mutation.
+    /// attribute is "no change". A change already sent and awaiting confirmation is kept, and a class add the withdrawal
+    /// leaves nothing to oblige is withdrawn with it. Pure in-memory mutation.
     /// </summary>
     /// <param name="stagedPendingExport">The Pending Export already staged for the CSO, mutated in place.</param>
     /// <param name="alreadyCurrentChanges">The changes the evaluation skipped as already current on the target.</param>
+    /// <param name="objectType">The Object Type the Pending Export writes, for its class membership; null leaves class
+    /// adds as they are.</param>
     /// <returns>The staged changes withdrawn, which the run records on the object's execution item (#2001).</returns>
     List<PendingExportAttributeValueChange> WithdrawChangesAlreadyCurrent(
         PendingExport stagedPendingExport,
-        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges);
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ConnectedSystemObjectType? objectType);
 
     /// <summary>
     /// Creates the Pending Export attribute value changes an export Synchronisation Rule's Attribute Flow

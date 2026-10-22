@@ -2672,7 +2672,7 @@ public class ExportEvaluationServer
             // Nothing new to stage, but a change queued earlier for one of these attributes may now be stale.
             if (existingCso != null)
             {
-                var withdrawn = await WithdrawQueuedChangesAlreadyCurrentAsync(existingCso.Id, alreadyCurrentChanges, cache, existingPendingExports, mvo.Id);
+                var withdrawn = await WithdrawQueuedChangesAlreadyCurrentAsync(existingCso.Id, alreadyCurrentChanges, exportRule.ConnectedSystemObjectType, cache, existingPendingExports, mvo.Id);
                 RecordWithdrawal(withdrawals, existingCso.Id, exportRule, mvo.Id, withdrawn);
             }
 
@@ -2718,7 +2718,7 @@ public class ExportEvaluationServer
                 // dropped here exactly as in the merge-replace branch below.
                 var changesToMergeInMemory = DropChangesRestatingAHeldChange(attributeChanges, existingPendingExport, csoId.Value);
                 var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(existingPendingExport, changesToMergeInMemory);
-                var withdrawnInMemory = _syncEngine.WithdrawChangesAlreadyCurrent(existingPendingExport, alreadyCurrentChanges);
+                var withdrawnInMemory = _syncEngine.WithdrawChangesAlreadyCurrent(existingPendingExport, alreadyCurrentChanges, exportRule.ConnectedSystemObjectType);
                 RecordWithdrawal(withdrawals, csoId.Value, exportRule, mvo.Id, withdrawnInMemory);
 
                 if (mergeResult.ReplacedCount > 0 || mergeResult.AddedCount > 0)
@@ -2878,7 +2878,7 @@ public class ExportEvaluationServer
                 // The queued changes the target no longer needs are withdrawn rather than carried into the replacement;
                 // read before the delete below detaches them, so the run can report what was withdrawn (#2001).
                 var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
-                    attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges);
+                    attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges, exportRule.ConnectedSystemObjectType);
 
                 // Every incoming change restated a held change: the evaluation stages nothing new, so the persisted
                 // Pending Export is kept, as the no-change path above keeps it. Anything the target no longer needs is
@@ -3251,6 +3251,7 @@ public class ExportEvaluationServer
     private async Task<List<PendingExportAttributeValueChange>> WithdrawQueuedChangesAlreadyCurrentAsync(
         Guid csoId,
         IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ConnectedSystemObjectType? objectType,
         ExportEvaluationCache cache,
         List<PendingExport>? existingPendingExports,
         Guid mvoId)
@@ -3262,7 +3263,7 @@ public class ExportEvaluationServer
         var inMemory = existingPendingExports?.FirstOrDefault(pe => pe.ConnectedSystemObjectId == csoId);
         if (inMemory is { ChangeType: PendingExportChangeType.Update })
         {
-            withdrawn.AddRange(_syncEngine.WithdrawChangesAlreadyCurrent(inMemory, alreadyCurrentChanges));
+            withdrawn.AddRange(_syncEngine.WithdrawChangesAlreadyCurrent(inMemory, alreadyCurrentChanges, objectType));
             if (withdrawn.Count > 0)
             {
                 if (inMemory.AttributeValueChanges.Count == 0)
@@ -3281,7 +3282,7 @@ public class ExportEvaluationServer
         if (persisted is not { ChangeType: PendingExportChangeType.Update } || persisted.Status == PendingExportStatus.Executing)
             return withdrawn;
 
-        var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], persisted.AttributeValueChanges, alreadyCurrentChanges);
+        var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], persisted.AttributeValueChanges, alreadyCurrentChanges, objectType);
         if (withdrawnFromPersisted.Count == 0)
             return withdrawn;
 
@@ -3659,7 +3660,8 @@ public class ExportEvaluationServer
         // What a real evaluation would withdraw from the object's queued Pending Export (#2001), for a synchronisation and
         // a recall alike: the recall executors record the same withdrawal (#2011).
         var withdrawnChanges = PreviewQueuedChangesWithdrawn(
-            queuedPendingExport, existingCso, effectiveChangeType, evaluatedChangeCount, attributeChanges, noNetChangeSkippedChanges);
+            queuedPendingExport, existingCso, effectiveChangeType, evaluatedChangeCount, attributeChanges, noNetChangeSkippedChanges,
+            exportRule.ConnectedSystemObjectType);
 
         return new OutboundPreviewEntry
         {
@@ -3732,7 +3734,8 @@ public class ExportEvaluationServer
         PendingExportChangeType? changeType,
         int evaluatedChangeCount,
         List<PendingExportAttributeValueChange> attributeChanges,
-        List<PendingExportAttributeValueChange> alreadyCurrentChanges)
+        List<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ConnectedSystemObjectType? objectType)
     {
         if (queued == null || existingCso == null || alreadyCurrentChanges.Count == 0)
             return [];
@@ -3740,7 +3743,7 @@ public class ExportEvaluationServer
         if (evaluatedChangeCount == 0)
         {
             return changeType == PendingExportChangeType.Update && queued.ChangeType == PendingExportChangeType.Update && queued.Status != PendingExportStatus.Executing
-                ? SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], queued.AttributeValueChanges, alreadyCurrentChanges)
+                ? SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], queued.AttributeValueChanges, alreadyCurrentChanges, objectType)
                 : [];
         }
 
@@ -3751,7 +3754,7 @@ public class ExportEvaluationServer
             return [];
         }
 
-        return SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(attributeChanges, queued.AttributeValueChanges, alreadyCurrentChanges);
+        return SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(attributeChanges, queued.AttributeValueChanges, alreadyCurrentChanges, objectType);
     }
 
     /// <summary>

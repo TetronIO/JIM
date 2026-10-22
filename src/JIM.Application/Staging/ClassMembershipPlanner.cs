@@ -66,6 +66,16 @@ public static class ClassMembershipPlanner
     }
 
     /// <summary>
+    /// The classes an export writing <paramref name="attributesBeingWritten"/> obliges the object to belong to, most
+    /// fundamental first: the same answer <see cref="Plan"/> starts from, before it leaves out the classes the object
+    /// already carries.
+    /// </summary>
+    /// <param name="objectType">The Object Type being exported.</param>
+    /// <param name="attributesBeingWritten">The names of the attributes the export writes a value for.</param>
+    public static List<string> ClassesObligedBy(ConnectedSystemObjectType objectType, IEnumerable<string> attributesBeingWritten) =>
+        ClassesThisObjectBelongsTo(objectType, new HashSet<string>(attributesBeingWritten, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>
     /// The classes this object belongs to, most fundamental first.
     /// </summary>
     private static List<string> ClassesThisObjectBelongsTo(ConnectedSystemObjectType objectType, HashSet<string> attributesBeingWritten)
