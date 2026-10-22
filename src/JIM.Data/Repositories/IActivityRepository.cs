@@ -265,6 +265,13 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId);
 
     /// <summary>
+    /// Every outcome a Run Profile Execution Item recorded, flat and with no navigations loaded, so a caller can build
+    /// the item's outcome tree (#2033) from <c>ParentSyncOutcomeId</c> without loading the item's graph. Empty when the
+    /// item recorded none.
+    /// </summary>
+    public Task<List<ActivityRunProfileExecutionItemSyncOutcome>> GetSyncOutcomesAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
     /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
     /// upward walk can resolve a whole level of a cascade in one round trip.
     /// </summary>

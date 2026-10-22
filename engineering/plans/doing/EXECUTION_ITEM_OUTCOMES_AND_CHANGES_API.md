@@ -1,6 +1,6 @@
 # Execution Item Outcomes and Changes over REST and PowerShell - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete)
 - **Issue:** [#2033](https://github.com/TetronIO/JIM/issues/2033)
 - **Follows:** #2032 (`GET /activities/items/{id}`, `Get-JIMActivityExecutionItem`)
 
@@ -46,8 +46,8 @@ Today a script can find an item's changes only by paging the object's whole chan
 
 ## Implementation Phases
 
-1. **Outcomes (TDD)**: repository query and tree build; `SyncOutcomeNodeDto.FromEntity` and `ConnectedSystemObjectChangeId`; `include` parsing with `400` on unknown values; controller tests (default unchanged, outcomes present when asked, nesting and order, unknown include). Database test against real PostgreSQL for the query.
-2. **Changes (TDD)**: projection extraction (existing change-history tests must stay green unchanged); by-item queries, including a deleted object's changes; `ExecutionItemChangesDto`; controller tests for sync, import and export items.
+1. **Outcomes (TDD)** ✅: flat repository read (`GetSyncOutcomesAsync`) and tree build (`ActivityServer.GetSyncOutcomeTreeAsync`, mapping through the existing `SyncOutcomeNode.FromSyncOutcome`); `include` parsing with `400` on unknown values; controller tests (default unchanged and not read, outcomes nested and ordered, none recorded reads as empty, unknown include); real-PostgreSQL test for the read on a no-tracking context. OpenAPI generation confirmed: `outcomes` and `children` resolve to a `$ref`. `ConnectedSystemObjectChangeId` moved to phase 2, where the changes it points at arrive.
+2. **Changes (TDD)**: `SyncOutcomeNode`/`SyncOutcomeNodeDto` gain `ConnectedSystemObjectChangeId` (check the preview fidelity test still holds, since a preview has no change to point at); projection extraction (existing change-history tests must stay green unchanged); by-item queries, including a deleted object's changes; `ExecutionItemChangesDto`; controller tests for sync, import and export items.
 3. **OpenAPI**: `Generate-OpenApiDoc.ps1`, then `Test-DocsCoverage.ps1 -Rule ACC-3,COV-4`.
 4. **PowerShell**: switches building the query string; Pester tests for the query string each combination produces and the default sending none.
 5. **Docs and changelog**: `docs/powershell/activities.md` and `docs/api/` output tables naming the real properties; `CHANGELOG.md` `✨` entry.

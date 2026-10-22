@@ -34,6 +34,13 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     private readonly JimApplication _application = application;
     private readonly IActivityEtaTracker _etaTracker = etaTracker;
 
+    private const string IncludeOutcomes = "outcomes";
+
+    /// <summary>
+    /// The sections an Execution Item's detail can be asked to add with <c>include</c>, matched case-insensitively.
+    /// </summary>
+    private static readonly HashSet<string> ExecutionItemIncludeSections = new(StringComparer.OrdinalIgnoreCase) { IncludeOutcomes };
+
     /// <summary>
     /// List Activities
     /// </summary>
@@ -300,20 +307,30 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     /// <remarks>
     /// One item's detail: what happened to the object and, when it failed, the error message and stack trace the
     /// list's headers do not carry, with the snapshots taken when it was recorded and the ids of what it is about.
-    /// Item ids come from the list (<c>GET /activities/{id}/items</c>).
+    /// Item ids come from the list (<c>GET /activities/{id}/items</c>). The outcome tree is left out unless asked for
+    /// with <c>include=outcomes</c>.
     /// </remarks>
     /// <param name="id">The unique identifier (GUID) of the Execution Item.</param>
+    /// <param name="include">Comma-separated sections to add to the detail: <c>outcomes</c>, the item's outcome tree.</param>
     /// <returns>The Execution Item's detail.</returns>
     /// <response code="200">Returns the Execution Item.</response>
+    /// <response code="400">If <c>include</c> names something other than <c>outcomes</c>.</response>
     /// <response code="404">If no Execution Item has the id.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet("items/{id:guid}", Name = "GetActivityExecutionItem")]
     [ProducesResponseType(typeof(ActivityRunProfileExecutionItemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetActivityExecutionItemAsync(Guid id)
+    public async Task<IActionResult> GetActivityExecutionItemAsync(Guid id, [FromQuery] string? include = null)
     {
         _logger.LogDebug("Getting activity execution item: {Id}", id);
+
+        var sections = include?.Split(',', StringSplitOptions.TrimEntries) ?? [];
+        var unknown = sections.Where(s => !ExecutionItemIncludeSections.Contains(s)).ToList();
+        if (unknown.Count > 0)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"include can only name {string.Join(", ", ExecutionItemIncludeSections.Select(s => $"'{s}'"))}."));
 
         var item = await _application.Activities.GetActivityRunProfileExecutionItemCoreAsync(id);
         if (item == null)
@@ -335,6 +352,13 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             dto.JoinObjectMatchingRuleId = joined.ObjectMatchingRuleId;
             dto.JoinObjectMatchingRuleDescriptionSnapshot = joined.ObjectMatchingRuleDescriptionSnapshot;
             dto.JoinMatchedValue = joined.MatchedValue;
+        }
+
+        if (sections.Contains(IncludeOutcomes, StringComparer.OrdinalIgnoreCase))
+        {
+            dto.Outcomes = (await _application.Activities.GetSyncOutcomeTreeAsync(id))
+                .Select(SyncOutcomeNodeDto.FromModel)
+                .ToList();
         }
 
         return Ok(dto);

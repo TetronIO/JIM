@@ -8,6 +8,7 @@ using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Scheduling;
 using JIM.Models.Security;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Serilog;
 namespace JIM.Application.Servers;
@@ -738,6 +739,27 @@ public partial class ActivityServer
     public async Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId)
     {
         return await Application.Repository.Activity.GetJoinedOutcomeAsync(runProfileExecutionItemId);
+    }
+
+    /// <summary>
+    /// A Run Profile Execution Item's outcome tree (#2033): its root outcomes in ordinal order, each with its children
+    /// nested, in the shape a Sync Preview's tree takes. One flat read; the tree is built here rather than by EF
+    /// relationship fix-up, which a context that does not track never performs. Empty when the item recorded none.
+    /// </summary>
+    public async Task<List<SyncOutcomeNode>> GetSyncOutcomeTreeAsync(Guid runProfileExecutionItemId)
+    {
+        var outcomes = await Application.Repository.Activity.GetSyncOutcomesAsync(runProfileExecutionItemId);
+        var childrenByParent = outcomes
+            .Where(o => o.ParentSyncOutcomeId.HasValue)
+            .ToLookup(o => o.ParentSyncOutcomeId!.Value);
+        foreach (var outcome in outcomes)
+            outcome.Children = [.. childrenByParent[outcome.Id]];
+
+        return outcomes
+            .Where(o => !o.ParentSyncOutcomeId.HasValue)
+            .OrderBy(o => o.Ordinal)
+            .Select(SyncOutcomeNode.FromSyncOutcome)
+            .ToList();
     }
 
     /// <summary>

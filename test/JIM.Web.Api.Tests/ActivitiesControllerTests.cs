@@ -17,6 +17,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -1261,6 +1262,85 @@ public class ActivitiesControllerTests
         Assert.That(dto?.JoinMatchedValue, Is.Null);
         _mockActivityRepo.Verify(r => r.GetJoinedOutcomeAsync(It.IsAny<Guid>()), Times.Never);
     }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_WithoutInclude_LeavesOutcomesOutAndDoesNotReadThemAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Outcomes, Is.Null);
+        _mockActivityRepo.Verify(r => r.GetSyncOutcomesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeOutcomes_ReturnsTheTreeNestedAndInOrdinalOrderAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        var projected = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, ordinal: 0);
+        var flow = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, ordinal: 0, parent: projected);
+        flow.DetailCount = 12;
+        flow.SyncRuleName = "HR Inbound";
+        var provisioned = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, ordinal: 1, parent: projected);
+        var staged = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, ordinal: 0, parent: provisioned);
+        staged.StagedChangeType = PendingExportChangeType.Create;
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        // Read flat and in no particular order, as the query returns them.
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomesAsync(item.Id)).ReturnsAsync([staged, provisioned, flow, projected]);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "outcomes") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Outcomes, Is.Not.Null);
+        var root = dto!.Outcomes!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.Projected));
+            Assert.That(root.Children.Select(c => c.OutcomeType), Is.EqualTo(new[]
+            {
+                ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            }));
+            Assert.That(root.Children[0].DetailCount, Is.EqualTo(12));
+            Assert.That(root.Children[0].SyncRuleName, Is.EqualTo("HR Inbound"));
+            Assert.That(root.Children[1].Children.Single().StagedChangeType, Is.EqualTo(PendingExportChangeType.Create));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeOutcomes_ItemWithNoOutcomes_ReturnsAnEmptyListAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomesAsync(item.Id)).ReturnsAsync([]);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "Outcomes") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Outcomes, Is.Not.Null.And.Empty, "asked for and none recorded reads as empty, not as left out");
+    }
+
+    [TestCase("bogus")]
+    [TestCase("outcomes,bogus")]
+    public async Task GetActivityExecutionItemAsync_IncludeNamesSomethingUnknown_ReturnsBadRequestAsync(string include)
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id, include);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    private static ActivityRunProfileExecutionItemSyncOutcome Outcome(
+        ActivityRunProfileExecutionItemSyncOutcomeType type, int ordinal, ActivityRunProfileExecutionItemSyncOutcome? parent = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        OutcomeType = type,
+        Ordinal = ordinal,
+        ParentSyncOutcomeId = parent?.Id
+    };
 
     private static ActivityRunProfileExecutionItemMatchCandidate Candidate(Guid id, string name, int ordinal) => new()
     {

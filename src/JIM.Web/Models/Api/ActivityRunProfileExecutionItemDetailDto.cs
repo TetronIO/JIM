@@ -112,6 +112,14 @@ public class ActivityRunProfileExecutionItemDetailDto
     public string? JoinMatchedValue { get; set; }
 
     /// <summary>
+    /// What the run did to the object, as a tree: the root outcomes in order, each with the outcomes that followed from
+    /// it nested under <c>children</c> (for example Projected, then Attribute Flow and Provisioned, then the Pending
+    /// Export it staged). Null unless asked for with <c>include=outcomes</c>; empty when asked for and the item recorded
+    /// none.
+    /// </summary>
+    public List<SyncOutcomeNodeDto>? Outcomes { get; set; }
+
+    /// <summary>
     /// Creates the detail from an item's own row; no navigation property is read, so the light retrieval suffices.
     /// </summary>
     public static ActivityRunProfileExecutionItemDetailDto FromEntity(ActivityRunProfileExecutionItem entity)

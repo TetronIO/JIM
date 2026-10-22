@@ -2190,6 +2190,15 @@ public partial class ActivityRepository : IActivityRepository
             .FirstOrDefaultAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<ActivityRunProfileExecutionItemSyncOutcome>> GetSyncOutcomesAsync(Guid runProfileExecutionItemId)
+    {
+        return await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+            .AsNoTracking()
+            .Where(o => o.ActivityRunProfileExecutionItemId == runProfileExecutionItemId)
+            .ToListAsync();
+    }
+
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
         // AsTracking required: multiple Include paths create cycles through ReferenceValue navigations
