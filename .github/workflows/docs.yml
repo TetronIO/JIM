@@ -47,7 +47,7 @@ jobs:
           path: .cache
           restore-keys: |
             mkdocs-material-
-      - run: pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
+      - run: pip install -r docs/requirements.txt
       # --strict promotes MkDocs warnings (broken internal links, a nav entry pointing at a missing
       # page, an unreadable asset) to build failures. changelog-lint runs the same strict build, plus a
       # link check of the built site, on every pull request that touches a docs source

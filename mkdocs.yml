@@ -4,10 +4,12 @@ repo_url: https://github.com/TetronIO/JIM
 repo_name: TetronIO/JIM
 
 # overrides/ is the theme's custom_dir, not content: without this it is also
-# published as a static file at /overrides/home.html.
+# published as a static file at /overrides/home.html. requirements.txt pins the
+# site's own toolchain and would otherwise be published at /requirements.txt.
 exclude_docs: |
   CLAUDE.md
   overrides/
+  requirements.txt
 
 # Link validation (#1454). Under --strict, which changelog-lint runs on every
 # pull request that touches the docs, a warning fails the build:

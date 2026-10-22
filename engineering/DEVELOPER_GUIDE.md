@@ -1330,7 +1330,7 @@ Backing scripts: [`.github/scripts/check-tooling-pins.ps1`](../.github/scripts/c
 
 **Adding a new manually-pinned tool:** add an entry to the `$tools` manifest at the top of `check-tooling-pins.ps1` (name, registry, package id, and one regex-located pin site per file). The next run picks it up. This is the single place to look when you pin a new dev tool outside a Dependabot-readable manifest.
 
-Ranges (e.g. the `mkdocs>=1.6,<2` pins in `setup.sh`) are deliberately out of scope: a range already absorbs minor and patch releases, so only the upper bound is a periodic judgment call rather than an automatable bump.
+The docs toolchain is out of scope too: it is pinned in `docs/requirements.txt`, which Dependabot (`pip`) bumps.
 
 ##### When the scan-images gate blocks on an upstream-only CVE
 

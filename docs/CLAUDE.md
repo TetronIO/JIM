@@ -120,14 +120,10 @@ The lightbox background is themed via `docs/assets/stylesheets/custom.css` (`.gs
 
 ## Dependencies
 
-MkDocs dependencies are pinned in two places - keep them in sync:
+The docs toolchain is pinned to exact versions in **`docs/requirements.txt`**, the only place its versions are set. Every install reads it with `pip install -r docs/requirements.txt`: `.devcontainer/setup.sh`, and the `changelog-lint`, `docs`, `publish-api-reference` and `release` workflows. Never add a version to an install line; change the file.
 
-| File | Purpose |
-|------|---------|
-| `.devcontainer/setup.sh` | Installed in the dev container |
-| `.github/workflows/docs.yml` | Installed in CI for GitHub Pages deployment |
-| `.github/workflows/changelog-lint.yml` | Installed in CI for the pull request docs site check |
+Dependabot (`pip`, directory `/docs`) raises the bumps. A bump pull request changes a path under `docs/`, so `changelog-lint` runs the strict build and link check on it before it can merge. Majors are ignored: MkDocs 2.0 is incompatible with Material for MkDocs.
 
-Current pinned versions: `mkdocs>=1.6,<2`, `mkdocs-material>=9.7,<10`, `mkdocs-glightbox>=0.4,<1`.
+**Why exact pins, and why this is temporary (#2058).** Material for MkDocs is in maintenance mode, with critical fixes committed until 5 May 2027; MkDocs 1.6.1 (August 2024) is the last 1.x release. The planned move is to Zensical, from the same team, once its 0.1 release line ships (scheduled for 5 November 2026), and before Material's window closes. A trial build on Zensical 0.0.71 read `mkdocs.yml` unchanged, but showed two gaps to close first: it does not enforce the `absolute_links` or `omitted_files` validation, and it silently drops the GLightbox plugin unless its own lightbox is configured. **Review by 1 February 2027.**
 
 The pull request link check also runs lychee, from its official container image pinned by digest in `scripts/Test-DocsSite.ps1` (row 10 of `engineering/DEPENDENCY_PINNING.md`).
