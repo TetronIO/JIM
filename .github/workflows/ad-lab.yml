@@ -40,7 +40,8 @@
 #             host)
 #   variables JIM_AD_LAB_CONTROL_HOST, JIM_AD_LAB_CONTROL_USER (default jim-lab), JIM_AD_LAB_CONTROL_PORT (default 22),
 #             JIM_AD_LAB_SCRIPT_ROOT (default C:\jim-ad-lab), JIM_AD_LAB_PRIMARY_ADDRESS, JIM_AD_LAB_SOURCE_ADDRESS,
-#             JIM_AD_LAB_TARGET_ADDRESS
+#             JIM_AD_LAB_TARGET_ADDRESS, JIM_AD_LAB_ADFS_PRIMARY_ADDRESS (the AD FS server, adfs-primary, which the
+#             AD FS scenarios sign in through)
 #   optional  repository variable JIM_BENCH_API_URL and secret JIM_BENCH_API_KEY, which the runner reads to stream
 #             results to the metrics API (as for every integration run); unset, results stay local
 #
@@ -104,6 +105,7 @@ jobs:
       JIM_AD_LAB_PRIMARY_ADDRESS: ${{ vars.JIM_AD_LAB_PRIMARY_ADDRESS }}
       JIM_AD_LAB_SOURCE_ADDRESS: ${{ vars.JIM_AD_LAB_SOURCE_ADDRESS }}
       JIM_AD_LAB_TARGET_ADDRESS: ${{ vars.JIM_AD_LAB_TARGET_ADDRESS }}
+      JIM_AD_LAB_ADFS_PRIMARY_ADDRESS: ${{ vars.JIM_AD_LAB_ADFS_PRIMARY_ADDRESS }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -117,7 +119,8 @@ jobs:
         run: |
           $missing = @()
           # The variables are exported by the job's env block under their own names, so the name is the lookup key.
-          $variables = @('JIM_AD_LAB_CONTROL_HOST', 'JIM_AD_LAB_PRIMARY_ADDRESS', 'JIM_AD_LAB_SOURCE_ADDRESS', 'JIM_AD_LAB_TARGET_ADDRESS')
+          $variables = @('JIM_AD_LAB_CONTROL_HOST', 'JIM_AD_LAB_PRIMARY_ADDRESS', 'JIM_AD_LAB_SOURCE_ADDRESS', 'JIM_AD_LAB_TARGET_ADDRESS',
+            'JIM_AD_LAB_ADFS_PRIMARY_ADDRESS')
           foreach ($name in $variables) {
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += "variable $name" }
           }

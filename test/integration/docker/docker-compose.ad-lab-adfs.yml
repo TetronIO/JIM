@@ -1,0 +1,31 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+# AD FS overlay for the JIM stack: the lab's AD FS server, adfs-primary, as JIM's identity provider.
+#
+# Run-IntegrationTests.ps1 adds this file after docker-compose.ad-lab.yml for the scenarios that sign in through
+# AD FS (Test-ActiveDirectoryLabFederationScenario in utils/ActiveDirectoryLab-Helpers.ps1):
+#
+#   docker compose ... -f test/integration/docker/docker-compose.ad-lab.yml -f test/integration/docker/docker-compose.ad-lab-adfs.yml ...
+#
+# Compose merges jim.web's environment by name, so these replace docker-compose.override.yml's Keycloak values and
+# leave everything else as it is. The AD FS server is reached by its service name, the name its certificate and its
+# discovery document carry, which is in no DNS the container can see, so it is mapped to the server's address like
+# the domain controllers in docker-compose.ad-lab.yml.
+#
+# The authority's certificate is self-signed and nothing in the container trusts it: that is deliberate. The AD FS
+# scenarios start with JIM reporting it Untrusted and trust it as an administrator would
+# (Add-JIMCertificate -FromIdentityProvider). Nobody can sign in yet: JIM's registration on AD FS comes with the
+# registration command (#2364), and until then JIM_SSO_CLIENT_ID names no client there.
+
+services:
+  jim.web:
+    environment:
+      - JIM_SSO_AUTHORITY=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs
+      - JIM_SSO_PUBLIC_AUTHORITY=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs
+      # The issuers JIM accepts on API tokens. AD FS's discovery document (and its ID tokens) name the authority, but
+      # its access tokens name its federation service identifier (access_token_issuer), which is plain HTTP whatever
+      # its endpoints are, so both are listed.
+      - JIM_SSO_VALID_ISSUERS=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs,http://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs/services/trust
+    extra_hosts:
+      - "${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}:${JIM_AD_LAB_ADFS_PRIMARY_ADDRESS:-0.0.0.0}"
