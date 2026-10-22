@@ -550,7 +550,7 @@ jobs:
           python-version: 3.x
 
       - name: Install MkDocs
-        run: pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
+        run: pip install -r docs/requirements.txt
 
       - name: Build site
         # --strict: see the comment on the equivalent step in docs.yml. Safe to fail a release on,

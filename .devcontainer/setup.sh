@@ -223,10 +223,10 @@ fi
 
 # 6. Install MkDocs Material for documentation preview
 print_step "Installing MkDocs Material..."
-if pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1" --break-system-packages --quiet 2>/dev/null; then
+if pip install -r docs/requirements.txt --break-system-packages --quiet 2>/dev/null; then
     print_success "MkDocs Material installed (mkdocs serve on port 8000)"
 else
-    print_warning "MkDocs Material installation failed - you can install manually: pip install \"mkdocs>=1.6,<2\" \"mkdocs-material>=9.7,<10\" \"mkdocs-glightbox>=0.4,<1\" --break-system-packages"
+    print_warning "MkDocs Material installation failed - you can install manually: pip install -r docs/requirements.txt --break-system-packages"
 fi
 
 # 7. Install Playwright browser for the Playwright MCP server (in-IDE UI validation)
