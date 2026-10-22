@@ -175,6 +175,12 @@ public interface IMetaverseRepository
     /// <returns>The page of changes plus the total count of change records for the MVO.</returns>
     public Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize);
 
+    /// <summary>
+    /// The change a Run Profile Execution Item recorded on its Metaverse Object, in the change-history shape (#2033);
+    /// null when it recorded none. Read by item, so a change whose object has since been deleted is found.
+    /// </summary>
+    public Task<MvoChangeHistoryDto?> GetMvoChangeForExecutionItemAsync(Guid runProfileExecutionItemId);
+
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
     /// <summary>

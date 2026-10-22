@@ -12,11 +12,13 @@ using JIM.Web.Services;
 using JIM.Application;
 using JIM.Data;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.AspNetCore.Mvc;
@@ -1331,6 +1333,75 @@ public class ActivitiesControllerTests
         var result = await _controller.GetActivityExecutionItemAsync(item.Id, include);
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_WithoutInclude_LeavesChangesOutAndDoesNotReadThemAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        var metaverse = new Mock<IMetaverseRepository>();
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverse.Object);
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Changes, Is.Null);
+        metaverse.Verify(r => r.GetMvoChangeForExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
+        connectedSystems.Verify(r => r.GetCsoChangeForExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeChanges_ReturnsTheItemsChangesAndEachStagedExportAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        var mvoChange = new MvoChangeHistoryDto { Id = Guid.NewGuid(), ActivityRunProfileExecutionItemId = item.Id };
+        var stagedChange = new CsoChangeHistoryDto { Id = Guid.NewGuid() };
+        var staged = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, ordinal: 0);
+        staged.ConnectedSystemObjectChangeId = stagedChange.Id;
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomesAsync(item.Id)).ReturnsAsync([staged]);
+        var metaverse = new Mock<IMetaverseRepository>();
+        metaverse.Setup(r => r.GetMvoChangeForExecutionItemAsync(item.Id)).ReturnsAsync(mvoChange);
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverse.Object);
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetCsoChangeForExecutionItemAsync(item.Id)).ReturnsAsync((CsoChangeHistoryDto?)null);
+        connectedSystems.Setup(r => r.GetCsoChangesAsync(It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { stagedChange.Id }))))
+            .ReturnsAsync([stagedChange]);
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "changes") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Changes, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.Changes!.MetaverseObjectChange?.Id, Is.EqualTo(mvoChange.Id));
+            Assert.That(dto!.Changes!.ConnectedSystemObjectChange, Is.Null);
+            Assert.That(dto!.Changes!.StagedExportChanges.Select(c => c.Id), Is.EqualTo(new[] { stagedChange.Id }));
+            Assert.That(dto!.Outcomes, Is.Null, "changes alone does not bring the outcome tree");
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeOutcomesAndChanges_LinksTheStagedExportToItsChangeAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        var stagedChange = new CsoChangeHistoryDto { Id = Guid.NewGuid() };
+        var staged = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, ordinal: 0);
+        staged.ConnectedSystemObjectChangeId = stagedChange.Id;
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomesAsync(item.Id)).ReturnsAsync([staged]);
+        var metaverse = new Mock<IMetaverseRepository>();
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverse.Object);
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetCsoChangesAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([stagedChange]);
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "outcomes, changes") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Outcomes?.Single().ConnectedSystemObjectChangeId, Is.EqualTo(stagedChange.Id));
+        Assert.That(dto?.Changes?.StagedExportChanges.Single().Id, Is.EqualTo(stagedChange.Id));
     }
 
     private static ActivityRunProfileExecutionItemSyncOutcome Outcome(

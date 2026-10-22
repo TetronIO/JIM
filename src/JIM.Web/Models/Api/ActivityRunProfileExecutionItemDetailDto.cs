@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 
 namespace JIM.Web.Models.Api;
@@ -118,6 +119,13 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// none.
     /// </summary>
     public List<SyncOutcomeNodeDto>? Outcomes { get; set; }
+
+    /// <summary>
+    /// The attribute changes recorded with the item, in the shapes object change history uses: the Metaverse Object
+    /// change a synchronisation made, the Connected System Object change an import or export recorded, and what each
+    /// Pending Export a synchronisation staged would write. Null unless asked for with <c>include=changes</c>.
+    /// </summary>
+    public ExecutionItemChanges? Changes { get; set; }
 
     /// <summary>
     /// Creates the detail from an item's own row; no navigation property is read, so the light retrieval suffices.

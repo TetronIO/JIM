@@ -1,6 +1,6 @@
 # Execution Item Outcomes and Changes over REST and PowerShell - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-2 complete)
 - **Issue:** [#2033](https://github.com/TetronIO/JIM/issues/2033)
 - **Follows:** #2032 (`GET /activities/items/{id}`, `Get-JIMActivityExecutionItem`)
 
@@ -28,7 +28,7 @@ Today a script can find an item's changes only by paging the object's whole chan
 - No `include`: the response and its database work are unchanged.
 - New nullable properties on `ActivityRunProfileExecutionItemDetailDto`, null unless requested:
   - `Outcomes: List<SyncOutcomeNodeDto>?`: root outcomes, ordered by `Ordinal`, with children nested.
-  - `Changes: ExecutionItemChangesDto?` with:
+  - `Changes: ExecutionItemChanges?` (a JIM.Models DTO, as `MvoChangeHistoryDto` is) with:
     - `MetaverseObjectChange: MvoChangeHistoryDto?` (synchronisation items)
     - `ConnectedSystemObjectChange: CsoChangeHistoryDto?` (import and export items)
     - `StagedExportChanges: List<CsoChangeHistoryDto>`: the per-outcome snapshots `PendingExportCreated` outcomes record of what they staged (the Pending Export itself is deleted on confirmation, so this snapshot is the only lasting record).
@@ -47,7 +47,7 @@ Today a script can find an item's changes only by paging the object's whole chan
 ## Implementation Phases
 
 1. **Outcomes (TDD)** ✅: flat repository read (`GetSyncOutcomesAsync`) and tree build (`ActivityServer.GetSyncOutcomeTreeAsync`, mapping through the existing `SyncOutcomeNode.FromSyncOutcome`); `include` parsing with `400` on unknown values; controller tests (default unchanged and not read, outcomes nested and ordered, none recorded reads as empty, unknown include); real-PostgreSQL test for the read on a no-tracking context. OpenAPI generation confirmed: `outcomes` and `children` resolve to a `$ref`. `ConnectedSystemObjectChangeId` moved to phase 2, where the changes it points at arrive.
-2. **Changes (TDD)**: `SyncOutcomeNode`/`SyncOutcomeNodeDto` gain `ConnectedSystemObjectChangeId` (check the preview fidelity test still holds, since a preview has no change to point at); projection extraction (existing change-history tests must stay green unchanged); by-item queries, including a deleted object's changes; `ExecutionItemChangesDto`; controller tests for sync, import and export items.
+2. **Changes (TDD)** ✅: `SyncOutcomeNode`/`SyncOutcomeNodeDto` gained `ConnectedSystemObjectChangeId` (the preview fidelity tests are unaffected); both change-history projections extracted into shared expressions (`MvoChangeHistoryProjection`, `CsoChangeHistoryProjection`), with object history's existing tests green unchanged; by-item reads (`GetMvoChangeForExecutionItemAsync`, `GetCsoChangeForExecutionItemAsync`, `GetCsoChangesAsync`), Generated Value marking shared with object history; `ExecutionItemChanges` (JIM.Models) returned as is, dates canonicalised as object history's are. Real-PostgreSQL tests cover a synchronisation item, an import whose object has since been deleted, and an item with no changes.
 3. **OpenAPI**: `Generate-OpenApiDoc.ps1`, then `Test-DocsCoverage.ps1 -Rule ACC-3,COV-4`.
 4. **PowerShell**: switches building the query string; Pester tests for the query string each combination produces and the default sending none.
 5. **Docs and changelog**: `docs/powershell/activities.md` and `docs/api/` output tables naming the real properties; `CHANGELOG.md` `✨` entry.

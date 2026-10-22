@@ -763,6 +763,31 @@ public partial class ActivityServer
     }
 
     /// <summary>
+    /// The attribute changes a Run Profile Execution Item recorded (#2033): its Metaverse Object change, its Connected
+    /// System Object change, and the snapshot of what each Pending Export it staged would write, in the shapes object
+    /// change history uses. Read by item, so changes on since-deleted objects are found.
+    /// </summary>
+    /// <param name="item">The item, as its core retrieval returns it.</param>
+    public async Task<ExecutionItemChanges> GetExecutionItemChangesAsync(ActivityRunProfileExecutionItem item)
+    {
+        var stagedChangeIds = (await Application.Repository.Activity.GetSyncOutcomesAsync(item.Id))
+            .Where(o => o.ConnectedSystemObjectChangeId.HasValue)
+            .OrderBy(o => o.Ordinal)
+            .Select(o => o.ConnectedSystemObjectChangeId!.Value)
+            .ToList();
+        var stagedChanges = await Application.ConnectedSystems.GetCsoChangesAsync(stagedChangeIds);
+        var stagedById = stagedChanges.ToDictionary(c => c.Id);
+
+        return new ExecutionItemChanges
+        {
+            MetaverseObjectChange = await Application.Metaverse.GetMvoChangeForExecutionItemAsync(item.Id, item.MetaverseObjectId),
+            ConnectedSystemObjectChange = await Application.ConnectedSystems.GetCsoChangeForExecutionItemAsync(item.Id),
+            // In the order the outcomes recorded them.
+            StagedExportChanges = [.. stagedChangeIds.Where(stagedById.ContainsKey).Select(id => stagedById[id])]
+        };
+    }
+
+    /// <summary>
     /// The candidates an ambiguous match recorded with a Run Profile Execution Item (#2052), in the order recorded,
     /// each with whether it still exists and, for a Metaverse Object, what is joined to it now. Three reads at most,
     /// whatever the number of candidates.
