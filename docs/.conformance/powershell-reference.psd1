@@ -16,6 +16,7 @@
         'JIM.ConnectionStatus'  = 'Test-JIMConnection builds it from the module''s connection and the health endpoint'
         'JIM.ConnectedSystemDeletionQueued' = 'Remove-JIMConnectedSystem builds it from the queued deletion and the deletion preview''s headline counts'
         'JIM.ConsequenceCohort' = 'Get-JIMActivityExecutionItem -Consequences flattens the consequences endpoint''s nested cohorts into one row per cohort'
+        'JIM.IdentityProviderRegistration' = 'Register-JIMIdentityProvider builds it from what it configured on the identity provider, which JIM''s API never sees'
         'JIM.MetaverseObjectConnectionEntry' = 'Get-JIMMetaverseObjectConnection flattens the connections endpoint''s joined and not-connected lists into one row per entry, with the same properties on both'
     }
 
