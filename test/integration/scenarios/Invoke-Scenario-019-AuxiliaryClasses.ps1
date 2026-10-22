@@ -581,6 +581,11 @@ try {
             -Message "The refusal names the class being added (jimBadgeHolder)"
         Write-Host "    Refusal: $refusalMessage" -ForegroundColor Gray
 
+        # Refused, not given up on: the Pending Export stays queued until its cause is fixed. The
+        # restore below asserts it is withdrawn; this proves that search finds it while it exists.
+        $doraPendingExports = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -Search "Dora Dean (S19)" -All)
+        Assert-Equal -Expected 1 -Actual $doraPendingExports.Count -Message "Dora's refused Pending Export is still queued"
+
         # The directory was never touched: the refusal happened in JIM, not at OpenLDAP.
         $doraClasses = @(Get-Scenario19LdapAttributeValues -LdapConfig $targetLdapConfig -Uid "dora19" -AttributeName "objectClass")
         Assert-Condition -Condition ($doraClasses -notcontains "jimBadgeHolder") `
@@ -618,6 +623,13 @@ delete: roomNumber
         $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSync.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Target) after roomNumber withdrawal"
         Assert-MvoAttributeValue -MvoId $doraMvoId -AttributeName "Badge Colour" -ExpectNoValue -Name "Dora's Badge Colour recalled after the withdrawal"
+
+        # The recall must take the refused Pending Export with it, class add included: the
+        # jimBadgeHolder add was only there because of her colour, and left behind on its own it
+        # is refused again at every later export (Pending Exports never give up, so Test 5's
+        # export retried it and failed).
+        $doraPendingExports = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -Search "Dora Dean (S19)" -All)
+        Assert-Equal -Expected 0 -Actual $doraPendingExports.Count -Message "Dora's refused Pending Export was withdrawn with her Badge Colour"
 
         # Now the value is gone, the mapping can go too. The priority order cannot be shrunk
         # first (the API requires every contributing mapping listed); removal takes the mapping's

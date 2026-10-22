@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using JIM.Application.Expressions;
+using JIM.Application.Staging;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
@@ -308,16 +309,19 @@ public partial class SyncEngine
     /// a newly evaluated change (merge keys, and #1199's whole-attribute rule), applied when the evaluation's answer
     /// for the attribute is "no change". A change already sent and awaiting its confirming import is kept: it is
     /// the confirmation of what the target now holds; one held until an Initial Password is delivered is not exempt
-    /// (#2039, see <see cref="SelectSurvivingDriftChanges"/>). Mutates in place; returns the staged changes withdrawn.
+    /// (#2039, see <see cref="SelectSurvivingDriftChanges"/>). A class add the withdrawal leaves nothing to oblige goes
+    /// with it (see <see cref="SelectChangesWithdrawnAsAlreadyCurrent"/>). Mutates in place; returns the staged changes
+    /// withdrawn.
     /// </summary>
     public List<PendingExportAttributeValueChange> WithdrawChangesAlreadyCurrent(
         PendingExport stagedPendingExport,
-        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges)
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ConnectedSystemObjectType? objectType)
     {
         ArgumentNullException.ThrowIfNull(stagedPendingExport);
         ArgumentNullException.ThrowIfNull(alreadyCurrentChanges);
 
-        var withdrawn = SelectChangesWithdrawnAsAlreadyCurrent([], stagedPendingExport.AttributeValueChanges, alreadyCurrentChanges);
+        var withdrawn = SelectChangesWithdrawnAsAlreadyCurrent([], stagedPendingExport.AttributeValueChanges, alreadyCurrentChanges, objectType);
         foreach (var change in withdrawn)
             stagedPendingExport.AttributeValueChanges.Remove(change);
 
@@ -332,15 +336,28 @@ public partial class SyncEngine
     /// is one already sent and awaiting confirmation, unless it is held until an Initial Password is delivered (#2039).
     /// The same rules as <see cref="SelectSurvivingDriftChanges"/>,
     /// which is what the run applies, so the run and the previews agree on what is withdrawn.
+    /// <para>
+    /// A queued class add goes with the attribute changes that obliged it (#492). Class membership is never compared with
+    /// the target on its own, because JIM computes it from the attributes an export writes (see
+    /// <c>AddClassMembershipChanges</c>), so no-net-change detection never finds it current. Once the withdrawal leaves no
+    /// queued or incoming change for any attribute of a merged class, the class add left behind asks the Connected System
+    /// to add a class that nothing gives a value, whose required attributes nothing writes, and the export is refused on
+    /// every run. So the classes are planned again from what is left, and a queued add for a class no longer obliged is
+    /// withdrawn too; one already sent and awaiting confirmation is kept, as any such change is.
+    /// </para>
     /// </summary>
     /// <param name="incomingChanges">The changes the evaluation stages.</param>
     /// <param name="existingChanges">The changes already queued on the object's Pending Export.</param>
     /// <param name="alreadyCurrentChanges">The changes the evaluation skipped as already current on the target.</param>
+    /// <param name="objectType">The Object Type the Pending Export writes, which says whether the Connected System has
+    /// class membership and which attributes each merged class contributes. Null where it is not known; then class adds
+    /// are left as they are.</param>
     /// <returns>The withdrawn changes, in their original order.</returns>
     internal static List<PendingExportAttributeValueChange> SelectChangesWithdrawnAsAlreadyCurrent(
         IReadOnlyCollection<PendingExportAttributeValueChange> incomingChanges,
         IReadOnlyCollection<PendingExportAttributeValueChange> existingChanges,
-        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges)
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ConnectedSystemObjectType? objectType = null)
     {
         ArgumentNullException.ThrowIfNull(incomingChanges);
         ArgumentNullException.ThrowIfNull(existingChanges);
@@ -350,8 +367,65 @@ public partial class SyncEngine
             return [];
 
         var survivors = SelectSurvivingDriftChanges(incomingChanges, existingChanges, alreadyCurrentChanges).ToHashSet();
-        return [.. SelectSurvivingDriftChanges(incomingChanges, existingChanges).Where(change => !survivors.Contains(change))];
+        List<PendingExportAttributeValueChange> withdrawn =
+            [.. SelectSurvivingDriftChanges(incomingChanges, existingChanges).Where(change => !survivors.Contains(change))];
+
+        if (withdrawn.Count == 0 || objectType == null)
+            return withdrawn;
+
+        var classesNoLongerObliged = SelectClassAddsNoLongerObliged(objectType, incomingChanges, survivors);
+        if (classesNoLongerObliged.Count == 0)
+            return withdrawn;
+
+        // In the queued order, as the rest of the withdrawal is.
+        var withdrawnSet = withdrawn.Concat(classesNoLongerObliged).ToHashSet();
+        return [.. existingChanges.Where(withdrawnSet.Contains)];
     }
+
+    /// <summary>
+    /// The queued class adds among <paramref name="survivors"/> that no change left on the Pending Export obliges, for
+    /// <see cref="SelectChangesWithdrawnAsAlreadyCurrent"/>: what is left is <paramref name="survivors"/> and
+    /// <paramref name="incomingChanges"/>, and the classes it obliges are planned exactly as staging plans them
+    /// (<see cref="ClassMembershipPlanner.ClassesObligedBy"/>). Empty where the Connected System has no class membership.
+    /// </summary>
+    private static List<PendingExportAttributeValueChange> SelectClassAddsNoLongerObliged(
+        ConnectedSystemObjectType objectType,
+        IReadOnlyCollection<PendingExportAttributeValueChange> incomingChanges,
+        HashSet<PendingExportAttributeValueChange> survivors)
+    {
+        var classAttributeName = objectType.ClassMembershipAttributeName();
+        if (string.IsNullOrEmpty(classAttributeName))
+            return [];
+
+        var attributeNamesById = new Dictionary<int, string>();
+        foreach (var attribute in objectType.Attributes ?? [])
+            attributeNamesById.TryAdd(attribute.Id, attribute.Name);
+
+        // No such attribute in the schema matches no change by id; a change naming it is still recognised by name.
+        var classAttributeId = (objectType.Attributes ?? [])
+            .FirstOrDefault(a => a.Name.Equals(classAttributeName, StringComparison.OrdinalIgnoreCase))?.Id ?? -1;
+
+        var queuedClassAdds = survivors
+            .Where(change => IsClassAdd(change, classAttributeId, classAttributeName) && change.Status != PendingExportAttributeChangeStatus.ExportedPendingConfirmation)
+            .ToList();
+        if (queuedClassAdds.Count == 0)
+            return [];
+
+        // Named from the Object Type's schema, which is what the classes are planned from, by id: a Pending Export read
+        // lightweight from the database carries ids only. The change's own attribute is the fallback.
+        var attributesLeft = survivors.Concat(incomingChanges)
+            .Where(change => !IsClassAdd(change, classAttributeId, classAttributeName))
+            .Select(change => attributeNamesById.GetValueOrDefault(change.AttributeId) ?? change.Attribute?.Name)
+            .OfType<string>();
+        var obliged = new HashSet<string>(ClassMembershipPlanner.ClassesObligedBy(objectType, attributesLeft), StringComparer.OrdinalIgnoreCase);
+
+        return [.. queuedClassAdds.Where(change => change.StringValue == null || !obliged.Contains(change.StringValue))];
+    }
+
+    private static bool IsClassAdd(PendingExportAttributeValueChange change, int classAttributeId, string classAttributeName) =>
+        change.ChangeType == PendingExportAttributeChangeType.Add &&
+        (change.AttributeId == classAttributeId ||
+         string.Equals(change.Attribute?.Name, classAttributeName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Creates PendingExportAttributeValueChange objects based on export rule mappings.
