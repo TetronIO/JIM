@@ -15,6 +15,8 @@ A Run Profile execution records one execution item (a Run Profile Execution Item
 
 Retrieves one execution item of a Run Profile activity: what happened to one object and, when it failed, why. The list returned by `Get-JIMActivity -ExecutionItems` names each failed item's error type; this cmdlet returns the error message and stack trace as well, which is usually what tells you how to fix it. For a generated value that ran out, for example, the message names the attribute, the last value tried and what already holds it.
 
+With `-IncludeOutcomes` and `-IncludeChanges` it adds what the portal's execution item page shows beneath the summary: the outcome tree, and the attribute changes recorded with the item.
+
 With `-Causes` it returns what caused the item instead, and with `-Consequences` what the item went on to cause, in later runs as well as its own: the same story the [Lineage view](../configuration/causality.md) tells, one row per cohort.
 
 With `-ConnectedSystemId` and `-ConnectedSystemObjectId`, or with `-MetaverseObjectId`, it returns the object's causal timeline: every execution item about the object, newest first, each with its nearest cause in `Because`, as the [Causality Explorer](../configuration/causality.md#the-causality-explorer) lists them. Each row's `Id` is the item's own, so rows pipe straight back in for `-Causes` or `-Consequences`.
@@ -180,6 +182,10 @@ An object can join only one Metaverse Object, so when its [Object Matching Rule]
 | `Exists` | Whether the candidate still exists. |
 | `JoinedObjects` | For a Metaverse Object candidate, the Connected System Objects joined to it now, each with `ConnectedSystemObjectId`, `ConnectedSystemId`, `ConnectedSystemName`, `TypeName`, `DisplayName` and `ExternalId`. |
 
+`Outcomes` is a tree, as the portal draws it: each outcome holds the outcomes that followed from it in `Children`, so a synchronisation that projected an object reads Projected, then its Attribute Flow and each Provisioned, then the Pending Export each one staged. Walk `Children` to reach every depth; the examples below show how.
+
+`Changes` holds the item's changes in the shapes [`Get-JIMMetaverseObjectChangeHistory`](metaverse.md#get-jimmetaverseobjectchangehistory) and [`Get-JIMConnectedSystemObjectChangeHistory`](connected-system-objects.md#get-jimconnectedsystemobjectchangehistory) return. `MetaverseObjectChange` is what a synchronisation changed on the Metaverse Object; `ConnectedSystemObjectChange` is what an import or export recorded on the Connected System Object, found even after the object is deleted; `StagedExportChanges` is what each Pending Export the synchronisation staged would write, recorded when it was staged because the Pending Export itself is gone once its export is confirmed. A `PendingExportCreated` outcome's `ConnectedSystemObjectChangeId` is the `Id` of its entry in `StagedExportChanges`.
+
 Consequences can still be happening, so `-Consequences` is a reading taken at the time of the call: an `Ending` that starts with `Waiting` or reads `DeletionScheduled` will move on without anyone acting, and a later call can show more. `NeedsAttention` will not; open the Pending Export it names.
 
 ### Examples
@@ -219,6 +225,29 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems |
 (Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901").MatchCandidates |
     Select-Object DisplayNameSnapshot, MatchedValue, Exists,
         @{ Name = 'JoinedTo'; Expression = { $_.JoinedObjects.ConnectedSystemName -join ', ' } }
+```
+
+```powershell title="Show which Metaverse Object attributes a synchronisation changed"
+$item = Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -IncludeChanges
+$item.Changes.MetaverseObjectChange.AttributeChanges |
+    Select-Object AttributeName,
+        @{ Name = 'Added'; Expression = { ($_.ValueChanges | Where-Object ValueChangeType -eq 'Add').StringValue } },
+        @{ Name = 'Removed'; Expression = { ($_.ValueChanges | Where-Object ValueChangeType -eq 'Remove').StringValue } }
+```
+
+`StringValue` holds text; other types arrive in `IntValue`, `DateTimeValue`, `BoolValue`, `ReferenceValue` and their siblings.
+
+```powershell title="List the Pending Exports a synchronisation staged, and what each would write"
+function Get-Outcome($Outcomes) { foreach ($o in $Outcomes) { $o; Get-Outcome $o.Children } }
+$item = Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -IncludeOutcomes -IncludeChanges
+foreach ($staged in Get-Outcome $item.Outcomes | Where-Object OutcomeType -eq 'PendingExportCreated') {
+    $change = $item.Changes.StagedExportChanges | Where-Object Id -eq $staged.ConnectedSystemObjectChangeId
+    [PSCustomObject]@{
+        System     = $staged.TargetEntityDescription
+        Change     = $staged.StagedChangeType
+        Attributes = $change.AttributeChanges.AttributeName -join ', '
+    }
+}
 ```
 
 ```powershell title="Show what caused an execution item"

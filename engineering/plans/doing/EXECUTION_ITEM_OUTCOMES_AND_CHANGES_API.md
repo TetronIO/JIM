@@ -1,6 +1,6 @@
 # Execution Item Outcomes and Changes over REST and PowerShell - Implementation Plan
 
-- **Status:** Doing (Phases 1-4 complete)
+- **Status:** Doing (Phases 1-5 complete)
 - **Issue:** [#2033](https://github.com/TetronIO/JIM/issues/2033)
 - **Follows:** #2032 (`GET /activities/items/{id}`, `Get-JIMActivityExecutionItem`)
 
@@ -50,7 +50,7 @@ Today a script can find an item's changes only by paging the object's whole chan
 2. **Changes (TDD)** ✅: `SyncOutcomeNode`/`SyncOutcomeNodeDto` gained `ConnectedSystemObjectChangeId` (the preview fidelity tests are unaffected); both change-history projections extracted into shared expressions (`MvoChangeHistoryProjection`, `CsoChangeHistoryProjection`), with object history's existing tests green unchanged; by-item reads (`GetMvoChangeForExecutionItemAsync`, `GetCsoChangeForExecutionItemAsync`, `GetCsoChangesAsync`), Generated Value marking shared with object history; `ExecutionItemChanges` (JIM.Models) returned as is, dates canonicalised as object history's are. Real-PostgreSQL tests cover a synchronisation item, an import whose object has since been deleted, and an item with no changes.
 3. **OpenAPI** ✅: done alongside phases 1 and 2; `outcomes`, `children` and `changes` all resolve to a `$ref`, and ACC-3/COV-4 pass.
 4. **PowerShell** ✅: `-IncludeOutcomes` and `-IncludeChanges` in the `Item` set only, composing into one `include`; Pester tests for each combination's request, the set membership and the nested wire shape; two help examples (Metaverse Object changes, a recursive walk of the outcome tree). The generated reference for `execution-items.md` (and `sync-preview.md`, whose outcome node gained `ConnectedSystemObjectChangeId`) is regenerated, with an explicit `With -Id` output label so the item's output is not shown as needing the switches.
-5. **Docs and changelog**: `docs/powershell/activities.md` and `docs/api/` output tables naming the real properties; `CHANGELOG.md` `✨` entry.
+5. **Docs and changelog** ✅: `docs/powershell/execution-items.md` (the cmdlet's page; the issue named `activities.md`) explains `Outcomes` and `Changes`, with examples for the Metaverse Object changes and for joining each staged Pending Export outcome to its change; its generated Output table names the DTOs' real properties. The REST reference is generated from the OpenAPI document. `CHANGELOG.md` `✨` entry.
 6. **Runtime check**: light stack, run an import and a synchronisation, read one item each way, compare against the portal page.
 
 ## Risks
