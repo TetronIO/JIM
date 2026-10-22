@@ -329,6 +329,49 @@ function Get-ActiveDirectoryLabSetting {
     throw "The Active Directory lab needs the environment variable $Name to be set, and it is not. See test/integration/ad-lab/README.md."
 }
 
+function Get-ActiveDirectoryLabFederationConfig {
+    <#
+    .SYNOPSIS
+        The configuration of the lab's AD FS server, adfs-primary, which JIM signs in through in the AD FS scenarios.
+
+    .DESCRIPTION
+        adfs-primary is a member server of dc-primary's forest (test/integration/ad-lab/README.md, The AD FS server). It
+        is reached by its service name, adfs.panoply.local, the name its HTTPS certificate carries and the one its
+        endpoints are published on, so Host is that name and not the server's own (adfs1.panoply.local).
+
+        DirectoryType is ActiveDirectoryFederation: it is not a directory, and no directory function accepts it.
+        Save-ActiveDirectoryCertificate does, to read its certificate off the wire on 443.
+
+        Read from JIM_AD_LAB_ADFS_PRIMARY_ADDRESS (required), JIM_AD_LAB_ADFS_PRIMARY_HOST (default
+        adfs.panoply.local) and JIM_AD_LAB_ADFS_PRIMARY_VM (default adfs-primary; the monthly rebuild points it at the
+        candidate). Authority is what JIM_SSO_AUTHORITY is set to. Issuer is the discovery document's issuer, which
+        AD FS also puts in its ID tokens: the authority itself. AccessTokenIssuer is what it puts in access tokens
+        instead (its access_token_issuer): the federation service identifier, plain HTTP whatever its endpoints are.
+
+    .OUTPUTS
+        A hashtable.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param()
+
+    $serviceName = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_ADFS_PRIMARY_HOST' -Default 'adfs.panoply.local'
+    return @{
+        DirectoryType      = 'ActiveDirectoryFederation'
+        Instance           = 'AdfsPrimary'
+        ContainerName      = $null
+        Host               = $serviceName
+        Address            = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_ADFS_PRIMARY_ADDRESS'
+        VmName             = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_ADFS_PRIMARY_VM' -Default 'adfs-primary'
+        Port               = 443
+        Authority          = "https://$serviceName/adfs"
+        DiscoveryPath      = '/adfs/.well-known/openid-configuration'
+        Issuer             = "https://$serviceName/adfs"
+        AccessTokenIssuer  = "http://$serviceName/adfs/services/trust"
+        CheckpointBaseline = 'baseline'
+    }
+}
+
 function Test-TemplateSpansSyncPages {
     <#
     .SYNOPSIS
@@ -1288,8 +1331,13 @@ function Save-ActiveDirectoryCertificate {
         acceptable for a lab on an isolated Hyper-V network and is why the Subject Alternative Name
         check exists; it is not a way to trust a domain controller across an untrusted network.
 
+        The lab's AD FS server is fetched the same way, on 443 by its service name
+        (Get-ActiveDirectoryLabFederationConfig): the readiness check verifies discovery against it. JIM itself
+        is not given it here; the AD FS scenarios trust it the way an administrator would.
+
     .PARAMETER DirectoryConfig
-        An ActiveDirectory config from Get-DirectoryConfig (Host, Address, VmName, Port).
+        An ActiveDirectory config from Get-DirectoryConfig (Host, Address, VmName, Port), or the AD FS server's
+        from Get-ActiveDirectoryLabFederationConfig.
 
     .PARAMETER CertificateDirectory
         Where to write the certificates. Defaults to test/integration/ad-lab-certs, the folder the
@@ -1307,9 +1355,10 @@ function Save-ActiveDirectoryCertificate {
         [string]$CertificateDirectory = (Join-Path $PSScriptRoot '../ad-lab-certs')
     )
 
-    if (([string]$DirectoryConfig['DirectoryType']) -ne 'ActiveDirectory') {
-        throw "Save-ActiveDirectoryCertificate: the directory config is for '$($DirectoryConfig['DirectoryType'])', not ActiveDirectory."
+    if (([string]$DirectoryConfig['DirectoryType']) -notin 'ActiveDirectory', 'ActiveDirectoryFederation') {
+        throw "Save-ActiveDirectoryCertificate: the directory config is for '$($DirectoryConfig['DirectoryType'])', not ActiveDirectory or the lab's AD FS server (ActiveDirectoryFederation)."
     }
+    $certificateKind = if ($DirectoryConfig['DirectoryType'] -eq 'ActiveDirectoryFederation') { 'HTTPS' } else { 'LDAPS' }
 
     # These reach a shell inside the toolbox (the </dev/null redirect needs one) and a file name, so
     # each must be a plain name before it is used.
@@ -1328,7 +1377,7 @@ function Save-ActiveDirectoryCertificate {
     }
 
     $toolbox = $script:AdLabToolboxContainerName
-    Write-Host "  Fetching ${vmName}'s LDAPS certificate (${hostName} at ${address}:${port}) through the toolbox..." -ForegroundColor Gray
+    Write-Host "  Fetching ${vmName}'s $certificateKind certificate (${hostName} at ${address}:${port}) through the toolbox..." -ForegroundColor Gray
 
     $running = docker ps --filter "name=^/${toolbox}$" --format '{{.Names}}' 2>$null
     if (-not $running) {
@@ -1348,7 +1397,7 @@ function Save-ActiveDirectoryCertificate {
     }
     $sanText = @($sanOutput | ForEach-Object { "$_" }) -join "`n"
     if (-not (Test-CertificateSanHasName -SubjectAltNameText $sanText -DnsName $hostName)) {
-        throw "Save-ActiveDirectoryCertificate: ${vmName}'s LDAPS certificate does not carry '$hostName' in its Subject Alternative Name list, so the Connected System could not validate it. Was the domain controller built with -ExtraCertificateNames for this name? Subject Alternative Names found: $sanText"
+        throw "Save-ActiveDirectoryCertificate: ${vmName}'s $certificateKind certificate does not carry '$hostName' in its Subject Alternative Name list, so JIM could not validate it. Was the machine built for this name (-ExtraCertificateNames for a domain controller, -ServiceName for the AD FS server)? Subject Alternative Names found: $sanText"
     }
 
     New-Item -ItemType Directory -Path $CertificateDirectory -Force | Out-Null

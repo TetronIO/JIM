@@ -65,7 +65,7 @@ RUN mkdir -p /data/keys /var/log/jim /connector-files \
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2 AS build
 # Corporate networks routinely inspect outbound TLS by re-signing it with their own authority, which
 # breaks certificate validation for every package restore inside the build. Supplying that authority
 # here (base64 of a PEM bundle) lets the build trust it; empty (the default) is a no-op. Build-stage

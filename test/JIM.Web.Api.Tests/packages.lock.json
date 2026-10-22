@@ -529,8 +529,8 @@
       },
       "Microsoft.OpenApi": {
         "type": "Transitive",
-        "resolved": "2.12.2",
-        "contentHash": "ZkT7qiJe0Kj0+DTZOZo+xrDy1kNmdsWFQVPIQLNx9ZJ0T9cB2LG7r+Bi60so8/+yg1nkS7QCPadrzsTG4VPKrA=="
+        "resolved": "2.13.0",
+        "contentHash": "wavlgBYnn7uU/ZGhFHNl0UlDOlwz+6KRduKkqdCCbfxxANaQ1rmBpETVGdwXanAM6twQOxsvI3CBEGF4OScbeQ=="
       },
       "Microsoft.SqlServer.Server": {
         "type": "Transitive",
@@ -636,8 +636,8 @@
       },
       "Oracle.ManagedDataAccess.Core": {
         "type": "Transitive",
-        "resolved": "23.26.301",
-        "contentHash": "hhl6m5sam9vWNXt4Xad+bAcB+VBMBxya16/P+R3xRMKzNVl/6ssF6HuNZNeofD+5qDaTRqhWbKjdFn65rD5KYw==",
+        "resolved": "23.26.400",
+        "contentHash": "PWVJunbl2LVcdFBluW5R3678MvrTLlTrQBdXe9wR4YCauISa4zCceJ7fLHVFFiGog8/ZPxo2cY4adpVQCJf+YQ==",
         "dependencies": {
           "System.Diagnostics.PerformanceCounter": "8.0.0",
           "System.DirectoryServices.Protocols": "8.0.2",
@@ -815,7 +815,7 @@
           "JIM.Scim": "[0.16.0, )",
           "JIM.Utilities": "[0.16.0, )",
           "Microsoft.Data.SqlClient": "[7.1.1, )",
-          "Oracle.ManagedDataAccess.Core": "[23.26.301, )",
+          "Oracle.ManagedDataAccess.Core": "[23.26.400, )",
           "System.DirectoryServices.Protocols": "[10.0.13, )",
           "System.Security.Cryptography.Pkcs": "[10.0.13, )"
         }
@@ -888,7 +888,7 @@
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.13, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.13, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.13, )",
-          "Microsoft.OpenApi": "[2.12.2, )",
+          "Microsoft.OpenApi": "[2.13.0, )",
           "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": "[1.23.0, )",
           "MudBlazor": "[9.11.0, )",
           "Scalar.AspNetCore": "[2.18.2, )",

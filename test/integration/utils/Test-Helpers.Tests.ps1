@@ -539,6 +539,65 @@ Describe 'Get-DirectoryConfig -DirectoryType ActiveDirectory' {
     }
 }
 
+Describe 'Get-ActiveDirectoryLabFederationConfig' {
+    BeforeEach {
+        foreach ($name in 'JIM_AD_LAB_ADFS_PRIMARY_ADDRESS', 'JIM_AD_LAB_ADFS_PRIMARY_HOST', 'JIM_AD_LAB_ADFS_PRIMARY_VM') {
+            [System.Environment]::SetEnvironmentVariable($name, $null)
+        }
+        $env:JIM_AD_LAB_ADFS_PRIMARY_ADDRESS = '192.0.2.21'
+    }
+    AfterEach {
+        foreach ($name in 'JIM_AD_LAB_ADFS_PRIMARY_ADDRESS', 'JIM_AD_LAB_ADFS_PRIMARY_HOST', 'JIM_AD_LAB_ADFS_PRIMARY_VM') {
+            [System.Environment]::SetEnvironmentVariable($name, $null)
+        }
+    }
+
+    It 'describes adfs-primary by its service name, over HTTPS, reverted to baseline' {
+        $config = Get-ActiveDirectoryLabFederationConfig
+
+        $config | Should -BeOfType [hashtable]
+        $config.DirectoryType | Should -Be 'ActiveDirectoryFederation'
+        $config.Instance | Should -Be 'AdfsPrimary'
+        $config.Host | Should -Be 'adfs.panoply.local'
+        $config.Address | Should -Be '192.0.2.21'
+        $config.VmName | Should -Be 'adfs-primary'
+        $config.Port | Should -Be 443
+        $config.CheckpointBaseline | Should -Be 'baseline'
+        $config.ContainsKey('ContainerName') | Should -BeTrue
+        $config.ContainerName | Should -BeNullOrEmpty
+    }
+
+    It 'gives the authority JIM signs in through and the issuers AD FS names itself by' {
+        $config = Get-ActiveDirectoryLabFederationConfig
+
+        $config.Authority | Should -Be 'https://adfs.panoply.local/adfs'
+        $config.DiscoveryPath | Should -Be '/adfs/.well-known/openid-configuration'
+        # The discovery document's issuer (and the ID token's) is the authority; access tokens carry the federation
+        # service identifier, which is plain HTTP whatever the endpoints are. As adfs-primary publishes them.
+        $config.Issuer | Should -Be 'https://adfs.panoply.local/adfs'
+        $config.AccessTokenIssuer | Should -Be 'http://adfs.panoply.local/adfs/services/trust'
+    }
+
+    It 'takes the host and VM name from the environment, and follows the host in the URLs' {
+        $env:JIM_AD_LAB_ADFS_PRIMARY_HOST = 'sts.example.test'
+        $env:JIM_AD_LAB_ADFS_PRIMARY_VM = 'adfs-primary-candidate'
+
+        $config = Get-ActiveDirectoryLabFederationConfig
+
+        $config.Host | Should -Be 'sts.example.test'
+        $config.VmName | Should -Be 'adfs-primary-candidate'
+        $config.Authority | Should -Be 'https://sts.example.test/adfs'
+        $config.Issuer | Should -Be 'https://sts.example.test/adfs'
+        $config.AccessTokenIssuer | Should -Be 'http://sts.example.test/adfs/services/trust'
+    }
+
+    It 'throws naming the variable when the address is unset' {
+        [System.Environment]::SetEnvironmentVariable('JIM_AD_LAB_ADFS_PRIMARY_ADDRESS', $null)
+
+        { Get-ActiveDirectoryLabFederationConfig } | Should -Throw '*JIM_AD_LAB_ADFS_PRIMARY_ADDRESS*'
+    }
+}
+
 Describe 'Get-FirstPemCertificate' {
     It 'returns the first certificate block of s_client output, normalised to LF with a trailing newline' {
         $text = "CONNECTED(00000003)`r`n---`r`nCertificate chain`r`n 0 s:CN = dc1.panoply.local`r`n-----BEGIN CERTIFICATE-----`r`nAAAA`r`nBBBB`r`n-----END CERTIFICATE-----`r`n 1 s:CN = Issuing CA`r`n-----BEGIN CERTIFICATE-----`r`nCCCC`r`n-----END CERTIFICATE-----`r`n"
@@ -747,6 +806,20 @@ Describe 'Save-ActiveDirectoryCertificate' {
     It 'refuses a config that is not an Active Directory one' {
         { Save-ActiveDirectoryCertificate -DirectoryConfig @{ DirectoryType = 'SambaAD'; ContainerName = 'samba-ad-primary' } -CertificateDirectory $script:certDir } |
             Should -Throw '*ActiveDirectory*'
+    }
+
+    It 'fetches the AD FS server''s HTTPS certificate on 443 by its service name, saved under its VM name' {
+        $script:sanText = "X509v3 Subject Alternative Name: `n    DNS:adfs.panoply.local, DNS:adfs1.panoply.local"
+        $federation = @{
+            DirectoryType = 'ActiveDirectoryFederation'; ContainerName = $null; Host = 'adfs.panoply.local'
+            Address = '192.0.2.21'; VmName = 'adfs-primary'; Port = 443
+        }
+
+        $result = Save-ActiveDirectoryCertificate -DirectoryConfig $federation -CertificateDirectory $script:certDir
+
+        $fetch = @($script:dockerCalls | Where-Object { (@($_) -join ' ') -like '*s_client*' })
+        (@($fetch[0]) -join ' ') | Should -Match 'openssl s_client -connect 192\.0\.2\.21:443 -servername adfs\.panoply\.local -showcerts'
+        $result.Path | Should -Be (Join-Path $script:certDir 'adfs-primary.pem')
     }
 }
 
