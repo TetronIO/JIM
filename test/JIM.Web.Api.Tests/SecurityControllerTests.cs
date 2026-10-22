@@ -61,7 +61,8 @@ public class SecurityControllerTests
         _application = new JimApplication(_mockRepository.Object);
         _controller = new SecurityController(_mockLogger.Object, _application);
 
-        // Set up SSO user authentication context (Metaverse Object ID as sub claim)
+        // Set up SSO user authentication context. The identity provider's "sub" is not the Metaverse Object id;
+        // JIM attaches the caller's Metaverse Object id as its own claim.
         _callerObjectId = Guid.NewGuid();
         SetupUserContext(_callerObjectId);
     }
@@ -70,7 +71,8 @@ public class SecurityControllerTests
     {
         var claims = new List<Claim>
         {
-            new("sub", userId.ToString()),
+            new("sub", Guid.NewGuid().ToString()),
+            new(Constants.BuiltInClaims.MetaverseObjectId, userId.ToString()),
             new("name", "Test User"),
             new(ClaimTypes.Role, "Administrator")
         };
