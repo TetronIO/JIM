@@ -4479,6 +4479,20 @@ if ($operations) {
 
 if ($metrics.Operations.Count -eq 0) {
     Write-RunnerWarning "No performance metrics found in worker logs"
+
+    # A scenario that runs no synchronisation (an identity provider check, say) logs no timings. Its duration and
+    # domain controller builds are still saved, wall-clock only, as for the large templates above: the AD lab's run
+    # summary counts a single-scenario run from this file, and without it reports that no scenarios ran.
+    $metrics.WallClockOnly = $true
+    $hostname = [System.Net.Dns]::GetHostName()
+    $perfDir = Join-Path -Path $scriptRoot -ChildPath "results" -AdditionalChildPath "performance", $hostname
+    if (-not (Test-Path $perfDir)) {
+        New-Item -ItemType Directory -Path $perfDir -Force | Out-Null
+    }
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json"
+    $metrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
+    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json"
 }
 else {
     Write-Success "Captured $($metrics.Operations.Count) operation timings"
@@ -4652,7 +4666,8 @@ else {
 
         # Compare key operations - use parallel grouping for better performance
         $currentOps = $metrics.Operations | Group-Object -Property Name -AsHashTable -AsString
-        $baselineOps = $baseline.Operations | Group-Object -Property Name -AsHashTable -AsString
+        # A wall-clock-only baseline has no operations to compare, and grouping nothing gives $null, not a table.
+        $baselineOps = if (@($baseline.Operations).Count -gt 0) { $baseline.Operations | Group-Object -Property Name -AsHashTable -AsString } else { @{} }
 
         # Display comparison for key operations
         $keyOperations = @("FullImport", "FullSync", "Export", "ProcessConnectedSystemObjects")
