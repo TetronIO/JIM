@@ -1,0 +1,66 @@
+# Execution Item Outcomes and Changes over REST and PowerShell - Implementation Plan
+
+- **Status:** Planned
+- **Issue:** [#2033](https://github.com/TetronIO/JIM/issues/2033)
+- **Follows:** #2032 (`GET /activities/items/{id}`, `Get-JIMActivityExecutionItem`)
+
+## Overview
+
+The portal's item page (`/activity/item/{id}`) shows an execution item's outcome tree and the attribute changes recorded with it. REST and PowerShell return only the flattened `OutcomeSummary`. This plan adds both as opt-in sections of the existing item detail, keeping the default response exactly as #2032 left it.
+
+## What already exists (and changes the issue's scope)
+
+| Need | Already shipped | Consequence |
+|---|---|---|
+| Causal edges | `GET /activities/items/{id}/causes`, `/consequences`, cohort members; `Get-JIMActivityExecutionItem -Causes / -Consequences`, `Get-JIMCausalCohortMember` | **Out of scope.** Causality parity is already complete; `include=causality` would duplicate it. |
+| Outcome tree DTO | `SyncOutcomeNodeDto` (Sync Preview's speculative tree, nested `Children`, documented as "the same shape so a caller can render both through the same component"), generating cleanly in the OpenAPI document today | **Reuse it, nested.** The generator only fails on cycles through types it inlines; a registered DTO class referencing itself resolves to a `$ref`, as this one already proves. |
+| Attribute change DTOs | `MvoChangeHistoryDto` / `CsoChangeHistoryDto` (with attribute and value change children), served by `.../objects/{id}/change-history` | **Reuse them.** Same shapes a script already reads from object history; only a by-item filter is new. |
+
+Today a script can find an item's changes only by paging the object's whole change history and filtering on `ActivityRunProfileExecutionItemId`, which also misses changes on a since-deleted object. Direct access is still worth adding.
+
+## Design
+
+### REST
+
+`GET /api/v1/activities/items/{id}?include=outcomes,changes`
+
+- `include` is a comma-separated list, case-insensitive; an unknown value returns `400` naming the valid ones (fail loudly rather than silently returning less).
+- No `include`: the response and its database work are unchanged.
+- New nullable properties on `ActivityRunProfileExecutionItemDetailDto`, null unless requested:
+  - `Outcomes: List<SyncOutcomeNodeDto>?`: root outcomes, ordered by `Ordinal`, with children nested.
+  - `Changes: ExecutionItemChangesDto?` with:
+    - `MetaverseObjectChange: MvoChangeHistoryDto?` (synchronisation items)
+    - `ConnectedSystemObjectChange: CsoChangeHistoryDto?` (import and export items)
+    - `StagedExportChanges: List<CsoChangeHistoryDto>`: the per-outcome snapshots `PendingExportCreated` outcomes record of what they staged (the Pending Export itself is deleted on confirmation, so this snapshot is the only lasting record).
+- `SyncOutcomeNodeDto` gains `ConnectedSystemObjectChangeId: Guid?`, linking a `PendingExportCreated` outcome to its entry in `StagedExportChanges`. Sync Preview leaves it null.
+
+### PowerShell
+
+`Get-JIMActivityExecutionItem -Id <guid> [-IncludeOutcomes] [-IncludeChanges]` (both in the `Item` parameter set; they compose). Output stays `JIM.ActivityRunProfileExecutionItemDetailDto`. The nested tree is filtered with a short recursive walk, documented as an example in `docs/powershell/activities.md`.
+
+### Application and data
+
+- `ActivityServer.GetExecutionItemOutcomesAsync(itemId)`: one query over `ActivityRunProfileExecutionItemSyncOutcomes` for the item, built into a tree in memory (same approach as the portal's loader). No `.Include` of the full item graph.
+- `MetaverseRepository` / `ConnectedSystemRepository`: extract the existing flat change-history projections into a shared expression, then add `GetMvoChangeForExecutionItemAsync(itemId)` and `GetCsoChangesForExecutionItemAsync(itemId)` (the item's own CSO change plus the outcome-linked snapshots). One projection means object history and item detail can never disagree on a change's shape.
+- The controller calls only the sections requested.
+
+## Implementation Phases
+
+1. **Outcomes (TDD)**: repository query and tree build; `SyncOutcomeNodeDto.FromEntity` and `ConnectedSystemObjectChangeId`; `include` parsing with `400` on unknown values; controller tests (default unchanged, outcomes present when asked, nesting and order, unknown include). Database test against real PostgreSQL for the query.
+2. **Changes (TDD)**: projection extraction (existing change-history tests must stay green unchanged); by-item queries, including a deleted object's changes; `ExecutionItemChangesDto`; controller tests for sync, import and export items.
+3. **OpenAPI**: `Generate-OpenApiDoc.ps1`, then `Test-DocsCoverage.ps1 -Rule ACC-3,COV-4`.
+4. **PowerShell**: switches building the query string; Pester tests for the query string each combination produces and the default sending none.
+5. **Docs and changelog**: `docs/powershell/activities.md` and `docs/api/` output tables naming the real properties; `CHANGELOG.md` `✨` entry.
+6. **Runtime check**: light stack, run an import and a synchronisation, read one item each way, compare against the portal page.
+
+## Risks
+
+- **Changes payload size.** An item touching a large multi-valued attribute (for example group membership) can carry thousands of value changes. Mitigation: it is opt-in; document it. Revisit with a cap only if a real case shows it matters.
+- **Projection refactor regressing object history.** Mitigation: phase 2 extracts first and runs the existing change-history tests before adding anything.
+- **In-memory provider masking a missing join.** Mitigation: database tests for both new queries, per `test/CLAUDE.md`.
+
+## Success Criteria
+
+- An item's outcome tree and attribute changes are readable through REST and PowerShell, matching the portal page.
+- A request without `include` produces the same response and the same queries as before.
+- OpenAPI generation succeeds; API, database and Pester tests pass; docs name the DTOs' real properties.
