@@ -1,0 +1,388 @@
+@using JIM.Models.Core
+@using JIM.Models.ExampleData
+@using JIM.Models.Search
+@using JIM.Utilities
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<MudDialog>
+    <DialogContent>
+        @if (_loaded)
+        {
+            <MudStack Spacing="4">
+                <MudSelect T="MetaverseAttribute" Label="Metaverse Attribute" Variant="Variant.Outlined"
+                           Value="@_draft.Attribute" ValueChanged="OnAttributeChanged"
+                           ToStringFunc="@(a => a == null ? string.Empty : $"{a.Name} ({a.Type.ToString().SplitOnCapitalLetters()})")"
+                           HelperText="@AttributeHelperText()" Disabled="@(_attributeChoices.Count == 0)">
+                    @foreach (var choice in _attributeChoices)
+                    {
+                        <MudSelectItem T="MetaverseAttribute" Value="@choice">@choice.Name (@choice.Type.ToString().SplitOnCapitalLetters())</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_draft.ShowsPopulation)
+                {
+                    <MudNumericField T="int" Label="Objects given a value (%)" Variant="Variant.Outlined" Immediate="true"
+                                     @bind-Value="_draft.PopulatedValuesPercentage" Min="1" Max="100"
+                                     HelperText="The rest of the objects are left without a value for this attribute." />
+                }
+
+                @* ─── Text: where values come from ─── *@
+                @if (_draft.ShowsTextSources)
+                {
+                    <MudSelect T="ExampleDataTextSource" Label="Values come from" Variant="Variant.Outlined" @bind-Value="_draft.TextSource">
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.DataSets">Example Data Sets</MudSelectItem>
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Pattern">A pattern</MudSelectItem>
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.WeightedValues">Weighted values</MudSelectItem>
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Expression">An expression</MudSelectItem>
+                        <MudSelectItem T="ExampleDataTextSource" Value="ExampleDataTextSource.Numbers">A number</MudSelectItem>
+                    </MudSelect>
+
+                    @if (_draft.TextSource == ExampleDataTextSource.Pattern)
+                    {
+                        <MudTextField T="string" Label="Pattern" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.Pattern"
+                                      HelperText="Literal text, other attributes as {First Name}, Example Data Sets as {0}, {1} in the order below, and [UniqueInt] to add a number only where a value would repeat." />
+                    }
+
+                    @if (_draft.TextSource is ExampleDataTextSource.DataSets or ExampleDataTextSource.Pattern)
+                    {
+                        <div>
+                            <MudText Typo="Typo.subtitle2">Example Data Sets</MudText>
+                            @if (_draft.TextSource == ExampleDataTextSource.DataSets)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Each value is picked at random from these sets.</MudText>
+                            }
+                            @for (var i = 0; i < _draft.DataSets.Count; i++)
+                            {
+                                var index = i;
+                                var dataSet = _draft.DataSets[index];
+                                <div @key="dataSet.Id" class="d-flex align-center gap-2 mt-1">
+                                    @if (_draft.TextSource == ExampleDataTextSource.Pattern)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Primary">{@index}</MudChip>
+                                    }
+                                    <MudText>@dataSet.Name</MudText>
+                                    <MudSpacer />
+                                    <MudTooltip Text="Remove" Arrow="true" Placement="Placement.Top">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="@($"Remove {dataSet.Name}")"
+                                                       OnClick="@(() => _draft.DataSets.RemoveAt(index))" />
+                                    </MudTooltip>
+                                </div>
+                            }
+                            <MudSelect T="ExampleDataSet" Label="Add an Example Data Set" Variant="Variant.Outlined" Class="mt-2"
+                                       Value="@((ExampleDataSet?)null)" ValueChanged="AddDataSet" ToStringFunc="@(s => s?.Name ?? string.Empty)">
+                                @foreach (var dataSet in _dataSets.Where(s => _draft.DataSets.All(chosen => chosen.Id != s.Id)))
+                                {
+                                    <MudSelectItem T="ExampleDataSet" Value="@dataSet">@dataSet.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </div>
+                    }
+
+                    @if (_draft.TextSource == ExampleDataTextSource.WeightedValues)
+                    {
+                        <div>
+                            <MudText Typo="Typo.subtitle2">Weighted values</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Each value is picked in proportion to its weight.</MudText>
+                            @for (var i = 0; i < _draft.WeightedValues.Count; i++)
+                            {
+                                var index = i;
+                                var weighted = _draft.WeightedValues[index];
+                                <div class="d-flex align-center gap-2 mt-2">
+                                    <MudTextField T="string" Label="Value" Variant="Variant.Outlined" Immediate="true" @bind-Value="weighted.Value" Class="flex-grow-1" />
+                                    <MudNumericField T="float" Label="Weight" Variant="Variant.Outlined" Immediate="true" @bind-Value="weighted.Weight" Min="0" Step="0.1f" Style="max-width: 9rem" />
+                                    <MudTooltip Text="Remove" Arrow="true" Placement="Placement.Top">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Remove value"
+                                                       OnClick="@(() => _draft.WeightedValues.RemoveAt(index))" />
+                                    </MudTooltip>
+                                </div>
+                            }
+                            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" Class="mt-2"
+                                       OnClick="@(() => _draft.WeightedValues.Add(new ExampleDataWeightedValueDraft()))">Add Value</MudButton>
+                        </div>
+                    }
+
+                    @if (_draft.TextSource == ExampleDataTextSource.Expression)
+                    {
+                        <ExpressionEditor @bind-Value="_draft.Expression" Label="Expression" Lines="2"
+                                          MetaverseAttributeNames="@_siblingAttributeNames"
+                                          HelperText="Read the object's other generated values with mv[&quot;Attribute Name&quot;]." />
+                    }
+                }
+
+                @* ─── Numbers ─── *@
+                @if (_draft.ShowsNumberRange)
+                {
+                    <div class="d-flex gap-4">
+                        <MudNumericField T="int?" Label="Minimum" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MinNumber" Class="flex-grow-1" />
+                        <MudNumericField T="int?" Label="Maximum" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MaxNumber" Class="flex-grow-1" />
+                    </div>
+                    <SegmentedToggle TValue="ExampleDataNumberOrder" Options="@NumberOrderOptions" @bind-Value="_draft.NumberOrder" AriaLabel="Number order" />
+                }
+
+                @* ─── Dates ─── *@
+                @if (_draft.ShowsDateRange)
+                {
+                    <div class="d-flex gap-4">
+                        <MudDatePicker Label="Earliest" Variant="Variant.Outlined" @bind-Date="_draft.MinDate" Class="flex-grow-1" />
+                        <MudDatePicker Label="Latest" Variant="Variant.Outlined" @bind-Date="_draft.MaxDate" Class="flex-grow-1" />
+                    </div>
+                }
+
+                @* ─── References ─── *@
+                @if (_draft.ShowsReferenceTargets)
+                {
+                    <MudSelect T="int" Label="Refers to" Variant="Variant.Outlined" MultiSelection="true"
+                               SelectedValues="@_draft.ReferenceObjectTypes.Select(t => t.Id).ToList()" SelectedValuesChanged="OnReferenceTargetsChanged"
+                               HelperText="Each reference points at an object of one of these Metaverse Object Types.">
+                        @foreach (var objectType in _objectTypes)
+                        {
+                            <MudSelectItem T="int" Value="@objectType.Id">@objectType.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+
+                @if (_draft.ShowsReferenceCountRange)
+                {
+                    <div class="d-flex gap-4">
+                        <MudNumericField T="int?" Label="Fewest references" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MvaMin" Min="0" Class="flex-grow-1" />
+                        <MudNumericField T="int?" Label="Most references" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.MvaMax" Min="1" Class="flex-grow-1" />
+                    </div>
+                }
+
+                @if (_draft.ShowsManagerDepth)
+                {
+                    <MudNumericField T="int?" Label="Manager depth (%)" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.ManagerDepthPercentage" Min="1" Max="99"
+                                     HelperText="The percentage of Users who manage other Users. Every other User is given one of them as a manager." />
+                }
+
+                @if (_draft.Attribute?.Type == AttributeDataType.Boolean)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Each object is given true or false at random.</MudText>
+                }
+
+                @if (_draft.Attribute?.Type == AttributeDataType.Guid)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Each object is given a new identifier.</MudText>
+                }
+
+                @* ─── Condition ─── *@
+                @if (_draft.Attribute != null)
+                {
+                    <MudSwitch T="bool" @bind-Value="_draft.HasCondition" Color="Color.Primary" Disabled="@(_conditionChoices.Count == 0)"
+                               Label="Only generate a value when another attribute has a given value" />
+                    @if (_conditionChoices.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-n3">Add another attribute to this Metaverse Object Type first; a condition reads one of its values.</MudText>
+                    }
+
+                    @if (_draft.HasCondition)
+                    {
+                        <div class="d-flex gap-4">
+                            <MudSelect T="MetaverseAttribute" Label="Attribute" Variant="Variant.Outlined" Class="flex-grow-1"
+                                       Value="@_draft.ConditionAttribute" ValueChanged="OnConditionAttributeChanged" ToStringFunc="@(a => a?.Name ?? string.Empty)">
+                                @foreach (var choice in _conditionChoices)
+                                {
+                                    <MudSelectItem T="MetaverseAttribute" Value="@choice">@choice.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                            @if (_draft.ConditionAttribute != null)
+                            {
+                                <MudSelect T="SearchComparisonType" Label="Condition" Variant="Variant.Outlined" Class="flex-grow-1" @bind-Value="_draft.ConditionOperator">
+                                    @foreach (var option in CriterionOperatorOptions.ForType(_draft.ConditionAttribute.Type, CriterionContext.ExampleData))
+                                    {
+                                        <MudSelectItem T="SearchComparisonType" Value="@option.Operator">@option.Label</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+                        </div>
+                        @if (_draft.ConditionAttribute != null && SearchComparisonOperators.TakesValue(_draft.ConditionOperator))
+                        {
+                            <MudTextField T="string" Label="Value" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.ConditionValue" />
+                        }
+                    }
+                }
+
+                @{ var blockers = _draft.Attribute == null ? [] : _draft.Validate(); }
+                @if (blockers.Count > 0)
+                {
+                    <div>
+                        @foreach (var blocker in blockers)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Error">@blocker</MudText>
+                        }
+                    </div>
+                }
+
+                @if (_saveError != null)
+                {
+                    <MudAlert Severity="Severity.Error">@_saveError</MudAlert>
+                }
+            </MudStack>
+        }
+        else
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanSave())" OnClick="SaveAsync">
+            @(ExistingAttribute == null ? "Add Attribute" : "Save Attribute")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [Parameter, EditorRequired]
+    public int TemplateId { get; set; }
+
+    /// <summary>The template's Object Type the attribute belongs to, as the page loaded it.</summary>
+    [Parameter, EditorRequired]
+    public ExampleDataObjectType ObjectType { get; set; } = null!;
+
+    /// <summary>The attribute being edited; null adds a new one.</summary>
+    [Parameter]
+    public ExampleDataTemplateAttribute? ExistingAttribute { get; set; }
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<ExampleDataNumberOrder>> NumberOrderOptions =
+    [
+        new(ExampleDataNumberOrder.Sequential, "Count up from the minimum"),
+        new(ExampleDataNumberOrder.Random, "Random within the range")
+    ];
+
+    private bool _loaded;
+    private bool _saving;
+    private string? _saveError;
+    private ExampleDataTemplateAttributeDraft _draft = new();
+    private List<MetaverseAttribute> _attributeChoices = [];
+    private List<MetaverseAttribute> _conditionChoices = [];
+    private List<string> _siblingAttributeNames = [];
+    private List<MetaverseObjectType> _objectTypes = [];
+    private List<ExampleDataSet> _dataSets = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        var metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(ObjectType.MetaverseObjectType.Id, includeChildObjects: true);
+        _objectTypes = (await jim.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects: false)).OrderBy(t => t.Name).ToList();
+
+        // headers are enough: saving resolves each Example Data Set by its id, and loading every set's values to fill
+        // a picker would read thousands of names for nothing.
+        _dataSets = (await jim.ExampleData.GetExampleDataSetHeadersAsync())
+            .Select(h => new ExampleDataSet { Id = h.Id, Name = h.Name, Culture = h.Culture })
+            .ToList();
+
+        var siblings = ObjectType.TemplateAttributes
+            .Where(a => a.MetaverseAttribute != null && a.Id != ExistingAttribute?.Id)
+            .Select(a => a.MetaverseAttribute!)
+            .ToList();
+        _siblingAttributeNames = siblings.Select(a => a.Name).ToList();
+
+        // one instance per attribute, so the selects can match the draft's choices by reference.
+        var typeAttributes = metaverseObjectType?.Attributes.Where(ExampleDataTemplateAttributeDraft.IsGeneratable).OrderBy(a => a.Name).ToList() ?? [];
+        _attributeChoices = typeAttributes.Where(a => siblings.All(s => s.Id != a.Id)).ToList();
+        _conditionChoices = typeAttributes.Where(a => siblings.Any(s => s.Id == a.Id)).ToList();
+
+        if (ExistingAttribute != null)
+        {
+            _draft = ExampleDataTemplateAttributeDraft.FromEntity(ExistingAttribute);
+            _draft.Attribute = _attributeChoices.FirstOrDefault(a => a.Id == _draft.Attribute?.Id) ?? _draft.Attribute;
+            _draft.ConditionAttribute = _conditionChoices.FirstOrDefault(a => a.Id == _draft.ConditionAttribute?.Id) ?? _draft.ConditionAttribute;
+            _draft.DataSets = _draft.DataSets.Select(chosen => _dataSets.FirstOrDefault(s => s.Id == chosen.Id) ?? chosen).ToList();
+            _draft.ReferenceObjectTypes = _draft.ReferenceObjectTypes.Select(chosen => _objectTypes.FirstOrDefault(t => t.Id == chosen.Id) ?? chosen).ToList();
+        }
+
+        _loaded = true;
+    }
+
+    private string? AttributeHelperText() => _attributeChoices.Count == 0
+        ? "Every attribute of this Metaverse Object Type that can be generated already has rules in this template."
+        : null;
+
+    private void OnAttributeChanged(MetaverseAttribute? attribute)
+    {
+        _draft.Attribute = attribute;
+        _saveError = null;
+    }
+
+    private void OnConditionAttributeChanged(MetaverseAttribute? attribute)
+    {
+        _draft.ConditionAttribute = attribute;
+
+        // an operator valid for the previous attribute's type may not be valid for this one's.
+        if (attribute != null && CriterionOperatorOptions.ForType(attribute.Type, CriterionContext.ExampleData).All(o => o.Operator != _draft.ConditionOperator))
+            _draft.ConditionOperator = CriterionOperatorOptions.ForType(attribute.Type, CriterionContext.ExampleData)[0].Operator;
+    }
+
+    private void AddDataSet(ExampleDataSet? dataSet)
+    {
+        if (dataSet != null)
+            _draft.DataSets.Add(dataSet);
+    }
+
+    private void OnReferenceTargetsChanged(IReadOnlyCollection<int> ids)
+    {
+        var chosen = ids.ToHashSet();
+        _draft.ReferenceObjectTypes = _objectTypes.Where(t => chosen.Contains(t.Id)).ToList();
+    }
+
+    private bool CanSave() => _loaded && !_saving && _draft.Attribute != null && _draft.Validate().Count == 0;
+
+    private async Task SaveAsync()
+    {
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, ExistingAttribute == null ? "Add" : "Save");
+        if (cancelled)
+            return;
+
+        _saving = true;
+        _saveError = null;
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        var entity = _draft.ToEntity();
+        var result = await ExampleDataTemplateEditorSave.ApplyAsync(jim, TemplateId,
+            template => ExampleDataTemplateGraphEdits.SaveAttribute(template, ObjectType.Id, ExistingAttribute?.Id, entity),
+            user, changeReason);
+        _saving = false;
+
+        if (!result.Succeeded)
+        {
+            _saveError = result.Error;
+            return;
+        }
+
+        foreach (var warning in result.Warnings)
+            Snackbar.Add(warning, Severity.Warning);
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>Opens the dialog; true when the attribute was saved.</summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, int templateId, ExampleDataObjectType objectType, ExampleDataTemplateAttribute? existingAttribute)
+    {
+        var parameters = new DialogParameters<ExampleDataTemplateAttributeDialog>
+        {
+            { x => x.TemplateId, templateId },
+            { x => x.ObjectType, objectType },
+            { x => x.ExistingAttribute, existingAttribute }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var title = existingAttribute?.MetaverseAttribute == null
+            ? $"Add Attribute to {objectType.MetaverseObjectType.Name}"
+            : $"Edit {existingAttribute.MetaverseAttribute.Name}";
+        var dialog = await dialogService.ShowAsync<ExampleDataTemplateAttributeDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

@@ -10,6 +10,8 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUiNotificationService UiNotifications
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 @implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -34,6 +36,25 @@
     <NavigableMudTabs Class="mt-2" TabPanelsClass="pa-0">
 
         <MudTabPanel Text="Details">
+    @if (_template.BuiltIn)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-5">
+            This is a built-in template, so it cannot be changed or deleted. Duplicate it to make a version you can change.
+            <AlertButton Severity="Severity.Info" Class="ml-3" StartIcon="@Icons.Material.Outlined.ContentCopy" OnClick="DuplicateAsync">Duplicate</AlertButton>
+        </MudAlert>
+    }
+    else
+    {
+        @* ─── Template actions ─── *@
+        <div class="d-flex flex-wrap gap-2 mt-5">
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.Edit" OnClick="RenameAsync">Rename</MudButton>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.ContentCopy" OnClick="DuplicateAsync">Duplicate</MudButton>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="AddObjectTypeAsync">Add Object Type</MudButton>
+            <MudSpacer />
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Outlined.Delete" OnClick="DeleteAsync">Delete</MudButton>
+        </div>
+    }
+
     @* One virtualised grid per Metaverse Object Type in the template. The object type's name is the heading above
        its grid rather than a toolbar title, because the grid's toolbar belongs to the density toggle, the count and
        the search box. Each grid's URL parameters are prefixed with its own object type id, so several grids on this
@@ -41,7 +62,22 @@
        template, so the window is sliced from memory. *@
     @foreach (var objectType in _template.ObjectTypes)
     {
-        <MudText Typo="Typo.h6" Class="mt-5">@objectType.MetaverseObjectType.Name</MudText>
+        <div class="d-flex align-center gap-2 mt-5">
+            <MudText Typo="Typo.h6">@objectType.MetaverseObjectType.Name</MudText>
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@objectType.ObjectsToCreate.ToString("N0") to create</MudChip>
+            @if (!_template.BuiltIn)
+            {
+                <MudTooltip Text="Change how many to create" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" aria-label="@($"Change how many {objectType.MetaverseObjectType.PluralName} to create")"
+                                   OnClick="@(() => EditObjectTypeAsync(objectType))" />
+                </MudTooltip>
+                <MudTooltip Text="@(_template.ObjectTypes.Count == 1 ? "A template needs at least one Metaverse Object Type" : "Remove from template")" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" Disabled="@(_template.ObjectTypes.Count == 1)"
+                                   aria-label="@($"Remove {objectType.MetaverseObjectType.Name} from template")"
+                                   OnClick="@(() => RemoveObjectTypeAsync(objectType))" />
+                </MudTooltip>
+            }
+        </div>
         <VirtualisedDataGrid @key="objectType.Id" T="ExampleDataTemplateAttribute"
                              ContainerId="@($"template-attributes-{objectType.Id}")"
                              UrlParameterPrefix="@($"ot{objectType.Id}-")"
@@ -50,6 +86,12 @@
                              SingularName="Template Attribute"
                              PluralName="Template Attributes"
                              SearchPlaceholder="Search attributes">
+            <ToolBarExtras>
+                @if (!_template.BuiltIn)
+                {
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAttributeAsync(objectType, null))">Add Attribute</MudButton>
+                }
+            </ToolBarExtras>
             <Columns>
                 <TemplateColumn Title="Attribute" Sortable="false">
                     <HeaderTemplate>
@@ -91,6 +133,25 @@
                         </OverflowList>
                     </CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn Title="Actions" Sortable="false" Hidden="@_template.BuiltIn">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Actions</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <div class="d-flex justify-end gap-2">
+                            <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small"
+                                               aria-label="@($"Edit {context.Item.MetaverseAttribute?.Name}")"
+                                               OnClick="@(() => EditAttributeAsync(objectType, context.Item))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Remove" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error"
+                                               aria-label="@($"Remove {context.Item.MetaverseAttribute?.Name}")"
+                                               OnClick="@(() => RemoveAttributeAsync(objectType, context.Item))" />
+                            </MudTooltip>
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
             </Columns>
             <EmptyContent Context="grid">
                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
@@ -103,9 +164,20 @@
                 }
                 else
                 {
-                    <TableEmptyState Icon="@Icons.Material.Filled.Science"
-                                     PrimaryText="No Template Attributes are configured for this Metaverse Object Type"
-                                     SecondaryText="Nothing will be generated for this type until the Data Generation Template gives it at least one attribute." />
+                    @if (_template.BuiltIn)
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.Science"
+                                         PrimaryText="No Template Attributes are configured for this Metaverse Object Type"
+                                         SecondaryText="Objects of this type are created with no attribute values." />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.Science"
+                                         PrimaryText="No Template Attributes are configured for this Metaverse Object Type"
+                                         SecondaryText="Objects of this type are created with no attribute values until you add an attribute."
+                                         ActionText="Add Attribute"
+                                         OnAction="@(() => EditAttributeAsync(objectType, null))" />
+                    }
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
@@ -174,7 +246,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-            <ConfigurationChangesTab TargetType="ActivityTargetType.ExampleDataTemplate" ObjectId="@_template.Id" ObjectTypeLabel="Example Data Template" />
+            <ConfigurationChangesTab @key="_changeCount" TargetType="ActivityTargetType.ExampleDataTemplate" ObjectId="@_template.Id" ObjectTypeLabel="Example Data Template" />
         </MudTabPanel>
 
     </NavigableMudTabs>
@@ -359,6 +431,126 @@
         UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
         await RefreshWorkerTaskStatusAsync();
         _statusPollTimer = new Timer(async _ => await OnStatusPollTimerElapsedAsync(), null, GetPollingInterval(), Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>Reloads the template after an edit: every save replaces its rows, so the page's copy is stale.</summary>
+    private async Task ReloadTemplateAsync()
+    {
+        using var jim = JimFactory.Create();
+        var template = await jim.ExampleData.GetTemplateAsync(Id);
+        if (template == null)
+        {
+            NavManager.NavigateTo("/admin/example-data");
+            return;
+        }
+
+        _template = template;
+        _breadcrumbs[^1] = new BreadcrumbItem(_template.Name, href: null, disabled: true);
+        _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ExampleDataTemplate, _template.Id, 1, 1)).TotalResults;
+        StateHasChanged();
+    }
+
+    private async Task RenameAsync()
+    {
+        if (await RenameExampleDataTemplateDialog.ShowAsync(DialogService, _template!.Id, _template.Name))
+            await ReloadTemplateAsync();
+    }
+
+    private async Task DuplicateAsync()
+    {
+        var header = new JIM.Models.ExampleData.DTOs.ExampleDataTemplateHeader { Id = _template!.Id, Name = _template.Name, BuiltIn = _template.BuiltIn };
+        var newId = await NewExampleDataTemplateDialog.ShowAsync(DialogService, copyOf: header);
+        if (newId.HasValue)
+            NavManager.NavigateTo($"/admin/example-data/templates/{newId.Value}");
+    }
+
+    private async Task DeleteAsync()
+    {
+        var name = _template!.Name;
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete Data Generation Template?",
+            $"\"{name}\" will be deleted. Metaverse Objects already generated from it are not affected.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        if (cancelled)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.ExampleData.DeleteTemplateAsync(_template.Id, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
+        Snackbar.Add($"Deleted \"{name}\".", Severity.Success);
+        NavManager.NavigateTo("/admin/example-data");
+    }
+
+    private async Task AddObjectTypeAsync()
+    {
+        if (await ExampleDataTemplateObjectTypeDialog.ShowAsync(DialogService, _template!, null))
+            await ReloadTemplateAsync();
+    }
+
+    private async Task EditObjectTypeAsync(ExampleDataObjectType objectType)
+    {
+        if (await ExampleDataTemplateObjectTypeDialog.ShowAsync(DialogService, _template!, objectType))
+            await ReloadTemplateAsync();
+    }
+
+    private async Task RemoveObjectTypeAsync(ExampleDataObjectType objectType)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            $"Remove {objectType.MetaverseObjectType.Name}?",
+            $"{objectType.MetaverseObjectType.PluralName} and all {objectType.TemplateAttributes.Count:N0} of their Template Attributes will be removed from this template.",
+            yesText: "Remove",
+            cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+
+        await SaveEditAsync(template => ExampleDataTemplateGraphEdits.RemoveObjectType(template, objectType.Id), "Remove");
+    }
+
+    private async Task EditAttributeAsync(ExampleDataObjectType objectType, ExampleDataTemplateAttribute? attribute)
+    {
+        if (await ExampleDataTemplateAttributeDialog.ShowAsync(DialogService, _template!.Id, objectType, attribute))
+            await ReloadTemplateAsync();
+    }
+
+    private async Task RemoveAttributeAsync(ExampleDataObjectType objectType, ExampleDataTemplateAttribute templateAttribute)
+    {
+        var attributeName = templateAttribute.MetaverseAttribute?.Name ?? "this attribute";
+        var message = $"{attributeName} will no longer be generated for {objectType.MetaverseObjectType.PluralName}.";
+        var conditional = templateAttribute.MetaverseAttribute == null
+            ? []
+            : ExampleDataTemplateGraphEdits.AttributesConditionalOn(objectType, templateAttribute.MetaverseAttribute);
+        if (conditional.Count > 0)
+            message += $" {string.Join(", ", conditional)} {(conditional.Count == 1 ? "is" : "are")} only generated when {attributeName} has a given value, so {(conditional.Count == 1 ? "it" : "they")} will stop being generated too.";
+
+        var confirmed = await DialogService.ShowMessageBoxAsync($"Remove {attributeName}?", message, yesText: "Remove", cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+
+        await SaveEditAsync(template => ExampleDataTemplateGraphEdits.RemoveAttribute(template, objectType.Id, templateAttribute.Id), "Remove");
+    }
+
+    /// <summary>Saves an edit made straight from the page (a removal), reporting a refusal as an error.</summary>
+    private async Task SaveEditAsync(Action<ExampleDataTemplate> edit, string actionText)
+    {
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, actionText);
+        if (cancelled)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        var result = await ExampleDataTemplateEditorSave.ApplyAsync(jim, Id, edit, user, changeReason);
+        if (!result.Succeeded)
+            Snackbar.Add(result.Error!, Severity.Error);
+
+        foreach (var warning in result.Warnings)
+            Snackbar.Add(warning, Severity.Warning);
+
+        await ReloadTemplateAsync();
     }
 
     public void Dispose()

@@ -1,0 +1,164 @@
+@using JIM.Models.Activities
+@using JIM.Models.Core
+@using JIM.Models.ExampleData
+@using JIM.Models.ExampleData.DTOs
+@using JIM.Models.Exceptions
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="4">
+            <MudTextField T="string" Label="Name" Variant="Variant.Outlined" Immediate="true" @bind-Value="_name" AutoFocus="true"
+                          Error="@(_nameError != null)" ErrorText="@_nameError" />
+
+            <SegmentedToggle TValue="bool" Options="@StartOptions" @bind-Value="_copy" AriaLabel="Start from" />
+
+            @if (_copy)
+            {
+                <MudSelect T="int?" Label="Template to copy" Variant="Variant.Outlined" @bind-Value="_sourceId"
+                           HelperText="The new template starts with the same Metaverse Object Types and rules, and can then be changed.">
+                    @foreach (var header in _templates)
+                    {
+                        <MudSelectItem T="int?" Value="@header.Id">@header.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else
+            {
+                @* a template needs at least one Object Type to be valid, so a blank template starts with one. *@
+                <MudSelect T="MetaverseObjectType" Label="Metaverse Object Type" Variant="Variant.Outlined"
+                           @bind-Value="_metaverseObjectType" ToStringFunc="@(t => t?.Name ?? string.Empty)"
+                           HelperText="The first Metaverse Object Type to generate. You can add attributes and more types next.">
+                    @foreach (var objectType in _objectTypes)
+                    {
+                        <MudSelectItem T="MetaverseObjectType" Value="@objectType">@objectType.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudNumericField T="int" Label="Objects to create" Variant="Variant.Outlined" Immediate="true" @bind-Value="_objectsToCreate" Min="1" />
+            }
+
+            @if (_saveError != null)
+            {
+                <MudAlert Severity="Severity.Error">@_saveError</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanCreate())" OnClick="CreateAsync">Create Template</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>The template to copy, when the dialog is opened by Duplicate.</summary>
+    [Parameter]
+    public ExampleDataTemplateHeader? CopyOf { get; set; }
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> StartOptions =
+    [
+        new(false, "Start blank"),
+        new(true, "Copy an existing template")
+    ];
+
+    private string? _name;
+    private string? _nameError;
+    private string? _saveError;
+    private bool _copy;
+    private bool _creating;
+    private int? _sourceId;
+    private int _objectsToCreate = 100;
+    private MetaverseObjectType? _metaverseObjectType;
+    private List<ExampleDataTemplateHeader> _templates = [];
+    private List<MetaverseObjectType> _objectTypes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        _templates = (await jim.ExampleData.GetTemplateHeadersAsync()).OrderBy(t => t.Name).ToList();
+        _objectTypes = (await jim.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects: false)).OrderBy(t => t.Name).ToList();
+
+        if (CopyOf != null)
+        {
+            _copy = true;
+            _sourceId = CopyOf.Id;
+            _name = $"{CopyOf.Name} (copy)";
+        }
+    }
+
+    private bool CanCreate() => !_creating && !string.IsNullOrWhiteSpace(_name) &&
+        (_copy ? _sourceId.HasValue : _metaverseObjectType != null && _objectsToCreate >= 1);
+
+    private async Task CreateAsync()
+    {
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Create");
+        if (cancelled)
+            return;
+
+        _creating = true;
+        _nameError = null;
+        _saveError = null;
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        var name = _name!.Trim();
+
+        try
+        {
+            int newId;
+            if (_copy)
+            {
+                newId = (await jim.ExampleData.CopyTemplateAsync(_sourceId!.Value, name, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason)).Id;
+            }
+            else
+            {
+                var template = new ExampleDataTemplate { Name = name };
+                template.ObjectTypes.Add(new ExampleDataObjectType { MetaverseObjectType = _metaverseObjectType!, ObjectsToCreate = _objectsToCreate });
+                await jim.ExampleData.CreateTemplateAsync(template, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
+                newId = template.Id;
+            }
+
+            MudDialog.Close(DialogResult.Ok(newId));
+        }
+        catch (InvalidOperationException ex)
+        {
+            // the only conflict a create raises is the name.
+            _nameError = ex.Message;
+        }
+        catch (KeyNotFoundException)
+        {
+            _saveError = "The template to copy no longer exists.";
+        }
+        catch (ExampleDataTemplateException ex)
+        {
+            _saveError = ex.Message;
+        }
+        catch (ExampleDataTemplateAttributeException ex)
+        {
+            _saveError = ex.Message;
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    /// <summary>Opens the dialog; the new template's id when one was created, otherwise null.</summary>
+    public static async Task<int?> ShowAsync(IDialogService dialogService, ExampleDataTemplateHeader? copyOf = null)
+    {
+        var parameters = new DialogParameters<NewExampleDataTemplateDialog> { { x => x.CopyOf, copyOf } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var title = copyOf == null ? "New Data Generation Template" : $"Duplicate {copyOf.Name}";
+        var dialog = await dialogService.ShowAsync<NewExampleDataTemplateDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: int id } ? id : null;
+    }
+}
