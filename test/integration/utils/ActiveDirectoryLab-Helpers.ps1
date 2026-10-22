@@ -33,7 +33,7 @@ $script:AdLabInstanceOrder = @('Primary', 'Source', 'Target', 'AdfsPrimary')
 
 # The scenarios that sign in through the lab's AD FS server. Only these revert it (it takes minutes: AD FS is a
 # delayed-start service) and start JIM with it as the identity provider.
-$script:AdLabFederationScenarios = @(29)
+$script:AdLabFederationScenarios = @(30)
 
 function Test-ActiveDirectoryLabFederationScenario {
     <#

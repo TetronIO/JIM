@@ -52,8 +52,8 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         $result | Should -Not -Contain 'DirectoryServer389'
     }
 
-    It 'restricts Scenarios 024, 025 and 029 (Active Directory lab only) to ActiveDirectory' {
-        foreach ($number in 24, 25, 29) {
+    It 'restricts Scenarios 024, 025 and 030 (Active Directory lab only) to ActiveDirectory' {
+        foreach ($number in 24, 25, 30) {
             Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number | Should -Be @('ActiveDirectory')
         }
     }
@@ -82,12 +82,12 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
     }
 
     It 'runs the Active Directory lab on whatever Samba AD runs, except the scenarios only a real domain controller or its AD FS server can hold' {
-        # The lab stands in for Samba AD everywhere but 024, 025 and 029, so a scenario supports one if and
+        # The lab stands in for Samba AD everywhere but 024, 025 and 030, so a scenario supports one if and
         # only if it supports the other. That is what let the -Scenario All sweep drop its
         # "judge an ActiveDirectory sweep by Samba AD" substitution.
         foreach ($number in 1..40) {
             $supported = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number)
-            if ($number -in 24, 25, 29) {
+            if ($number -in 24, 25, 30) {
                 $supported | Should -Be @('ActiveDirectory') -Because "Scenario $number needs a real domain controller or the lab's AD FS server"
             }
             elseif ($number -in 14, 19, 22) {

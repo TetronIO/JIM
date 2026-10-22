@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    Test Scenario 029: AD FS identity provider trust (JIM trusts the lab's AD FS server for sign-in)
+    Test Scenario 030: AD FS identity provider trust (JIM trusts the lab's AD FS server for sign-in)
 
 .DESCRIPTION
     The first scenario that signs in through the Active Directory lab's AD FS server, adfs-primary (#2355). The
@@ -52,7 +52,7 @@
     Where the runner saved the AD FS server's certificate. Defaults to test/integration/ad-lab-certs.
 
 .EXAMPLE
-    ./Invoke-Scenario-029-ActiveDirectoryFederationTrust.ps1 -ApiKey "jim_..."
+    ./Invoke-Scenario-030-ActiveDirectoryFederationTrust.ps1 -ApiKey "jim_..."
 #>
 
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Operator-facing progress output, coloured in the repository style.')]
@@ -100,8 +100,8 @@ if (-not $ApiKey) {
 $federationConfig = Get-ActiveDirectoryLabFederationConfig
 $certificatePath = Join-Path $CertificateDirectory "$($federationConfig.VmName).pem"
 if (-not (Test-Path -LiteralPath $certificatePath)) {
-    throw "Scenario 029 needs the AD FS server's certificate the runner saves while waiting for it ($certificatePath), and it " +
-          "is not there. Run the scenario through Run-IntegrationTests.ps1 -DirectoryType ActiveDirectory -Scenario 29."
+    throw "Scenario 030 needs the AD FS server's certificate the runner saves while waiting for it ($certificatePath), and it " +
+          "is not there. Run the scenario through Run-IntegrationTests.ps1 -DirectoryType ActiveDirectory -Scenario 30."
 }
 # The thumbprint JIM shows is SHA-1 in upper-case hexadecimal, as X509Certificate2 gives it.
 $expectedThumbprint = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certificatePath).Thumbprint
@@ -157,7 +157,7 @@ function Format-TrustStatus {
     return "state '$($Status.state)', host '$($Status.host)', suggested '$($Status.suggestedThumbprint)': $($Status.message)"
 }
 
-Write-TestSection "Scenario 029: AD FS identity provider trust"
+Write-TestSection "Scenario 030: AD FS identity provider trust"
 Write-Host "Identity provider: $($federationConfig.Authority) ($($federationConfig.VmName))" -ForegroundColor Gray
 Write-Host "Certificate:       $expectedThumbprint, read off the wire by the runner" -ForegroundColor Gray
 Write-Host ""
@@ -190,7 +190,7 @@ try {
     # Trust: as an administrator would, naming the thumbprint they checked
     # ---------------------------------------------------------------------------------------------------------------
     Write-Host "  [2/4] Trusting the certificate AD FS presents, for sign-in" -ForegroundColor DarkGray
-    $trust = Add-JIMCertificate -FromIdentityProvider -Thumbprint $expectedThumbprint -ChangeReason "Scenario 029" -PassThru
+    $trust = Add-JIMCertificate -FromIdentityProvider -Thumbprint $expectedThumbprint -ChangeReason "Scenario 030" -PassThru
 
     Add-TestResult -Name "Add-JIMCertificate -FromIdentityProvider trusts the AD FS certificate" `
         -Passed ("$($trust.outcome)" -eq 'Trusted') -Detail "Outcome '$($trust.outcome)': $($trust.message)"
@@ -233,7 +233,7 @@ $duration = (Get-Date) - $startTime
 $passed = @($script:TestResults | Where-Object { $_.Passed }).Count
 $failed = @($script:TestResults | Where-Object { -not $_.Passed }).Count
 
-Write-TestSection "Scenario 029 Summary"
+Write-TestSection "Scenario 030 Summary"
 Write-Host "Duration: $([math]::Round($duration.TotalSeconds, 1))s" -ForegroundColor Gray
 Write-Host "Passed:   $passed" -ForegroundColor Green
 if ($failed -gt 0) {

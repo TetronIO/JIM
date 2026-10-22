@@ -97,7 +97,7 @@ Describe 'Get-JimComposeArgument' {
     }
 
     It 'names a file that exists' {
-        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 29
+        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 30
         $repoRoot = Join-Path $PSScriptRoot '..' '..' '..'
 
         foreach ($file in $composeArgs | Where-Object { $_ -ne '-f' }) {
@@ -106,7 +106,7 @@ Describe 'Get-JimComposeArgument' {
     }
 
     It 'adds the AD FS overlay after the lab overlay for a scenario that signs in through AD FS, so JIM''s identity provider is adfs-primary' {
-        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 29
+        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 30
 
         $composeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml',
             '-f', 'test/integration/docker/docker-compose.ad-lab.yml', '-f', 'test/integration/docker/docker-compose.ad-lab-adfs.yml')
@@ -120,7 +120,7 @@ Describe 'Get-JimComposeArgument' {
     }
 
     It 'never adds the AD FS overlay outside the Active Directory lab' {
-        Get-JimComposeArgument -DirectoryType 'SambaAD' -ScenarioNumber 29 | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
+        Get-JimComposeArgument -DirectoryType 'SambaAD' -ScenarioNumber 30 | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
     }
 }
 
@@ -144,8 +144,8 @@ Describe 'Get-ActiveDirectoryLabInstance' {
         @(Get-ActiveDirectoryLabInstance -ScenarioNumber $null) | Should -Be @('Primary')
     }
 
-    It 'is Primary then the AD FS server for Scenario 29, so the pair is reverted domain controller first' {
-        @(Get-ActiveDirectoryLabInstance -ScenarioNumber 29) | Should -Be @('Primary', 'AdfsPrimary')
+    It 'is Primary then the AD FS server for Scenario 30, so the pair is reverted domain controller first' {
+        @(Get-ActiveDirectoryLabInstance -ScenarioNumber 30) | Should -Be @('Primary', 'AdfsPrimary')
     }
 
     It 'reverts the AD FS server for no other scenario: it takes minutes, and its baseline pairs with dc-primary''s' {
@@ -156,8 +156,8 @@ Describe 'Get-ActiveDirectoryLabInstance' {
 }
 
 Describe 'Test-ActiveDirectoryLabFederationScenario' {
-    It 'is true for Scenario 29 only' {
-        Test-ActiveDirectoryLabFederationScenario -ScenarioNumber 29 | Should -BeTrue
+    It 'is true for Scenario 30 only' {
+        Test-ActiveDirectoryLabFederationScenario -ScenarioNumber 30 | Should -BeTrue
         foreach ($number in 1, 8, 25, 28, $null) {
             Test-ActiveDirectoryLabFederationScenario -ScenarioNumber $number | Should -BeFalse
         }
@@ -322,7 +322,7 @@ Describe 'Select-ActiveDirectoryLabCheckpoint' {
     }
 
     It 'reverts the AD FS server to baseline and never asks for population' {
-        $pick = Select-ActiveDirectoryLabCheckpoint -Instance 'AdfsPrimary' -ScenarioNumber 29 -Template 'Nano' -Hash $script:hash `
+        $pick = Select-ActiveDirectoryLabCheckpoint -Instance 'AdfsPrimary' -ScenarioNumber 30 -Template 'Nano' -Hash $script:hash `
             -AvailableCheckpoint @('baseline')
 
         $pick.Checkpoint | Should -Be 'baseline'

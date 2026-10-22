@@ -317,7 +317,7 @@ C:\jim-ad-lab\New-LabFederationServer.ps1 @arguments
 
 It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB of memory while running.
 
-**How a run uses it.** Only the scenarios that sign in through AD FS use the AD FS server (Scenario 029 so far;
+**How a run uses it.** Only the scenarios that sign in through AD FS use the AD FS server (Scenario 030 so far;
 `$script:AdLabFederationScenarios` in `test/integration/utils/ActiveDirectoryLab-Helpers.ps1`). For those, the runner:
 
 1. reverts `dc-primary`, then `adfs-primary`, to `baseline`;
