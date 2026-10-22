@@ -19,32 +19,6 @@ public class SyncRepositoryRemainingTests
         _repo = new SyncRepository();
     }
 
-    #region CSO Lookup Cache
-
-    [Test]
-    public void AddCsoToCache_DoesNotThrow()
-    {
-        Assert.That(() =>
-            _repo.AddCsoToCache(CsId, 10, "ext-id-1", Guid.NewGuid()), Throws.Nothing);
-    }
-
-    [Test]
-    public void EvictCsoFromCache_DoesNotThrow()
-    {
-        _repo.AddCsoToCache(CsId, 10, "ext-id-1", Guid.NewGuid());
-        Assert.That(() =>
-            _repo.EvictCsoFromCache(CsId, 10, "ext-id-1"), Throws.Nothing);
-    }
-
-    [Test]
-    public void EvictCsoFromCache_NonExistent_DoesNotThrow()
-    {
-        Assert.That(() =>
-            _repo.EvictCsoFromCache(CsId, 10, "nonexistent"), Throws.Nothing);
-    }
-
-    #endregion
-
     #region Synchronisation Rules and Configuration
 
     [Test]

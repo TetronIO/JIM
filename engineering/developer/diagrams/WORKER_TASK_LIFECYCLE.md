@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-09-29, JIM v0.16.0
+> Last updated: 2026-10-22, JIM v0.16.0
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
 
@@ -12,9 +12,7 @@ flowchart TD
     InitLog --> WaitDb[Wait for the database server, #1808<br/>Retry with increasing delay, logging each attempt<br/>Health-check file kept fresh meanwhile]
     WaitDb -.->|Not reachable within 5 minutes,<br/>or credentials rejected| ExitFail([Worker exits non-zero])
     WaitDb --> InitDb[Initialise database<br/>Migrate and seed]
-    InitDb --> WarmCache[Warm the CSO lookup cache<br/>for every Connected System<br/>Tasks queue until warming completes]
-
-    WarmCache --> CancelOrphans[Process orphaned cancellation requests<br/>from previous crash]
+    InitDb --> CancelOrphans[Process orphaned cancellation requests<br/>from previous crash]
     CancelOrphans --> RecoverStale[Recover ALL stale tasks<br/>TimeSpan.Zero = recover immediately<br/>All Processing tasks are orphaned at startup]
     RecoverStale --> RecoverExports[Recover Pending Exports stranded<br/>in Executing by a crash mid-export<br/>Back to Exported if any change was sent,<br/>otherwise back to Pending]
 
@@ -201,7 +199,7 @@ History retention cleanup no longer runs here: it is a step on the built-in **Hi
 
 Both Worker and Scheduler write a heartbeat file each main-loop iteration. Docker's `HEALTHCHECK` instruction compares the file's modification timestamp against a staleness threshold.
 
-Both also keep the file fresh while they start (#1808): while waiting for the database server, and in the Worker's case every 15 seconds through migrations, seeding, cache warming and startup recovery (`HealthcheckFile.KeepFreshWhileAsync`). A large upgrade can outlast the threshold, and Podman restarts a container whose liveness check fails, which would otherwise kill a migration part-way. A service whose loop fails exits with code 1 (`HostRunner`), so the container runtime or systemd sees a failure rather than a clean stop.
+Both also keep the file fresh while they start (#1808): while waiting for the database server, and in the Worker's case every 15 seconds through migrations, seeding and startup recovery (`HealthcheckFile.KeepFreshWhileAsync`). A large upgrade can outlast the threshold, and Podman restarts a container whose liveness check fails, which would otherwise kill a migration part-way. A service whose loop fails exits with code 1 (`HostRunner`), so the container runtime or systemd sees a failure rather than a clean stop.
 
 ```mermaid
 flowchart LR
