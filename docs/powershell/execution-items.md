@@ -24,7 +24,7 @@ With `-ConnectedSystemId` and `-ConnectedSystemObjectId`, or with `-MetaverseObj
 
 ```powershell
 # Item (default)
-Get-JIMActivityExecutionItem -Id <guid>
+Get-JIMActivityExecutionItem -Id <guid> [-IncludeOutcomes] [-IncludeChanges]
 
 # Consequences
 Get-JIMActivityExecutionItem -Id <guid> -Consequences
@@ -50,6 +50,8 @@ Get-JIMActivityExecutionItem -MetaverseObjectId <guid> [-Page <int>] [-PageSize 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes (Item, Consequences, Causes) |  | The execution item to get. The rows of `Get-JIMActivity -ExecutionItems` can be piped straight in. Accepts pipeline input by property name. |
+| `IncludeOutcomes` | `switch` | No (Item) |  | Add the item's outcome tree as Outcomes: what the run did to the object, each outcome with the outcomes that followed from it in Children. |
+| `IncludeChanges` | `switch` | No (Item) |  | Add the attribute changes recorded with the item as Changes: its Metaverse Object change, its Connected System Object change, and what each Pending Export it staged would write. |
 | `Causes` | `switch` | Yes (Causes) |  | Return what caused the item instead, one row per cohort of causes. |
 | `Consequences` | `switch` | Yes (Consequences) |  | Return what the item went on to cause instead, one row per cohort of consequences. |
 | `ConnectedSystemId` | `int` | Yes (ConnectedSystemObjectTimelineAll, ConnectedSystemObjectTimeline) |  | The Connected System holding the Connected System Object whose timeline to return. |
@@ -62,7 +64,7 @@ Get-JIMActivityExecutionItem -MetaverseObjectId <guid> [-Page <int>] [-PageSize 
 
 ### Output
 
-Without a switch, the item. With `-Causes`, what caused it, and with `-Consequences` what it went on to cause, in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row with a Count), with Level 1 for the nearest and one more per step. With an object's id, the object's timeline, one row per execution item, newest first; where the deployment records no Metaverse Object changes, a Metaverse Object's timeline holds only what its joined Connected System Objects recorded, and a warning says so.
+Without a switch, the item; `-IncludeOutcomes` and `-IncludeChanges` add its Outcomes and Changes, which are otherwise empty. With `-Causes`, what caused it, and with `-Consequences` what it went on to cause, in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row with a Count), with Level 1 for the nearest and one more per step. With an object's id, the object's timeline, one row per execution item, newest first; where the deployment records no Metaverse Object changes, a Metaverse Object's timeline holds only what its joined Connected System Objects recorded, and a warning says so.
 
 **With `-Id`**:
 
@@ -91,6 +93,8 @@ Without a switch, the item. With `-Causes`, what caused it, and with `-Consequen
 | `JoinObjectMatchingRuleId` | `int` | For an object joined to an existing Metaverse Object by matching, the id of the Object Matching Rule that found it; empty for any other item. The rule may since have been changed or deleted; the description below records what it compared at the time. |
 | `JoinObjectMatchingRuleDescriptionSnapshot` | `string` | For an object joined by matching, what the Object Matching Rule compared when the join was made, for example `Employee ID equals employeeId`; empty for any other item. |
 | `JoinMatchedValue` | `string` | For an object joined by matching, the value the join matched on: what the rule computed from the object, with several separated by commas for a multi-valued source. Empty for any other item. |
+| `Outcomes` | `object[]` | What the run did to the object, as a tree: the root outcomes in order, each with the outcomes that followed from it nested under `children` (for example Projected, then Attribute Flow and Provisioned, then the Pending Export it staged). Empty unless asked for (`include=outcomes`, or `-IncludeOutcomes` in PowerShell); an empty list when asked for and the item recorded none. Each has `OutcomeType`, `TargetEntityId`, `TargetEntityDescription`, `SyncRuleId`, `SyncRuleName`, `StagedChangeType`, `DetailCount`, `DetailMessage`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `MatchedValue`, `ConnectedSystemObjectChangeId`, `Ordinal` and `Children`. |
+| `Changes` | `object` | The attribute changes recorded with the item, in the shapes object change history uses: the Metaverse Object change a synchronisation made, the Connected System Object change an import or export recorded, and what each Pending Export a synchronisation staged would write. Empty unless asked for (`include=changes`, or `-IncludeChanges` in PowerShell). It has `MetaverseObjectChange`, `ConnectedSystemObjectChange` and `StagedExportChanges`. |
 
 **With `-Causes`**:
 

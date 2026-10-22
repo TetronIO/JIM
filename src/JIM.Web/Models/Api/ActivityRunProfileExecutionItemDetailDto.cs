@@ -115,15 +115,16 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// <summary>
     /// What the run did to the object, as a tree: the root outcomes in order, each with the outcomes that followed from
     /// it nested under <c>children</c> (for example Projected, then Attribute Flow and Provisioned, then the Pending
-    /// Export it staged). Null unless asked for with <c>include=outcomes</c>; empty when asked for and the item recorded
-    /// none.
+    /// Export it staged). Null unless asked for (<c>include=outcomes</c>, or <c>-IncludeOutcomes</c> in PowerShell); an
+    /// empty list when asked for and the item recorded none.
     /// </summary>
     public List<SyncOutcomeNodeDto>? Outcomes { get; set; }
 
     /// <summary>
     /// The attribute changes recorded with the item, in the shapes object change history uses: the Metaverse Object
     /// change a synchronisation made, the Connected System Object change an import or export recorded, and what each
-    /// Pending Export a synchronisation staged would write. Null unless asked for with <c>include=changes</c>.
+    /// Pending Export a synchronisation staged would write. Null unless asked for (<c>include=changes</c>, or
+    /// <c>-IncludeChanges</c> in PowerShell).
     /// </summary>
     public ExecutionItemChanges? Changes { get; set; }
 
