@@ -1,13 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Security.DTOs;
+using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -234,8 +234,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
         if (role.Name == Constants.BuiltInRoles.Administrator)
         {
             // Prevent self-removal from Administrator role
-            var callerObjectId = GetCallerMetaverseObjectId();
-            if (callerObjectId.HasValue && callerObjectId.Value == metaverseObjectId)
+            if (!IsApiKeyAuthenticated() && IdentityUtilities.TryGetUserId(User, out var callerObjectId) && callerObjectId == metaverseObjectId)
             {
                 return BadRequest(ApiErrorResponse.ValidationError(
                     "You cannot remove yourself from the Administrator role. Ask another administrator to remove you."));
@@ -330,27 +329,4 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     }
 
     #endregion
-
-    /// <summary>
-    /// Gets the caller's Metaverse Object ID from their authentication claims.
-    /// Returns null for API key callers (who are not Metaverse Objects).
-    /// </summary>
-    private Guid? GetCallerMetaverseObjectId()
-    {
-        // API key callers have auth_method = "api_key" and don't map to Metaverse Objects
-        var authMethod = User.FindFirst("auth_method")?.Value;
-        if (authMethod == "api_key")
-        {
-            return null;
-        }
-
-        // SSO users have their Metaverse Object ID in the "sub" claim
-        var subClaim = User.FindFirst("sub") ?? User.FindFirst(ClaimTypes.NameIdentifier);
-        if (subClaim != null && Guid.TryParse(subClaim.Value, out var objectId))
-        {
-            return objectId;
-        }
-
-        return null;
-    }
 }
