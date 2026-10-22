@@ -95,6 +95,59 @@ public class ExampleDataTemplateCrudTests
             "a duplicate-name create must persist nothing");
     }
 
+    // -- copy (#1466) ------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task CopyTemplateAsync_BuiltInSource_CreatesAnEditableCopyUnderTheNewNameAsync()
+    {
+        var source = BuildValidTemplate(TemplateId, "Users and Groups");
+        source.BuiltIn = true;
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(source);
+        ExampleDataTemplate? persisted = null;
+        _exampleRepo.Setup(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()))
+            .Callback<ExampleDataTemplate>(t => { persisted = t; t.Id = 99; })
+            .Returns(Task.CompletedTask);
+
+        var copy = await _jim.ExampleData.CopyTemplateAsync(TemplateId, "My Users and Groups", ActivityInitiatorType.User, Guid.NewGuid(), "Admin");
+
+        Assert.That(persisted, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(copy.Id, Is.EqualTo(99));
+            Assert.That(persisted!.Name, Is.EqualTo("My Users and Groups"));
+            Assert.That(persisted!.BuiltIn, Is.False);
+            Assert.That(persisted!.ObjectTypes, Has.Count.EqualTo(1));
+            Assert.That(persisted!.ObjectTypes[0], Is.Not.SameAs(source.ObjectTypes[0]));
+            Assert.That(persisted!.ObjectTypes[0].ObjectsToCreate, Is.EqualTo(100));
+        }
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.Is<Activity>(a =>
+            a.TargetOperationType == ActivityTargetOperationType.Create && a.TargetName == "My Users and Groups")), Times.Once);
+    }
+
+    [Test]
+    public void CopyTemplateAsync_SourceMissing_ThrowsAndRecordsNoActivity()
+    {
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync((ExampleDataTemplate?)null);
+
+        Assert.That(async () => await _jim.ExampleData.CopyTemplateAsync(TemplateId, "Copy", ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<KeyNotFoundException>());
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never);
+    }
+
+    [Test]
+    public void CopyTemplateAsync_NameTaken_ThrowsAndPersistsNothing()
+    {
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(BuildValidTemplate(TemplateId, "Users and Groups"));
+        _exampleRepo.Setup(r => r.GetTemplateAsync("Users and Groups")).ReturnsAsync(BuildValidTemplate(TemplateId, "Users and Groups"));
+
+        Assert.That(async () => await _jim.ExampleData.CopyTemplateAsync(TemplateId, "Users and Groups", ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<InvalidOperationException>().With.Message.Contains("already exists"));
+
+        _exampleRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
     // -- update ------------------------------------------------------------------------------------------------------
 
     [Test]

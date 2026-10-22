@@ -21,7 +21,15 @@ JIM ships one template, **Users & Groups**, which creates 10,000 users and 500 g
 - **Users** get first and last names, a display name and email address built from them, a sequential Employee ID, a company, department, team, job title and start date, a manager drawn from the users above them, and a status.
 - **Groups** get a generated name, a type (security or distribution, with an email address for distribution groups), between 5 and 200 users as members, and up to five owners.
 
-A built-in template cannot be changed or deleted. Build your own with `New-JIMExampleDataTemplate`, or over the REST API; see [Example Data](../powershell/example-data.md#building-a-template-end-to-end) in the PowerShell reference. The portal shows templates but does not create or edit them.
+A built-in template cannot be changed or deleted. To customise one, duplicate it and change the copy.
+
+### Build your own
+
+1. On the **Templates** page, select **New Template**. Name it, then either start blank with a first Metaverse Object Type and how many objects to create, or copy an existing template. **Duplicate**, on a template's row or its page, does the same with that template already chosen.
+2. On the template's page, select **Add Attribute** on an Object Type, choose the Metaverse Attribute, and set how its values are made (see the table below). **Add Object Type** adds another type to generate.
+3. Edit or remove an attribute from its row, change how many objects of a type to create with the pencil beside its name, and **Rename** or **Delete** the template from the buttons above.
+
+Each change is saved as soon as you confirm it, with an optional reason recorded in the template's **Changes** tab. Removing an attribute warns you when another attribute's pattern or condition reads its value. Templates can also be built with `New-JIMExampleDataTemplate`, copied with `Copy-JIMExampleDataTemplate`, or managed over the REST API; see [Example Data](../powershell/example-data.md#building-a-template-end-to-end) in the PowerShell reference.
 
 ### How values are made
 
@@ -29,7 +37,7 @@ Each attribute's rules decide its values:
 
 | Attribute data type | Rules |
 |---|---|
-| Text | A value from one or more Example Data Sets; a pattern combining other attributes and sets, such as `{First Name}.{Last Name}@company.com` (`[UniqueInt]` adds a number only where a value would repeat); an [expression](../concepts/expressions.md); or a choice from weighted values |
+| Text | A value from one or more Example Data Sets; a pattern combining other attributes and sets, such as `{First Name}.{Last Name}@company.com` (`{0}`, `{1}` read the template attribute's Example Data Sets in order, and `[UniqueInt]` adds a number only where a value would repeat); an [expression](../concepts/expressions.md); a choice from weighted values; or a number |
 | Number | Between a minimum and maximum, counting up or chosen at random |
 | Date | A random date between a minimum and maximum |
 | True or false | Chosen at random |
