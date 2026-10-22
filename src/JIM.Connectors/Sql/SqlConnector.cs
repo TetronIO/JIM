@@ -122,6 +122,10 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     // Connected System. The administrator gets the final word, per attribute, on the Schema tab (#1354).
     public bool SupportsUserSelectedAttributeTypes => true;
 
+    // Plurality is the catalogue's: a multi-valued attribute is one gathered from a related table, so an override
+    // would make JIM misread the data (#2186).
+    public bool SupportsUserSelectedAttributePlurality => false;
+
     // A committed transaction is a verified write, so an export needs no confirming import.
     public bool SupportsAutoConfirmExport => true;
 

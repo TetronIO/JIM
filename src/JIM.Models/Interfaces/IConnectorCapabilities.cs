@@ -59,6 +59,14 @@ public interface IConnectorCapabilities
     public bool SupportsUserSelectedAttributeTypes {  get; }
 
     /// <summary>
+    /// Controls whether the user can say whether a Connected System attribute holds one value or several. True only
+    /// where the schema cannot state it, i.e. a delimited file, whose header names columns and nothing more; a
+    /// Connector that reads plurality from its Connected System's schema must leave this false, since an override
+    /// would make JIM misread the data.
+    /// </summary>
+    public bool SupportsUserSelectedAttributePlurality { get; }
+
+    /// <summary>
     /// Does the Connector support auto-confirming exports? When true, the connector can provide an "Auto-Confirm Exports"
     /// setting that, when enabled, causes PendingExports to be deleted (confirmed) immediately after a successful export
     /// rather than waiting for reconciliation via the next import cycle.

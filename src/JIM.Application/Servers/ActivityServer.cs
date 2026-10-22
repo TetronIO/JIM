@@ -161,10 +161,16 @@ public partial class ActivityServer
     /// (a lost update; SecurityAuditServer's aggregated AttemptCount increments were erased this way under a
     /// concurrent authentication spray).
     /// </summary>
-    public async Task CreateCompletedActivityWithTriadAsync(Activity activity, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    /// <param name="activity">The Activity to record.</param>
+    /// <param name="initiatorType">Who made it happen.</param>
+    /// <param name="initiatorId">Their id, if they have one.</param>
+    /// <param name="initiatorName">Their name.</param>
+    /// <param name="completedStatus">The terminal status: complete, or complete with a warning the Activity carries.</param>
+    public async Task CreateCompletedActivityWithTriadAsync(Activity activity, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName,
+        ActivityStatus completedStatus = ActivityStatus.Complete)
     {
         var now = DateTime.UtcNow;
-        activity.Status = ActivityStatus.Complete;
+        activity.Status = completedStatus;
         activity.Executed = now;
         activity.ExecutionTime = TimeSpan.Zero;
         activity.TotalActivityTime = now - activity.Created;

@@ -33,6 +33,7 @@ Describe 'SCIM cmdlets require a connection' {
         @{ Command = 'Get-JIMScimStoreSummary'; Arguments = @{ ConnectedSystemId = 7 } }
         @{ Command = 'Get-JIMScimResourceType'; Arguments = @{ ConnectedSystemId = 7 } }
         @{ Command = 'Get-JIMScimSchema'; Arguments = @{ ConnectedSystemId = 7 } }
+        @{ Command = 'Get-JIMScimJournal'; Arguments = @{ ConnectedSystemId = 7; ResourceId = [guid]::NewGuid() } }
     ) {
         { & $Command @Arguments -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
     }
@@ -277,6 +278,51 @@ Describe 'Get-JIMScimSchema' {
             $schemas.Count | Should -Be 1
             Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
                 $Endpoint -eq '/api/v1/synchronisation/connected-systems/7/scim/schemas'
+            }
+        }
+    }
+}
+
+Describe 'Get-JIMScimJournal' {
+
+    It 'Gets a resource''s journal, passing the range' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { @([PSCustomObject]@{ operation = 'Created' }, [PSCustomObject]@{ operation = 'Patched' }) }
+            $resource = [guid]'11111111-2222-3333-4444-555555555555'
+
+            $entries = @(Get-JIMScimJournal -ConnectedSystemId 7 -ResourceId $resource -AfterSequence 10 -UpToSequence 20)
+
+            $entries.Count | Should -Be 2
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Endpoint -eq '/api/v1/synchronisation/connected-systems/7/scim/journal?resourceId=11111111-2222-3333-4444-555555555555&afterSequence=10&upToSequence=20'
+            }
+        }
+    }
+
+    It 'Leaves out a range not given' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { @() }
+
+            Get-JIMScimJournal -ConnectedSystemId 7 -ResourceId ([guid]'11111111-2222-3333-4444-555555555555') | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Endpoint -eq '/api/v1/synchronisation/connected-systems/7/scim/journal?resourceId=11111111-2222-3333-4444-555555555555'
+            }
+        }
+    }
+
+    It 'Gets the requests behind an imported change' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ upToSequence = 20; entries = @() } }
+
+            $behind = Get-JIMScimJournal -ConnectedSystemId 7 -ChangeId ([guid]'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
+
+            $behind.upToSequence | Should -Be 20
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Endpoint -eq '/api/v1/synchronisation/connected-systems/7/scim/journal/changes/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
             }
         }
     }

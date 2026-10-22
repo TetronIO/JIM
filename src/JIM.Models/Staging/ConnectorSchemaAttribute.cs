@@ -70,6 +70,15 @@ public class ConnectorSchemaAttribute
     /// </summary>
     public bool IsOperational { get; set; }
 
+    /// <summary>
+    /// Whether the Connector cannot work without this attribute's values, so it must always be imported. Schema import
+    /// selects such an attribute and locks the selection, as it does the External ID: the SCIM 2.0 Client Connector
+    /// declares <c>meta.version</c> this way when the service provider supports entity tags, because conditional export
+    /// reads its If-Match tag from the imported value (#2404). Connector-owned, so a refresh that stops declaring it
+    /// releases the lock and leaves the selection to the administrator.
+    /// </summary>
+    public bool AlwaysImported { get; set; }
+
     public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {
         Name = name;

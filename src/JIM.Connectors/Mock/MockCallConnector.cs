@@ -30,6 +30,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     public bool SupportsSecondaryExternalId => _supportsSecondaryExternalId;
     public bool SupportsUserSelectedExternalId => true;
     public bool SupportsUserSelectedAttributeTypes => true;
+    public bool SupportsUserSelectedAttributePlurality => true;
     public bool SupportsAutoConfirmExport => false;
     public bool SupportsParallelExport => true;
     public bool SupportsPaging => true;

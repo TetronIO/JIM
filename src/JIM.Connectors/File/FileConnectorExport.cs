@@ -53,7 +53,7 @@ internal class FileConnectorExport
             throw new InvalidSettingValuesException("File Path setting is required for export operations.");
 
         var delimiter = GetSettingValue("Delimiter") is { Length: > 0 } configuredDelimiter ? configuredDelimiter : FileConnector.DefaultDelimiter;
-        var multiValueDelimiter = GetSettingValue("Multi-Value Delimiter") ?? "|";
+        var multiValueDelimiter = GetSettingValue("Multi-Value Delimiter") is { Length: > 0 } configuredMultiValueDelimiter ? configuredMultiValueDelimiter : "|";
 
         // Ensure the export directory exists
         var exportDir = Path.GetDirectoryName(exportFilePath);
@@ -75,10 +75,20 @@ internal class FileConnectorExport
         // without it the Activity message sits on "0 of N" for the whole connector call.
         await _progress.EnterPhaseAsync(FileConnectorPhases.LoadExistingFile);
         var existingFileHeaders = new List<string>();
-        var existingRows = LoadExistingFileContent(exportFilePath, delimiter, externalIdAttributeName, existingFileHeaders);
+        var existingRows = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        var unkeyedRows = new List<Dictionary<string, string>>();
+
+        // The file is rewritten whole, so every row this run does not change must come back as it was. Where JIM cannot
+        // be sure of that, every export fails and the file is left untouched, rather than rewritten with only the rows
+        // this run touched.
+        if (LoadExistingFileContent(exportFilePath, delimiter, multiValueDelimiter, externalIdAttributeName, existingFileHeaders, existingRows, unkeyedRows) is { } fileProblem)
+        {
+            _logger.Error("FileConnectorExport.Execute: {FileProblem}", LogSanitiser.Sanitise(fileProblem));
+            return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed(fileProblem)).ToList();
+        }
 
         // Determine schema columns by merging existing file headers with the Pending Exports' attribute metadata
-        var attributeColumns = CollectAttributeColumns(existingFileHeaders);
+        var attributeColumns = CollectAttributeColumns(existingFileHeaders, externalIdAttributeName);
         if (attributeColumns.Count == 0)
         {
             _logger.Warning("FileConnectorExport.Execute: No attribute columns found in Pending Exports or existing file");
@@ -124,7 +134,7 @@ internal class FileConnectorExport
 
         // Write the full-state file
         await _progress.EnterPhaseAsync(FileConnectorPhases.Write, $"Writing {existingRows.Count:N0} rows to output file...");
-        WriteFullStateFile(exportFilePath, delimiter, attributeColumns, existingRows);
+        WriteFullStateFile(exportFilePath, delimiter, attributeColumns, existingRows, unkeyedRows);
 
         _logger.Information(
             "FileConnectorExport.Execute: Export complete. Created: {Created}, Updated: {Updated}, Deleted: {Deleted}. Total rows in file: {TotalRows}",
@@ -169,11 +179,12 @@ internal class FileConnectorExport
     /// <summary>
     /// Collects all attribute column names by merging existing file headers with the
     /// Pending Exports' attribute metadata, in alphabetical order.
-    /// This ensures updates and deletes don't lose columns that were in the original file.
+    /// This ensures updates and deletes don't lose columns that were in the original file. The External ID column is
+    /// always written, even when no change names it, since without it no later export or import can tell rows apart.
     /// </summary>
-    private List<string> CollectAttributeColumns(List<string> existingFileHeaders)
+    private List<string> CollectAttributeColumns(List<string> existingFileHeaders, string externalIdAttributeName)
     {
-        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { externalIdAttributeName };
 
         // Include columns from the existing file
         foreach (var header in existingFileHeaders)
@@ -195,21 +206,31 @@ internal class FileConnectorExport
     }
 
     /// <summary>
-    /// Loads existing file content into a dictionary keyed by External ID.
-    /// Populates existingFileHeaders with the column headers from the file.
-    /// Returns an empty dictionary if the file doesn't exist or has no data rows.
+    /// Loads the existing file into <paramref name="rows"/>, keyed by External ID, and <paramref name="unkeyedRows"/>,
+    /// the rows with no External ID, which are written back unchanged. Populates <paramref name="existingFileHeaders"/>
+    /// with the file's column headers. Leaves everything empty when there is no file yet.
     /// </summary>
-    private Dictionary<string, Dictionary<string, string>> LoadExistingFileContent(
-        string filePath, string delimiter, string externalIdAttributeName, List<string> existingFileHeaders)
+    /// <returns>
+    /// Why the file cannot be rewritten without losing rows this run was not asked to change, or null when it can: it
+    /// cannot be read, its header names a column twice (#2186), it has rows but no External ID column, or two rows claim
+    /// the same External ID.
+    /// </returns>
+    private string? LoadExistingFileContent(
+        string filePath,
+        string delimiter,
+        string multiValueDelimiter,
+        string externalIdAttributeName,
+        List<string> existingFileHeaders,
+        Dictionary<string, Dictionary<string, string>> rows,
+        List<Dictionary<string, string>> unkeyedRows)
     {
-        var rows = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
         if (!System.IO.File.Exists(filePath))
         {
-            _logger.Debug("FileConnectorExport.LoadExistingFileContent: File does not exist, starting fresh");
-            return rows;
+            _logger.Debug("FileConnectorExport.LoadExistingFileContent: File does not exist, starting a new one");
+            return null;
         }
 
+        var fileName = Path.GetFileName(filePath);
         try
         {
             using var reader = new StreamReader(filePath);
@@ -222,36 +243,29 @@ internal class FileConnectorExport
                 PrepareHeaderForMatch = args => IdentifierKey.For(args.Header, caseExact: false)
             });
 
-            csv.Read();
-            csv.ReadHeader();
-
-            var headers = csv.HeaderRecord;
-            if (headers == null || headers.Length == 0)
+            if (!csv.Read() || !csv.ReadHeader() || csv.HeaderRecord is not { Length: > 0 } headers)
             {
                 _logger.Debug("FileConnectorExport.LoadExistingFileContent: File has no headers");
-                return rows;
+                return null;
             }
+
+            // A file whose header repeats a column cannot be rewritten without losing every column after the first of
+            // that name, for every row (#2186).
+            if (FileConnectorHeader.FindProblem(headers, fileName, multiValueDelimiter) is { } headerProblem)
+                return headerProblem;
 
             // Capture headers so the caller can merge them into the attribute columns
             existingFileHeaders.AddRange(headers);
 
-            // Check if the External ID column exists in the file
-            if (!headers.Contains(externalIdAttributeName, StringComparer.OrdinalIgnoreCase))
-            {
-                _logger.Warning(
-                    "FileConnectorExport.LoadExistingFileContent: External ID column '{ExternalIdColumn}' not found in existing file headers. Starting fresh.",
-                    externalIdAttributeName);
-                return rows;
-            }
-
+            var hasExternalIdColumn = headers.Contains(externalIdAttributeName, StringComparer.OrdinalIgnoreCase);
+            var rowNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             while (csv.Read())
             {
-                var externalId = csv.GetField(externalIdAttributeName);
-                if (string.IsNullOrEmpty(externalId))
-                {
-                    _logger.Warning("FileConnectorExport.LoadExistingFileContent: Row with empty External ID found, skipping");
-                    continue;
-                }
+                // Without the External ID column no row can be matched to its object, and rewriting would lose them all.
+                if (!hasExternalIdColumn)
+                    return $"The file '{fileName}' has rows but no '{externalIdAttributeName}' column, so JIM cannot tell which row " +
+                           "belongs to which object, and rewriting it would lose them. Add the column, or move the file aside so JIM " +
+                           "starts a new one, then run the export again.";
 
                 var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var header in headers)
@@ -261,18 +275,33 @@ internal class FileConnectorExport
                         row[header] = value;
                 }
 
+                var externalId = csv.GetField(externalIdAttributeName);
+                var rowNumber = csv.Parser.Row;
+                if (string.IsNullOrEmpty(externalId))
+                {
+                    // Not JIM's to change, and not JIM's to drop: written back as it is.
+                    _logger.Warning("FileConnectorExport.LoadExistingFileContent: Row {Row} has no External ID; keeping it unchanged", rowNumber);
+                    unkeyedRows.Add(row);
+                    continue;
+                }
+
+                if (rowNumbers.TryGetValue(externalId, out var firstRow))
+                    return $"The file '{fileName}' has more than one row for External ID '{externalId}' (rows {firstRow:N0} and " +
+                           $"{rowNumber:N0}), so JIM cannot tell which one to update. Remove the duplicate row, then run the export again.";
+
+                rowNumbers[externalId] = rowNumber;
                 rows[externalId] = row;
             }
 
-            _logger.Debug("FileConnectorExport.LoadExistingFileContent: Loaded {Count} existing rows from file", rows.Count);
+            _logger.Debug("FileConnectorExport.LoadExistingFileContent: Loaded {Count} existing rows from file", rows.Count + unkeyedRows.Count);
+            return null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CsvHelperException)
         {
-            _logger.Warning(ex, "FileConnectorExport.LoadExistingFileContent: Error reading existing file, starting fresh");
-            rows.Clear();
+            _logger.Warning(ex, "FileConnectorExport.LoadExistingFileContent: Could not read the existing file");
+            return $"The file '{fileName}' could not be read ({ex.Message.Split('\n')[0].Trim()}), so JIM cannot rewrite it without losing " +
+                   "the rows it holds. Correct or move the file, then run the export again.";
         }
-
-        return rows;
     }
 
     /// <summary>
@@ -305,12 +334,11 @@ internal class FileConnectorExport
                         LogSanitiser.Sanitise(externalId));
                 }
 
-                // Build the row from attribute changes
+                // Build the row from attribute changes, then the CSO's full state (for attributes not in changes)
                 var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                ApplyAttributeChanges(row, pendingExport, multiValueDelimiter);
-
-                // Include full state from CSO if available (for attributes not in changes)
-                ApplyCsoFullState(row, pendingExport, multiValueDelimiter);
+                var problem = ApplyAttributeChanges(row, pendingExport, multiValueDelimiter) ?? ApplyCsoFullState(row, pendingExport, multiValueDelimiter);
+                if (problem != null)
+                    return ConnectedSystemExportResult.Failed(problem);
 
                 existingRows[externalId] = row;
 
@@ -330,13 +358,15 @@ internal class FileConnectorExport
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Update for '{ExternalId}' but no existing row found. Creating new row.",
                         LogSanitiser.Sanitise(externalId));
                     existingRow = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    existingRows[externalId] = existingRow;
                 }
 
-                ApplyAttributeChanges(existingRow, pendingExport, multiValueDelimiter);
+                // Changes are applied to a copy, so an export refused part-way leaves the row as the file held it.
+                var updatedRow = new Dictionary<string, string>(existingRow, StringComparer.OrdinalIgnoreCase);
+                var problem = ApplyAttributeChanges(updatedRow, pendingExport, multiValueDelimiter) ?? ApplyCsoFullState(updatedRow, pendingExport, multiValueDelimiter);
+                if (problem != null)
+                    return ConnectedSystemExportResult.Failed(problem);
 
-                // Include full state from CSO if available (for attributes not in changes)
-                ApplyCsoFullState(existingRow, pendingExport, multiValueDelimiter);
+                existingRows[externalId] = updatedRow;
 
                 return ConnectedSystemExportResult.Succeeded(externalId);
             }
@@ -394,88 +424,202 @@ internal class FileConnectorExport
     }
 
     /// <summary>
-    /// Applies attribute value changes from a Pending Export to a row dictionary.
+    /// Applies attribute value changes from a Pending Export to a row dictionary, returning why the export cannot be
+    /// written, or null once it is applied.
     /// </summary>
-    private static void ApplyAttributeChanges(
+    /// <remarks>
+    /// A single-valued attribute's change is its whole cell. A multi-valued attribute's changes are each one value
+    /// added or removed (on an Update, only the values that changed), so its cell is the set the changes leave behind:
+    /// the cell as the file holds it (or, where the file has no row, the Connected System Object's values), less what
+    /// is removed, plus what is added (#2186).
+    /// </remarks>
+    private static string? ApplyAttributeChanges(
         Dictionary<string, string> row,
         PendingExport pendingExport,
         string multiValueDelimiter)
     {
-        foreach (var attrChange in pendingExport.AttributeValueChanges)
-        {
-            if (attrChange.Attribute?.Name == null)
-                continue;
+        var changesByAttribute = pendingExport.AttributeValueChanges
+            .Where(change => change.Attribute?.Name != null)
+            .GroupBy(change => change.Attribute.Name, StringComparer.OrdinalIgnoreCase);
 
-            if (attrChange.ChangeType == PendingExportAttributeChangeType.Remove ||
-                attrChange.ChangeType == PendingExportAttributeChangeType.RemoveAll)
+        foreach (var changes in changesByAttribute)
+        {
+            var attribute = changes.First().Attribute;
+            if (attribute.AttributePlurality != AttributePlurality.MultiValued)
             {
-                row[attrChange.Attribute.Name] = string.Empty;
+                foreach (var attrChange in changes)
+                {
+                    row[attribute.Name] = attrChange.ChangeType is PendingExportAttributeChangeType.Remove or PendingExportAttributeChangeType.RemoveAll
+                        ? string.Empty
+                        : FormatAttributeValue(attrChange, multiValueDelimiter);
+                }
+
+                continue;
             }
-            else
+
+            var values = row.TryGetValue(attribute.Name, out var cell)
+                ? SplitCell(cell, attribute, multiValueDelimiter)
+                : CsoValues(pendingExport, attribute, multiValueDelimiter);
+            var comparer = ValueComparer(attribute);
+
+            if (changes.Any(change => change.ChangeType == PendingExportAttributeChangeType.RemoveAll))
+                values.Clear();
+
+            foreach (var removed in changes.Where(change => change.ChangeType == PendingExportAttributeChangeType.Remove))
             {
-                row[attrChange.Attribute.Name] = FormatAttributeValue(attrChange, multiValueDelimiter);
+                var value = Canonicalise(FormatAttributeValue(removed, multiValueDelimiter), attribute.Type);
+                values.RemoveAll(held => comparer.Equals(held, value));
             }
+
+            foreach (var added in changes.Where(change => change.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update))
+            {
+                var value = Canonicalise(FormatAttributeValue(added, multiValueDelimiter), attribute.Type);
+                if (value.Contains(multiValueDelimiter, StringComparison.Ordinal))
+                    return DelimiterInValue(attribute.Name, multiValueDelimiter);
+
+                if (value.Length > 0 && !values.Contains(value, comparer))
+                    values.Add(value);
+            }
+
+            row[attribute.Name] = string.Join(multiValueDelimiter, values);
         }
+
+        return null;
     }
 
     /// <summary>
     /// Applies full state from the CSO's current attribute values to the row,
     /// for any attributes not already present from the Pending Export changes.
-    /// This ensures the file has complete attribute data for each row.
+    /// This ensures the file has complete attribute data for each row. Returns why the export cannot be written, or
+    /// null once it is applied.
     /// </summary>
-    private void ApplyCsoFullState(
+    private static string? ApplyCsoFullState(
         Dictionary<string, string> row,
         PendingExport pendingExport,
         string multiValueDelimiter)
     {
         if (pendingExport.ConnectedSystemObject?.AttributeValues == null)
-            return;
+            return null;
 
-        foreach (var attrValue in pendingExport.ConnectedSystemObject.AttributeValues)
-        {
-            if (attrValue.Attribute?.Name == null)
-                continue;
-
+        var valuesByAttribute = pendingExport.ConnectedSystemObject.AttributeValues
+            .Where(attrValue => attrValue.Attribute?.Name != null)
+            .GroupBy(attrValue => attrValue.Attribute.Name, StringComparer.OrdinalIgnoreCase)
             // Don't overwrite values that were explicitly set by the Pending Export changes
-            if (row.ContainsKey(attrValue.Attribute.Name))
-                continue;
+            .Where(attrValues => !row.ContainsKey(attrValues.Key));
 
-            row[attrValue.Attribute.Name] = FormatCsoAttributeValue(attrValue, multiValueDelimiter);
+        foreach (var attrValues in valuesByAttribute)
+        {
+            var attribute = attrValues.First().Attribute;
+            if (attribute.AttributePlurality != AttributePlurality.MultiValued)
+            {
+                row[attribute.Name] = FormatCsoAttributeValue(attrValues.First(), multiValueDelimiter);
+                continue;
+            }
+
+            var values = CsoValues(pendingExport, attribute, multiValueDelimiter);
+            if (values.Any(value => value.Contains(multiValueDelimiter, StringComparison.Ordinal)))
+                return DelimiterInValue(attribute.Name, multiValueDelimiter);
+
+            row[attribute.Name] = string.Join(multiValueDelimiter, values);
         }
+
+        return null;
     }
 
     /// <summary>
-    /// Writes the full-state file from the merged rows dictionary.
+    /// The Connected System Object's values of a multi-valued attribute, in their cell form, without duplicates.
+    /// </summary>
+    private static List<string> CsoValues(PendingExport pendingExport, ConnectedSystemObjectTypeAttribute attribute, string multiValueDelimiter)
+    {
+        var values = new List<string>();
+        var comparer = ValueComparer(attribute);
+        var held = pendingExport.ConnectedSystemObject?.AttributeValues
+            .Where(attrValue => attrValue.Attribute?.Name != null && attrValue.Attribute.Name.Equals(attribute.Name, StringComparison.OrdinalIgnoreCase))
+            .Select(attrValue => Canonicalise(FormatCsoAttributeValue(attrValue, multiValueDelimiter), attribute.Type))
+            ?? [];
+
+        values.AddRange(held.Where(value => value.Length > 0).Distinct(comparer));
+        return values;
+    }
+
+    /// <summary>
+    /// A multi-valued cell's values, each put in the form JIM writes, so a value written by hand in another form
+    /// (<c>1.50</c>, a date with no fraction) is still recognised when a change removes or re-adds it. Every value a
+    /// multi-valued cell is built from passes through <see cref="Canonicalise"/>, so the set is compared in one form.
+    /// </summary>
+    private static List<string> SplitCell(string cell, ConnectedSystemObjectTypeAttribute attribute, string multiValueDelimiter) =>
+        cell.Split(multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(value => Canonicalise(value, attribute.Type))
+            .Distinct(ValueComparer(attribute))
+            .ToList();
+
+    private static string Canonicalise(string value, AttributeDataType type) => type switch
+    {
+        AttributeDataType.Number when int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) =>
+            number.ToString(CultureInfo.InvariantCulture),
+        AttributeDataType.LongNumber when long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longNumber) =>
+            longNumber.ToString(CultureInfo.InvariantCulture),
+        AttributeDataType.Decimal when DecimalAttributeValue.TryParse(value, out var decimalValue) =>
+            DecimalAttributeValue.ToCanonicalString(decimalValue),
+        AttributeDataType.DateTime when DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dateTime) =>
+            dateTime.ToString("O"),
+        AttributeDataType.Guid when Guid.TryParse(value, out var guid) => guid.ToString(),
+        _ => value
+    };
+
+    /// <summary>
+    /// How two values of the attribute are told apart: text and references ignoring case unless the attribute is
+    /// case-exact, every other type by its written form, which is already canonical.
+    /// </summary>
+    private static StringComparer ValueComparer(ConnectedSystemObjectTypeAttribute attribute) =>
+        attribute.Type is AttributeDataType.Text or AttributeDataType.Reference && !attribute.CaseExact
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+
+    private static string DelimiterInValue(string attributeName, string multiValueDelimiter) =>
+        $"A value of the multi-valued attribute '{attributeName}' contains the Multi-Value Delimiter ({multiValueDelimiter}), " +
+        "so the file would read it back as more than one value. Choose a Multi-Value Delimiter that no value contains.";
+
+    /// <summary>
+    /// Writes the full-state file from the merged rows dictionary, then the rows with no External ID as they were. The
+    /// file is written beside the original and then moved over it, so a write that fails part-way leaves the original
+    /// whole rather than truncated.
     /// </summary>
     private void WriteFullStateFile(
         string filePath,
         string delimiter,
         List<string> attributeColumns,
-        Dictionary<string, Dictionary<string, string>> rows)
+        Dictionary<string, Dictionary<string, string>> rows,
+        List<Dictionary<string, string>> unkeyedRows)
     {
-        _logger.Debug("FileConnectorExport.WriteFullStateFile: Writing {RowCount} rows to {Path}", rows.Count, filePath);
+        _logger.Debug("FileConnectorExport.WriteFullStateFile: Writing {RowCount} rows to {Path}", rows.Count + unkeyedRows.Count, filePath);
 
-        using var writer = new StreamWriter(filePath);
-        using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture)
+        var temporaryPath = $"{filePath}.{Guid.NewGuid():N}.tmp";
+        try
         {
-            Delimiter = delimiter
-        });
-
-        // Write header - use attribute columns only (no system columns)
-        foreach (var column in attributeColumns)
-        {
-            csv.WriteField(column);
-        }
-        csv.NextRecord();
-
-        // Write data rows
-        foreach (var row in rows.Values)
-        {
-            foreach (var column in attributeColumns)
+            using (var writer = new StreamWriter(temporaryPath))
+            using (var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture) { Delimiter = delimiter }))
             {
-                csv.WriteField(row.TryGetValue(column, out var value) ? value : string.Empty);
+                // Write header - use attribute columns only (no system columns)
+                foreach (var column in attributeColumns)
+                    csv.WriteField(column);
+                csv.NextRecord();
+
+                // Write data rows
+                foreach (var row in rows.Values.Concat(unkeyedRows))
+                {
+                    foreach (var column in attributeColumns)
+                        csv.WriteField(row.TryGetValue(column, out var value) ? value : string.Empty);
+                    csv.NextRecord();
+                }
             }
-            csv.NextRecord();
+
+            System.IO.File.Move(temporaryPath, filePath, overwrite: true);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(temporaryPath))
+                System.IO.File.Delete(temporaryPath);
         }
     }
 

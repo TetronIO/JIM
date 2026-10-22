@@ -249,11 +249,13 @@ public class SynchronisationController(
     /// - IsExternalId: Whether this is the unique identifier for objects
     /// - IsSecondaryExternalId: Whether this is a secondary identifier (e.g., DN for LDAP)
     /// - Type: Overrides the data type schema discovery inferred, where the Connector supports it
+    /// - Plurality: Whether the attribute holds one value or several, where the Connector supports it
     ///
     /// A data type override is accepted only where the Connector declares
     /// SupportsUserSelectedAttributeTypes, and only while the attribute is neither referenced by a
     /// Synchronisation Rule nor holding values. A Boolean holds one value, so an override to Boolean also
-    /// makes the attribute single-valued.
+    /// makes the attribute single-valued. Plurality follows the same rules, where the Connector declares
+    /// SupportsUserSelectedAttributePlurality (a delimited file), and a Boolean cannot be made multi-valued.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
@@ -309,14 +311,11 @@ public class SynchronisationController(
                 "Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
         }
 
-        // Validate: Cannot unselect an External ID or Secondary External ID attribute
-        if (request.Selected.HasValue && !request.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
+        // Validate: an anchor, or an attribute the Connector cannot work without, must stay selected (#2404).
+        if (request.Selected == false && JIM.Application.Servers.ConnectedSystemServer.GetDeselectionRefusal(attribute) is { } deselectionRefusal)
         {
-            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-            _logger.LogWarning("Attempted to unselect {IdType} attribute {AttributeId} ({Name})", idType, attributeId, attribute.Name);
-            return BadRequest(ApiErrorResponse.BadRequest(
-                $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. " +
-                "These attributes must remain selected to ensure sync operations function correctly."));
+            _logger.LogWarning("Attempted to unselect attribute {AttributeId} ({Name}), which must stay selected", attributeId, LogSanitiser.Sanitise(attribute.Name));
+            return BadRequest(ApiErrorResponse.BadRequest(deselectionRefusal));
         }
 
         // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact.
@@ -336,6 +335,14 @@ public class SynchronisationController(
                 return BadRequest(ApiErrorResponse.BadRequest(resolutionError));
         }
 
+        // Validate: a Boolean holds one value (#2153). The type checked is the one the attribute will have, so a Type and
+        // a Plurality sent together agree, and nothing is applied when they do not.
+        if (request.Plurality.HasValue && !AttributeDataTypeCapabilities.IsPermitted(request.Type ?? attribute.Type, request.Plurality.Value))
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Attribute '{attribute.Name}' cannot be made multi-valued. {AttributeDataTypeCapabilities.MultiValuedBooleanRule}"));
+        }
+
         // Validate and apply a data type override through the one rule set the portal's Schema tab shares
         // (#1354): refused for NotSet, on a Connector whose schema states types definitively, and once the
         // attribute is referenced or holds values. An override to Boolean also makes the attribute
@@ -347,6 +354,18 @@ public class SynchronisationController(
             {
                 _logger.LogWarning("Refused a data type override for attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
                 return BadRequest(ApiErrorResponse.BadRequest(typeOverride.ErrorMessage!));
+            }
+        }
+
+        // Likewise plurality, after the type so it is checked against the type the attribute now has (#2186): refused on
+        // a Connector that reads plurality from its schema, and once the attribute is referenced or holds values.
+        if (request.Plurality.HasValue)
+        {
+            var pluralityOverride = await _application.ConnectedSystems.OverrideAttributePluralityAsync(connectedSystem, attribute, request.Plurality.Value);
+            if (!pluralityOverride.Success)
+            {
+                _logger.LogWarning("Refused a plurality override for attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
+                return BadRequest(ApiErrorResponse.BadRequest(pluralityOverride.ErrorMessage!));
             }
         }
 
@@ -482,6 +501,16 @@ public class SynchronisationController(
             _logger.LogWarning("Rejected bulk attribute update carrying {Count} data type override(s)", typeOverrides.Count);
             return BadRequest(ApiErrorResponse.BadRequest(
                 $"A data type cannot be set through a bulk attribute update ({typeOverrides.Count} attribute(s) requested one). " +
+                "Update each attribute individually via PUT connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}."));
+        }
+
+        // Plurality likewise, for the same reason (#2186).
+        var pluralityOverrides = request.Attributes.Count(kvp => kvp.Value.Plurality.HasValue);
+        if (pluralityOverrides > 0)
+        {
+            _logger.LogWarning("Rejected bulk attribute update carrying {Count} plurality override(s)", pluralityOverrides);
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Plurality cannot be set through a bulk attribute update ({pluralityOverrides} attribute(s) requested one). " +
                 "Update each attribute individually via PUT connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}."));
         }
 

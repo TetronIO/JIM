@@ -62,3 +62,19 @@ Describe 'Get-PostgresImageReference' {
         $compose | Should -Match ([regex]::Escape("image: `${JIM_DB_IMAGE:-$reference}"))
     }
 }
+
+Describe 'The PostgreSQL image pin' {
+    It 'lives only in docker-compose.yml, so CI and the devcontainer run what customers run' {
+        # Dependabot bumps docker-compose.yml alone. A second pin anywhere else (CI's database tests, the devcontainer's
+        # database, the throwaway test database) is one it never moves, and it falls a release behind with every bump:
+        # by #2075 there were three of them, on three different versions. Everything else reads the compose pin.
+        # test/integration/docker is out of scope: it runs an older PostgreSQL deliberately, for compatibility testing.
+        $roots = @('.github', '.devcontainer', 'scripts', 'test/scripts') | ForEach-Object { Join-Path $script:RepoRoot $_ }
+        $pinned = Get-ChildItem -Path $roots -Recurse -File |
+            Where-Object { $_.Extension -ne '.md' -and $_.FullName -notmatch '[\\/]Tests[\\/]' } |
+            Select-String -Pattern '\bpostgres:\d' |
+            ForEach-Object { "$([System.IO.Path]::GetRelativePath($script:RepoRoot, $_.Path)):$($_.LineNumber)" }
+
+        $pinned | Should -BeNullOrEmpty
+    }
+}

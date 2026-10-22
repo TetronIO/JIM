@@ -9,7 +9,7 @@ function Set-JIMConnectedSystemAttribute {
     .DESCRIPTION
         Changes one attribute, or in bulk several at once with -AttributeUpdates: whether JIM manages it, whether it
         identifies objects, whether its values are case-exact, the step of time a date is held to, and where the
-        Connector allows it, its data type.
+        Connector allows it, its data type and whether it holds one value or several.
 
     .PARAMETER ConnectedSystemId
         The ID of the Connected System.
@@ -41,6 +41,14 @@ function Set-JIMConnectedSystemAttribute {
         column may be a whole number, a counter or a fractional figure. Refused once a Synchronisation Rule uses the
         attribute or it holds values. Integer is the Number data type, as in New-JIMMetaverseAttribute. A Boolean
         holds one value, so Boolean also makes the attribute single-valued. Cannot be set with -AttributeUpdates.
+
+    .PARAMETER Plurality
+        Whether the attribute holds one value or several. Accepted only where the Connector cannot read it from the
+        Connected System's schema: a delimited file's header names columns and nothing more, so its columns are
+        discovered single-valued, and a MultiValued column holds its values separated by the Multi-Value Delimiter.
+        Setting it makes the plurality the administrator's, so a schema refresh keeps it. Refused once a
+        Synchronisation Rule uses the attribute or it holds values, and for a Boolean, which holds one value. Cannot be
+        set with -AttributeUpdates.
 
     .PARAMETER CaseExact
         Whether the attribute's values are case-exact: $true when values differing only in case identify different
@@ -105,6 +113,12 @@ function Set-JIMConnectedSystemAttribute {
         a built-in whole-number Metaverse Attribute such as Employee Number without an expression.
 
     .EXAMPLE
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId 2 -ObjectTypeId 6 -AttributeId 30 -Plurality MultiValued
+
+        Tells JIM that a delimited file's member column holds several values, separated by the Multi-Value Delimiter,
+        so an import reads each one and an export writes the whole set.
+
+    .EXAMPLE
         Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 12 -CaseExact $true
 
         Declares that an attribute's values are case-exact, so JBloggs and jbloggs are different values. A schema
@@ -151,6 +165,10 @@ function Set-JIMConnectedSystemAttribute {
         [Parameter(ParameterSetName = 'Single')]
         [ValidateSet('Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
         [string]$Type,
+
+        [Parameter(ParameterSetName = 'Single')]
+        [ValidateSet('SingleValued', 'MultiValued')]
+        [string]$Plurality,
 
         [Parameter(ParameterSetName = 'Single')]
         [bool]$CaseExact,
@@ -230,6 +248,10 @@ function Set-JIMConnectedSystemAttribute {
                 # The ValidateSet exposes 'Integer' as a friendly alias for the AttributeDataType member
                 # 'Number'; the API takes the enum member name.
                 $body.type = if ($Type -eq 'Integer') { 'Number' } else { $Type }
+            }
+
+            if ($PSBoundParameters.ContainsKey('Plurality')) {
+                $body.plurality = $Plurality
             }
 
             if ($PSBoundParameters.ContainsKey('CaseExact')) {

@@ -14,7 +14,7 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 ## Supported Features
 
 - **Configurable delimiters**<br /> Comma (default), tab, pipe, semicolon, or any custom character
-- **Multi-valued attributes**<br /> Supported via duplicate column names in the header row, or via a configurable in-field delimiter (default: pipe `|`)
+- **Multi-valued attributes**<br /> Held in one column, the values separated by a configurable Multi-Value Delimiter (default: pipe `|`); you mark the attribute multi-valued on the Schema tab (see [Multi-valued attributes](#multi-valued-attributes))
 - **Schema auto-discovery**<br /> Column headers are read automatically to build the schema
 - **Type detection**<br /> Attribute data types are inferred by inspecting up to 50 rows of data. Supported types: Text, Number, Long Number, Decimal, Boolean, Guid, DateTime
 - **Culture-aware parsing**<br /> An optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed. A date with no time zone is read as UTC, and one with an offset is converted to UTC
@@ -156,12 +156,30 @@ JIM's File Connector configurations would then point at:
 
 When you configure a File Connector Connected System and trigger schema discovery, JIM performs the following steps:
 
-1. **Reads the header row**<br /> Column names become attribute names in the schema. On import a column is matched to its attribute ignoring case, so a file whose header later reads `employeeid` still fills `EmployeeId`.
-2. **Detects multi-valued attributes**<br /> If the same column name appears more than once in the header, the attribute is marked as multi-valued.
+1. **Reads the header row**<br /> Column names become attribute names in the schema. On import a column is matched to its attribute ignoring case, so a file whose header later reads `employeeid` still fills `EmployeeId`. Each attribute has one column: a header that names a column twice, or two columns differing only in case, is refused.
+2. **Discovers every attribute as single-valued**<br /> A delimiter in a cell could as easily be part of one value, so you mark the multi-valued attributes yourself (see [Multi-valued attributes](#multi-valued-attributes)).
 3. **Infers data types**<br /> JIM reads up to 50 data rows and attempts to parse each column's values as Number, Long Number, Decimal, Boolean, Guid, or DateTime, in that order (narrowest numeric type first). Whole numbers within 32-bit range infer Number, larger whole numbers infer Long Number, and fractional or exponent-notation values (for example `1.5` or `1.5E3`) infer Decimal. If none of these match, the attribute defaults to Text.
 4. **Discovers object types**<br /> If an Object Type Column is configured, JIM reads through the file to find all unique object type values. Otherwise, it uses the fixed Object Type setting.
 
 In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by Synchronisation Rules.
+
+## Multi-valued attributes
+
+A multi-valued attribute is one column whose cells hold several values, separated by the **Multi-Value Delimiter** setting (pipe `|` by default):
+
+```text
+employeeId,displayName,member
+E1001,Joe Bloggs,CN=Engineering|CN=London Office
+E1002,Ann Smith,CN=Finance
+```
+
+Schema discovery cannot tell a delimited cell from a single value that happens to contain the delimiter, so every column is discovered single-valued. After retrieving the schema, open each multi-valued attribute's **Edit** control on the Connected System's Schema tab, set **Values per object** to **Multi-Valued**, and save the schema; [Connected System Attributes](../configuration/connected-system-attributes.md#plurality) covers the rules and the PowerShell and REST API equivalents. Do this before a Synchronisation Rule uses the attribute or an import fills it, because the setting is locked after that. A schema refresh keeps it.
+
+On import, each value in the cell is read separately. On export, JIM writes the whole set: the values the cell already holds (or, for a row not yet in the file, the values JIM holds for the object), less the values removed, plus the values added, each once.
+
+- **Choose a delimiter no value contains.** A value containing the Multi-Value Delimiter would read back as two values, so JIM fails that object's export with an error naming the attribute instead of writing it. Avoid `,` and `;` for attributes holding distinguished names, which contain commas and may contain semicolons; the default `|` is the safe choice.
+- **Large sets stay in one cell.** A group with thousands of members is a long cell. The file is still valid, but spreadsheet applications may not show all of it (Excel shows at most 32,767 characters in a cell), so edit such files with a text editor or a script.
+- **A Boolean holds one value**, so it cannot be made multi-valued.
 
 ## Export Cell Formats
 
@@ -270,12 +288,26 @@ If imported data contains garbled characters or unexpected symbols:
 - Ensure the file is saved in UTF-8 encoding. JIM reads the file as UTF-8 (or as UTF-16 or UTF-32 when the file starts with a byte order mark), and no setting changes this; the **Culture** setting only affects how numbers and dates are parsed.
 - If the file was exported from another system, check whether that system uses a different character encoding.
 
-### Multi-valued attribute not detected
+### Export refuses to rewrite the file
 
-If attributes that should be multi-valued are appearing as single-valued:
+An export rewrites the whole file, and every row it was not asked to change must come back as it was. When JIM cannot be sure of that, every export in the run fails with an error naming the file, and the file is left exactly as it was:
 
-- **Duplicate column approach**<br /> Ensure the column name appears more than once in the header row. The names must match exactly (case-insensitive).
-- **In-field delimiter approach**<br /> Check that the Multi-Value Delimiter setting matches the delimiter used within the field values.
+- **The file could not be read.**<br /> It is malformed (for example a stray quotation mark), locked by another process, or not readable by JIM. The error includes what the reader reported; correct the file or the permission (see [Access denied](#access-denied-permission-error)).
+- **The file has rows but no External ID column.**<br /> JIM matches each row to its object by the External ID attribute's column, so without it every row would be lost. Add the column, or move the file aside so JIM starts a new one.
+- **Two rows have the same External ID.**<br /> JIM cannot tell which to update. The error names the External ID and both row numbers; remove the duplicate.
+
+The exports are retried on the next run once the file is corrected. A row with no External ID at all is not JIM's to change: it is written back unchanged, after the rows JIM manages. JIM writes the new file beside the old one and then replaces it, so an export that fails part-way through writing leaves the previous file whole.
+
+### Repeated column
+
+Schema discovery, an import and an export all fail with an error naming the column when the file's header names a column twice, such as `member,member`. Each attribute has one column: put the values in that one column, separated by the Multi-Value Delimiter, and mark the attribute multi-valued on the Schema tab (see [Multi-valued attributes](#multi-valued-attributes)). An export refuses such a file before writing anything, so the file is left as it was.
+
+### Multi-valued attribute imports as one value
+
+If a cell such as `CN=Alice|CN=Bob` imports as a single value:
+
+- **The attribute is single-valued.**<br /> Every column is discovered single-valued; mark it **Multi-Valued** on the Schema tab, as described under [Multi-valued attributes](#multi-valued-attributes).
+- **The delimiter does not match.**<br /> Check that the Multi-Value Delimiter setting matches the character separating the values in the file.
 
 ## Related
 

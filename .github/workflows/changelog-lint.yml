@@ -162,7 +162,7 @@ jobs:
       - name: Build the docs site strictly and check every link in it
         if: steps.docs-sources.outputs.changed == 'true'
         run: |
-          # The same bounded ranges as docs.yml, so the site checked here is the
+          # The same pinned versions as docs.yml, so the site checked here is the
           # site that deploys.
-          pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
+          pip install -r docs/requirements.txt
           pwsh -File ./scripts/Test-DocsSite.ps1

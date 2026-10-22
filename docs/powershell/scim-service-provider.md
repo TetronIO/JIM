@@ -233,6 +233,7 @@ The summary.
 | `ImportedUpTo` | `long` | The change the last successful import read up to; empty when the store has never been imported. |
 | `ChangesAwaitingImport` | `int` | Resources changed since the last import, which the next import will read. |
 | `LastWrite` | `datetime` | When a SCIM client last wrote to the store; empty when none has. |
+| `RejectedLast24Hours` | `int` | Requests the endpoint refused in the last 24 hours, across every key, other than for authentication. Each key's SCIM request Activities name the latest rejection and count the rest. |
 <!-- END GENERATED: Get-JIMScimStoreSummary -->
 
 ### Examples
@@ -319,4 +320,70 @@ Each schema.
 
 ```powershell title="List the attributes of the User schema"
 (Get-JIMScimSchema -ConnectedSystemId 12 | Where-Object { $_.Name -eq 'User' }).Attributes | Select-Object Name, Type, Required
+```
+
+---
+
+## Get-JIMScimJournal
+
+Returns the requests an identity provider made to one resource, oldest first: what each did, the attributes it changed or ignored (by name, never by value), and the key and address that made it. With `-ChangeId`, returns the requests behind one imported change in a Connected System Object's change history.
+
+<!-- BEGIN GENERATED: Get-JIMScimJournal -->
+### Syntax
+
+```powershell
+# ByResource (default)
+Get-JIMScimJournal -ConnectedSystemId <int> -ResourceId <guid> [-AfterSequence <long>] [-UpToSequence <long>]
+
+# ByChange
+Get-JIMScimJournal -ConnectedSystemId <int> -ChangeId <guid>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System, which must use the SCIM 2.0 Service Provider Connector. |
+| `ResourceId` | `guid` | Yes (ByResource) |  | The SCIM resource, which is the Connected System Object's external id. |
+| `AfterSequence` | `long` | No (ByResource) |  | Only writes after this change number. |
+| `UpToSequence` | `long` | No (ByResource) |  | Only writes up to and including this change number. |
+| `ChangeId` | `guid` | Yes (ByChange) |  | The ID of a change in a Connected System Object's change history, to get the requests behind it. |
+
+### Output
+
+Each journal entry, oldest first; with `-ChangeId`, the requests behind the change.
+
+**With `-ResourceId`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ChangeSequence` | `long` | The store's change number for the write; an import reads every write after the one it last read. |
+| `Occurred` | `datetime` | When the write was accepted. |
+| `ResourceId` | `guid` | The resource written, which is the Connected System Object's external id. |
+| `ResourceTypeName` | `string` | The resource's type, for example `User`. |
+| `Operation` | `string` | What the write did: `Created`, `Replaced`, `Patched`, `Deleted`, or `ReferenceRemovedByDeletion` for a membership removed because the resource it pointed to was deleted. One of `Created`, `Replaced`, `Patched`, `Deleted` or `ReferenceRemovedByDeletion`. |
+| `ChangedAttributes` | `string[]` | The SCIM attributes the write changed, by name. |
+| `IgnoredAttributes` | `string[]` | Attributes the request sent that the store does not keep, by name. |
+| `ApiKeyId` | `guid` | The key the write was made with; empty once that key has been deleted. |
+| `ApiKeyName` | `string` | The key's name when the write was made. |
+| `ClientAddress` | `string` | The address the request came from. |
+
+**With `-ChangeId`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ResourceId` | `guid` | The resource, which is the Connected System Object's external id. |
+| `AfterSequence` | `long` | The change number the import started after; empty for an import that read from the start. |
+| `UpToSequence` | `long` | The change number the import read up to, inclusive. |
+| `Entries` | `object[]` | The resource's accepted writes in that range, oldest first. Each has `ChangeSequence`, `Occurred`, `ResourceId`, `ResourceTypeName`, `Operation`, `ChangedAttributes`, `IgnoredAttributes`, `ApiKeyId`, `ApiKeyName` and `ClientAddress`. |
+<!-- END GENERATED: Get-JIMScimJournal -->
+
+### Examples
+
+```powershell title="See what each request did to a resource, and which key made it"
+Get-JIMScimJournal -ConnectedSystemId 12 -ResourceId 2819c223-7f76-453a-919d-413861904646 | Select-Object Occurred, Operation, ChangedAttributes, ApiKeyName
+```
+
+```powershell title="See the requests behind one imported change"
+(Get-JIMScimJournal -ConnectedSystemId 12 -ChangeId $changeId).Entries
 ```

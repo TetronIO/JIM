@@ -327,15 +327,16 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
-      # Phase 3: Container vulnerability scanning
+      # Phase 3: Container vulnerability scanning. The same script, scanner (.github/trivy-image.txt) and gate
+      # (fixable findings with a CVSS score of 7.0 or more) as ci.yml's scan-images job, so a release cannot fail
+      # on a finding CI passed or ship one CI would block. It used trivy-action until #2075, which brought its own
+      # Trivy version and gated on Trivy's severity labels. The image reference goes in via env rather than being
+      # interpolated into the script.
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # 0.36.0
-        with:
-          image-ref: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
+        env:
+          IMAGE_REF: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pwsh -File ./.github/scripts/Invoke-TrivyImageScan.ps1 -ImageRef "$IMAGE_REF"
 
       # Phase 4: Smoke test — verify container starts and logs expected startup message
       # Note: HTTP-based smoke tests are not viable because JIM.Web blocks on database
@@ -549,7 +550,7 @@ jobs:
           python-version: 3.x
 
       - name: Install MkDocs
-        run: pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
+        run: pip install -r docs/requirements.txt
 
       - name: Build site
         # --strict: see the comment on the equivalent step in docs.yml. Safe to fail a release on,

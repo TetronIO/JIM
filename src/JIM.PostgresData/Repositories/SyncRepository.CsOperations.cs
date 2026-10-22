@@ -129,7 +129,7 @@ public partial class SyncRepository
                 // The partition's values and its rows' synchronisation-pending mark (#2092) commit together.
                 await using var transaction = await connection!.BeginTransactionAsync();
                 if (attributeValues.Count > 0)
-                    await BulkInsertCsoAttributeValuesOnConnectionAsync(connection, transaction, attributeValues, allBatchCsoIds);
+                    await BulkInsertCsoAttributeValuesOnConnectionAsync(connection, attributeValues, allBatchCsoIds);
                 await MarkConnectedSystemObjectsSynchronisationPendingOnConnectionAsync(connection, transaction,
                     partition.Select(cso => cso.Id).ToList());
                 await transaction.CommitAsync();
@@ -147,7 +147,7 @@ public partial class SyncRepository
     /// per-statement SQL parse/bind of tens of thousands of parameters), so this reuses the same
     /// on-connection writers the parallel branch calls (<see cref="BulkInsertCsosOnConnectionAsync"/>,
     /// <see cref="BulkInsertCsoAttributeValuesOnConnectionAsync"/>); see the established pattern for
-    /// COPY on the EF connection in <see cref="BulkInsertOptimisticApplyAttributeValuesRawAsync"/>.
+    /// COPY on the EF connection in <see cref="ApplyExportedAttributeValuesAsync"/>.
     /// </summary>
     /// <remarks>
     /// No partition-based reference filtering is needed here (<c>partitionCsoIds: null</c>, meaning
@@ -178,7 +178,7 @@ public partial class SyncRepository
             .ToList();
 
         if (allAttributeValues.Count > 0)
-            await BulkInsertCsoAttributeValuesOnConnectionAsync(npgsqlConn, npgsqlTx, allAttributeValues, partitionCsoIds: null);
+            await BulkInsertCsoAttributeValuesOnConnectionAsync(npgsqlConn, allAttributeValues, partitionCsoIds: null);
 
         await transaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
@@ -314,7 +314,6 @@ public partial class SyncRepository
     /// allowed set before persistence begins.</param>
     private static async Task BulkInsertCsoAttributeValuesOnConnectionAsync(
         NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues,
         HashSet<Guid>? partitionCsoIds = null)
     {
@@ -401,7 +400,13 @@ public partial class SyncRepository
             await DeleteCsoAttributeValuesByIdAsync(removalValueIds);
 
         if (additions.Count > 0)
-            await BulkInsertOptimisticApplyAttributeValuesRawAsync(additions);
+        {
+            var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+            await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+            // COPY joins the connection's current transaction, as the import writer does.
+            await BulkInsertCsoAttributeValuesOnConnectionAsync(connection,
+                additions.Select(value => (value.ConnectedSystemObject.Id, value)).ToList(), partitionCsoIds: null);
+        }
 
         // SPEC-1082 D9: null the import state hash/fingerprint for every mutated CSO, set-based,
         // in the same call. Deliberately does NOT touch LastUpdated (see the class remarks above).
@@ -449,74 +454,6 @@ public partial class SyncRepository
             _context.ConnectedSystemObjectAttributeValues.RemoveRange(entities);
             await _context.SaveChangesAsync();
         }
-    }
-
-    /// <summary>
-    /// Bulk inserts <see cref="ConnectedSystemObjectAttributeValue"/> rows using Npgsql binary
-    /// COPY. Mirrors <c>ConnectedSystemRepository.BulkInsertCsoAttributeValuesRawAsync</c> exactly
-    /// (same columns, same per-column <see cref="NpgsqlTypes.NpgsqlDbType"/> mapping, same null
-    /// handling); duplicated rather than shared because that method is private to
-    /// <c>ConnectedSystemRepository</c> and this repository owns its own connection lifecycle.
-    /// </summary>
-    private async Task BulkInsertOptimisticApplyAttributeValuesRawAsync(List<ConnectedSystemObjectAttributeValue> additions)
-    {
-        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
-
-        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
-            COPY "ConnectedSystemObjectAttributeValues" (
-                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue", "DateTimeValue",
-                "IntValue", "LongValue", "ByteValue", "GuidValue", "BoolValue",
-                "ReferenceValueId", "UnresolvedReferenceValue"
-            ) FROM STDIN (FORMAT binary)
-            """);
-
-        foreach (var av in additions)
-        {
-            await writer.StartRowAsync();
-            await writer.WriteAsync(av.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
-            await writer.WriteAsync(av.ConnectedSystemObject.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
-            await writer.WriteAsync(av.AttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
-            if (av.StringValue is not null)
-                await writer.WriteAsync(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text);
-            else
-                await writer.WriteNullAsync();
-            if (av.DateTimeValue.HasValue)
-                await writer.WriteAsync(DateTimeAttributeValue.ToCanonical(av.DateTimeValue.Value), NpgsqlTypes.NpgsqlDbType.TimestampTz);
-            else
-                await writer.WriteNullAsync();
-            if (av.IntValue.HasValue)
-                await writer.WriteAsync(av.IntValue.Value, NpgsqlTypes.NpgsqlDbType.Integer);
-            else
-                await writer.WriteNullAsync();
-            if (av.LongValue.HasValue)
-                await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
-            else
-                await writer.WriteNullAsync();
-            if (av.ByteValue is not null)
-                await writer.WriteAsync(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea);
-            else
-                await writer.WriteNullAsync();
-            if (av.GuidValue.HasValue)
-                await writer.WriteAsync(av.GuidValue.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
-            else
-                await writer.WriteNullAsync();
-            if (av.BoolValue.HasValue)
-                await writer.WriteAsync(av.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
-            else
-                await writer.WriteNullAsync();
-            if (av.ReferenceValueId.HasValue)
-                await writer.WriteAsync(av.ReferenceValueId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
-            else
-                await writer.WriteNullAsync();
-            if (av.UnresolvedReferenceValue is not null)
-                await writer.WriteAsync(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text);
-            else
-                await writer.WriteNullAsync();
-        }
-
-        await writer.CompleteAsync();
     }
 
     #endregion

@@ -267,6 +267,34 @@ public class ScimStoreRepository : IScimStoreRepository
         };
     }
 
+    public async Task<List<ScimStoreJournalEntry>> GetJournalEntriesAsync(int connectedSystemId, Guid resourceId, long? afterSequence,
+        long? upToSequence, int maxEntries, CancellationToken cancellationToken = default)
+    {
+        var query = Repository.Database.ScimStoreJournalEntries
+            .AsNoTracking()
+            .Where(e => e.ConnectedSystemId == connectedSystemId && e.ResourceId == resourceId);
+        if (afterSequence is { } after)
+            query = query.Where(e => e.ChangeSequence > after);
+        if (upToSequence is { } upTo)
+            query = query.Where(e => e.ChangeSequence <= upTo);
+
+        // The (ConnectedSystemId, ResourceId, ChangeSequence) index serves this read in order.
+        return await query.OrderBy(e => e.ChangeSequence).Take(maxEntries).ToListAsync(cancellationToken);
+    }
+
+    public async Task<ScimChangeImportContext?> GetChangeImportContextAsync(Guid connectedSystemObjectChangeId, CancellationToken cancellationToken = default)
+    {
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .AsNoTracking()
+            .Where(c => c.Id == connectedSystemObjectChangeId)
+            .Select(c => new ScimChangeImportContext(
+                c.ConnectedSystemId,
+                c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ExternalIdSnapshot : null,
+                c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.Activity.ImportWatermarkFrom : null,
+                c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.Activity.ImportWatermarkTo : null))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task AddDefinitionsAsync(int connectedSystemId, IReadOnlyCollection<ScimStoreSchema> schemas,
         IReadOnlyCollection<ScimStoreResourceType> resourceTypes, CancellationToken cancellationToken = default)
     {

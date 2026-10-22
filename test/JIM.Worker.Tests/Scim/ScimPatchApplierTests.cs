@@ -215,6 +215,58 @@ public class ScimPatchApplierTests
         }
     }
 
+    [Test]
+    public void Apply_CapitalisedRemoveWithAValueList_RemovesOnlyTheListedMembers()
+    {
+        var group = Applied(ScimPatchApplier.Apply(Engineers(), [Op("Remove", "members", """[ { "value": "b2" } ]""")], Group()));
+
+        Assert.That(Members(group), Is.EqualTo(new[] { "a1", "c3" }));
+    }
+
+    [Test]
+    public void Apply_PrimarySentAsAString_IsStoredAsABoolean()
+    {
+        var resource = Applied(ScimPatchApplier.Apply(Alice(),
+            [Op("replace", "emails", """[ { "type": "work", "value": "alice@example.com", "primary": "True" } ]""")], User()));
+
+        Assert.That(resource["emails"]![0]!["primary"]!.GetValue<bool>(), Is.True);
+    }
+
+    [Test]
+    public void Apply_SingleElementArrayAsTheValueOfAnOperationWithNoPath_IsUnwrapped()
+    {
+        var result = ScimPatchApplier.Apply(Alice(), [Op("replace", null, """[ { "displayName": "A" } ]""")], User());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Applied(result)["displayName"]!.GetValue<string>(), Is.EqualTo("A"));
+            Assert.That(result.Coercions, Is.Not.Empty);
+        }
+    }
+
+    [Test]
+    public void Apply_EveryLeniency_RecordedWithoutTheValuesSent()
+    {
+        // The coercions are logged as they stand, so a value in one would reach the log.
+        var result = ScimPatchApplier.Apply(Alice(),
+        [
+            Op("Replace", "displayName", "\"Value-One\""),
+            Op("replace", "active", "\"False\""),
+            Op("replace", "title", "[ \"Value-Two\" ]"),
+            Op("replace", null, """[ { "nickName": "Value-Three" } ]"""),
+            Op("add", null, """{ "groups": [ { "value": "Value-Four" } ], "undeclaredThing": "Value-Five" }"""),
+            Op("add", "urn:example:undeclared:2.0:User:badge", "\"Value-Six\"")
+        ], User());
+
+        Assert.That(result.Error, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Coercions, Has.Count.GreaterThanOrEqualTo(6));
+            Assert.That(result.Coercions.Where(c => c.Contains("Value-", StringComparison.Ordinal) || c.Contains("False", StringComparison.Ordinal)),
+                Is.Empty);
+        }
+    }
+
     [TestCase("\"False\"", false)]
     [TestCase("\"true\"", true)]
     public void Apply_BooleanSentAsAString_IsStoredAsABoolean(string json, bool expected)

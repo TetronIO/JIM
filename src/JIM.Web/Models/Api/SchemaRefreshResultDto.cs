@@ -103,6 +103,12 @@ public class SchemaRefreshResultDto
     public Dictionary<string, List<string>> BlockedCredentialAttributes { get; set; } = new();
 
     /// <summary>
+    /// Existing attributes this refresh selected and locked because the Connector cannot work without their values,
+    /// grouped by object type name.
+    /// </summary>
+    public Dictionary<string, List<string>> AttributesSelectedByConnector { get; set; } = new();
+
+    /// <summary>
     /// Discovery shortfalls the Connector worked around rather than failed on. A partial read can make entries
     /// appear removed when they are not; check these before committing a refresh.
     /// </summary>
@@ -175,6 +181,7 @@ public class SchemaRefreshResultDto
                 kvp => kvp.Value.Select(SchemaObjectTypeClassificationChangeDto.FromModel).ToList()),
             AttributesInUse = result.AttributesInUse,
             BlockedCredentialAttributes = result.BlockedCredentialAttributes,
+            AttributesSelectedByConnector = result.AttributesSelectedByConnector,
             DiscoveryWarnings = result.DiscoveryWarnings,
             PasswordPolicyDiscovered = result.PasswordPolicyDiscovered,
             HasChanges = result.HasChanges,

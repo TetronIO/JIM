@@ -12,7 +12,7 @@ The JIM SCIM 2.0 Client Connector synchronises identities with any system that e
 JIM acts as the **SCIM client**: it connects out to the service provider, discovers what it can do, imports its resources, and exports provisioning changes to it. One standards-based connector therefore reaches every system that speaks SCIM, without a separate connector per product.
 
 !!! note "Direction matters"
-    This connector is for systems that **publish** a SCIM interface for JIM to call. The reverse arrangement, where an external system pushes changes into JIM, is a separate capability and is not covered here.
+    This connector is for systems that **publish** a SCIM interface for JIM to call. For the reverse arrangement, where an identity provider pushes Users and Groups to JIM, use the [JIM SCIM 2.0 Service Provider Connector](jim-scim-service-provider-connector.md).
 
 ## Supported Service Providers
 
@@ -99,7 +99,7 @@ The watermark is recorded only when a run finishes, and is deliberately set a mi
 | Update (provider without PATCH) | The resource is read, the changes are applied to it, and the whole resource is written back with `PUT`. |
 | Delete | `DELETE`. A resource that has already gone counts as success. |
 
-Where the provider maintains entity tags, updates carry `If-Match`, so an export cannot silently overwrite a change made in the provider since JIM last read it. A rejected update is reported as a concurrency conflict and reconciled by the next import.
+Where the provider maintains entity tags, updates carry `If-Match`, so an export cannot silently overwrite a change made in the provider since JIM last read it. A rejected update is reported as a concurrency conflict and reconciled by the next import. The tag sent is the `meta.version` JIM last imported, so schema import selects `meta.version` on every Object Type and keeps it selected; its Selected switch is disabled. Where the provider does not support entity tags, `meta.version` is yours to select or not.
 
 A `dateTime` value is written in UTC, with a fraction of a second only where it has one. A provider's schema cannot say how finely it keeps dates, so schema discovery gives every `dateTime` attribute a [Date resolution](../configuration/connected-system-attributes.md#date-resolution) of one second, and JIM exports and compares dates to the second. Where a provider keeps milliseconds, change the resolution on the Schema tab or with `Set-JIMConnectedSystemAttribute -DateTimeResolution`. Removing one date of a multi-valued attribute finds it as an instant, however the provider writes it.
 

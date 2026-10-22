@@ -354,6 +354,11 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("TargetType", "Created")
                         .HasDatabaseName("IX_Activities_TargetType_Created");
 
+                    b.HasIndex("InitiatedById", "ConnectedSystemId", "AggregationWindowStart")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Activities_ScimRequestAggregation_Unique")
+                        .HasFilter("\"TargetType\" = 26 AND \"AggregationWindowStart\" IS NOT NULL");
+
                     b.HasIndex("TargetType", "ApiKeyPrefix", "ClientIpAddress", "SecurityEventReason", "AggregationWindowStart")
                         .IsUnique()
                         .HasDatabaseName("IX_Activities_SecurityAggregation_Unique")
@@ -3929,6 +3934,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("PluralitySetByAdministrator")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("ReferencedObjectTypeId")
                         .HasColumnType("integer");
 
@@ -4373,6 +4381,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsUniquenessRejectionClassification")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsUserSelectedAttributePlurality")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsUserSelectedAttributeTypes")

@@ -198,6 +198,37 @@ public class ScimConnectorSchemaTests
     }
 
     [Test]
+    public async Task DiscoverAsync_ProviderSupportsEntityTags_DeclaresMetaVersionAlwaysImportedAsync()
+    {
+        // Conditional export reads the If-Match tag from the Connected System Object's meta.version, so an
+        // administrator who left it unselected silently lost concurrency protection (#2404).
+        var discovery = CreateDiscovery(DiscoveryHandler());
+
+        var result = await discovery.DiscoverAsync(CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var objectType in result.Schema.ObjectTypes)
+            {
+                Assert.That(objectType.Attributes.Single(a => a.Name == "meta.version").AlwaysImported, Is.True, objectType.Name);
+                Assert.That(objectType.Attributes.Where(a => a.AlwaysImported).Select(a => a.Name), Is.EqualTo(new[] { "meta.version" }),
+                    $"{objectType.Name}: nothing else is needed to work.");
+            }
+        }
+    }
+
+    [Test]
+    public async Task DiscoverAsync_ProviderDoesNotSupportEntityTags_LeavesMetaVersionToTheAdministratorAsync()
+    {
+        var discovery = CreateDiscovery(DiscoveryHandler(serviceProviderConfig: ServiceProviderConfigJson.Replace(
+            "\"etag\": { \"supported\": true }", "\"etag\": { \"supported\": false }")));
+
+        var result = await discovery.DiscoverAsync(CancellationToken.None);
+
+        Assert.That(result.Schema.ObjectTypes.SelectMany(o => o.Attributes).Where(a => a.AlwaysImported), Is.Empty);
+    }
+
+    [Test]
     public async Task DiscoverAsync_RecommendsIdAsTheExternalIdAndMarksItReadOnlyAsync()
     {
         var discovery = CreateDiscovery(DiscoveryHandler());

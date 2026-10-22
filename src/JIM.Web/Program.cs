@@ -169,6 +169,11 @@ try
     });
     builder.Services.AddSingleton<IJimApplicationFactory, JimApplicationFactory>();
     builder.Services.AddSingleton<IFailedAuthenticationRecorder, FailedAuthenticationRecorder>();
+    // SCIM summary Activity (#124, D17): requests counted in memory, flushed every ten seconds and at shutdown.
+    builder.Services.AddSingleton<JIM.Web.Scim.ScimRequestTallyBuffer>();
+    builder.Services.AddScoped<JIM.Web.Scim.ScimRequestTallyFilter>();
+    builder.Services.AddSingleton<JIM.Web.Scim.ScimRequestTallyFlusher>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<JIM.Web.Scim.ScimRequestTallyFlusher>());
     builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
 
@@ -680,7 +685,7 @@ try
 
     // Health probes are exempt, so that a probe over the loopback HTTP listener sees JIM's real state rather than
     // a redirect that counts as healthy.
-    app.UseHttpsRedirectionExceptHealthProbes();
+    app.UseHttpsRedirectionExceptHealthProbes(app.Environment);
     app.UseStaticFiles();
     app.UseRouting();
 

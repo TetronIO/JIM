@@ -156,7 +156,7 @@ Total: 43 tests.
 
 **Running locally**:
 
-Use the `jim-test-db` alias, which spins up a disposable PostgreSQL container on port 5433 (so it never collides with your dev `jim-db` on 5432), runs the tier, and tears the container down:
+Use the `jim-test-db` alias, which spins up a disposable PostgreSQL container on port 5433 (so it never collides with your dev `jim-db` on 5432), runs the tier, and tears the container down. The container comes from `test/scripts/Start-PostgresTestServer.ps1`, which CI's `database-tests` job runs too: both use the image pinned in `docker-compose.yml`, with durability off and a `C.UTF-8` cluster as the bundled database has:
 
 ```bash
 jim-test-db
@@ -170,7 +170,7 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
   dotnet test JIM.sln --filter "Category=RequiresPostgres"
 ```
 
-**Running in CI**: The `database-tests` job in `.github/workflows/ci.yml` stands up a PostgreSQL service container, turns off `fsync`, `synchronous_commit` and `full_page_writes` on it (the database is discarded, and with them on the job's run time followed the runner's disk speed), points `JIM_TEST_RESET_*` at a throwaway `jim_test` database, and runs `dotnet test JIM.sln --filter "Category=RequiresPostgres"` on every PR. It runs alongside the in-memory `build-and-test` job, so the two tiers give independent feedback and a failure here blocks the PR.
+**Running in CI**: The `database-tests` job in `.github/workflows/ci.yml` stands up PostgreSQL with `test/scripts/Start-PostgresTestServer.ps1` (the script behind `jim-test-db`), from the image pinned in `docker-compose.yml` rather than a service container's hand-maintained pin (#2075), with `fsync`, `synchronous_commit` and `full_page_writes` off (the database is discarded, and with them on the job's run time followed the runner's disk speed), points `JIM_TEST_RESET_*` at a throwaway `jim_test` database, and runs `dotnet test JIM.sln --filter "Category=RequiresPostgres"` on every PR. It runs alongside the in-memory `build-and-test` job, so the two tiers give independent feedback and a failure here blocks the PR.
 
 **What Database-Backed Component Tests Are Good At**:
 - ✅ Catching persistence bugs the in-memory provider's auto-tracking masks (silent no-op writes)
@@ -376,13 +376,17 @@ Beside the five tiers, which test JIM's code, one check tests how JIM is deploye
 
 ### Deployment lab
 
-**Location**: `test/ci/deployment/lab/`, run on a dedicated LXD host, not in CI (see its README; the host's setup is in `TetronIO/ci-runners`).
+**Location**: `test/ci/deployment/lab/`, run by `.github/workflows/deploy-lab.yml` on the dedicated LXD lab host, a self-hosted runner in its own runner group (see the lab's README; the host's setup and the runner's registration are in `TetronIO/ci-runners`, `docs/deploy-lab.md`).
 
 **Purpose**: What `deployment-boot` cannot reach from GitHub's Ubuntu runners: Red Hat Enterprise Linux (AlmaLinux 9, SELinux enforcing, firewalld, NetworkManager), a host with no route to the internet, a host reboot, and a sign-in from another machine. It found most of #1876's defects, among them #1953 (AppArmor crashing .NET on Ubuntu's rootful Podman) and #2009 (NetworkManager unplugging rootful Podman's pods on AlmaLinux).
 
-**What it does**: installs a bundle on a fresh VM per cell of a matrix (`Cells.psd1`) of operating system, runtime and network, as many cells at once as the host's memory holds. Each cell checks the bundle's checksums, runs `Invoke-DeploymentBoot.ps1` inside the VM (so the lab and CI check the same things), then from the lab host checks readiness over HTTPS, an OIDC sign-in by the initial administrator, a reboot, and that nothing crashed. Upgrade cells install the latest release with real data (an LDAP Connected System whose stored credential must still decrypt), upgrade by the Upgrading guide, reboot, and roll back by it, running every command the guide gives as written there (`Get-DocumentedCommand.ps1`). InstallerCases cells check that every setting the installer refuses, a run stopped with Ctrl+C, and a declined or refused run over an installation leave every file and container exactly as they were, and that a re-run serves its new certificate; ExternalDatabase cells install against a PostgreSQL server of the customer's own, prepared by the deployment guide's SQL, on a VM beside JIM's. The matrix, scheduling, sign-in parsing and report have Pester tests in `test/ci/deployment/lab/Tests/`, which `build-and-test` runs.
+**What it does**: installs a bundle on a fresh VM per cell of a matrix (`Cells.psd1`) of operating system, runtime and network, as many cells at once as the host's memory holds. Each cell checks the bundle's checksums, runs `Invoke-DeploymentBoot.ps1` inside the VM (so the lab and CI check the same things), then from the lab host checks readiness over HTTPS, an OIDC sign-in by the initial administrator, a reboot, and that nothing crashed. Upgrade cells install the latest release with real data (an LDAP Connected System whose stored credential must still decrypt), upgrade by the Upgrading guide, reboot, and roll back by it, running every command the guide gives as written there (`Get-DocumentedCommand.ps1`). InstallerCases cells check that every setting the installer refuses, a run stopped with Ctrl+C, and a declined or refused run over an installation leave every file and container exactly as they were, that a re-run serves its new certificate, and that `--renew-certificate` and `--certificate` do what they say; ExternalDatabase cells install against a PostgreSQL server of the customer's own, prepared by the deployment guide's SQL, on a VM beside JIM's; the Soak cell restarts JIM 20 times and reboots its host 5 times, checking it comes back each time. The matrix, scheduling, sign-in parsing and report have Pester tests in `test/ci/deployment/lab/Tests/`, which `build-and-test` runs.
 
-**Status**: run by hand against a release candidate, pending a release workflow that runs it on the lab host.
+**Running in CI**: nightly on `main`, on every push to `main` that changes `VERSION` (so merging a release pull request tests the release commit), and on demand (`gh workflow run deploy-lab.yml --ref main`, optionally with a choice of cells). Never on pull requests. A full run is 19 cells in about 40 minutes. It posts a `jim-deploy-lab` commit status, and a release is refused unless the commit being tagged has a green one (`engineering/RELEASE_PROCESS.md`, "The Deployment Lab Gate").
+
+**Running locally**: on the lab host, `Invoke-DeploymentLab.ps1` (see the README's "Running it").
+
+**Not yet covered**: online installs and online upgrades, which download from GitHub Releases and ghcr.io and so need two published releases with `setup.sh --upgrade`; they follow the next release (#1876).
 
 ## The Watermark Bug: A Case Study
 

@@ -109,6 +109,12 @@ public class ConnectorDefinitionDto
     public bool SupportsUserSelectedAttributeTypes { get; set; }
 
     /// <summary>
+    /// Whether the administrator can say whether an attribute holds one value or several, where the Connected System's
+    /// schema cannot state it (a delimited file).
+    /// </summary>
+    public bool SupportsUserSelectedAttributePlurality { get; set; }
+
+    /// <summary>
     /// Whether the Connector confirms an export as soon as it is made, rather than at the next import.
     /// </summary>
     public bool SupportsAutoConfirmExport { get; set; }
@@ -193,6 +199,7 @@ public class ConnectorDefinitionDto
             SupportsSecondaryExternalId = entity.SupportsSecondaryExternalId,
             SupportsUserSelectedExternalId = entity.SupportsUserSelectedExternalId,
             SupportsUserSelectedAttributeTypes = entity.SupportsUserSelectedAttributeTypes,
+            SupportsUserSelectedAttributePlurality = entity.SupportsUserSelectedAttributePlurality,
             SupportsAutoConfirmExport = entity.SupportsAutoConfirmExport,
             SupportsParallelExport = entity.SupportsParallelExport,
             SupportsPaging = entity.SupportsPaging,

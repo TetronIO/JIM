@@ -217,6 +217,30 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
+  # Docs site toolchain (mkdocs, mkdocs-material, mkdocs-glightbox), pinned exactly
+  # in docs/requirements.txt (#2058). A bump touches docs/, so changelog-lint runs
+  # the strict docs build and link check on it. Majors are ignored: MkDocs 2.0 is
+  # incompatible with Material for MkDocs, and the planned move is to Zensical.
+  - package-ecosystem: "pip"
+    directory: "/docs"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docs-toolchain:
+        patterns:
+          - "*"
+
   # GitHub Actions
   #
   # Grouped so that the codeql-action sub-actions (init, analyze,

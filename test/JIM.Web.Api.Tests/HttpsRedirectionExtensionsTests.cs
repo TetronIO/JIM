@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
 
 namespace JIM.Web.Api.Tests;
@@ -47,6 +49,16 @@ public class HttpsRedirectionExtensionsTests
     }
 
     [Test]
+    public async Task UseHttpsRedirectionExceptHealthProbes_DevelopmentRequestOverHttp_ReachesTheEndpoint()
+    {
+        // A development host may serve HTTPS beside HTTP (the integration harness does, for JIM's SCIM client to call
+        // its own SCIM endpoint) while every other caller keeps using HTTP.
+        var context = await SendAsync("http", "/api/v1/metaverse/objects", Environments.Development);
+
+        Assert.That(context.Response.StatusCode, Is.EqualTo(StatusCodes.Status503ServiceUnavailable));
+    }
+
+    [Test]
     public async Task UseHttpsRedirectionExceptHealthProbes_RequestOverHttps_ReachesTheEndpoint()
     {
         var context = await SendAsync("https", "/");
@@ -58,7 +70,7 @@ public class HttpsRedirectionExtensionsTests
     /// Sends one request through the redirection middleware to an endpoint that always answers 503, as the
     /// readiness endpoint does when JIM is not ready.
     /// </summary>
-    private static async Task<HttpContext> SendAsync(string scheme, string path)
+    private static async Task<HttpContext> SendAsync(string scheme, string path, string environmentName = "Production")
     {
         await using var services = new ServiceCollection()
             .AddLogging()
@@ -73,7 +85,7 @@ public class HttpsRedirectionExtensionsTests
         serverFeatures.Set<IServerAddressesFeature>(addresses);
 
         var app = new ApplicationBuilder(services, serverFeatures);
-        app.UseHttpsRedirectionExceptHealthProbes();
+        app.UseHttpsRedirectionExceptHealthProbes(new TestHostEnvironment { EnvironmentName = environmentName });
         app.Run(context =>
         {
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
@@ -88,5 +100,16 @@ public class HttpsRedirectionExtensionsTests
 
         await app.Build()(httpContext);
         return httpContext;
+    }
+
+    private sealed class TestHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Production;
+
+        public string ApplicationName { get; set; } = "JIM.Web";
+
+        public string ContentRootPath { get; set; } = string.Empty;
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

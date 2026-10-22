@@ -44,7 +44,7 @@ Describe 'Get-IntegrationLane (serial)' {
     }
 
     It 'keeps the historic Compose arguments' {
-        Get-JimComposeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
+        Get-JimComposeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'test/integration/docker/jim-web-https.override.yml')
         Get-IntegrationComposeArgs | Should -Be @('-f', 'test/integration/docker/docker-compose.integration-tests.yml')
     }
 
@@ -101,10 +101,10 @@ Describe 'Get-IntegrationLane (lanes)' {
     It 'adds the lane override files and project names to the suffixed lanes only' {
         $env:JIM_INTEGRATION_LANE = 'OpenLDAP'
         try {
-            Get-JimComposeArgs | Should -Be @('-p', 'jim-openldap', '-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'test/integration/docker/jim-lane.override.yml')
+            Get-JimComposeArgs | Should -Be @('-p', 'jim-openldap', '-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'test/integration/docker/jim-web-https.override.yml', '-f', 'test/integration/docker/jim-lane.override.yml')
             Get-IntegrationComposeArgs | Should -Be @('-p', 'jim-integration-openldap', '-f', 'test/integration/docker/docker-compose.integration-tests.yml', '-f', 'test/integration/docker/integration-lane.override.yml')
             $env:JIM_INTEGRATION_LANE = 'SambaAD'
-            Get-JimComposeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
+            Get-JimComposeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'test/integration/docker/jim-web-https.override.yml')
         }
         finally {
             $env:JIM_INTEGRATION_LANE = $null

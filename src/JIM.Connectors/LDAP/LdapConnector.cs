@@ -124,6 +124,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     public bool SupportsSecondaryExternalId => true;
     public bool SupportsUserSelectedExternalId => false;
     public bool SupportsUserSelectedAttributeTypes => false;
+    public bool SupportsUserSelectedAttributePlurality => false;
     public bool SupportsAutoConfirmExport => false;
     public bool SupportsParallelExport => true;
     public bool SupportsPaging => true;

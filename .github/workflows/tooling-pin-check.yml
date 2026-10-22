@@ -13,6 +13,12 @@
 #     in scripts/Test-DocsSite.ps1, which `docker run`s it. Not a Dockerfile FROM
 #     line, so Dependabot's docker ecosystem never sees it. Tag and digest move
 #     together.
+#   - aquasec/trivy, the scanner CI and the release run over every production
+#     image, pinned by tag and digest in .github/trivy-image.txt, which
+#     .github/scripts/Invoke-TrivyImageScan.ps1 reads. Named in a workflow
+#     it would be invisible to Dependabot, and this workflow's App could not
+#     commit a bump to it (it has no `workflows` permission, deliberately: with
+#     it, the bot could rewrite CI). Hence the data file.
 #
 # See .github/scripts/check-tooling-pins.ps1 (detection: npm, NuGet and Docker
 # Hub registry lookups, no Docker) and .github/scripts/open-pin-pr.ps1 (the shared
@@ -83,8 +89,8 @@ jobs:
         run: |
           $intro = @'
           Newer versions of development tooling pinned outside any Dependabot-readable
-          manifest (.devcontainer/setup.sh, .mcp.json, scripts/Test-DocsSite.ps1) are
-          available upstream. Raised
+          manifest (.devcontainer/setup.sh, .mcp.json, scripts/Test-DocsSite.ps1,
+          .github/trivy-image.txt) are available upstream. Raised
           for evaluation by the tooling-pin-check workflow. Where a tool is pinned in
           more than one file, every location has been moved to the same version.
           '@
@@ -94,7 +100,7 @@ jobs:
           $nothingToPropose = '${{ steps.check.outputs.has_updates }}' -ne 'true'
           ./.github/scripts/open-pin-pr.ps1 `
             -BodyFile tooling-pin-pr-body.md `
-            -FilePattern '(^|/)(setup\.sh|\.mcp\.json|Test-DocsSite\.ps1)$' `
+            -FilePattern '(^|/)(setup\.sh|\.mcp\.json|Test-DocsSite\.ps1|trivy-image\.txt)$' `
             -Branch 'automation/tooling-pin-updates' `
             -CommitHeadline 'chore(deps): bump pinned development tooling versions' `
             -CommitBodyIntro $intro `

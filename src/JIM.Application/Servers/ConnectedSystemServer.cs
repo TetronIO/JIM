@@ -3014,10 +3014,12 @@ public partial class ConnectedSystemServer
 
                         // The Boolean rule (#2153): the plurality follows the attribute's effective type, which is
                         // the administrator's where they overrode it, so a Boolean is single-valued whatever the
-                        // Connected System declares.
+                        // Connected System declares. A plurality the administrator set is kept, as their type is: a
+                        // delimited file discovers every column single-valued, so restating discovery would undo every
+                        // multi-valued column on each refresh (#2186).
                         var effectivePlurality = AttributeDataTypeCapabilities.Constrain(
                             existingAttribute.TypeSetByAdministrator ? existingAttribute.Type : schemaAttribute.Type,
-                            schemaAttribute.AttributePlurality);
+                            existingAttribute.PluralitySetByAdministrator ? existingAttribute.AttributePlurality : schemaAttribute.AttributePlurality);
                         if (existingAttribute.AttributePlurality != effectivePlurality)
                         {
                             result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
@@ -3180,6 +3182,8 @@ public partial class ConnectedSystemServer
             // date (#2049).
             if (existingObjectType != null && classificationUpdated && !result.ChangedObjectTypeClassifications.ContainsKey(connectedSystemObjectType.Name))
                 result.ObjectTypesWithClassificationUpdates.Add(connectedSystemObjectType.Name);
+
+            ApplyConnectorRequiredSelections(connectedSystemObjectType, schemaObjectType, result);
 
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
             // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
@@ -3532,6 +3536,49 @@ public partial class ConnectedSystemServer
         if (result.BlockedCredentialAttributeCount > 0)
             Log.Information("Blocked {Count} credential attribute(s) while importing the schema for Connected System {ConnectedSystem}. Passwords are handled by JIM's dedicated password channel, not Attribute Flow.",
                 result.BlockedCredentialAttributeCount, LogSanitiser.Sanitise(connectedSystem.Name));
+    }
+
+    /// <summary>
+    /// Selects and locks every attribute the Connector declares it cannot work without (#2404), as the External ID is,
+    /// and releases the lock on any it no longer declares, leaving that attribute's selection to the administrator. The
+    /// lock is the Connector's to give, so it is restated on every merge; the External ID and credential rules run
+    /// afterwards and lock what they own again. An existing attribute this newly selects or locks is reported, so a
+    /// refresh carrying only that is offered for applying rather than discarded as up to date.
+    /// </summary>
+    private static void ApplyConnectorRequiredSelections(
+        ConnectedSystemObjectType connectedSystemObjectType,
+        ConnectorSchemaObjectType schemaObjectType,
+        SchemaRefreshResult result)
+    {
+        var additions = result.AddedAttributes.GetValueOrDefault(schemaObjectType.Name) ?? [];
+        var mergedAttributesByName = connectedSystemObjectType.Attributes
+            .GroupBy(a => a.Name)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var (schemaAttribute, mergedAttribute) in schemaObjectType.Attributes
+                     .Where(a => mergedAttributesByName.ContainsKey(a.Name))
+                     .Select(a => (a, mergedAttributesByName[a.Name])))
+        {
+            if (!schemaAttribute.AlwaysImported)
+            {
+                mergedAttribute.SelectionLocked = false;
+                continue;
+            }
+
+            var changed = !mergedAttribute.Selected || !mergedAttribute.SelectionLocked;
+            mergedAttribute.Selected = true;
+            mergedAttribute.SelectionLocked = true;
+
+            if (changed && !additions.Contains(schemaAttribute.Name))
+            {
+                if (!result.AttributesSelectedByConnector.TryGetValue(schemaObjectType.Name, out var selected))
+                {
+                    selected = [];
+                    result.AttributesSelectedByConnector[schemaObjectType.Name] = selected;
+                }
+                selected.Add(schemaAttribute.Name);
+            }
+        }
     }
 
     /// <summary>
@@ -5327,6 +5374,28 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Why an attribute may not be deselected, or null when it may: an External ID or Secondary External ID, and an
+    /// attribute whose selection is locked selected because the Connector cannot work without it (#2404). A locked
+    /// credential attribute is held deselected, so deselecting it again is allowed. Shared by every attribute update
+    /// path so the portal, the REST API and PowerShell cannot disagree.
+    /// </summary>
+    public static string? GetDeselectionRefusal(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        if (attribute.IsExternalId || attribute.IsSecondaryExternalId)
+        {
+            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
+            return $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. " +
+                   "These attributes must remain selected to ensure sync operations function correctly.";
+        }
+
+        if (attribute.SelectionLocked && attribute.Selected)
+            return $"Cannot unselect attribute '{attribute.Name}' because the Connector cannot work without its values, " +
+                   "so it is always imported.";
+
+        return null;
+    }
+
+    /// <summary>
     /// Validates and applies one attribute's part of a bulk update, returning why it was refused, or null once it is
     /// applied. Shared by both bulk overloads so the user and API key paths cannot disagree on a rule.
     /// </summary>
@@ -5339,12 +5408,8 @@ public partial class ConnectedSystemServer
             (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
             return $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.";
 
-        // Validate: Cannot unselect an External ID or Secondary External ID attribute
-        if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
-        {
-            var idType = attribute.IsExternalId ? "External ID" : "Secondary External ID";
-            return $"Cannot unselect attribute '{attribute.Name}' because it is the {idType} attribute. These attributes must remain selected.";
-        }
+        if (updates.Selected == false && GetDeselectionRefusal(attribute) is { } deselectionRefusal)
+            return deselectionRefusal;
 
         // Validate: only text compares with or without case, so only a Text attribute can be declared case-exact (#2051).
         if (updates.CaseExact == true && attribute.Type != AttributeDataType.Text)
@@ -7136,6 +7201,52 @@ public partial class ConnectedSystemServer
         attribute.AttributePlurality = plurality;
 
         return AttributeTypeOverrideResult.Applied(madeSingleValued);
+    }
+
+    /// <summary>
+    /// Validates and applies an administrator's choice of whether a Connected System attribute holds one value or
+    /// several, the one rule set the portal's Schema tab and the REST API (and so PowerShell) share. The attribute is
+    /// changed in memory only; the caller persists it through its own audited save.
+    /// </summary>
+    /// <remarks>
+    /// Plurality may only be set where the Connector says its schema cannot state it: a delimited file's header names
+    /// columns and nothing more, so only the administrator knows which hold delimited sets (#2186). It follows the same
+    /// lock as a data type override, since reading a cell as several values instead of one (or the reverse)
+    /// reinterprets what was imported and what a Synchronisation Rule was validated against. By the Boolean rule
+    /// (#2153) a Boolean holds one value, so it cannot be made multi-valued. Call this after any type override in the
+    /// same edit, so the type checked is the one the attribute will have.
+    /// </remarks>
+    public async Task<AttributePluralityOverrideResult> OverrideAttributePluralityAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectTypeAttribute attribute,
+        AttributePlurality newPlurality)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        // An absent Connector Definition is treated as not supporting the override, as for a type override.
+        if (connectedSystem.ConnectorDefinition?.SupportsUserSelectedAttributePlurality != true)
+            return AttributePluralityOverrideResult.Refused(
+                $"The '{connectedSystem.ConnectorDefinition?.Name ?? connectedSystem.Name}' Connector states whether each attribute holds one value " +
+                "or several from the Connected System's own schema, so it cannot be overridden.");
+
+        if (!AttributeDataTypeCapabilities.IsPermitted(attribute.Type, newPlurality))
+            return AttributePluralityOverrideResult.Refused(
+                $"Attribute '{attribute.Name}' cannot be made multi-valued. {AttributeDataTypeCapabilities.MultiValuedBooleanRule}");
+
+        if (newPlurality != attribute.AttributePlurality && await IsObjectTypeAttributeBeingReferencedAsync(attribute))
+            return AttributePluralityOverrideResult.Refused(
+                $"Whether attribute '{attribute.Name}' holds one value or several cannot be changed because it is referenced by a Synchronisation Rule, " +
+                "or already holds values. Changing it would reinterpret data already imported. Remove the references, or clear the Connected System " +
+                "Objects, and try again.");
+
+        attribute.AttributePlurality = newPlurality;
+
+        // Recorded, not inferred from the value being different, for the same reason as a type override: a schema
+        // refresh must leave the administrator's choice alone even where it matches what discovery found.
+        attribute.PluralitySetByAdministrator = true;
+
+        return AttributePluralityOverrideResult.Applied();
     }
     #endregion
 

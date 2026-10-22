@@ -8322,6 +8322,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 @"DELETE FROM ""ConnectorSpaceClearJoinRecords"" WHERE ""ConnectedSystemId"" = {0}",
                 connectedSystemId);
 
+            // bulk-sql-column-exemption: narrow reconciliation marker capturing joins before a Connector Space clear.
             joinRecordsWritten = await Repository.Database.Database.ExecuteSqlRawAsync(
                 @"INSERT INTO ""ConnectorSpaceClearJoinRecords"" (""ConnectedSystemId"", ""MetaverseObjectId"", ""ClearedAt"")
                   SELECT DISTINCT ""ConnectedSystemId"", ""MetaverseObjectId"", {1}

@@ -70,6 +70,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsSecondaryExternalId => false;
     public bool SupportsUserSelectedExternalId => false;
     public bool SupportsUserSelectedAttributeTypes => false;
+    public bool SupportsUserSelectedAttributePlurality => false;
     public bool SupportsAutoConfirmExport => false;
     public bool SupportsParallelExport => true;
     public bool SupportsPaging => true;

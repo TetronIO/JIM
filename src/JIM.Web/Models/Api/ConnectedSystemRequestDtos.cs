@@ -235,6 +235,20 @@ public class UpdateConnectedSystemAttributeRequest
     public AttributeDataType? Type { get; set; }
 
     /// <summary>
+    /// Sets whether the attribute holds one value (<c>SingleValued</c>) or several (<c>MultiValued</c>). Omitted or null
+    /// leaves it unchanged. A <c>Boolean</c> holds one value, so it cannot be made multi-valued.
+    /// </summary>
+    /// <remarks>
+    /// Accepted only where the Connector declares that its schema cannot state plurality
+    /// (<c>SupportsUserSelectedAttributePlurality</c>): a delimited file's header names columns and nothing more, so
+    /// only the administrator knows which hold several values, separated by the Multi-Value Delimiter (#2186).
+    /// Recorded as the administrator's, so a schema refresh keeps it. Refused once the attribute is referenced by a
+    /// Synchronisation Rule or holds values, as a data type override is. Sent with <c>Type</c>, it is checked against
+    /// the new type.
+    /// </remarks>
+    public AttributePlurality? Plurality { get; set; }
+
+    /// <summary>
     /// Declares whether this attribute's values are case-exact: true when values differing only in case identify
     /// different things, false when they identify the same thing. Omitted or null leaves the declaration
     /// unchanged. Only Text attributes can be declared case-exact.

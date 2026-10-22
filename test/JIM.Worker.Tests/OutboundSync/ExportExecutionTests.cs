@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
@@ -2891,6 +2892,30 @@ public class ExportExecutionTests
                 "a recorded, auto-confirmed export is complete");
             Assert.That(result.UnrecordedExportCount, Is.Zero);
         }
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_AutoConfirmedDecimalExport_LaterClearIsNotAlreadyCurrentAsync()
+    {
+        var (system, cso, attribute) = SeedFileUpdateExport(SyncRepo, "unused");
+        attribute.Type = AttributeDataType.Decimal;
+        var pending = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+        var change = pending!.AttributeValueChanges.Single();
+        change.StringValue = null;
+        change.DecimalValue = 123.45m;
+        var connector = CreateSucceedingFileConnector(autoConfirm: true);
+
+        await Jim.ExportExecution.ExecuteExportsAsync(system, connector.Object, SyncRunMode.PreviewAndSync);
+
+        Assert.That(cso.AttributeValues.SingleOrDefault(v => v.AttributeId == attribute.Id)?.DecimalValue, Is.EqualTo(123.45m));
+        Assert.That(await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id), Is.Null);
+        var clear = new PendingExportAttributeValueChange
+        {
+            Attribute = attribute, AttributeId = attribute.Id, ChangeType = PendingExportAttributeChangeType.Update
+        };
+        Assert.That(SyncEngine.IsCsoAttributeAlreadyCurrent(clear,
+            cso.AttributeValues.Where(v => v.AttributeId == attribute.Id)), Is.False,
+            "export staging must retain the later clear");
     }
 
     /// <summary>

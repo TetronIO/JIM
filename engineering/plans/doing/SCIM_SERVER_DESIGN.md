@@ -1,6 +1,6 @@
 # SCIM 2.0 Service Provider Design
 
-- **Status:** Doing (Phases 1 to 4 and 5a complete: the SCIM store, the server's writes, Get and list, the Service Provider Connector behind its feature flag, scoped API keys, the `/scim` HTTP surface, and key management, the store summary and the definitions across the portal, REST and PowerShell)
+- **Status:** Doing (Phases 1 to 6 complete, and the feature is in Preview: the SCIM store, the server's writes, Get and list, the Service Provider Connector, scoped API keys, the `/scim` HTTP surface, key management, the store summary and the definitions, the SCIM summary Activity and the requests behind a change, across the portal, REST and PowerShell, the JIM-to-JIM acceptance scenario, and the public documentation; removing the flag after a release in Preview (D16) remains)
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
 - **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
@@ -113,7 +113,7 @@ When a customer needs more, choose by their driver; B (then C) is the preferred 
 
 The server consumes `src/JIM.Scim` from JIM.Web and JIM.Application and adds no typed `ScimUser` or `ScimGroup` DTOs: request bodies bind as JSON and map through the same flattened attributes the client uses, so attribute names are identical in both directions (`emails.work`, `name.givenName`, `enterpriseUser.department`). What exists today is client-oriented; the server work adds:
 
-- **A PATCH applier** that is the exact inverse of the shipped `ScimPatchBuilder`, including the non-strict forms the builder emits (a value-less `replace` to clear, a filtered `replace` on a missing entry, scalar adds to multi-valued attributes, unquoted `primary eq true`), tested as `Apply(Build(x)) == x`.
+- **A PATCH applier** that is the exact inverse of the shipped `ScimPatchBuilder`, including the non-strict forms the builder emits (a value-less `replace` to clear, a filtered `replace` on a missing entry, scalar adds to multi-valued attributes (no longer emitted since #2215, but still sent by other clients), unquoted `primary eq true`), tested as `Apply(Build(x)) == x`.
 - **One filter grammar** shared by the client's query builders and the server's parser.
 - **A server mode for the resource reader and writer** that honours `mutability` and `returned` (ignore client-supplied `id` and `meta`; emit `id` and `meta` in responses; never return write-only attributes).
 - **ETag helpers** with SCIM's weak comparison.
@@ -310,7 +310,7 @@ Accepted on input, each coercion logged without values:
 - booleans sent as strings (`"False"`) on `active` and on `primary`;
 - single-element arrays for single-valued attributes, and `""` treated as absent;
 - `remove` on an unfiltered multi-valued path **with** a `value` array removes only the listed values (`remove` with no value still removes all). Strict RFC handling here would wipe a group's whole membership when the identity provider meant to remove one member;
-- unknown and read-only attributes ignored (`groups`, `roles` on input, custom URNs not declared), undeclared ones named in the journal (D17);
+- unknown and read-only attributes ignored (`groups` on input, custom URNs not declared), undeclared ones named in the journal (D17);
 - base URL with or without a trailing slash; unknown query parameters ignored;
 - the credential probe some providers send on every cycle (`GET /Users?filter=userName eq "<random>"`) returns `200` with an empty list.
 
@@ -394,7 +394,7 @@ Two PRs: **4a** scoped API keys (the scope, its enforcement, the per-Connected-S
 - **Verified on the light stack:** every authentication and scope case above; discovery; a create, a duplicate (`409 uniqueness`), a read, a stale and a current `If-Match` (`412`, then `200` with `W/"2"`), a filter, malformed JSON and a pushed password (`400`), a delete (`204`, then `404`); the journal naming the key and address; and the rate limit refusing the sixth request a minute with a SCIM `429` once lowered to five.
 - **Not in 4b:** request size and complexity limits are the framework's defaults until the JIM-to-JIM scenario (Phase 6) measures what the shipped client sends; `/Bulk` and `/Me` are not served.
 
-### Phase 5: Surface parity and documentation
+### Phase 5: Surface parity and documentation ✅
 
 Decided 19 October 2026: three PRs, each with full surface parity for what it contains.
 
@@ -403,6 +403,12 @@ Decided 19 October 2026: three PRs, each with full surface parity for what it co
 - **5c:** the public documentation and changelog entries.
 
 Also decided: a key is rotated by creating a second key (the two-key limit allows the overlap) and disabling or deleting the old one once its last-used time goes quiet; there is no rotate verb. Key management lives under the Connected System (REST `connected-systems/{id}/scim/keys`, PowerShell `*-JIMScimKey -ConnectedSystemId`); the general API key list shows scoped keys with their scope but cannot create them.
+
+Decided 20 October 2026, for 5b:
+
+- **The summary Activity reuses the aggregation columns** the failed sign-in audit already has (window start, first and last seen) and the existing `TotalCreated`, `TotalUpdated`, `TotalDeleted` and `TotalErrors` counters, as a new Activity target type; no new table. Its unique key adds the Connected System, so each (Connected System, key, window) has one row.
+- **Counts are buffered in memory and flushed** about every ten seconds and at shutdown, one statement per window rather than one per request, so a parallel initial load does not queue on one row. A crash can lose up to about ten seconds of counts; accepted writes stay journalled transactionally, so only those seconds' rejection counts are truly lost.
+- **A rejection is any 4xx answer except authentication** (`400`, `404`, `409`, `412`), reads included, with the latest error's type and detail kept on the Activity. A `401` stays with the security audit, so nothing is counted twice.
 
 #### 5a: Keys, store summary and definitions ✅
 
@@ -413,15 +419,55 @@ Also decided: a key is rotated by creating a second key (the two-key limit allow
 - **Verified on the light stack:** a full rotation over REST, PowerShell and the portal (a third usable key and an expiry beyond two years refused, a disabled key refused on `/scim`, re-enabling at the limit refused, a key of another Connected System or a non-SCIM one answering `404`), and the summary counting writes made through `/scim`.
 - **Left for 5b and 5c:** the aggregated request rejections in the portal summary (they come with the SCIM summary Activity), and the public documentation and changelog.
 
+#### 5b: SCIM summary Activity, requests behind a change, import read ranges ✅
+
+- **Summary Activity:** target type `ScimRequests` (26) with operation `Receive` (22), category Identity Data. Counts reuse `TotalAdded` (creates), `TotalUpdated` (replace and patch), `TotalDeleted` and `TotalErrors` (rejections), with the window start and first and last request. It is attributed to the key (`InitiatedById`) and named after the Connected System; once anything is rejected it completes with a warning naming the latest rejection (`Latest rejection: 409 uniqueness on POST /Users`). A partial unique index on (key, Connected System, window start) for this type only makes each window one row: a flush adds its deltas with one `UPDATE`, inserts the row when the window has none, and on losing that race retries the add. A tally for a Connected System deleted in the meantime is dropped with a warning.
+- **Counting:** a result filter on every `/scim` controller classifies each response (`201` on POST a create, `2xx` on PUT or PATCH an update, `2xx` on DELETE a delete, any 4xx but `401` and `403` a rejection; reads and server errors are not counted) and records it, for scoped keys only, in a singleton buffer per (Connected System, key, 15-minute window). A hosted service drains it every ten seconds and at shutdown.
+- **Requests behind a change:** `ScimServer.GetJournalAsync` (a resource's entries, optionally within a change sequence range, at most 1,000) and `GetRequestsBehindChangeAsync` (from a Connected System Object change, its execution item's external id and its Activity's import watermarks). REST `GET .../scim/journal?resourceId=` and `GET .../scim/journal/changes/{changeId}`; PowerShell `Get-JIMScimJournal` (`-ResourceId` or `-ChangeId`). The change history's detail dialog gains an extension slot, filled on Service Provider Connected Systems with a "SCIM Requests" panel that says why it is empty when it is (no range recorded, nothing new read, history cleared).
+- **Surfaced:** Activity DTOs carry `scimRequests` (the four counts, null for other Activities) and an import's `importWatermarkFrom` and `importWatermarkTo`; the store summary gains `rejectedLast24Hours` across every key; `Get-JIMActivity -Operation Receive` lists the summaries. In the portal, the Activity list's type filter and count chips, a SCIM section on the Activity page, Read From and Read Up To on imports, and a Rejected tile on the SCIM tab (store tiles now at most three to a row).
+- **Verified on the light stack:** four creates, a `409`, a `404` and a `400` from one key landed on one Activity with the latest rejection named, while a read and a keyless `401` were not counted; REST, PowerShell and the portal agreed; and a Connected System Object's change listed the create and patch an import read.
+- **Left for 5c:** the public documentation and changelog.
+
 - **Portal:** the Connected System page shows the base URL permanently, manages scoped keys (create, show once, rotate, revoke, last used, expiry), and shows a store summary (resource counts, last write, changes awaiting import) plus aggregated request rejections.
 - **Portal:** the SCIM summary Activity per Connected System, key and window (D17), and on a Connected System Object's change history, the SCIM requests behind each imported change.
 - **REST API and PowerShell:** the same key management and store summary, and the journal for a resource.
 - **Definitions, read-only (D19):** `Get-JIMScimResourceType` and `Get-JIMScimSchema`, their REST endpoints, and a read-only view on the Connected System page.
 - **Docs:** a connector page with per-provider setup (what to paste where), the recommended Schedule and the latency statement, the lifecycle table, and the "create a new Connected System" guidance; updates to the connectors index, architecture concepts, glossary and roadmap; changelog entries.
 
-### Phase 6: Acceptance
+#### 5c: Public documentation and promotion to Preview ✅
+
+- **Promotion:** `Features.ScimServiceProvider` is Preview. The Connector wears the Preview chip in the Connector choice, the Connectors list and its own page, and so does the SCIM tab; `Helpers.IsPreviewConnector` decides which Connectors do. The docs coverage check (COV-6) then required the Connector's page, which is how the promotion and the docs land together.
+- **Docs:** `connectors/jim-scim-service-provider-connector.md` (object: from request to Metaverse, features, what the endpoint accepts and its leniency, the lifecycle table, the tasks, the endpoint's limits, troubleshooting by response) and `connectors/jim-scim-service-provider-connector-identity-providers.md` (how-to: what any identity provider needs, Microsoft Entra ID and another JIM). Also the connectors index, the roadmap, a glossary entry for the SCIM endpoint, and the SCIM 2.0 Client Connector page's direction note.
+- **Written against the code where it differs from this document:** ignored attributes are journalled but not counted on the summary Activity; every key or scope refusal is the same `401` (no `403`; `403` is for plain HTTP and a filter on a discovery endpoint); clearing the Connector Space leaves the import watermark, so the docs say to run a Full Import after clearing; `roles` is stored.
+- **Per-provider setup is deliberately thin:** only Microsoft Entra ID's field names and the JIM-to-JIM setup (Scenario 029) are given, as nothing else has been tried against the endpoint; Preview feedback decides which identity providers get more.
+
+### Phase 6: Acceptance ✅
 
 The JIM-to-JIM integration scenario (both directions of the round trip, scheduled Delta Import and Delta Synchronisation to the Metaverse, a client Full Import proving deletes), leniency tests, then promotion of the flag from In Development to Preview. Its removal follows after a release in Preview (D16).
+
+Decided 20 October 2026:
+
+- **Phase 6 before 5c.** The public documentation, the changelog entries and the promotion to Preview ship together in 5c, after this acceptance passes, so the docs site (deployed on every merge) never describes a feature administrators cannot turn on.
+- **One instance, looped back.** A SCIM Client Connected System points at the same JIM's `/scim` endpoint over HTTPS, and a Service Provider Connected System imports what arrives. The requests cross a real socket exactly as between two instances, at half the infrastructure, and the scenario runs in every lane.
+- **HTTPS from Kestrel itself**, as the production compose file serves it on 8443, from a certificate the runner mints for `jim.web` and the scenario trusts; no proxy and no new image.
+- **Leniency through the real pipeline in the scenario.** No SCIM test yet crosses routing, authentication and the scheme selector, so a scenario step sends what identity providers actually send (lower-case and bare bearer values, a trailing slash, unknown query parameters, the empty probe, capitalised operations, booleans as strings). The gaps below the pipeline get unit tests: `primary` as a string, a capitalised `Remove`, the path-less single-element array, and coercions logged without values.
+- **`roles` is stored, not ignored.** RFC 7643 declares it read-write and the client imports `roles.value`, so the leniency list above was wrong to name it; only `groups` (read-only) is ignored on input.
+
+As built:
+
+- **Scenario 029** (`Invoke-Scenario-029-ScimRoundTrip.ps1`, `Setup-Scenario-029.ps1`): an HR CSV projects people and a group; a SCIM Client Connected System, keyed with a scoped key and trusting the harness certificate, provisions them to `https://jim.web:8443/scim/v2/{id}`; a Service Provider Connected System joins them by userName and display name through a Manual Schedule of Delta Import and Delta Synchronisation. Steps, each asserted through JIM and against the endpoint:
+  - **Provision:** POST, a group's members added by PATCH, and a confirming Full Import paging four at a time.
+  - **Inbound:** the Schedule joins every person and the group, with its members.
+  - **Update:** PATCH with `If-Match`, confirmed by the client's `meta.lastModified` Delta Import and then by the Schedule.
+  - **Clear:** a value-less replace leaves no value at the endpoint.
+  - **IdentityProvider:** a lower-case scheme, a bare key, a trailing slash, an unknown query parameter, the empty probe, a capitalised op and Booleans as strings are all accepted. A pushed password is refused and stored nowhere, a duplicate userName gets `409 uniqueness`, and a pushed Job Title reaches the Metaverse.
+  - **Conflict:** the identity provider changes a User, and the client's export over it gets `412`, which it records as a Concurrency Conflict. After an import, both changes are kept.
+  - **Deprovision:** a DELETE, then the client's Full Import finds the leaver gone and the Schedule's Delta Import reads the deletion.
+  - **Restore:** after the Connector Space is cleared, a Full Import rebuilds it from the store, and the pushed Job Title comes back.
+  - **Summary:** per-key creates, deletes and rejections are counted.
+- **Harness:** `jim-web-https.override.yml` serves 8443 on the Docker network from a certificate `Initialize-JimWebTlsCertificate` mints once per run, before any lane. HTTPS redirection is skipped in development (as HSTS already is), since every other caller there keeps using HTTP.
+- **Unit:** `primary` as a string, a capitalised `Remove` with a value list, the path-less single-element array, and every coercion recorded without the values sent, each mutation-checked.
+- **Found:** the SCIM Client Connector sends `If-Match` only when `meta.version` is a selected attribute, which nothing selects or explains ([#2404](https://github.com/TetronIO/JIM/issues/2404)); the scenario selects it, as Scenario 015 does.
 
 ## Success Criteria
 
@@ -461,7 +507,7 @@ The JIM-to-JIM integration scenario (both directions of the round trip, schedule
 - **SCIM inbound password channel** ([#2099](https://github.com/TetronIO/JIM/issues/2099)).
 - **Reset SCIM store** ([#2098](https://github.com/TetronIO/JIM/issues/2098)).
 - **Push-triggered runs** and immediate processing (#123).
-- **SCIM Delta Query** (publishing a change feed to downstream pullers via `draft-sehgal-scim-delta-query`). Deferred, not planned: the draft is an expired individual Internet-Draft never adopted by the working group, no client ecosystem consumes `/.delta`, and it needs durable change-feed retention, token issue and expiry, and per-resource authorisation re-checks on replay. Revisit on working-group adoption plus concrete demand. The store's change sequence would be the natural basis.
+- **SCIM Delta Query** (publishing a change feed to downstream pullers via `draft-sehgal-scim-delta-query`). Deferred, not planned, and reviewed on 21 October 2026. A Connected System's endpoint serves only what one identity provider pushed into its store (the Connector does not export), so a delta feed here would hand a downstream puller that identity provider's own data, not the hub's. "JIM as a SCIM source others synchronise from" is a different feature: a SCIM endpoint publishing Metaverse objects (or an export target), needing its own design. The store's change sequence, journal and tombstones would carry much of a feed if one were ever wanted. The draft is still an expired individual Internet-Draft (-02, January 2025) never adopted, and the SCIM working group has no change-feed document; the nearest standard, RFC 9967 (SCIM profile for Security Event Tokens, May 2026), is event push, which belongs with #123.
 
 ## References
 

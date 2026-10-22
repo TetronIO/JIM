@@ -1,0 +1,20 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+#
+# HTTPS for jim.web in the integration harness, beside its usual HTTP. Applied by Get-JimComposeArgs
+# (test/integration/utils/IntegrationLane.ps1) to every run, serial and lane alike.
+#
+# The SCIM Client Connector refuses plain HTTP to anything but a loopback address, so for JIM to provision
+# its own SCIM endpoint (Scenario 029) the worker must reach jim.web over HTTPS. 8443 is served on the
+# Docker network only and is not published: the host, the healthcheck and every other scenario keep using
+# HTTP on 8080. Kestrel serves the certificate the runner mints for jim.web (Initialize-JimWebTlsCertificate),
+# the same way the production compose file serves its own.
+
+services:
+  jim.web:
+    environment:
+      - ASPNETCORE_URLS=http://+:8080;https://+:8443
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/run/jim-tls/tls.crt
+      - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/run/jim-tls/tls.key
+    volumes:
+      - ./test/integration/results/jim-web-tls:/run/jim-tls:ro

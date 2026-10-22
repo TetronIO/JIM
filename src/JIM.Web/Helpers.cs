@@ -200,6 +200,13 @@ public static class Helpers
         definition != null && (definition.Tier == FeatureFlagTier.Preview || includeInDevelopment);
 
     /// <summary>
+    /// Whether a built-in Connector is behind a Preview-tier feature flag, so the portal marks it with a Preview chip
+    /// wherever it is named or chosen.
+    /// </summary>
+    public static bool IsPreviewConnector(string connectorName) =>
+        JIM.Application.Servers.ConnectedSystemServer.FeatureFlagFor(connectorName)?.Tier == FeatureFlagTier.Preview;
+
+    /// <summary>
     /// Extension method that converts a DateTime into the site-wide human-friendly full date/time string
     /// (e.g. "12 Jul 2026 14:30:00"). Unambiguous and culture-independent, unlike the short date/time
     /// formats. Callers are responsible for calling <see cref="DateTime.ToLocalTime"/> first if the value
@@ -507,6 +514,16 @@ public static class Helpers
             _ => Color.Default,
         };
     }
+
+    /// <summary>
+    /// An Activity target type's name as the portal shows it: its enum name split into words, except where that would
+    /// spell an acronym as a word.
+    /// </summary>
+    public static string GetActivityTargetTypeName(ActivityTargetType targetType) => targetType switch
+    {
+        ActivityTargetType.ScimRequests => "SCIM Requests",
+        _ => targetType.ToString().SplitOnCapitalLetters()
+    };
 
     public static Color GetActivityMudBlazorColorForOperation(ActivityTargetOperationType operation)
     {

@@ -19,6 +19,7 @@ namespace JIM.Web.Scim;
 /// </summary>
 [Authorize(Policy = ScimRoutes.AuthorisationPolicy)]
 [ApiExplorerSettings(IgnoreApi = true)]
+[ServiceFilter(typeof(ScimRequestTallyFilter))]
 public abstract class ScimControllerBase(JimApplication application) : ControllerBase
 {
     /// <summary>
@@ -58,8 +59,14 @@ public abstract class ScimControllerBase(JimApplication application) : Controlle
     /// <summary>
     /// A SCIM error response (RFC 7644 section 3.12).
     /// </summary>
-    protected ContentResult ScimError(int statusCode, string? detail = null, string? scimType = null) =>
-        Scim(ScimErrorDocument.ForStatus(statusCode, detail, scimType), statusCode);
+    /// <remarks>
+    /// Leaves the error type where <see cref="ScimRequestTallyFilter"/> can name the rejection without the detail.
+    /// </remarks>
+    protected ContentResult ScimError(int statusCode, string? detail = null, string? scimType = null)
+    {
+        HttpContext.Items[ScimRequestOutcomes.ErrorTypeItem] = scimType;
+        return Scim(ScimErrorDocument.ForStatus(statusCode, detail, scimType), statusCode);
+    }
 
     private string ResponseMediaType()
     {

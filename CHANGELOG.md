@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Identity providers can push Users and Groups to JIM over SCIM 2.0 (Preview): the new JIM SCIM 2.0 Service Provider Connector gives a Connected System its own SCIM endpoint and keys, and imports what arrives on its Schedule. Also via REST and `*-JIMScimKey`. (#124)
+- ✨ See what an identity provider sent: an Activity per key every 15 minutes counts its creates, updates, deletes and refused requests, and a Connected System Object's change history lists the SCIM requests behind each imported change. (#124)
+- ✨ Say whether a File Connector column holds several values, separated by the Multi-Value Delimiter, on the Schema tab, via REST or `Set-JIMConnectedSystemAttribute -Plurality`; a schema refresh keeps your choice. (#2186)
 - ✨ JIM signs people in through an identity provider whose HTTPS certificate comes from your own certificate authority, such as AD FS or Keycloak run on premises: trust it for sign-in with `Add-JIMCertificate -FromIdentityProvider`, REST, or the portal, and sign-in works straight away, with no image rebuild or restart. (#2363)
 - ✨ When JIM cannot trust its identity provider, opening JIM explains why on a **Sign-in is unavailable** page with the fix filled in, and signed-in administrators see a warning before new sign-ins fail, with **Review and trust**. `Get-JIMIdentityProviderTrust` reports the same. (#2363)
 - ✨ Each Trusted Certificate is trusted for Connectors, for sign-in, or both, and removing the one sign-in depends on asks first. Existing certificates stay trusted for Connectors only; set it on the Certificates page, REST or `-TrustedFor`. (#2363)
@@ -126,6 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ The File Connector no longer reads a repeated column header (`member,member`) as a multi-valued attribute: schema discovery, imports and exports refuse such a file, naming the column. Put the values in one column, separated by the Multi-Value Delimiter. (#2186)
 - 🗑️ The Pending Export **Failed** status, its five-attempt limit and the wait between attempts are gone: `maxRetries` and `nextRetryAt` are removed from the REST API and PowerShell output, and `Failed` from `-Status`. Pending Exports left Failed are queued again on upgrade. (#2119)
 - 🗑️ Export, Full Synchronisation and Delta Synchronisation Run Profiles no longer take a **File Path**: an export always writes to the file the Connected System's **File Path** names, so the field did nothing. It is gone from the portal, the REST API and `-FilePath` refuse it, and any already stored is cleared on upgrade.
 - 🗑️ Example Data Template attributes can no longer name a Connected System attribute: templates generate Metaverse Attribute values only, so it produced nothing. `-ConnectedSystemObjectTypeAttributeId` and the `ConnectedSystemObjectTypeAttributeId` hashtable key are gone from the cmdlets, and `connectedSystemObjectTypeAttributeId` from the REST API.
@@ -134,6 +138,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The SCIM 2.0 Client Connector now sends a value added to, or set on, a multi-valued attribute such as a list of strings in a schema extension as a list, as SCIM requires. Service providers that check values against their schema refused it. (#2215)
+- 🐛 The SCIM 2.0 Client Connector now always imports `meta.version` where the provider supports entity tags, so updates carry `If-Match` and cannot overwrite a change made in the provider. Schema import selects it and keeps it selected; a refresh selects it on existing Connected Systems. (#2404)
+- 🐛 Decimal values are recorded after export, so clearing or reverting a value still reaches an auto-confirmed File Connector target. (#2185)
+- 🐛 Export Activity items with no available name now show the Connected System Object id, including provisioning retries after a value collision. (#2397)
+- 🐛 A File Connector export no longer loses rows it was not asked to change: a file JIM cannot read, one with rows but no External ID column, or one with two rows for one External ID now fails the export and is left untouched, and rows with no External ID are kept. (#2186)
+- 🐛 File Connector exports now write every value of a multi-valued attribute, and an update adds or removes only the values that changed, instead of keeping just the last value. A value containing the Multi-Value Delimiter fails that object's export. (#2186)
 - 🐛 JIM starts when its identity provider is unreachable or its certificate is not trusted, instead of stopping after five attempts; API keys keep working while sign-in is unavailable. (#2363)
 - 🐛 After the encryption keys are lost, JIM.Worker starts and configuration changes save again, so the Connected System secrets the recovery asks for can be re-entered. JIM previously failed both on a key that records secret changes in Configuration History; it now replaces that key with a warning in the log. (#2124)
 - 🐛 SSO access tokens are now accepted by the REST API and `Connect-JIM` when `JIM_SSO_API_SCOPE` is a bare identifier such as AD FS's `api://{client-identifier}` or Okta's `api://default`. JIM previously expected the audience `api:/`, which no token carries, so every such token was refused. (#2353)
@@ -309,6 +319,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 The REST API now refuses to let a signed-in administrator remove themselves from the Administrator role; the check was comparing the wrong identifier and never applied. (#2152)
 - 🔒 The web, worker and scheduler images now ship .NET and ASP.NET Core 10.0.13, and the worker and scheduler's own .NET packages move to 10.0.13 with them, fixing the vulnerabilities in the 10.0.11 runtime and 10.0.12 packages they carried, including CVE-2026-88092, a critical ASP.NET Core security feature bypass.
 - 🔒 Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when you save them as well as when they run, so no expression can hold a type, assembly or method. (#2053)
 - 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)

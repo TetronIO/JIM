@@ -39,6 +39,7 @@ public class ConnectorDefinitionDtoTests
             SupportsSecondaryExternalId = false,
             SupportsUserSelectedExternalId = true,
             SupportsUserSelectedAttributeTypes = true,
+            SupportsUserSelectedAttributePlurality = true,
             SupportsAutoConfirmExport = true,
             SupportsParallelExport = true,
             SupportsPaging = true,
@@ -98,6 +99,7 @@ public class ConnectorDefinitionDtoTests
             Assert.That(dto.SupportsSecondaryExternalId, Is.False);
             Assert.That(dto.SupportsUserSelectedExternalId, Is.True);
             Assert.That(dto.SupportsUserSelectedAttributeTypes, Is.True);
+            Assert.That(dto.SupportsUserSelectedAttributePlurality, Is.True);
             Assert.That(dto.SupportsAutoConfirmExport, Is.True);
             Assert.That(dto.SupportsParallelExport, Is.True);
             Assert.That(dto.SupportsPaging, Is.True);

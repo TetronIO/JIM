@@ -40,7 +40,7 @@ RUN echo "apt refresh: ${APT_REFRESH}" \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
         libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \
-        cifs-utils=2:7.0-2ubuntu0.5 \
+        cifs-utils=2:7.0-2ubuntu0.6 \
         libgssapi-krb5-2=1.20.1-6ubuntu2.10 \
     && rm -rf /var/lib/apt/lists/* \
     # Symlink for System.DirectoryServices.Protocols compatibility

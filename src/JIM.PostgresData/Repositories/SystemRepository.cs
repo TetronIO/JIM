@@ -291,13 +291,12 @@ internal sealed class SystemRepository : ISystemRepository
         // (Service, InstanceId) is what lets the database do the "insert or replace" without a second round trip.
         // Column lists come from the constants so they cannot drift from the model; the parameter order below MUST
         // match ServiceHeartbeatBulkColumns.ServiceHeartbeats exactly.
-        var columns = BulkSqlHelpers.ToQuotedList(ServiceHeartbeatBulkColumns.ServiceHeartbeats);
         var placeholders = string.Join(", ", Enumerable.Range(0, ServiceHeartbeatBulkColumns.ServiceHeartbeats.Length).Select(i => $"{{{i}}}"));
         var assignments = string.Join(", ", ServiceHeartbeatBulkColumns.ServiceHeartbeatsUpdate
             .Select(c => $"\"{c}\" = EXCLUDED.\"{c}\""));
 
         var sql = $"""
-            INSERT INTO "ServiceHeartbeats" ({columns}) VALUES ({placeholders})
+            INSERT INTO "ServiceHeartbeats" ({BulkSqlHelpers.ToQuotedList(ServiceHeartbeatBulkColumns.ServiceHeartbeats)}) VALUES ({placeholders})
             ON CONFLICT ("Service", "InstanceId") DO UPDATE SET {assignments}
             """;
 

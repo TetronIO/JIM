@@ -25,13 +25,16 @@ namespace JIM.Worker.Tests.Workflows;
 [TestFixture]
 public class UnconfirmedProvisioningDeleteWorkflowTests : WorkflowTestBase
 {
-    [Test]
-    public async Task Export_SuccessfulDeleteOfUnconfirmedProvisioningCso_RemovesCsoAndRecordsSnapshottedRpeiAsync()
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task Export_SuccessfulDeleteOfUnconfirmedProvisioningCso_RemovesCsoAndRecordsSnapshottedRpeiAsync(bool hasName)
     {
         // Arrange
         var connectedSystem = await CreateConnectedSystemAsync("Target System");
         var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
         var cso = await CreateCsoAsync(connectedSystem.Id, csoType, "Cancelled Provisioning User");
+        if (!hasName)
+            cso.AttributeValues.Clear();
 
         // The CSO's provisioning was never confirmed by an import: Status stays PendingProvisioning.
         cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
@@ -81,8 +84,8 @@ public class UnconfirmedProvisioningDeleteWorkflowTests : WorkflowTestBase
             Assert.That(rpei.ConnectedSystemObjectId, Is.Null,
                 "The RPEI must not FK to a Connected System Object row that no longer exists");
             Assert.That(rpei.ConnectedSystemObject, Is.Null);
-            Assert.That(rpei.DisplayNameSnapshot, Is.EqualTo("Cancelled Provisioning User"),
-                "The item must still keep its display name, taken from the in-memory CSO graph before removal");
+            Assert.That(rpei.DisplayNameSnapshot, Is.EqualTo(hasName ? "Cancelled Provisioning User" : cso.Id.ToString()),
+                "The item must keep its name or internal Connected System Object id even after removal");
             Assert.That(rpei.ObjectChangeType, Is.EqualTo(ObjectChangeType.Deprovisioned));
         }
     }

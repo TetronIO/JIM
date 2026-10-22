@@ -66,6 +66,7 @@
         @{ Anchor = 'safeguards'; Home = 'configuration/run-profiles.md'; TitleCase = $false }
         @{ Anchor = 'schedule'; Home = 'configuration/schedules.md'; TitleCase = $false }
         @{ Anchor = 'scoping'; Home = 'configuration/scoping-criteria.md'; TitleCase = $false }
+        @{ Anchor = 'scim-endpoint'; Home = 'connectors/jim-scim-service-provider-connector.md'; TitleCase = $false }
         @{ Anchor = 'service-health'; Home = 'configuration/operations.md'; TitleCase = $true }
         @{ Anchor = 'standard-mappings'; Home = 'configuration/metaverse.md'; TitleCase = $true }
         @{ Anchor = 'sync-preview'; Home = 'configuration/sync-preview.md'; TitleCase = $true }

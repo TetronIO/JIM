@@ -562,7 +562,7 @@ public static partial class CausalityLineageModelBuilder
 
             return activity.ConnectedSystemRunType is { } runType and not ConnectedSystemRunType.NotSet
                 ? runType.ToString().SplitOnCapitalLetters()
-                : activity.TargetType.ToString().SplitOnCapitalLetters();
+                : Helpers.GetActivityTargetTypeName(activity.TargetType);
         }
 
         /// <summary>

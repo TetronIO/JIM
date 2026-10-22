@@ -625,7 +625,7 @@
                 <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Operation</MudText>
                 <div>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">Type</MudText><br/>
-                    <MudText Typo="Typo.body1">@_selectedActivity.TargetOperationType.ToString().SplitOnCapitalLetters() @_selectedActivity.TargetType.ToString().SplitOnCapitalLetters()</MudText>
+                    <MudText Typo="Typo.body1">@_selectedActivity.TargetOperationType.ToString().SplitOnCapitalLetters() @Helpers.GetActivityTargetTypeName(_selectedActivity.TargetType)</MudText>
                 </div>
                 @if (_selectedActivity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
                 {

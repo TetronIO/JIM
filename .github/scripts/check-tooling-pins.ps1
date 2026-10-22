@@ -23,6 +23,12 @@
         digest Docker Hub gives it. A pinned release pushed again upstream (same
         tag, new digest; a rebuild over a fixed base image, say) is proposed as
         a bump too, since the pin no longer pulls what its tag names.
+      - `aquasec/trivy` (the scanner CI and the release run over every
+        production image) is pinned the same way in `.github/trivy-image.txt`,
+        which `.github/scripts/Invoke-TrivyImageScan.ps1` reads. It is kept out of the workflow file so that this
+        check's bump PRs can change it: the App that commits them cannot write
+        `.github/workflows/`. A stale scanner misses advisories a newer one
+        would catch, so this is the pin that matters most.
 
     Dependabot only reads real manifests (`package.json`, `.csproj`, Dockerfile
     FROM lines, workflow `uses:`). None of these pins live in one, so without this
@@ -125,6 +131,18 @@ $tools = @(
                 digestPattern = '(?<=lycheeverse/lychee:\d[\w.\-]*@)sha256:[0-9a-f]{64}'
             }
             @{ file = 'scripts/Test-DocsSite.ps1'; pattern = '(?m)(?<=^# lychee )\d[\w.\-]*' }
+        )
+    },
+    @{
+        name      = 'aquasec/trivy'
+        registry  = 'dockerhub'
+        id        = 'aquasec/trivy'
+        locations = @(
+            @{
+                file          = '.github/trivy-image.txt'
+                pattern       = '(?m)(?<=^aquasec/trivy:)\d[\w.\-]*(?=@sha256:)'
+                digestPattern = '(?m)(?<=^aquasec/trivy:\d[\w.\-]*@)sha256:[0-9a-f]{64}'
+            }
         )
     }
 )
