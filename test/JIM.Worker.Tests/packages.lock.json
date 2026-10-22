@@ -43,12 +43,12 @@
       },
       "MockQueryable.EntityFrameworkCore": {
         "type": "Direct",
-        "requested": "[10.0.12, )",
-        "resolved": "10.0.12",
-        "contentHash": "IMulQMbhuPqoxl+L0kfseswqlUzSCP5Vv7w2rtTzyckj1UpPqV8/CTZCHHTj4GG5ysDcpYl0o3qImnfkKAKWsA==",
+        "requested": "[10.0.13, )",
+        "resolved": "10.0.13",
+        "contentHash": "oh3k0wquAIuIId6upPn0J0eFmXe1K2MH8Dalhjadr7VgTQvtwUYPfqEE7wMFUyiXg/+JxAwjz9T9+lREp12HOQ==",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore": "10.0.12",
-          "MockQueryable.Core": "10.0.12"
+          "Microsoft.EntityFrameworkCore": "10.0.13",
+          "MockQueryable.Core": "10.0.13"
         }
       },
       "MockQueryable.Moq": {
@@ -650,8 +650,8 @@
       },
       "MockQueryable.Core": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "YABII3NELFR1jzW22pqjbCG4DBQVbmHr/iYVAqlcTO3GBRdjqnyavhrcGbJMAANPeg8EZFUd7FoggBFqgCKVqg=="
+        "resolved": "10.0.13",
+        "contentHash": "+EgIsLrbGmDaFkniqTYOq1j+7UwUz/K/iEKe4Y3mYMfx6pXvP8fBubywskBu6Lq6WN5kKr4ICz5hQuOqZmzoIQ=="
       },
       "NCrontab": {
         "type": "Transitive",
