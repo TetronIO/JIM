@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Create, edit, duplicate and delete Data Generation Templates in the portal: add Object Types and attributes, choose how each attribute's values are made, and duplicate a built-in template to customise it. Copying is also via REST and `Copy-JIMExampleDataTemplate`. (#1466)
 - ✨ Identity providers can push Users and Groups to JIM over SCIM 2.0 (Preview): the new JIM SCIM 2.0 Service Provider Connector gives a Connected System its own SCIM endpoint and keys, and imports what arrives on its Schedule. Also via REST and `*-JIMScimKey`. (#124)
 - ✨ See what an identity provider sent: an Activity per key every 15 minutes counts its creates, updates, deletes and refused requests, and a Connected System Object's change history lists the SCIM requests behind each imported change. (#124)
 - ✨ Say whether a File Connector column holds several values, separated by the Multi-Value Delimiter, on the Schema tab, via REST or `Set-JIMConnectedSystemAttribute -Plurality`; a schema refresh keeps your choice. (#2186)

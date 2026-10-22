@@ -1,4 +1,4 @@
-@using JIM.Models.Core
+﻿@using JIM.Models.Core
 @using JIM.Models.ExampleData
 @using JIM.Models.Search
 @using JIM.Utilities
@@ -74,7 +74,8 @@
                                     </MudTooltip>
                                 </div>
                             }
-                            <MudSelect T="ExampleDataSet" Label="Add an Example Data Set" Variant="Variant.Outlined" Class="mt-2"
+                            @* keyed on the count so the picker empties again once a set is added. *@
+                            <MudSelect @key="_draft.DataSets.Count" T="ExampleDataSet" Label="Add an Example Data Set" Variant="Variant.Outlined" Class="mt-2"
                                        Value="@((ExampleDataSet?)null)" ValueChanged="AddDataSet" ToStringFunc="@(s => s?.Name ?? string.Empty)">
                                 @foreach (var dataSet in _dataSets.Where(s => _draft.DataSets.All(chosen => chosen.Id != s.Id)))
                                 {
@@ -139,6 +140,7 @@
                 {
                     <MudSelect T="int" Label="Refers to" Variant="Variant.Outlined" MultiSelection="true"
                                SelectedValues="@_draft.ReferenceObjectTypes.Select(t => t.Id).ToList()" SelectedValuesChanged="OnReferenceTargetsChanged"
+                               ToStringFunc="@(id => _objectTypes.FirstOrDefault(t => t.Id == id)?.Name ?? string.Empty)"
                                HelperText="Each reference points at an object of one of these Metaverse Object Types.">
                         @foreach (var objectType in _objectTypes)
                         {

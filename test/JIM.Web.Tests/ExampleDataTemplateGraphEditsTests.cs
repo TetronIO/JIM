@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
@@ -83,14 +83,19 @@ public class ExampleDataTemplateGraphEditsTests
     }
 
     [Test]
-    public void AttributesConditionalOn_NamesAttributesWhoseConditionReadsIt()
+    public void AttributesReading_NamesAttributesWhoseConditionOrPatternReadsIt()
     {
         var objectType = _template.ObjectTypes[0];
+        objectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
+        {
+            Id = 44, MetaverseAttribute = new MetaverseAttribute { Id = 14, Name = "Display Name", Type = AttributeDataType.Text }, Pattern = "{First Name} Example"
+        });
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(ExampleDataTemplateGraphEdits.AttributesConditionalOn(objectType, EmployeeType), Is.EqualTo(new[] { "Job Title" }));
-            Assert.That(ExampleDataTemplateGraphEdits.AttributesConditionalOn(objectType, FirstName), Is.Empty);
+            Assert.That(ExampleDataTemplateGraphEdits.AttributesReading(objectType, EmployeeType), Is.EqualTo(new[] { "Job Title" }));
+            Assert.That(ExampleDataTemplateGraphEdits.AttributesReading(objectType, FirstName), Is.EqualTo(new[] { "Display Name" }));
+            Assert.That(ExampleDataTemplateGraphEdits.AttributesReading(objectType, JobTitle), Is.Empty);
         }
     }
 

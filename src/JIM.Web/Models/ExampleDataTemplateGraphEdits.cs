@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
@@ -38,14 +38,20 @@ public static class ExampleDataTemplateGraphEdits
     }
 
     /// <summary>
-    /// The names of the Object Type's attributes generated only when a condition on <paramref name="metaverseAttribute"/>
-    /// holds. Without that attribute's values such a condition is never met, so removing it stops them being generated.
+    /// The names of the Object Type's attributes that read <paramref name="metaverseAttribute"/>'s generated value: through
+    /// a condition (which is then never met, so they stop being generated) or a pattern placeholder (which then reads
+    /// nothing). Expressions are left out; the server names those itself when the template is saved.
     /// </summary>
-    public static IReadOnlyList<string> AttributesConditionalOn(ExampleDataObjectType objectType, MetaverseAttribute metaverseAttribute) =>
-        objectType.TemplateAttributes
-            .Where(a => a.AttributeDependency?.MetaverseAttribute.Id == metaverseAttribute.Id && a.MetaverseAttribute != null)
+    public static IReadOnlyList<string> AttributesReading(ExampleDataObjectType objectType, MetaverseAttribute metaverseAttribute)
+    {
+        var placeholder = $"{{{metaverseAttribute.Name}}}";
+        return objectType.TemplateAttributes
+            .Where(a => a.MetaverseAttribute != null && a.MetaverseAttribute.Id != metaverseAttribute.Id &&
+                        (a.AttributeDependency?.MetaverseAttribute.Id == metaverseAttribute.Id ||
+                         a.Pattern?.Contains(placeholder, StringComparison.Ordinal) == true))
             .Select(a => a.MetaverseAttribute!.Name)
             .ToList();
+    }
 
     public static void AddObjectType(ExampleDataTemplate template, MetaverseObjectType metaverseObjectType, int objectsToCreate) =>
         template.ObjectTypes.Add(new ExampleDataObjectType { MetaverseObjectType = metaverseObjectType, ObjectsToCreate = objectsToCreate });

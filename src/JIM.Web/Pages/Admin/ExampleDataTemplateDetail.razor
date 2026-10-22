@@ -93,7 +93,7 @@
                 }
             </ToolBarExtras>
             <Columns>
-                <TemplateColumn Title="Attribute" Sortable="false">
+                <TemplateColumn Title="Attribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Attribute" Name="attribute" />
                     </HeaderTemplate>
@@ -101,7 +101,7 @@
                         @context.Item.MetaverseAttribute?.Name
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Type" Sortable="false">
+                <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Type" Name="type" />
                     </HeaderTemplate>
@@ -109,7 +109,7 @@
                         @context.Item.MetaverseAttribute?.Type
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Population %" Sortable="false" CellClass="jim-nowrap">
+                <TemplateColumn Title="Population %" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Population %" Name="population" />
                     </HeaderTemplate>
@@ -117,7 +117,7 @@
                         @context.Item.PopulatedValuesPercentage
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Rules" Sortable="false">
+                <TemplateColumn Title="Rules" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Rules</MudText>
                     </HeaderTemplate>
@@ -133,7 +133,7 @@
                         </OverflowList>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Actions" Sortable="false" Hidden="@_template.BuiltIn">
+                <TemplateColumn Title="Actions" Sortable="false" Hidden="@_template.BuiltIn" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Actions</MudText>
                     </HeaderTemplate>
@@ -521,11 +521,11 @@
     {
         var attributeName = templateAttribute.MetaverseAttribute?.Name ?? "this attribute";
         var message = $"{attributeName} will no longer be generated for {objectType.MetaverseObjectType.PluralName}.";
-        var conditional = templateAttribute.MetaverseAttribute == null
+        var readers = templateAttribute.MetaverseAttribute == null
             ? []
-            : ExampleDataTemplateGraphEdits.AttributesConditionalOn(objectType, templateAttribute.MetaverseAttribute);
-        if (conditional.Count > 0)
-            message += $" {string.Join(", ", conditional)} {(conditional.Count == 1 ? "is" : "are")} only generated when {attributeName} has a given value, so {(conditional.Count == 1 ? "it" : "they")} will stop being generated too.";
+            : ExampleDataTemplateGraphEdits.AttributesReading(objectType, templateAttribute.MetaverseAttribute);
+        if (readers.Count > 0)
+            message += $" {string.Join(", ", readers)} {(readers.Count == 1 ? "reads" : "read")} its value in a pattern or a condition, so check {(readers.Count == 1 ? "it" : "them")} afterwards.";
 
         var confirmed = await DialogService.ShowMessageBoxAsync($"Remove {attributeName}?", message, yesText: "Remove", cancelText: "Cancel");
         if (confirmed != true)
