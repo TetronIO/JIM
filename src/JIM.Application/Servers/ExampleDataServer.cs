@@ -292,6 +292,26 @@ public class ExampleDataServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
+    /// <summary>
+    /// Creates a new Data Generation Template as a copy of an existing one (#1466), under a new name. Built-in templates
+    /// can be copied, which is how an administrator customises one: the copy is never built in. The copy goes through
+    /// <see cref="CreateTemplateAsync"/>, so it is validated, its name must be unique, and it records its own Create
+    /// Activity and version-1 snapshot.
+    /// </summary>
+    /// <returns>The newly created template.</returns>
+    /// <exception cref="KeyNotFoundException">No template exists with <paramref name="sourceTemplateId"/>.</exception>
+    /// <exception cref="InvalidOperationException">Another template already holds <paramref name="newName"/>.</exception>
+    public async Task<ExampleDataTemplate> CopyTemplateAsync(int sourceTemplateId, string newName, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
+    {
+        var source = await Application.Repository.ExampleData.GetTemplateAsync(sourceTemplateId) ??
+            throw new KeyNotFoundException($"No Data Generation Template exists with id {sourceTemplateId}.");
+
+        var copy = source.CloneGraph();
+        copy.Name = newName;
+        await CreateTemplateAsync(copy, initiatorType, initiatorId, initiatorName, changeReason);
+        return copy;
+    }
+
     public async Task DeleteTemplateAsync(int templateId, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
         var template = await Application.Repository.ExampleData.GetTemplateAsync(templateId);

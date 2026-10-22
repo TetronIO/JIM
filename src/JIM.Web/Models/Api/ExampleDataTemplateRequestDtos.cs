@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
@@ -29,6 +29,25 @@ public class CreateExampleDataTemplateRequest
 
     /// <summary>
     /// Optional reason for the creation, recorded against this template's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
+}
+
+/// <summary>
+/// Request model for copying a Data Generation Template under a new name.
+/// </summary>
+public class CopyExampleDataTemplateRequest
+{
+    /// <summary>
+    /// The name of the new template, e.g. "Demo Users (customised)". Must be unique across all Data Generation Templates.
+    /// </summary>
+    [Required]
+    [StringLength(200, MinimumLength = 1)]
+    public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// Optional reason for the copy, recorded against the new template's change history.
     /// </summary>
     [StringLength(2000)]
     public string? ChangeReason { get; set; }

@@ -36,6 +36,34 @@ public class ExampleDataTemplate : IAuditable
     [NotMapped]
     public List<string> SaveWarnings { get; } = [];
 
+    /// <summary>
+    /// Returns a detached copy of this template's graph (#1466) for saving as a new template: every template-owned row
+    /// (Object Types, Template Attributes, Example Data Set instances, weighted values, attribute dependencies) is a new
+    /// instance with no id, while the persisted entities they reference (Metaverse Object Types, Metaverse Attributes,
+    /// Example Data Sets) are shared rather than copied, so persisting the copy inserts a new template without
+    /// re-inserting or modifying anything it points at. The copy is never built in and carries no audit provenance.
+    /// </summary>
+    public ExampleDataTemplate CloneGraph()
+    {
+        var clone = new ExampleDataTemplate { Name = Name };
+
+        foreach (var objectType in ObjectTypes)
+        {
+            var objectTypeClone = new ExampleDataObjectType
+            {
+                MetaverseObjectType = objectType.MetaverseObjectType,
+                ObjectsToCreate = objectType.ObjectsToCreate
+            };
+
+            foreach (var attribute in objectType.TemplateAttributes)
+                objectTypeClone.TemplateAttributes.Add(attribute.CloneForNewTemplate());
+
+            clone.ObjectTypes.Add(objectTypeClone);
+        }
+
+        return clone;
+    }
+
     public void Validate()
     {
         if (string.IsNullOrEmpty(Name))
