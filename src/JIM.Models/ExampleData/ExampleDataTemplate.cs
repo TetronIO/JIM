@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
@@ -46,20 +46,16 @@ public class ExampleDataTemplate : IAuditable
     public ExampleDataTemplate CloneGraph()
     {
         var clone = new ExampleDataTemplate { Name = Name };
-
-        foreach (var objectType in ObjectTypes)
+        clone.ObjectTypes.AddRange(ObjectTypes.Select(objectType =>
         {
             var objectTypeClone = new ExampleDataObjectType
             {
                 MetaverseObjectType = objectType.MetaverseObjectType,
                 ObjectsToCreate = objectType.ObjectsToCreate
             };
-
-            foreach (var attribute in objectType.TemplateAttributes)
-                objectTypeClone.TemplateAttributes.Add(attribute.CloneForNewTemplate());
-
-            clone.ObjectTypes.Add(objectTypeClone);
-        }
+            objectTypeClone.TemplateAttributes.AddRange(objectType.TemplateAttributes.Select(a => a.CloneForNewTemplate()));
+            return objectTypeClone;
+        }));
 
         return clone;
     }

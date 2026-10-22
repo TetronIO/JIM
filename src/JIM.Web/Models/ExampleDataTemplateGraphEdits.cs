@@ -24,7 +24,8 @@ public static class ExampleDataTemplateGraphEdits
             return;
         }
 
-        var index = attributes.FindIndex(a => a.Id == templateAttributeId.Value);
+        var id = templateAttributeId.Value;
+        var index = attributes.FindIndex(a => a.Id == id);
         if (index < 0)
             throw new ExampleDataTemplateChangedException();
 
