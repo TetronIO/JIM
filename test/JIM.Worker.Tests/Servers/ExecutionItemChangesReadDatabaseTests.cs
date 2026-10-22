@@ -78,7 +78,7 @@ public class ExecutionItemChangesReadDatabaseTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(changes.ConnectedSystemObjectChange, Is.Null, "a synchronisation records no Connected System Object change of its own");
+            Assert.That(changes.ConnectedSystemObjectChange, Is.Null, "this synchronisation provisioned nothing, so it recorded no Connected System Object change");
             var mvoChange = changes.MetaverseObjectChange;
             Assert.That(mvoChange, Is.Not.Null);
             Assert.That(mvoChange!.ActivityRunProfileExecutionItemId, Is.EqualTo(item.Id));

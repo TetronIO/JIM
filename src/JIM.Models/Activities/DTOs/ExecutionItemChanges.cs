@@ -21,7 +21,8 @@ public class ExecutionItemChanges
     public MvoChangeHistoryDto? MetaverseObjectChange { get; set; }
 
     /// <summary>
-    /// The change an import or export recorded on the Connected System Object; null when the item recorded none.
+    /// The change the item recorded on a Connected System Object: what an import or export did to it, or the object a
+    /// synchronisation provisioned. Null when the item recorded none.
     /// </summary>
     public CsoChangeHistoryDto? ConnectedSystemObjectChange { get; set; }
 

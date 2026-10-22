@@ -122,7 +122,7 @@ public class ActivityRunProfileExecutionItemDetailDto
 
     /// <summary>
     /// The attribute changes recorded with the item, in the shapes object change history uses: the Metaverse Object
-    /// change a synchronisation made, the Connected System Object change an import or export recorded, and what each
+    /// change a synchronisation made, the Connected System Object change the item recorded, and what each
     /// Pending Export a synchronisation staged would write. Null unless asked for (<c>include=changes</c>, or
     /// <c>-IncludeChanges</c> in PowerShell).
     /// </summary>
