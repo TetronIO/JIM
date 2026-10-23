@@ -6,6 +6,7 @@ using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -25,6 +26,7 @@ namespace JIM.Worker.Tests.Servers;
 public class ConnectedSystemDirectoryServerDiscoveryTests
 {
     private const int ConnectedSystemId = 7;
+    private const string StubDiscoveryConnectorName = "Stub Discovery Connector";
 
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private JimApplication _jim = null!;
@@ -101,42 +103,88 @@ public class ConnectedSystemDirectoryServerDiscoveryTests
 
     #endregion
 
-    #region SupportsDirectoryServerDiscoveryAsync
+    #region GetDirectoryServerDiscoveryAsync
 
     [Test]
-    public async Task SupportsDirectoryServerDiscoveryAsync_FileConnector_ReturnsFalse()
+    public async Task GetDirectoryServerDiscoveryAsync_FileConnector_ReturnsNullAsync()
     {
         _mockConnectedSystemRepo
             .Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(CreateFileConnectorConnectedSystem());
 
-        var supported = await _jim.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(ConnectedSystemId);
+        var discovery = await _jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystemId);
 
-        Assert.That(supported, Is.False);
+        Assert.That(discovery, Is.Null);
     }
 
     [Test]
-    public async Task SupportsDirectoryServerDiscoveryAsync_LdapConnector_ReturnsTrue()
+    public async Task GetDirectoryServerDiscoveryAsync_LdapConnector_TargetsTheLdapConnectorsOwnSettingAsync()
+    {
+        var connectedSystem = CreateLdapConnectorConnectedSystem();
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+
+        var discovery = await _jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystemId);
+
+        // The target must be a free-text setting the Connector really declares: the portal only places the
+        // action beside a String field, so naming anything else would leave the action nowhere.
+        Assert.That(discovery, Is.Not.Null);
+        var target = connectedSystem.SettingValues.SingleOrDefault(sv => sv.Setting.Name == discovery!.TargetSettingName);
+        Assert.That(target?.Setting.Type, Is.EqualTo(ConnectedSystemSettingType.String));
+    }
+
+    [Test]
+    public async Task GetDirectoryServerDiscoveryAsync_ConnectorTargetingAnotherSetting_ReturnsThatConnectorsTargetAsync()
+    {
+        // A second Connector implementing discovery, whose target setting shares nothing with the LDAP
+        // Connector's: what comes back must be what the Connector declares, not an LDAP name.
+        var connector = new Mock<IConnector>();
+        connector.Setup(c => c.Name).Returns(StubDiscoveryConnectorName);
+        connector.As<IConnectorDirectoryServers>()
+            .Setup(c => c.DirectoryServerDiscovery)
+            .Returns(new ConnectorDirectoryServerDiscovery("Preferred Server", "directory servers"));
+        var connectorFactory = new Mock<IConnectorFactory>();
+        connectorFactory
+            .Setup(f => f.Create(StubDiscoveryConnectorName, It.IsAny<ICredentialProtection?>(), It.IsAny<ICertificateProvider?>()))
+            .Returns(connector.Object);
+        _jim.ConnectedSystems.ConnectorFactory = connectorFactory.Object;
+
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(CreateUnknownConnectorConnectedSystem(StubDiscoveryConnectorName));
+
+        var discovery = await _jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(discovery?.TargetSettingName, Is.EqualTo("Preferred Server"));
+            Assert.That(discovery?.ServerTerm, Is.EqualTo("directory servers"));
+        }
+    }
+
+    [Test]
+    public async Task GetDirectoryServerDiscoveryAsync_UnknownConnectorDefinition_ReturnsNullAsync()
     {
         _mockConnectedSystemRepo
             .Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>()))
-            .ReturnsAsync(CreateLdapConnectorConnectedSystem());
+            .ReturnsAsync(CreateUnknownConnectorConnectedSystem("Nonexistent Connector"));
 
-        var supported = await _jim.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(ConnectedSystemId);
+        var discovery = await _jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystemId);
 
-        Assert.That(supported, Is.True);
+        Assert.That(discovery, Is.Null);
     }
 
     [Test]
-    public async Task SupportsDirectoryServerDiscoveryAsync_UnknownConnectedSystemId_ReturnsFalse()
+    public async Task GetDirectoryServerDiscoveryAsync_UnknownConnectedSystemId_ReturnsNullAsync()
     {
         _mockConnectedSystemRepo
             .Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync((ConnectedSystem?)null);
 
-        var supported = await _jim.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(ConnectedSystemId);
+        var discovery = await _jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystemId);
 
-        Assert.That(supported, Is.False);
+        Assert.That(discovery, Is.Null);
     }
 
     #endregion

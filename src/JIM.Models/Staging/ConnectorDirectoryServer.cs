@@ -4,10 +4,11 @@
 namespace JIM.Models.Staging;
 
 /// <summary>
-/// Represents a directory server (domain controller) discovered within a Connected System's directory, i.e. an
-/// Active Directory or Samba AD forest. Used by the Discover Domain Controllers action (issue #1167) to help an
-/// administrator choose a value for the LDAP Connector's Preferred Domain Controller setting; discovery only ever
-/// informs that choice, it never writes to the setting itself.
+/// Represents a directory server discovered within a Connected System's directory (for the LDAP Connector, a
+/// domain controller in an Active Directory or Samba AD forest). Used by the Discover action (issue #1167) to help
+/// an administrator choose a value for the setting the Connector names in
+/// <see cref="ConnectorDirectoryServerDiscovery.TargetSettingName"/>; discovery only ever informs that choice, it
+/// never writes to the setting itself.
 /// </summary>
 public class ConnectorDirectoryServer
 {

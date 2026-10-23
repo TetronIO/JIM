@@ -150,7 +150,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     #region IConnectorSettings members
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
-    private readonly string _settingPreferredDomainController = ConnectorSettingNames.LdapPreferredDomainController;
+    private readonly string _settingPreferredDomainController = "Preferred Domain Controller";
     private readonly string _settingGlobalCatalogServer = "Global Catalog Server";
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
@@ -474,6 +474,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     #endregion
 
     #region IConnectorDirectoryServers members
+    /// <summary>
+    /// Discovery fills the Preferred Domain Controller setting, and since it only succeeds against Active Directory
+    /// and Samba AD (see <see cref="GetDirectoryServersAsync"/>), "domain controllers" is the right word for every
+    /// server it can return.
+    /// </summary>
+    public ConnectorDirectoryServerDiscovery DirectoryServerDiscovery => new(_settingPreferredDomainController, "domain controllers");
+
     /// <summary>
     /// Lists the domain controllers in the connected AD-family directory's forest, with the Active Directory Site
     /// each belongs to, so an administrator can choose one for the Preferred Domain Controller setting (issue
