@@ -325,6 +325,12 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
             .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");
 
+        // The Object Changes search (#1901) orders every Metaverse Object change newest first and filters by time
+        // range, across all objects; without this it sorts the whole change table for each window it reads.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasIndex(mvoc => mvoc.ChangeTime)
+            .HasDatabaseName("IX_MetaverseObjectChanges_ChangeTime");
+
         // A deleted Connected System Object's deletion record, the only place its id survives.
         modelBuilder.Entity<ConnectedSystemObjectChange>()
             .HasIndex(csoc => csoc.DeletedConnectedSystemObjectId)

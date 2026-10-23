@@ -998,6 +998,9 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ActivityRunProfileExecutionItemId")
                         .IsUnique();
 
+                    b.HasIndex("ChangeTime")
+                        .HasDatabaseName("IX_MetaverseObjectChanges_ChangeTime");
+
                     b.HasIndex("DeletedMetaverseObjectId")
                         .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
                         .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");

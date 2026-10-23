@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.History;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
@@ -670,6 +671,23 @@ public interface IMetaverseRepository
         DateTime? fromDate = null,
         DateTime? toDate = null,
         string? displayNameSearch = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
+    /// Searches Metaverse Object changes across every object (#1901): a window of the changes matching
+    /// <paramref name="query"/>, addressed by absolute offset and count and ordered newest first, for the Object
+    /// Changes page, its REST endpoint and its cmdlet. Changes to objects since deleted are included and described by
+    /// their preserved identity. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match
+    /// set; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="query">The validated search; conditions carry values already parsed to each attribute's type.</param>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one. Clamped to the header window cap.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    Task<RangeResultSet<MetaverseObjectChangeSearchResult>> SearchMetaverseObjectChangesRangeAsync(
+        MetaverseObjectChangeSearchQuery query,
+        int offset,
+        int count,
         bool includeTotalCount = true);
 
     /// <summary>
