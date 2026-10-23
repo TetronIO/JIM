@@ -1379,7 +1379,6 @@ Describe 'Add-JIMExampleDataTemplateAttribute' {
                                     metaverseAttributeName               = 'Firstname'
                                     populatedValuesPercentage            = 90
                                     boolTrueDistribution                 = $null
-                                    boolShouldBeRandom                   = $null
                                     minDate                              = $null
                                     maxDate                              = $null
                                     minNumber                            = $null
