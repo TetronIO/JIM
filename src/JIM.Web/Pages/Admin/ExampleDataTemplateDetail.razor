@@ -314,11 +314,11 @@
                 break;
 
             case AttributeDataType.Boolean:
-                if (attribute.BoolShouldBeRandom.HasValue)
-                    Add("Random", attribute.BoolShouldBeRandom.Value.ToString());
-
+                // BoolShouldBeRandom is not shown: it has no effect on generation, so showing it beside the
+                // distribution could only contradict what is actually generated. Without a distribution the values
+                // are random, which is what an attribute with no rules already reads as.
                 if (attribute.BoolTrueDistribution.HasValue)
-                    Add("True distribution", attribute.BoolTrueDistribution.Value.ToString("N0"));
+                    Add("Given true", $"{attribute.BoolTrueDistribution.Value}%");
 
                 break;
 

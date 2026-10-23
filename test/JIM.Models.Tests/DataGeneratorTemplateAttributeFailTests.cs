@@ -421,4 +421,33 @@ public class DataGeneratorTemplateAttributeFailTests
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject6.Validate);
     }
+
+    [TestCase(-1)]
+    [TestCase(101)]
+    public void Validate_BoolTrueDistributionOutOfRange_Throws(int distribution)
+    {
+        var subject = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
+            PopulatedValuesPercentage = 100,
+            BoolTrueDistribution = distribution
+        };
+
+        var ex = Assert.Throws<ExampleDataTemplateAttributeException>(subject.Validate);
+        Assert.That(ex!.Message, Does.Contain("BoolTrueDistribution"));
+    }
+
+    [TestCase(0)]
+    [TestCase(100)]
+    public void Validate_BoolTrueDistributionAtRangeLimits_DoesNotThrow(int distribution)
+    {
+        var subject = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
+            PopulatedValuesPercentage = 100,
+            BoolTrueDistribution = distribution
+        };
+
+        Assert.That(subject.Validate, Throws.Nothing);
+    }
 }

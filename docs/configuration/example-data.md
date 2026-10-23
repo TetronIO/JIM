@@ -40,11 +40,11 @@ Each attribute's rules decide its values:
 | Text | A value from one or more Example Data Sets; a pattern combining other attributes and sets, such as `{First Name}.{Last Name}@company.com` (`{0}`, `{1}` read the template attribute's Example Data Sets in order, and `[UniqueInt]` adds a number only where a value would repeat); an [expression](../concepts/expressions.md); a choice from weighted values; or a number |
 | Number | Between a minimum and maximum, counting up or chosen at random |
 | Date | A random date between a minimum and maximum |
-| True or false | Chosen at random |
+| True or false | Chosen at random, or an exact share given true: at 20%, 40 of 200 objects are true and 160 false, rounded to the nearest object with halves rounded up |
 | Reference | Objects of the chosen Object Types, between a minimum and maximum number for a multi-valued attribute; a Manager attribute builds a reporting hierarchy |
 | Identifier | A new identifier for each object |
 
-**Population %** leaves the attribute empty on the rest of the objects, and an attribute can depend on another one's value, such as an email address only for distribution groups.
+**Population %** leaves the attribute empty on the rest of the objects, and an attribute can depend on another one's value, such as an email address only for distribution groups. A true-or-false share counts only the objects that end up with a value, so an attribute at 50% Population % and 20% true on 200 objects gives 100 values, 20 of them true.
 
 ### Generate the objects
 

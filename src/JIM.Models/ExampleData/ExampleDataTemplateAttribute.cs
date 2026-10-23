@@ -20,12 +20,15 @@ public class ExampleDataTemplateAttribute
     public int? PopulatedValuesPercentage { get; set; }
 
     /// <summary>
-    /// Percentage of how many boolean values should be true
+    /// For a Boolean attribute, the percentage (0 to 100) of the objects given a value that are given true. The
+    /// quota is exact: it is applied to the number of objects that end up with a value (after PopulatedValuesPercentage
+    /// and any AttributeDependency), rounded to the nearest whole object with halves rounded up. When null, each object
+    /// is given true or false at random.
     /// </summary>
     public int? BoolTrueDistribution { get; set; }
 
     /// <summary>
-    /// Should we randomly generate bool values?
+    /// Has no effect on generation: Boolean values are random whenever BoolTrueDistribution is not set.
     /// </summary>
     public bool? BoolShouldBeRandom { get; set; }
 
@@ -242,6 +245,9 @@ public class ExampleDataTemplateAttribute
 
             if (usingPattern)
                 throw new ExampleDataTemplateAttributeException("Bool but using a pattern. This is not supported");
+
+            if (BoolTrueDistribution is < 0 or > 100)
+                throw new ExampleDataTemplateAttributeException("BoolTrueDistribution must be between 0 and 100: the percentage of the objects given a value that are given true");
         }
 
         if (IsUsingNumbers())

@@ -314,6 +314,72 @@ public class ExampleDataTemplateAttributeDraftTests
         {
             Attribute = Active, HasCondition = true, ConditionAttribute = EmployeeId, ConditionOperator = SearchComparisonType.Equals, ConditionValue = "not a number"
         }, "").SetName("Condition value not of the attribute's type");
+        yield return new TestCaseData(new ExampleDataTemplateAttributeDraft { Attribute = Active, BoolTrueDistribution = 101 }, "between 0 and 100").SetName("True distribution 101");
+        yield return new TestCaseData(new ExampleDataTemplateAttributeDraft { Attribute = Active, BoolTrueDistribution = -1 }, "between 0 and 100").SetName("True distribution -1");
+    }
+
+    // -- Boolean true distribution ---------------------------------------------------------------------------------
+
+    [Test]
+    public void ShowsBooleanDistribution_OnlyForBooleanAttributes()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(new ExampleDataTemplateAttributeDraft { Attribute = Active }.ShowsBooleanDistribution, Is.True);
+            Assert.That(new ExampleDataTemplateAttributeDraft { Attribute = DisplayName }.ShowsBooleanDistribution, Is.False);
+            Assert.That(new ExampleDataTemplateAttributeDraft().ShowsBooleanDistribution, Is.False);
+        }
+    }
+
+    [Test]
+    public void FromEntity_BooleanWithTrueDistribution_RoundTripsTheDistribution()
+    {
+        var source = Entity(Active, a =>
+        {
+            a.PopulatedValuesPercentage = 100;
+            a.BoolTrueDistribution = 20;
+        });
+
+        var draft = ExampleDataTemplateAttributeDraft.FromEntity(source);
+        var result = draft.ToEntity();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(draft.BoolTrueDistribution, Is.EqualTo(20));
+            Assert.That(result.BoolTrueDistribution, Is.EqualTo(20));
+        }
+        Assert.That(result.Validate, Throws.Nothing);
+    }
+
+    [Test]
+    public void ToEntity_BooleanWithNoTrueDistribution_WritesNone()
+    {
+        var result = new ExampleDataTemplateAttributeDraft { Attribute = Active }.ToEntity();
+
+        Assert.That(result.BoolTrueDistribution, Is.Null);
+    }
+
+    [Test]
+    public void ToEntity_AttributeChangedFromBooleanToText_CarriesNoTrueDistribution()
+    {
+        var draft = new ExampleDataTemplateAttributeDraft { Attribute = Active, BoolTrueDistribution = 30 };
+        draft.Attribute = DisplayName;
+        draft.TextSource = ExampleDataTextSource.DataSets;
+        draft.DataSets = [FirstNames];
+
+        var result = draft.ToEntity();
+
+        Assert.That(result.BoolTrueDistribution, Is.Null);
+        Assert.That(result.Validate, Throws.Nothing);
+    }
+
+    [Test]
+    public void Validate_TrueDistributionOutOfRangeOnANonBooleanAttribute_IsNotReported()
+    {
+        // the field is hidden for other data types and ToEntity drops it, so a leftover value must not block the save.
+        var draft = new ExampleDataTemplateAttributeDraft { Attribute = EmployeeId, BoolTrueDistribution = 500 };
+
+        Assert.That(draft.Validate(), Is.Empty);
     }
 
     // -- helpers ---------------------------------------------------------------------------------------------------
