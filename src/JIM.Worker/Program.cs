@@ -13,7 +13,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
 using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
@@ -43,9 +42,6 @@ var host = Host.CreateDefaultBuilder(args)
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning)));
 
-        // Shared memory cache — singleton, used for CSO external ID lookup indexing
-        services.AddSingleton<IMemoryCache>(new MemoryCache(new MemoryCacheOptions()));
-
         // Data Protection + Credential Protection — matches JIM.Web's encryption configuration
         var dataProtectionKeysPath = Environment.GetEnvironmentVariable("JIM_ENCRYPTION_KEY_PATH") ?? "/data/keys";
         services.AddDataProtection()
@@ -72,7 +68,7 @@ var host = Host.CreateDefaultBuilder(args)
         {
             var repo = sp.GetRequiredService<IRepository>();
             var syncRepo = repo.Sync;
-            var jim = new JimApplication(repo, sp.GetRequiredService<IMemoryCache>(), syncRepo);
+            var jim = new JimApplication(repo, syncRepo);
             jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
             return jim;
         });

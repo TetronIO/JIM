@@ -1,8 +1,14 @@
-@page "/admin/example-data"
+﻿@page "/admin/example-data"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
+@using JIM.Models.Exceptions
 @using JIM.Models.ExampleData.DTOs
 @using JIM.Web.Models
+@using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavManager
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -22,12 +28,16 @@
 @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
    shared grid; this page loads the small configuration list once and windows it in memory. The page header
    already names the list, so there is no toolbar title and the count carries the nouns. *@
-<VirtualisedDataGrid T="ExampleDataTemplateHeader"
+<VirtualisedDataGrid @ref="_grid" T="ExampleDataTemplateHeader"
                      ContainerId="example-data-template-list"
                      DefaultSortBy="name"
                      LoadWindow="LoadWindowAsync"
                      SingularName="Example Data Template"
                      PluralName="Example Data Templates">
+    <ToolBarExtras>
+        <MudButton OnClick="CreateAsync" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
+                   DropShadow="false">New Template</MudButton>
+    </ToolBarExtras>
     <Columns>
         <TemplateColumn Title="Name" Sortable="false">
             <HeaderTemplate>
@@ -55,6 +65,24 @@
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
+        <TemplateColumn Title="Actions" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Actions</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                <div class="d-flex justify-end gap-2">
+                    <MudTooltip Text="Duplicate" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Variant="Variant.Filled" Size="Size.Small"
+                                       aria-label="@($"Duplicate {context.Item.Name}")" OnClick="_ => DuplicateAsync(context.Item)" />
+                    </MudTooltip>
+                    <MudTooltip Text="@(context.Item.BuiltIn ? "Built-in templates cannot be deleted" : "Delete")" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error"
+                                       aria-label="@($"Delete {context.Item.Name}")" Disabled="@context.Item.BuiltIn"
+                                       OnClick="_ => DeleteAsync(context.Item)" />
+                    </MudTooltip>
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
     </Columns>
     <EmptyContent Context="grid">
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
@@ -69,13 +97,19 @@
         {
             <TableEmptyState Icon="@Icons.Material.Filled.Science"
                              PrimaryText="No Example Data Templates yet"
-                             SecondaryText="Templates define the example data that can be created in JIM." />
+                             SecondaryText="Templates define the example data that can be created in JIM."
+                             ActionText="New Template"
+                             OnAction="CreateAsync" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     private List<ExampleDataTemplateHeader>? _templates;
+    private VirtualisedDataGrid<ExampleDataTemplateHeader>? _grid;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
@@ -88,6 +122,54 @@
     {
         using var jim = JimFactory.Create();
         _templates = await jim.ExampleData.GetTemplateHeadersAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        var newId = await NewExampleDataTemplateDialog.ShowAsync(DialogService);
+        if (newId.HasValue)
+            NavManager.NavigateTo($"/admin/example-data/templates/{newId.Value}");
+    }
+
+    private async Task DuplicateAsync(ExampleDataTemplateHeader template)
+    {
+        var newId = await NewExampleDataTemplateDialog.ShowAsync(DialogService, copyOf: template);
+        if (newId.HasValue)
+            NavManager.NavigateTo($"/admin/example-data/templates/{newId.Value}");
+    }
+
+    private async Task DeleteAsync(ExampleDataTemplateHeader template)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete Data Generation Template?",
+            $"\"{template.Name}\" will be deleted. Metaverse Objects already generated from it are not affected.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        if (cancelled)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        try
+        {
+            await jim.ExampleData.DeleteTemplateAsync(template.Id, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
+        }
+        catch (ExampleDataTemplateException ex)
+        {
+            // a built-in template, which the server refuses; the delete action is hidden for those, so this is a stale page.
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+
+        Snackbar.Add($"Deleted \"{template.Name}\".", Severity.Success);
+
+        _templates = await jim.ExampleData.GetTemplateHeadersAsync();
+        if (_grid != null)
+            await _grid.RefreshAsync(invalidateTotals: true);
     }
 
     /// <summary>

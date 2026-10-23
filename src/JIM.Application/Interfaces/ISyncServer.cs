@@ -68,20 +68,6 @@ public interface ISyncServer
 
     #endregion
 
-    #region CSO Lookup Cache
-
-    /// <summary>
-    /// Adds a CSO to the in-memory lookup cache for fast external ID matching during import.
-    /// </summary>
-    void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId);
-
-    /// <summary>
-    /// Removes a CSO from the in-memory lookup cache.
-    /// </summary>
-    void EvictCsoFromCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue);
-
-    #endregion
-
     #region Object Matching
 
     /// <summary>

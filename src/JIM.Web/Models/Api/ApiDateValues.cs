@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Staging.DTOs;
 using JIM.Utilities;
@@ -8,7 +9,7 @@ using JIM.Utilities;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// Puts the dates in a change history page into the form the REST API emits (#2153): UTC, to the microsecond, written
+/// Puts the dates in a change history page, or an Activity item's changes, into the form the REST API emits (#2153): UTC, to the microsecond, written
 /// with <c>Z</c>. The repository projects these DTOs straight from the database, where Npgsql reads a date as Kind
 /// Local, which would serialise with the server's offset. The DTOs live in JIM.Models, which cannot reach
 /// <see cref="DateTimeAttributeValue"/>, so the controllers apply this before returning a page.
@@ -39,6 +40,18 @@ public static class ApiDateValues
             foreach (var valueChange in item.AttributeChanges.SelectMany(a => a.ValueChanges).Where(v => v.DateTimeValue.HasValue))
                 valueChange.DateTimeValue = DateTimeAttributeValue.ToCanonical(valueChange.DateTimeValue!.Value);
         }
+    }
+
+    /// <summary>
+    /// Canonicalises every change recorded with an Activity item, in place.
+    /// </summary>
+    public static void CanonicaliseDates(ExecutionItemChanges changes)
+    {
+        if (changes.MetaverseObjectChange != null)
+            CanonicaliseDates([changes.MetaverseObjectChange]);
+        if (changes.ConnectedSystemObjectChange != null)
+            CanonicaliseDates([changes.ConnectedSystemObjectChange]);
+        CanonicaliseDates(changes.StagedExportChanges);
     }
 
     /// <summary>

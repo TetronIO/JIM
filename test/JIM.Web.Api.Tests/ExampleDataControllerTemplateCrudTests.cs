@@ -11,6 +11,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
+using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Security;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Middleware.Api;
@@ -388,6 +389,26 @@ public class ExampleDataControllerTemplateCrudTests
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
     }
 
+    [TestCase(-1)]
+    [TestCase(101)]
+    public async Task CreateTemplateAsync_BoolTrueDistributionOutOfRange_ReturnsBadRequestNamingTheFieldAsync(int distribution)
+    {
+        var booleanAttribute = new MetaverseAttribute { Id = 13, Name = "Account Disabled", Type = AttributeDataType.Boolean };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(13, It.IsAny<bool>())).ReturnsAsync(booleanAttribute);
+        var request = BuildValidCreateRequest();
+        request.ObjectTypes[0].Attributes = new List<ExampleDataTemplateAttributeRequest>
+        {
+            new() { MetaverseAttributeId = 13, BoolTrueDistribution = distribution }
+        };
+
+        var result = await _controller.CreateTemplateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (ApiErrorResponse)((BadRequestObjectResult)result).Value!;
+        Assert.That(error.Message, Does.Contain("BoolTrueDistribution").And.Contain("between 0 and 100"));
+        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
     [Test]
     public async Task CreateTemplateAsync_DuplicateName_ReturnsConflictAsync()
     {
@@ -570,7 +591,9 @@ public class ExampleDataControllerTemplateCrudTests
     [Test]
     public async Task UpdateTemplateAsync_BuiltIn_ReturnsBadRequestAsync()
     {
-        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(1)).ReturnsAsync(BuildExistingTemplate(1, "Built-in Template", builtIn: true));
+        var existing = BuildExistingTemplate(1, "Built-in Template", builtIn: true);
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(1)).ReturnsAsync(existing);
+        _mockExampleDataRepo.Setup(r => r.GetTemplateHeaderAsync(1)).ReturnsAsync(ExampleDataTemplateHeader.FromEntity(existing));
 
         var result = await _controller.UpdateTemplateAsync(1, new UpdateExampleDataTemplateRequest { Name = "New Name" });
 
@@ -646,6 +669,69 @@ public class ExampleDataControllerTemplateCrudTests
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         _mockExampleDataRepo.Verify(r => r.DeleteTemplateAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    #endregion
+
+    #region copy (#1466)
+
+    [Test]
+    public async Task CopyTemplateAsync_BuiltInSource_ReturnsCreatedWithTheCopyAsync()
+    {
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(1)).ReturnsAsync(BuildExistingTemplate(1, "Built-in Template", builtIn: true));
+        ExampleDataTemplate? created = null;
+        _mockExampleDataRepo.Setup(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()))
+            .Callback<ExampleDataTemplate>(t => { t.Id = 42; created = t; })
+            .Returns(Task.CompletedTask);
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(42)).ReturnsAsync(() => created);
+
+        var result = await _controller.CopyTemplateAsync(1, new CopyExampleDataTemplateRequest { Name = "My Template", ChangeReason = "Customising." });
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var createdResult = (CreatedAtRouteResult)result;
+        var dto = (ExampleDataTemplateDto)createdResult.Value!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(createdResult.RouteName, Is.EqualTo("GetExampleDataTemplate"));
+            Assert.That(dto.Id, Is.EqualTo(42));
+            Assert.That(dto.Name, Is.EqualTo("My Template"));
+            Assert.That(dto.BuiltIn, Is.False);
+            Assert.That(dto.ObjectTypes, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task CopyTemplateAsync_UnknownSource_ReturnsNotFoundAsync()
+    {
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(999)).ReturnsAsync((ExampleDataTemplate?)null);
+
+        var result = await _controller.CopyTemplateAsync(999, new CopyExampleDataTemplateRequest { Name = "Copy" });
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CopyTemplateAsync_NameTaken_ReturnsConflictAsync()
+    {
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(3)).ReturnsAsync(BuildExistingTemplate(3, "Source"));
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync("Taken Name")).ReturnsAsync(BuildExistingTemplate(8, "Taken Name"));
+
+        var result = await _controller.CopyTemplateAsync(3, new CopyExampleDataTemplateRequest { Name = "Taken Name" });
+
+        Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
+        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CopyTemplateAsync_EmptyName_ReturnsBadRequestAsync()
+    {
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(3)).ReturnsAsync(BuildExistingTemplate(3, "Source"));
+
+        var result = await _controller.CopyTemplateAsync(3, new CopyExampleDataTemplateRequest { Name = "" });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
     }
 
     #endregion

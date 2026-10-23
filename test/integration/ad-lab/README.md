@@ -356,6 +356,20 @@ short of the 180-day tombstone lifetime.
 The control-plane scripts only ever touch VMs this lab created: the build writes a marker and the forest metadata into
 the VM's Notes, and every other script refuses a VM without it.
 
+## The runner VM
+
+The runner VM (`jim-ad-lab-runner`, Ubuntu, GitHub runner `<host>-jim-ad-lab`) is built and configured from the
+`TetronIO/ci-runners` repository (`docs/hyperv-host.md`), not from this folder.
+
+One part of that configuration matters to every run here: **`needrestart` must never restart the runner, Docker or
+containerd.** Ubuntu's daily upgrade runs `needrestart`, which restarts services whose libraries changed. On 23 Oct 2026
+it restarted the runner's service at 06:43, in the middle of the nightly, and the job was cancelled ("The runner has
+received a shutdown signal"). ci-runners now writes the exclusion for every runner it sets up, and moves the lab VM's
+daily upgrade to the afternoon, out of the nightly's way.
+
+Every lab run checks for the exclusion (`Check the runner is exempt from automatic service restarts` in `ad-lab.yml`),
+warns if it is missing, and logs the upgrade timer's schedule.
+
 ## How the runner calls the control plane
 
 The runner VM (label `jim-ad-lab`) never holds hypervisor credentials. It runs, over OpenSSH as `jim-lab`:

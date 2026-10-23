@@ -50,6 +50,19 @@ public class SyncOutcomeNodeTests
     }
 
     [Test]
+    public void FromSyncOutcome_StagedPendingExport_CarriesTheIdOfTheChangeItRecorded()
+    {
+        var changeId = Guid.NewGuid();
+        var outcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            ConnectedSystemObjectChangeId = changeId
+        };
+
+        Assert.That(SyncOutcomeNode.FromSyncOutcome(outcome).ConnectedSystemObjectChangeId, Is.EqualTo(changeId));
+    }
+
+    [Test]
     public void FromSyncOutcome_JoinedByMatching_MapsTheRuleAndValueItMatchedOn()
     {
         var outcome = new ActivityRunProfileExecutionItemSyncOutcome

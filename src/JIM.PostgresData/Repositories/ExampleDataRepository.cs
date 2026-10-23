@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
@@ -231,13 +231,14 @@ public class ExampleDataRepository : IExampleDataRepository
 
     public async Task CreateTemplateGraphAsync(ExampleDataTemplate template)
     {
-        // Insert the new template subtree while treating any already-persisted entities it references (Metaverse Object
-        // Types, Metaverse Attributes, Example Data Sets and their values) as existing rather than new. TrackGraph walks
-        // the whole graph (including the many-to-many reference rows) and, keyed on whether the entity already has its
-        // primary key set, marks existing entities Unchanged and new ones Added. This lets EF wire foreign keys to the
-        // existing entities instead of attempting to re-insert them (which would violate their primary keys).
-        Repository.Database.ChangeTracker.TrackGraph(template, node =>
-            node.Entry.State = node.Entry.IsKeySet ? EntityState.Unchanged : EntityState.Added);
+        // Insert the new template subtree while treating the already-persisted entities it references (Metaverse Object
+        // Types, Metaverse Attributes and Example Data Sets) as existing rather than new. The submitted graph's own
+        // instances of those are detached, and a no-tracking load gives each mention its own instance (a copied template
+        // whose attributes share an Example Data Set arrives with one instance per attribute, #1466), so they are
+        // re-pointed at one canonical tracked instance per key first; adding the template then inserts only the
+        // genuinely new template-owned rows, because EF's graph walk stops at every entity already tracked.
+        await RepointTemplateAtPersistedReferencesAsync(template.ObjectTypes, new PersistedTemplateReferences(Repository.Database));
+        Repository.Database.ExampleDataTemplates.Add(template);
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -418,17 +419,26 @@ public class ExampleDataRepository : IExampleDataRepository
         database.ExampleDataObjectTypes.RemoveRange(trackedTemplate.ObjectTypes);
         trackedTemplate.ObjectTypes.Clear();
 
-        // Re-point the incoming subtree at freshly-loaded, tracked instances of the entities it references. The
-        // submitted graph's own instances are detached copies loaded elsewhere, often carrying navigation collections
-        // of their own (a Metaverse Object Type usually arrives with its Attributes loaded), and attaching those would
-        // have EF re-insert the many-to-many bindings between them. Loading each referenced entity by key gives one
-        // canonical tracked instance per key, so an entity referenced twice (a Metaverse Object Type that is both an
-        // Object Type's target and a reference attribute's permitted type) attaches exactly once.
-        var references = new PersistedTemplateReferences(database);
-        foreach (var objectType in incomingTemplate.ObjectTypes)
+        // Re-point the incoming subtree at freshly-loaded, tracked instances of the entities it references (see
+        // RepointTemplateAtPersistedReferencesAsync), then adding it to the tracked template's collection is what marks
+        // it for insertion: EF's change detection walks it and stops at every entity already tracked, so only the
+        // genuinely new template-owned rows are inserted.
+        await RepointTemplateAtPersistedReferencesAsync(incomingTemplate.ObjectTypes, new PersistedTemplateReferences(database));
+        trackedTemplate.ObjectTypes.AddRange(incomingTemplate.ObjectTypes);
+    }
+
+    /// <summary>
+    /// Prepares a submitted Object Type subtree for insertion: every template-owned row's id is cleared (any ids it
+    /// carries belong to rows being replaced, and reusing them would collide), and every persisted entity it references
+    /// is swapped for one canonical tracked instance per key. The submitted graph's own instances are detached copies
+    /// loaded elsewhere, often carrying navigation collections of their own (a Metaverse Object Type usually arrives
+    /// with its Attributes loaded), and attaching those would have EF re-insert the many-to-many bindings between them;
+    /// loading each referenced entity by key also means an entity referenced twice attaches exactly once.
+    /// </summary>
+    private static async Task RepointTemplateAtPersistedReferencesAsync(IEnumerable<ExampleDataObjectType> objectTypes, PersistedTemplateReferences references)
+    {
+        foreach (var objectType in objectTypes)
         {
-            // the template-owned rows are all new inserts; any ids the submitted graph carries belong to the rows just
-            // removed above, and reusing them would collide with those deletions.
             objectType.Id = 0;
             objectType.MetaverseObjectType = await references.ResolveMetaverseObjectTypeAsync(objectType.MetaverseObjectType);
 
@@ -459,11 +469,6 @@ public class ExampleDataRepository : IExampleDataRepository
                     attribute.AttributeDependency.MetaverseAttribute = await references.ResolveMetaverseAttributeAsync(attribute.AttributeDependency.MetaverseAttribute);
                 }
             }
-
-            // Adding the new subtree to the tracked template's collection is what marks it for insertion: EF's change
-            // detection walks it and stops at every entity already tracked (the referenced entities resolved above),
-            // so only the genuinely new template-owned rows are inserted.
-            trackedTemplate.ObjectTypes.Add(objectType);
         }
     }
 
@@ -501,7 +506,7 @@ public class ExampleDataRepository : IExampleDataRepository
                 return cached;
 
             var resolved = await loadAsync(id) ??
-                throw new InvalidOperationException($"UpdateTemplateAsync: The submitted Data Generation Template references a {entityDescription} with id {id} that does not exist.");
+                throw new InvalidOperationException($"The submitted Data Generation Template references a {entityDescription} with id {id} that does not exist.");
 
             cache[id] = resolved;
             return resolved;

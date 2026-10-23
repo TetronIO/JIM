@@ -1540,9 +1540,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("AttributeDependencyId")
                         .HasColumnType("integer");
 
-                    b.Property<bool?>("BoolShouldBeRandom")
-                        .HasColumnType("boolean");
-
                     b.Property<int?>("BoolTrueDistribution")
                         .HasColumnType("integer");
 

@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Asp.Versioning;
@@ -327,9 +327,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (existing == null)
             return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
 
-        if (existing.BuiltIn)
-            return BadRequest(ApiErrorResponse.BadRequest("Built-in Data Generation Templates cannot be updated."));
-
         // A detached template carrying the existing identity and audit provenance; the server decides whether the
         // Object Type graph below it replaces the persisted one (see replaceObjectTypes).
         var template = new ExampleDataTemplate
@@ -404,13 +401,77 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (template == null)
             return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
 
-        if (template.BuiltIn)
-            return BadRequest(ApiErrorResponse.BadRequest("Built-in Data Generation Templates cannot be deleted."));
+        try
+        {
+            await _application.ExampleData.DeleteTemplateAsync(id, initiatorType, initiatorId, initiatorName, changeReason);
+        }
+        catch (ExampleDataTemplateException ex)
+        {
+            return TemplateRejected("deletion", ex);
+        }
 
-        await _application.ExampleData.DeleteTemplateAsync(id, initiatorType, initiatorId, initiatorName, changeReason);
         _logger.LogInformation("Deleted Data Generation Template {Id}", id);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Copy a Data Generation Template
+    /// </summary>
+    /// <remarks>
+    /// Creates a new template with the same Object Types and generation rules as the source, under a new name. Built-in
+    /// templates can be copied; the copy is never built in, so it can be edited and deleted.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the template to copy.</param>
+    /// <param name="request">The name for the new template.</param>
+    /// <returns>The new template.</returns>
+    /// <response code="201">The copy was created.</response>
+    /// <response code="400">The copy failed validation.</response>
+    /// <response code="404">The template to copy could not be found.</response>
+    /// <response code="409">A Data Generation Template with the requested name already exists.</response>
+    /// <response code="401">The initiating principal could not be identified.</response>
+    [HttpPost("templates/{id:int}/copy", Name = "CopyExampleDataTemplate")]
+    [ProducesResponseType(typeof(ExampleDataTemplateDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CopyTemplateAsync(int id, [FromBody] CopyExampleDataTemplateRequest request)
+    {
+        _logger.LogInformation("Copying Data Generation Template {Id} as: {Name}", id, LogSanitiser.Sanitise(request.Name));
+
+        if (!TryGetInitiatorInfo(out var initiatorType, out var initiatorId, out var initiatorName))
+            return UnidentifiedInitiator();
+
+        ExampleDataTemplate copy;
+        try
+        {
+            copy = await _application.ExampleData.CopyTemplateAsync(id, request.Name, initiatorType, initiatorId, initiatorName, request.ChangeReason);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
+        }
+        catch (ExampleDataTemplateException ex)
+        {
+            return TemplateRejected("copy", ex);
+        }
+        catch (ExampleDataTemplateAttributeException ex)
+        {
+            return TemplateRejected("copy", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Data Generation Template copy conflicted: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return Conflict(ApiErrorResponse.Conflict(ex.Message));
+        }
+
+        _logger.LogInformation("Copied Data Generation Template {SourceId} to {Id}", id, copy.Id);
+
+        var created = await _application.ExampleData.GetTemplateAsync(copy.Id);
+        var createdDto = created == null ? null : ExampleDataTemplateDto.FromEntity(created);
+        createdDto?.Warnings.AddRange(copy.SaveWarnings);
+        return CreatedAtRoute("GetExampleDataTemplate", new { id = copy.Id }, createdDto);
     }
 
     /// <summary>
@@ -697,8 +758,8 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     #endregion
 
     /// <summary>
-    /// Logs and builds the 400 response for a Data Generation Template the server refused as invalid. Shared by the
-    /// create and update endpoints, which catch the same two validation exception types with the same handling.
+    /// Logs and builds the 400 response for a Data Generation Template the server refused: invalid, or built in and
+    /// so not changeable. Shared by the create, update, delete and copy endpoints.
     /// </summary>
     private BadRequestObjectResult TemplateRejected(string operation, OperationalException exception)
     {
@@ -762,7 +823,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         {
             PopulatedValuesPercentage = request.PopulatedValuesPercentage,
             BoolTrueDistribution = request.BoolTrueDistribution,
-            BoolShouldBeRandom = request.BoolShouldBeRandom,
             MinDate = request.MinDate,
             MaxDate = request.MaxDate,
             MinNumber = request.MinNumber,

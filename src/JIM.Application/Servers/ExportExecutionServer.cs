@@ -3263,10 +3263,8 @@ public class ExportExecutionServer
                 : new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
         }
 
-        // Apply changes to each CSO in-memory, tracking old external ID values for cache invalidation
+        // Apply changes to each CSO in-memory
         var csoUpdates = new List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)>();
-        var cacheEvictions = new List<(int connectedSystemId, int attributeId, string oldValue)>();
-        var cacheAdditions = new List<(int connectedSystemId, int attributeId, string newValue, Guid csoId)>();
 
         foreach (var (cso, exportResult) in csosToUpdate)
         {
@@ -3281,12 +3279,6 @@ public class ExportExecutionServer
                 var externalIdAttrValue = cso.AttributeValues
                     .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
 
-                // Capture old primary external ID value before overwriting for cache invalidation
-                var oldPrimaryIdValue = externalIdAttrValue?.StringValue
-                    ?? externalIdAttrValue?.GuidValue?.ToString()
-                    ?? externalIdAttrValue?.IntValue?.ToString(CultureInfo.InvariantCulture)
-                    ?? externalIdAttrValue?.LongValue?.ToString(CultureInfo.InvariantCulture);
-
                 if (externalIdAttrValue == null)
                 {
                     externalIdAttrValue = new ConnectedSystemObjectAttributeValue
@@ -3300,11 +3292,6 @@ public class ExportExecutionServer
 
                 ApplyExternalIdToAttributeValue(externalIdAttrValue, externalIdAttribute?.Type, exportResult.ExternalId, cso.Id);
 
-                // Track cache invalidation: evict old value if it differs from the new one
-                if (oldPrimaryIdValue != null && !oldPrimaryIdValue.Equals(exportResult.ExternalId, StringComparison.OrdinalIgnoreCase))
-                    cacheEvictions.Add((cso.ConnectedSystemId, cso.ExternalIdAttributeId, oldPrimaryIdValue));
-                cacheAdditions.Add((cso.ConnectedSystemId, cso.ExternalIdAttributeId, exportResult.ExternalId, cso.Id));
-
                 needsUpdate = true;
                 Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
                     cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttribute?.Type.ToString() ?? "Unknown");
@@ -3315,9 +3302,6 @@ public class ExportExecutionServer
             {
                 var secondaryExternalIdAttrValue = cso.AttributeValues
                     .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
-
-                // Capture old secondary external ID value before overwriting for cache invalidation
-                var oldSecondaryIdValue = secondaryExternalIdAttrValue?.StringValue;
 
                 if (secondaryExternalIdAttrValue == null)
                 {
@@ -3331,11 +3315,6 @@ public class ExportExecutionServer
                 }
 
                 secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
-
-                // Track cache invalidation: evict old value if it differs from the new one
-                if (oldSecondaryIdValue != null && !oldSecondaryIdValue.Equals(exportResult.SecondaryExternalId, StringComparison.OrdinalIgnoreCase))
-                    cacheEvictions.Add((cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, oldSecondaryIdValue));
-                cacheAdditions.Add((cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, exportResult.SecondaryExternalId, cso.Id));
 
                 needsUpdate = true;
                 Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
@@ -3358,12 +3337,6 @@ public class ExportExecutionServer
             }
             Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs", csoUpdates.Count);
         }
-
-        // Update cache after successful persistence: evict stale entries, then add current ones
-        foreach (var (connectedSystemId, attributeId, oldValue) in cacheEvictions)
-            Application.ConnectedSystems.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
-        foreach (var (connectedSystemId, attributeId, newValue, csoId) in cacheAdditions)
-            Application.ConnectedSystems.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
     }
 
     /// <summary>

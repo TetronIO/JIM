@@ -475,7 +475,7 @@ public class ImportUpdateObjectMvaTests
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(4), $"Expected four Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
         
         // get the group cso
-        var cso4 = await Jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(1, (int)MockSourceSystemAttributeNames.GROUP_UID, TestConstants.CS_OBJECT_4_GROUP_UID);
+        var cso4 = await SyncRepo.GetConnectedSystemObjectByAttributeAsync(1, (int)MockSourceSystemAttributeNames.GROUP_UID, TestConstants.CS_OBJECT_4_GROUP_UID);
         Assert.That(cso4, Is.Not.EqualTo(null), "Expected to be able to retrieve the group (cso4).");
         var cso4MemberAttributes = cso4.GetAttributeValues(MockSourceSystemAttributeNames.MEMBER.ToString());
         Assert.That(cso4MemberAttributes, Is.Not.Null);

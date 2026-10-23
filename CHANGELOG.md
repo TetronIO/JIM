@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Register JIM with AD FS in one command: `Register-JIMIdentityProvider -Provider ADFS` creates the Application Group the SSO guide describes and returns the `JIM_SSO_*` values. Run it again to repair drift, or with `-WhatIf` to see it. (#2364)
+- ✨ Create, edit, duplicate and delete Data Generation Templates in the portal: add Object Types and attributes, choose how each attribute's values are made, and duplicate a built-in template to customise it. Copying is also via REST and `Copy-JIMExampleDataTemplate`. (#1466)
 - ✨ Identity providers can push Users and Groups to JIM over SCIM 2.0 (Preview): the new JIM SCIM 2.0 Service Provider Connector gives a Connected System its own SCIM endpoint and keys, and imports what arrives on its Schedule. Also via REST and `*-JIMScimKey`. (#124)
 - ✨ See what an identity provider sent: an Activity per key every 15 minutes counts its creates, updates, deletes and refused requests, and a Connected System Object's change history lists the SCIM requests behind each imported change. (#124)
 - ✨ Say whether a File Connector column holds several values, separated by the Multi-Value Delimiter, on the Schema tab, via REST or `Set-JIMConnectedSystemAttribute -Plurality`; a schema refresh keeps your choice. (#2186)
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Connected System attributes now say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable by administrators (Schema tab, REST, `-CaseExact`). New Object Matching Rules on them respect case. (#2051)
 - ✨ Scoping criteria and Predefined Searches gain **has a value** and **has no value** for every attribute type, and scoping gains **matches pattern** and **does not match pattern** for text, using a regular expression checked when you save. Also via REST and PowerShell. (#2053)
 - ✨ A portal page's info button now links to the documentation that explains it, and detail pages such as an Activity, a Connected System, a Connector or a Synchronisation Rule gain an info button of their own. (#1454)
+- ✨ Scripts can read what a run did to an object, outcome by outcome, and the attribute values it changed, as the execution item page shows them, even after the object is deleted: `Get-JIMActivityExecutionItem -IncludeOutcomes -IncludeChanges`, or REST. (#2033)
 - ✨ An import's execution item lists every value a Connector could not read under **Attribute Values Not Imported**: what came in, what was expected and why it was refused, with the file and row for a file. Also via REST and `Get-JIMActivityExecutionItem`. (#2066)
 - ✨ See which references an import could not link, and why: an object's page and its execution items list each with its likely cause (a Container not in scope, say), where to fix it and the next step. Also via REST and `Get-JIMConnectedSystemObjectUnresolvedReference`. (#959)
 - ✨ The Connected System page shows how many references are unresolved and opens the Connector Space filtered to the objects holding them, under "Where they point": the changes that would fix them. Also via REST and `Get-JIMConnectedSystemUnresolvedReferenceSummary`. (#959)
@@ -129,16 +132,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ The Worker no longer loads every Connected System Object into memory before it takes work, so it starts sooner and holds less memory; the `JIM_CACHE_WARM_PARALLELISM` setting that tuned that load is gone. (#2246)
 - 🗑️ The File Connector no longer reads a repeated column header (`member,member`) as a multi-valued attribute: schema discovery, imports and exports refuse such a file, naming the column. Put the values in one column, separated by the Multi-Value Delimiter. (#2186)
 - 🗑️ The Pending Export **Failed** status, its five-attempt limit and the wait between attempts are gone: `maxRetries` and `nextRetryAt` are removed from the REST API and PowerShell output, and `Failed` from `-Status`. Pending Exports left Failed are queued again on upgrade. (#2119)
 - 🗑️ Export, Full Synchronisation and Delta Synchronisation Run Profiles no longer take a **File Path**: an export always writes to the file the Connected System's **File Path** names, so the field did nothing. It is gone from the portal, the REST API and `-FilePath` refuse it, and any already stored is cleared on upgrade.
 - 🗑️ Example Data Template attributes can no longer name a Connected System attribute: templates generate Metaverse Attribute values only, so it produced nothing. `-ConnectedSystemObjectTypeAttributeId` and the `ConnectedSystemObjectTypeAttributeId` hashtable key are gone from the cmdlets, and `connectedSystemObjectTypeAttributeId` from the REST API.
+- 🗑️ Data Generation Template attributes no longer take a **Boolean random** setting: it never changed what was generated, since Boolean values are already random whenever no true distribution is set. `-BoolShouldBeRandom` and the `BoolShouldBeRandom` hashtable key are gone from the cmdlets, and `boolShouldBeRandom` from the REST API. (#2436)
 - 🗑️ The `CollectionContains` expression function is removed: `Eq()` is now true when any value of a Multi-Valued attribute is equal, which is what it did. (#2053)
 - 🗑️ Four Service Settings that did nothing are gone, on upgrade too: **Maintenance mode**, **Credential encryption** (always on), **Verbose no-change recording** and **SSO unique identifier claim type** (**SSO claim type** is the one JIM uses). (#2101)
 
 ### Fixed
 
 - 🐛 With **Create containers as needed?** on, an LDAP export no longer fails an object because a parallel export batch created its new OU a moment earlier; the OU exists, so the object is created in it. (#1820)
+- 🐛 Data Generation Templates now honour a true-or-false attribute's share of true values, which was accepted and ignored: at 20%, exactly 40 of 200 objects given a value are true. Set it as **Objects given true (%)** in the template editor, via REST or `-BoolTrueDistribution`; left empty, values stay random. (#877)
+- 🐛 A Data Generation Template attribute's **Population %** now leaves exactly that share of objects with a value: at 50%, 100 of 200 objects. It left too many before, about 124 of 200. For an attribute that depends on another one's value, the share is of the objects meeting the condition, so 50% of 120 Staff gives exactly 60 values. (#2437, #2448)
 - 🐛 When an auxiliary class attribute's value goes away before it is exported, JIM now withdraws the class add queued with it too. Left behind, the add was refused at every export because nothing wrote the class's required attributes. (#492)
 - 🐛 The SCIM 2.0 Client Connector now sends a value added to, or set on, a multi-valued attribute such as a list of strings in a schema extension as a list, as SCIM requires. Service providers that check values against their schema refused it. (#2215)
 - 🐛 The SCIM 2.0 Client Connector now always imports `meta.version` where the provider supports entity tags, so updates carry `If-Match` and cannot overwrite a change made in the provider. Schema import selects it and keeps it selected; a refresh selects it on existing Connected Systems. (#2404)

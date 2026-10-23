@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 
 namespace JIM.Web.Models.Api;
@@ -110,6 +111,22 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// several separated by commas for a multi-valued source. Null for any other item.
     /// </summary>
     public string? JoinMatchedValue { get; set; }
+
+    /// <summary>
+    /// What the run did to the object, as a tree: the root outcomes in order, each with the outcomes that followed from
+    /// it nested under <c>children</c> (for example Projected, then Attribute Flow and Provisioned, then the Pending
+    /// Export it staged). Null unless asked for (<c>include=outcomes</c>, or <c>-IncludeOutcomes</c> in PowerShell); an
+    /// empty list when asked for and the item recorded none.
+    /// </summary>
+    public List<SyncOutcomeNodeDto>? Outcomes { get; set; }
+
+    /// <summary>
+    /// The attribute changes recorded with the item, in the shapes object change history uses: the Metaverse Object
+    /// change a synchronisation made, the Connected System Object change the item recorded, and what each
+    /// Pending Export a synchronisation staged would write. Null unless asked for (<c>include=changes</c>, or
+    /// <c>-IncludeChanges</c> in PowerShell).
+    /// </summary>
+    public ExecutionItemChanges? Changes { get; set; }
 
     /// <summary>
     /// Creates the detail from an item's own row; no navigation property is read, so the light retrieval suffices.

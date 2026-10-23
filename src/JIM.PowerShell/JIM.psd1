@@ -227,6 +227,7 @@
         'Test-JIMCertificate',
         'Export-JIMCertificate',
         'Get-JIMIdentityProviderTrust',
+        'Register-JIMIdentityProvider',
 
         # Security
         'Get-JIMRole',
@@ -237,6 +238,7 @@
 
         # Data Generation
         'Add-JIMExampleDataTemplateAttribute',
+        'Copy-JIMExampleDataTemplate',
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
