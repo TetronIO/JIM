@@ -48,7 +48,7 @@ JIM is deployed as a set of containers, on Docker or Podman, each with a distinc
 
 ### JIM.Web
 
-The web application provides both the **administrative user interface** (built with Blazor Server and MudBlazor) and the **REST API** (at `/api/`). Administrators use the UI to configure Connected Systems, define Synchronisation Rules, monitor operations, and browse identity data. The API enables automation and integration with external tools.
+The web application provides both the **administrative user interface** (built with Blazor Server and MudBlazor) and the **REST API** (at `/api/`). Administrators use the UI to configure Connected Systems, define Synchronisation Rules, monitor operations, and browse identity data. The API enables automation and integration with external tools. It also serves the SCIM endpoint (at `/scim/`) that identity providers push Users and Groups to, for each Connected System using the [JIM SCIM 2.0 Service Provider Connector](../connectors/jim-scim-service-provider-connector.md). JIM keeps what they push, and the Worker imports it on the Connected System's Schedule.
 
 ### JIM.Worker
 

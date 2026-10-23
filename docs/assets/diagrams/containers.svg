@@ -15,15 +15,15 @@
 <!-- snippets inlines this into markdown); structure uses <g> groups. -->
 <svg class="jim-diagram" viewBox="0 0 1160 750" role="img" aria-labelledby="jimdg-ct-title jimdg-ct-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-ct-title">JIM Containers</title>
-  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline, delivers queued passwords, and hosts the Connectors, connecting to Directory Services, HR systems, file systems, enterprise databases and cloud applications.</desc>
+  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an Identity Provider authenticates sign-in over OIDC, and can push Users and Groups over SCIM 2.0 to the Web Application's SCIM endpoint, which keeps them in PostgreSQL for the Worker Service to import on a Schedule. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline, delivers queued passwords, and hosts the Connectors, connecting to Directory Services, HR systems, file systems, enterprise databases and cloud applications.</desc>
   <defs>
     <mask id="jimdg-ct-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="750">
       <rect x="0" y="0" width="1160" height="750" fill="#ffffff"/>
-      <rect x="416.6" y="156" width="49.9" height="18" rx="3" fill="#000000"/>
-      <rect x="547" y="157" width="66" height="18" rx="3" fill="#000000"/>
-      <rect x="735.4" y="158.9" width="41.2" height="18" rx="3" fill="#000000"/>
-      <rect x="646.4" y="327.7" width="89.2" height="18" rx="3" fill="#000000"/>
-      <rect x="848.2" y="337" width="83.7" height="18" rx="3" fill="#000000"/>
+      <rect x="416.4" y="155" width="51.1" height="19" rx="3" fill="#000000"/>
+      <rect x="547.4" y="156" width="65.1" height="19" rx="3" fill="#000000"/>
+      <rect x="703.1" y="157.9" width="105.9" height="19" rx="3" fill="#000000"/>
+      <rect x="643.4" y="326.7" width="95.4" height="19" rx="3" fill="#000000"/>
+      <rect x="845.3" y="336" width="89.6" height="19" rx="3" fill="#000000"/>
     </mask>
   </defs>
   <g id="jimdg-ct-people">
@@ -38,7 +38,7 @@
     <text class="jimdg-system-sub" x="592" y="80">REST API · API keys</text>
     <rect class="jimdg-system" x="790" y="32" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name" x="890" y="59">Identity Provider</text>
-    <text class="jimdg-system-sub" x="890" y="80">OIDC single sign-on</text>
+    <text class="jimdg-system-sub" x="890" y="80">sign-in · SCIM provisioning</text>
   </g>
   <g id="jimdg-ct-boundary">
     <rect class="jimdg-hub" x="90" y="150" width="980" height="450" rx="8"/>
@@ -49,7 +49,7 @@
     <text class="jimdg-system-sub" x="250" y="280">automation via the REST API</text>
     <rect class="jimdg-stage" x="460" y="225" width="240" height="80" rx="8"/>
     <text class="jimdg-stage-label" x="580" y="258">Web Application</text>
-    <text class="jimdg-system-sub" x="580" y="280">Blazor admin UI + REST API</text>
+    <text class="jimdg-system-sub" x="580" y="280">admin UI · REST API · SCIM</text>
     <rect class="jimdg-stage" x="770" y="225" width="240" height="80" rx="8"/>
     <text class="jimdg-stage-label" x="890" y="258">Scheduler Service</text>
     <text class="jimdg-system-sub" x="890" y="280">cron &amp; interval triggers</text>
@@ -120,6 +120,14 @@
   <g mask="url(#jimdg-ct-labelcut)">
   <g id="jimdg-ct-packets">
     <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-0.4s" repeatCount="indefinite" path="M890,96 L660,219"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-0.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-1.9s" repeatCount="indefinite" path="M640,305 L820,417"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-1.9s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
       <animateMotion dur="3s" begin="0s" repeatCount="indefinite" path="M480,516 L120,656"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="0s" repeatCount="indefinite"/>
     </circle>
@@ -144,7 +152,7 @@
   <g id="jimdg-ct-labels">
     <text class="jimdg-spoke-label jimdg-anchor-middle" x="442" y="169">web UI</text>
     <text class="jimdg-spoke-label jimdg-anchor-middle" x="580" y="170">REST API</text>
-    <text class="jimdg-spoke-label jimdg-anchor-middle" x="756" y="171.9">OIDC</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="756" y="171.9">OIDC · SCIM 2.0</text>
     <text class="jimdg-flow-label" x="372" y="253">REST API</text>
     <text class="jimdg-flow-label jimdg-anchor-middle" x="691" y="340.7">reads &amp; writes</text>
     <text class="jimdg-flow-label jimdg-anchor-middle" x="890" y="350">queues tasks</text>
