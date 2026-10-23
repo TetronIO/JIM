@@ -144,6 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 When your identity provider changes its signing key without notice, the first API request and sign-in using the new key now succeed. They failed before, and could keep failing for up to 5 minutes. (#2442)
 - 🐛 **Max Export Parallelism** applies to every export again, not only to those waiting on references: JIM sends that many batches at once, or the Connector's recommendation when it is empty, keeping one connection per batch stream for the whole run, so large provisioning runs finish sooner. (#1820)
 - 🐛 With **Create containers as needed?** on, an LDAP export no longer fails an object because a parallel export batch created its new OU a moment earlier; the OU exists, so the object is created in it. (#1820)
 - 🐛 Data Generation Templates now honour a true-or-false attribute's share of true values, which was accepted and ignored: at 20%, exactly 40 of 200 objects given a value are true. Set it as **Objects given true (%)** in the template editor, via REST or `-BoolTrueDistribution`; left empty, values stay random. (#877)
@@ -330,6 +331,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 JIM no longer accepts tokens signed by a key your identity provider has retired. It kept accepting them for up to an hour after a rollover, even one made because the key was compromised. (#2442)
 - 🔒 The REST API now refuses to let a signed-in administrator remove themselves from the Administrator role; the check was comparing the wrong identifier and never applied. (#2152)
 - 🔒 The web, worker and scheduler images now ship .NET and ASP.NET Core 10.0.13, and the worker and scheduler's own .NET packages move to 10.0.13 with them, fixing the vulnerabilities in the 10.0.11 runtime and 10.0.12 packages they carried, including CVE-2026-88092, a critical ASP.NET Core security feature bypass.
 - 🔒 Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when you save them as well as when they run, so no expression can hold a type, assembly or method. (#2053)

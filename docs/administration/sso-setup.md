@@ -202,6 +202,14 @@ Configure appropriate token lifetimes in your identity provider:
 - **Refresh tokens**<br /> Hours to days, depending on your security requirements
 - **ID tokens**<br /> Same as access tokens
 
+### Signing Key Rollover
+
+When your identity provider changes the key it signs tokens with, you need do nothing in JIM. JIM reads the signing keys from the key set the identity provider publishes. It fetches that key set again every 12 hours, and straight away when a token arrives signed by a key it has not seen.
+
+- **The new key is published before it is used**, as AD FS's automatic certificate rollover does: JIM already holds it when the first token signed by it arrives.
+- **The key changes without notice**, as when a Keycloak administrator adds a new key: JIM fetches the key set before answering that first request, and accepts it. JIM fetches the key set this way at most once every 30 seconds, so a token signed by a new key in the 30 seconds after such a fetch is refused until they have passed. A sign-in refused this way restarts once by itself.
+- **The old key is retired**: JIM stops accepting tokens signed by it as soon as it fetches a key set without it, which is when the first token signed by the new key arrives. If you retire a key because it was compromised (`Update-AdfsCertificate -Urgent` in AD FS), restart JIM's web container to drop it at once.
+
 ### Client Secrets
 
 - **Rotate client secrets regularly**<br /> Every 6–12 months is recommended.

@@ -289,6 +289,10 @@ try
                 options.NonceCookie.SameSite = SameSiteMode.Lax;
                 options.NonceCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
             }
+            // An ID token signed by a key JIM has not seen makes it fetch the key set early, at most every 30 seconds
+            // rather than IdentityModel's 5 minutes, so the sign-in restarted after one succeeds (#2442).
+            options.RefreshInterval = IdentityProviderSigningKeys.RefreshInterval;
+
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";
@@ -387,43 +391,25 @@ try
                 }
             };
         })
+        // Resolve (and, for the initial admin, just-in-time provision) the JIM identity for
+        // bearer-token callers too, so the PowerShell module / REST API can administer a fresh
+        // deployment without anyone first signing in to the web portal. The resolved roles and
+        // MetaverseObject id are attached to this request's principal. The scheme's settings live in
+        // JimJwtBearerOptions so the tests drive the same ones.
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-        {
-            options.Authority = authority;
-            options.Audience = apiAudience;
-
-            if (authority != null && authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-                options.RequireHttpsMetadata = false;
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidIssuers = validIssuers,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true
-            };
-
-            // Preserve standard OIDC claim names for API requests
-            options.MapInboundClaims = false;
-
-            options.TokenValidationParameters.RoleClaimType = Constants.BuiltInRoles.RoleClaimType;
-
-            // Resolve (and, for the initial admin, just-in-time provision) the JIM identity for
-            // bearer-token callers too, so the PowerShell module / REST API can administer a fresh
-            // deployment without anyone first signing in to the web portal. The resolved roles and
-            // MetaverseObject id are attached to this request's principal.
-            // A token that fails validation is recorded in the security audit log (#2108); see JimJwtBearerEvents.
-            options.Events = JimJwtBearerEvents.Create(async ctx =>
+            JimJwtBearerOptions.Configure(options, authority, apiAudience, validIssuers, async ctx =>
             {
                 await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
-            });
-        });
+            }));
 
     // Both handlers reach the identity provider through one back-channel, which also accepts a chain the JIM certificate
     // store vouches for when a certificate there is trusted for sign-in (#2363): an identity provider whose certificate
     // comes from an internal certificate authority (AD FS, an on-premises Keycloak) then works without an image
     // rebuild, and trusting its authority takes effect on the next sign-in.
     builder.Services.AddIdentityProviderTrust();
+
+    // Neither handler accepts a token signed by a key the identity provider has retired (#2442).
+    builder.Services.AddIdentityProviderSigningKeyPolicy();
 
     // setup authorisation policies
     builder.Services.AddJimAuthorisation();

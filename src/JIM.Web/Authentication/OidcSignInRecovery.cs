@@ -6,6 +6,7 @@ using System.Net;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 namespace JIM.Web.Authentication;
@@ -63,6 +64,11 @@ public static class OidcSignInRecovery
         if (failure == null)
             return false;
 
+        // The ID token is signed by a key the identity provider introduced without publishing it first (#2442). The
+        // failed sign-in has already asked for the key set again, so the next attempt, a round trip later, has it.
+        if (IsSigningKeyNotFound(failure))
+            return true;
+
         // A spent or expired single-use authorisation code comes back from the token endpoint as
         // invalid_grant; anything else an OpenIdConnectProtocolException carries (access_denied,
         // invalid_client, ...) describes a decision or a misconfiguration a retry will only repeat.
@@ -103,6 +109,12 @@ public static class OidcSignInRecovery
     {
         if (!ShouldRestartSignIn(failure))
             return OidcRemoteFailureAction.Surface;
+
+        // The sign-in cookies made the round trip, or the ID token would never have been checked, so the transport is
+        // not at fault and a second miss is not lost cookies: the error page reports it rather than the sign-in failed
+        // page's advice about cookies.
+        if (IsSigningKeyNotFound(failure))
+            return GetRestartCount(properties) >= MaxRestarts ? OidcRemoteFailureAction.Surface : OidcRemoteFailureAction.Restart;
 
         if (WillBrowserDiscardSignInCookies(correlationCookiePolicy, isHttps, host))
             return OidcRemoteFailureAction.StopPlainHttp;
@@ -163,6 +175,13 @@ public static class OidcSignInRecovery
         context.Response.Redirect(SignInFailedPath);
         context.HandleResponse();
     }
+
+    private static bool IsSigningKeyNotFound(Exception? failure) => failure switch
+    {
+        SecurityTokenSignatureKeyNotFoundException => true,
+        AggregateException aggregate => aggregate.InnerExceptions.Any(IsSigningKeyNotFound),
+        _ => false
+    };
 
     private static int GetRestartCount(AuthenticationProperties? properties)
     {
