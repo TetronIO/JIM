@@ -179,6 +179,8 @@ A naming context or crossRef partition the service account cannot read (a least-
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
 
+Export Concurrency is how many changes each batch sends at once. JIM can also send several batches at once, each with its own Export Concurrency, so the load on the directory is the two multiplied. With an Export Concurrency of 8 or more, the Connector recommends two batches at once; [Batching and Parallelism](../concepts/synchronisation-pipeline.md#batching-and-parallelism) explains how to change that.
+
 ## Troubleshooting
 
 [Troubleshooting the LDAP Connector](jim-ldap-connector-troubleshooting.md) covers connection, sign-in, import, Delta Import and export failures, each by the message it shows.

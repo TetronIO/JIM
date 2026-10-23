@@ -206,71 +206,243 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
-    /// Tests that with MaxParallelism > 1 and factories provided, immediate exports are still
-    /// processed sequentially via batch-loading. Factories are only used for deferred exports,
-    /// so they should not be called when all exports are immediate (no unresolved references).
+    /// #1820: Max Export Parallelism is how many export batches run at once, and that includes the first pass, which
+    /// carries every export without unresolved references. It ran one batch at a time whatever the setting said.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_MaxParallelism2_ProcessesImmediateExportsSequentiallyAsync()
+    public async Task ExecuteExportsAsync_MaxParallelism2_RunsImmediateBatchesConcurrentlyAsync()
     {
-        // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        SeedFreshExports(targetSystem, 4);
 
-        // Create 4 Pending Exports - with BatchSize=2, processed in 2 sequential batches
-        var pendingExportIds = new List<Guid>();
-        for (var i = 0; i < 4; i++)
+        // Each export call waits (bounded) until a second is in flight, so overlapping calls are what lets them finish.
+        var inFlight = 0;
+        var maxInFlight = 0;
+        var secondInFlight = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task<List<ConnectedSystemExportResult>> WaitForCompany(IList<PendingExport> exports)
         {
-            var cso = CreateCso(targetSystem, targetUserType);
-            ConnectedSystemObjectsData.Add(cso);
-            var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
-            PendingExportsData.Add(pe);
-            SyncRepo.SeedPendingExport(pe);
-            pendingExportIds.Add(pe.Id);
+            var now = Interlocked.Increment(ref inFlight);
+            InterlockedMax(ref maxInFlight, now);
+            if (now >= 2)
+                secondInFlight.TrySetResult();
+            await Task.WhenAny(secondInFlight.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+            Interlocked.Decrement(ref inFlight);
+            return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
         }
 
-        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        var primaryConnector = CreateAsyncScriptedConnector(WaitForCompany);
+        Func<IConnector> connectorFactory = () => CreateAsyncScriptedConnector(WaitForCompany).Object;
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
 
-        // Track whether factories are called - they should NOT be for immediate exports
-        var connectorFactoryCalled = false;
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 },
+            CancellationToken.None, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(maxInFlight, Is.EqualTo(2), "both batches of the first pass should be with a Connector at once");
+            Assert.That(result.SuccessCount, Is.EqualTo(4));
+            Assert.That(result.FailedCount, Is.EqualTo(0));
+            Assert.That(result.ProcessedExportItems, Has.Count.EqualTo(4));
+        }
+    }
+
+    /// <summary>
+    /// #1820: each worker keeps its Connector for every batch it runs. Opening a connection per batch cost a bind per 100
+    /// exports, and against a remote directory over TLS that is a round trip worth avoiding.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelImmediateBatches_EachWorkerOpensOneConnectorForAllItsBatchesAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        SeedFreshExports(targetSystem, 8);
+
+        var exportCalls = 0;
+        Task<List<ConnectedSystemExportResult>> Succeed(IList<PendingExport> exports)
+        {
+            Interlocked.Increment(ref exportCalls);
+            return Task.FromResult(exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        }
+
+        var primaryConnector = CreateAsyncScriptedConnector(Succeed);
+        var workerConnectors = new System.Collections.Concurrent.ConcurrentBag<Mock<IConnectorExportUsingCalls>>();
         Func<IConnector> connectorFactory = () =>
         {
-            connectorFactoryCalled = true;
-            return CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
+            var connector = CreateAsyncScriptedConnector(Succeed);
+            workerConnectors.Add(connector.As<IConnectorExportUsingCalls>());
+            return connector.Object;
         };
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
 
-        var repoFactoryCalled = false;
-        Func<ISyncRepositoryScope> repositoryFactory = () =>
-        {
-            repoFactoryCalled = true;
-            return new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
-        };
-
-        var options = new ExportExecutionOptions
-        {
-            BatchSize = 2,
-            MaxParallelism = 2
-        };
-
-        // Act
         var result = await Jim.ExportExecution.ExecuteExportsAsync(
-            targetSystem,
-            primaryConnector.Object,
-            SyncRunMode.PreviewAndSync,
-            options,
-            CancellationToken.None,
-            connectorFactory: connectorFactory,
-            repositoryFactory: repositoryFactory);
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 },
+            CancellationToken.None, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
 
-        // Assert - all 4 exports should succeed via sequential batch-loading
-        Assert.That(result.SuccessCount, Is.EqualTo(4), "All 4 exports should succeed");
-        Assert.That(result.FailedCount, Is.EqualTo(0));
-        Assert.That(result.ProcessedExportItems, Has.Count.EqualTo(4));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(8));
+            Assert.That(exportCalls, Is.EqualTo(8), "one export call per batch");
+            Assert.That(workerConnectors, Has.Count.EqualTo(1), "with two workers, one Connector beyond the primary is opened, for every batch its worker runs");
+            foreach (var connector in workerConnectors)
+            {
+                connector.Verify(c => c.OpenExportConnection(It.IsAny<IList<ConnectedSystemSettingValue>>(), It.IsAny<string?>()), Times.Once);
+                connector.Verify(c => c.CloseExportConnection(), Times.Once);
+            }
+        }
+    }
 
-        // Assert - factories not called because immediate exports use the primary connector
-        Assert.That(connectorFactoryCalled, Is.False, "Connector factory should not be called for immediate exports");
-        Assert.That(repoFactoryCalled, Is.False, "Repository factory should not be called for immediate exports");
+    /// <summary>
+    /// #1820: a failed batch on the first pass stops further batches being taken, as the sequential pass always has (the
+    /// Connector is likely broken). A batch already with the other worker finishes and is recorded; nothing further is
+    /// read, marked or sent, so every export beyond is left exactly as it was for the next run.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelImmediateBatchFails_StopsTakingFurtherBatchesAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 8);
+        var before = exports.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
+
+        // The primary (worker 0, first batch) fails at once; the other worker's batch takes long enough that the failure is
+        // recorded before it asks for another.
+        var primaryConnector = CreateAsyncScriptedConnector(_ => throw new InvalidOperationException("The directory went away"));
+        Func<IConnector> connectorFactory = () => CreateAsyncScriptedConnector(async sent =>
+        {
+            await Task.Delay(200);
+            return sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+        }).Object;
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 },
+            CancellationToken.None, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        var untouched = exports.Skip(2).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.EqualTo(1), "the failed batch is recorded");
+            Assert.That(result.SuccessCount, Is.EqualTo(1), "the batch already with the other worker finishes");
+            Assert.That(untouched.Select(PendingExportRetryState.Of), Is.EqualTo(untouched.Select(pe => before[pe.Id])),
+                "no batch is taken after the failure");
+            Assert.That(untouched.Select(pe => pe.Status), Has.All.EqualTo(PendingExportStatus.Pending));
+        }
+    }
+
+    /// <summary>
+    /// #1820: the per-batch callback and progress both write through the caller's DbContext, which is not safe for two
+    /// workers at once, so they are never run concurrently; and every batch's items reach the callback exactly once.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelImmediateBatches_NeverRunTheCallbackOrProgressConcurrentlyAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 9);
+
+        var inCallerContext = 0;
+        var overlaps = 0;
+        async Task UseCallerContextAsync()
+        {
+            if (Interlocked.Increment(ref inCallerContext) > 1)
+                Interlocked.Increment(ref overlaps);
+            await Task.Delay(5);
+            Interlocked.Decrement(ref inCallerContext);
+        }
+
+        var streamedIds = new System.Collections.Concurrent.ConcurrentBag<Guid?>();
+        Func<List<ProcessedExportItem>, Task> batchCompleted = async items =>
+        {
+            await UseCallerContextAsync();
+            foreach (var item in items)
+                streamedIds.Add(item.PendingExportId);
+        };
+        Func<ExportProgressInfo, Task> progress = _ => UseCallerContextAsync();
+
+        Task<List<ConnectedSystemExportResult>> Succeed(IList<PendingExport> sent) =>
+            Task.FromResult(sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        var primaryConnector = CreateAsyncScriptedConnector(Succeed);
+        Func<IConnector> connectorFactory = () => CreateAsyncScriptedConnector(Succeed).Object;
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 3 },
+            CancellationToken.None, progress, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory,
+            batchCompletedCallback: batchCompleted);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(9));
+            Assert.That(overlaps, Is.EqualTo(0), "the callback and progress must never run at the same time as each other");
+            Assert.That(streamedIds, Is.EquivalentTo(exports.Select(pe => (Guid?)pe.Id)), "every export's item is streamed exactly once");
+        }
+    }
+
+    /// <summary>
+    /// #1820: cancelling a run while first-pass batches are with their Connectors leaves nothing Executing: each
+    /// interrupted batch is put back exactly as it was, and no further batch is taken.
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_ParallelImmediateBatchCancelled_LeavesNothingExecuting()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 6);
+        var before = exports.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
+
+        using var cts = new CancellationTokenSource();
+        Task<List<ConnectedSystemExportResult>> CancelTheRun(IList<PendingExport> _)
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        }
+
+        var primaryConnector = CreateAsyncScriptedConnector(CancelTheRun);
+        Func<IConnector> connectorFactory = () => CreateAsyncScriptedConnector(CancelTheRun).Object;
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        Assert.CatchAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 },
+            cts.Token, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exports.Select(pe => pe.Status), Has.None.EqualTo(PendingExportStatus.Executing));
+            Assert.That(exports.Select(PendingExportRetryState.Of), Is.EqualTo(exports.Select(pe => before[pe.Id])),
+                "every change is exactly as it was before the run");
+        }
+    }
+
+    /// <summary>
+    /// Run Profile Safeguards (#1618) hold on a parallel first pass: a change type over its limit is withheld for the
+    /// whole run, so no worker is ever handed one, and every export of it is left as it was.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelImmediateBatches_NeverSendAWithheldChangeTypeAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 6);
+        var before = exports.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
+
+        var exportCalls = 0;
+        Task<List<ConnectedSystemExportResult>> Succeed(IList<PendingExport> sent)
+        {
+            Interlocked.Increment(ref exportCalls);
+            return Task.FromResult(sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        }
+        var primaryConnector = CreateAsyncScriptedConnector(Succeed);
+        Func<IConnector> connectorFactory = () => CreateAsyncScriptedConnector(Succeed).Object;
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, primaryConnector.Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 3, MaxUpdates = 3 },
+            CancellationToken.None, connectorFactory: connectorFactory, repositoryFactory: repositoryFactory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportCalls, Is.EqualTo(0), "no batch of a withheld type reaches a Connector");
+            Assert.That(result.UpdatesWithheld, Is.EqualTo(6));
+            Assert.That(exports.Select(PendingExportRetryState.Of), Is.EqualTo(exports.Select(pe => before[pe.Id])),
+                "the withheld exports are left as they were");
+        }
     }
 
     /// <summary>
@@ -1559,6 +1731,27 @@ public class ExportExecutionParallelBatchTests
         return Enumerable.Range(0, count)
             .Select(i => SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Update, queuedAt.AddSeconds(i), referencedMvoId))
             .ToList();
+    }
+
+    /// <summary>
+    /// A Connector whose every export call is answered by <paramref name="script"/>, which may wait or throw.
+    /// </summary>
+    private static Mock<IConnector> CreateAsyncScriptedConnector(Func<IList<PendingExport>, Task<List<ConnectedSystemExportResult>>> script)
+    {
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .Returns((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) => script(exports));
+        return mockConnector;
+    }
+
+    private static void InterlockedMax(ref int target, int value)
+    {
+        int current;
+        while (value > (current = Volatile.Read(ref target)) && Interlocked.CompareExchange(ref target, value, current) != current)
+        {
+        }
     }
 
     private static Mock<IConnector> CreateMockConnector(ConnectedSystemExportResult defaultResult)

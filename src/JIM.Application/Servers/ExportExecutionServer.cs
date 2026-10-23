@@ -688,77 +688,175 @@ public class ExportExecutionServer
                 });
                 DateTime? cursorCreatedAt = null;
                 Guid? cursorId = null;
+                var exhausted = false;
                 var exportPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                while (true)
+                // Reads forward to the next batch of exports that can be written now, collecting the deferred
+                // (reference-bearing) ones it passes on the way; null once nothing executable remains. Shared by the
+                // sequential loop and the parallel workers below, which call it one at a time on the caller's context.
+                async Task<List<PendingExport>?> ReadNextImmediateBatchAsync()
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    List<PendingExport> batch;
-
-                    while (true)
+                    while (!exhausted)
                     {
-                        List<PendingExport> rawBatch;
-                        using (Diagnostics.Diagnostics.Database.StartSpan("LoadExportBatch")
-                            .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start")
-                            .SetTag("take", options.BatchSize))
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        List<PendingExport> batch;
+
+                        while (true)
                         {
-                            rawBatch = await SyncRepo.GetExecutableExportBatchAsync(
-                                connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId, excludedChangeTypes);
+                            List<PendingExport> rawBatch;
+                            using (Diagnostics.Diagnostics.Database.StartSpan("LoadExportBatch")
+                                .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start")
+                                .SetTag("take", options.BatchSize))
+                            {
+                                rawBatch = await SyncRepo.GetExecutableExportBatchAsync(
+                                    connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId, excludedChangeTypes);
+                            }
+
+                            if (rawBatch.Count == 0)
+                            {
+                                batch = rawBatch;
+                                break;
+                            }
+
+                            // Advance the cursor past everything just read, whether or not it
+                            // survives the processed filter below.
+                            var lastRow = rawBatch[^1];
+                            cursorCreatedAt = lastRow.CreatedAt;
+                            cursorId = lastRow.Id;
+
+                            // Safety net: a monotonic cursor never re-reads rows, but keep the
+                            // in-memory filter as a guard against duplicates.
+                            batch = processedIds.Count > 0
+                                ? rawBatch.Where(pe => !processedIds.Contains(pe.Id)).ToList()
+                                : rawBatch;
+
+                            if (batch.Count > 0)
+                                break;
+
+                            // Entire page was already processed (unexpected under keyset paging);
+                            // keep sweeping forward.
                         }
 
-                        if (rawBatch.Count == 0)
+                        if (batch.Count == 0)
                         {
-                            batch = rawBatch;
+                            exhausted = true;
                             break;
                         }
 
-                        // Advance the cursor past everything just read, whether or not it
-                        // survives the processed filter below.
-                        var lastRow = rawBatch[^1];
-                        cursorCreatedAt = lastRow.CreatedAt;
-                        cursorId = lastRow.Id;
+                        // Apply in-memory eligibility filter (same as the old GetExecutableExportsAsync)
+                        var eligibleExports = batch.Where(pe => IsReadyForExecution(pe)).ToList();
 
-                        // Safety net: a monotonic cursor never re-reads rows, but keep the
-                        // in-memory filter as a guard against duplicates.
-                        batch = processedIds.Count > 0
-                            ? rawBatch.Where(pe => !processedIds.Contains(pe.Id)).ToList()
-                            : rawBatch;
+                        // Track all batch IDs as processed (even ineligible ones, to avoid re-fetching)
+                        foreach (var pe in batch)
+                            processedIds.Add(pe.Id);
 
-                        if (batch.Count > 0)
+                        // Track eligible export IDs for the result (used by preview mode and tests)
+                        foreach (var pe in eligibleExports)
+                            result.ProcessedPendingExportIds.Add(pe.Id);
+
+                        // Separate immediate from deferred exports
+                        var immediateExports = eligibleExports.Where(pe => !pe.HasUnresolvedReferences).ToList();
+                        var batchDeferred = eligibleExports.Where(pe => pe.HasUnresolvedReferences).ToList();
+                        deferredExports.AddRange(batchDeferred);
+
+                        // Run Profile Safeguards (#1618): a defensive guard, not the primary mechanism -
+                        // excludedChangeTypes above already keeps a withheld type out of every batch this
+                        // loop reads. Whatever it drops is left exactly as found (Pending), not marked,
+                        // failed, or given an execution item; its withheld total was already added to
+                        // processedCount once, up front, not accumulated here.
+                        immediateExports = ReserveAgainstLedger(immediateExports, changeLimitLedger);
+
+                        if (immediateExports.Count > 0)
+                            return immediateExports;
+
+                        if (batchDeferred.Count == batch.Count
+                            && !await SyncRepo.AnyExecutableNonDeferredExportsAfterAsync(connectedSystem.Id, cursorCreatedAt, cursorId))
+                        {
+                            // Fast path (issue #985c): the whole batch just loaded was deferred
+                            // (reference-bearing) and nothing in it was executable. Continuing to
+                            // page through the remainder 100 rows at a time would only ever rebuild
+                            // the same deferred list one page slower; at group-heavy scale (10K+
+                            // deferred exports) this was the entire cost of the collection loop.
+                            // Collect everything beyond the cursor with a single set-based query and
+                            // stop scanning; a mixed batch (some immediate, some deferred) always
+                            // returns above instead and keeps paging normally.
+                            //
+                            // The existence probe above is REQUIRED before stopping: deferred and
+                            // executable exports interleave in (CreatedAt, Id) order, so a full batch
+                            // of deferred exports does not prove the remainder of the queue is
+                            // deferred too. Without the probe, executable exports created after a
+                            // contiguous deferred run would silently never execute in this run; a
+                            // behaviour regression versus page-by-page scanning. The probe is a cheap
+                            // indexed existence check (no Includes, no materialisation); when it
+                            // finds executable exports beyond the cursor, normal paging continues.
+                            using var span = Diagnostics.Diagnostics.Database.StartSpan("CollectRemainingDeferred")
+                                .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start");
+
+                            var remainingDeferred = await SyncRepo.GetRemainingDeferredExportsAsync(
+                                connectedSystem.Id, cursorCreatedAt, cursorId);
+
+                            // Safety net: mirror the processedIds guard above, even though a
+                            // strictly-increasing cursor should make duplicates impossible here.
+                            if (processedIds.Count > 0)
+                                remainingDeferred = remainingDeferred.Where(pe => !processedIds.Contains(pe.Id)).ToList();
+
+                            foreach (var pe in remainingDeferred)
+                            {
+                                processedIds.Add(pe.Id);
+                                result.ProcessedPendingExportIds.Add(pe.Id);
+                            }
+
+                            deferredExports.AddRange(remainingDeferred);
+
+                            span.SetTag("collectedCount", remainingDeferred.Count);
+                            span.SetSuccess();
+
+                            exhausted = true;
                             break;
+                        }
 
-                        // Entire page was already processed (unexpected under keyset paging);
-                        // keep sweeping forward.
+                        // Note: a batch with only ineligible/deferred exports, where the fast path above
+                        // did not apply (a mixed batch, or executable exports still exist beyond the
+                        // cursor), keeps the scan going forward, since later batches (ordered by
+                        // CreatedAt) may contain eligible exports.
                     }
 
-                    if (batch.Count == 0)
-                        break;
+                    return null;
+                }
 
-                    // Apply in-memory eligibility filter (same as the old GetExecutableExportsAsync)
-                    var eligibleExports = batch.Where(pe => IsReadyForExecution(pe)).ToList();
+                // Batches run concurrently when the Connected System allows more than one at a time (Max Export
+                // Parallelism, or the Connector's recommendation) and there is more than one batch to run.
+                var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null
+                    && result.TotalPendingExports > options.BatchSize;
 
-                    // Track all batch IDs as processed (even ineligible ones, to avoid re-fetching)
-                    foreach (var pe in batch)
-                        processedIds.Add(pe.Id);
+                if (useParallelBatches)
+                {
+                    await ProcessBatchesInParallelAsync(connectedSystem, connector,
+                        async () =>
+                        {
+                            var next = await ReadNextImmediateBatchAsync();
 
-                    // Track eligible export IDs for the result (used by preview mode and tests)
-                    foreach (var pe in eligibleExports)
-                        result.ProcessedPendingExportIds.Add(pe.Id);
-
-                    // Separate immediate from deferred exports
-                    var immediateExports = eligibleExports.Where(pe => !pe.HasUnresolvedReferences).ToList();
-                    var batchDeferred = eligibleExports.Where(pe => pe.HasUnresolvedReferences).ToList();
-                    deferredExports.AddRange(batchDeferred);
-
-                    // Run Profile Safeguards (#1618): a defensive guard, not the primary mechanism -
-                    // excludedChangeTypes above already keeps a withheld type out of every batch this
-                    // loop reads. Whatever it drops is left exactly as found (Pending), not marked,
-                    // failed, or given an execution item; its withheld total was already added to
-                    // processedCount once, up front, not accumulated here.
-                    immediateExports = ReserveAgainstLedger(immediateExports, changeLimitLedger);
-
-                    if (immediateExports.Count > 0)
+                            // Each batch is re-loaded by the worker that runs it, so what was read here serves only to
+                            // choose the batch. Clear the change tracker to keep it from growing across the run (see
+                            // the sequential loop below).
+                            SyncRepo.ClearChangeTracker();
+                            return next;
+                        },
+                        stopOnBatchFailure: true, result, options, cancellationToken, progressCallback,
+                        connectorFactory!, repositoryFactory!, "ExportBatch",
+                        processedExportsOffset: processedCount,
+                        batchCompletedCallback: batchCompletedCallback,
+                        batchExecuted: batchCount =>
+                        {
+                            var executedSoFar = Interlocked.Add(ref processedCount, batchCount);
+                            Log.Information("MetricsCheckpoint: Export processed={ObjectsProcessed} elapsed={ElapsedMs}ms total={TotalObjects} cs={ConnectedSystemName}",
+                                executedSoFar, (long)exportPhaseStopwatch.Elapsed.TotalMilliseconds, result.TotalPendingExports, connectedSystem.Name);
+                        });
+                }
+                else
+                {
+                    while (await ReadNextImmediateBatchAsync() is { } immediateExports)
                     {
                         // Report progress
                         await ReportProgressAsync(progressCallback, new ExportProgressInfo
@@ -847,57 +945,6 @@ public class ExportExecutionServer
                         // all accumulated entities — 40K+ entities after 100 batches.
                         SyncRepo.ClearChangeTracker();
                     }
-                    else if (batchDeferred.Count == batch.Count
-                        && !await SyncRepo.AnyExecutableNonDeferredExportsAfterAsync(connectedSystem.Id, cursorCreatedAt, cursorId))
-                    {
-                        // Fast path (issue #985c): the whole batch just loaded was deferred
-                        // (reference-bearing) and nothing in it was executable. Continuing to
-                        // page through the remainder 100 rows at a time would only ever rebuild
-                        // the same deferred list one page slower; at group-heavy scale (10K+
-                        // deferred exports) this was the entire cost of the collection loop.
-                        // Collect everything beyond the cursor with a single set-based query and
-                        // stop scanning; a mixed batch (some immediate, some deferred) always
-                        // takes the branch above instead and keeps paging normally.
-                        //
-                        // The existence probe above is REQUIRED before breaking out: deferred and
-                        // executable exports interleave in (CreatedAt, Id) order, so a full batch
-                        // of deferred exports does not prove the remainder of the queue is
-                        // deferred too. Without the probe, executable exports created after a
-                        // contiguous deferred run would silently never execute in this run; a
-                        // behaviour regression versus page-by-page scanning. The probe is a cheap
-                        // indexed existence check (no Includes, no materialisation); when it
-                        // finds executable exports beyond the cursor, this branch is skipped and
-                        // normal paging continues for this iteration.
-                        using var span = Diagnostics.Diagnostics.Database.StartSpan("CollectRemainingDeferred")
-                            .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start");
-
-                        var remainingDeferred = await SyncRepo.GetRemainingDeferredExportsAsync(
-                            connectedSystem.Id, cursorCreatedAt, cursorId);
-
-                        // Safety net: mirror the in-loop processedIds guard above, even though a
-                        // strictly-increasing cursor should make duplicates impossible here.
-                        if (processedIds.Count > 0)
-                            remainingDeferred = remainingDeferred.Where(pe => !processedIds.Contains(pe.Id)).ToList();
-
-                        foreach (var pe in remainingDeferred)
-                        {
-                            processedIds.Add(pe.Id);
-                            result.ProcessedPendingExportIds.Add(pe.Id);
-                        }
-
-                        deferredExports.AddRange(remainingDeferred);
-
-                        span.SetTag("collectedCount", remainingDeferred.Count);
-                        span.SetSuccess();
-
-                        break;
-                    }
-                    // Note: no break when a batch has only ineligible/deferred exports and the
-                    // fast path above did not trigger (a mixed batch, or executable exports still
-                    // exist beyond the cursor); the outer loop continues scanning forward since
-                    // later batches (ordered by CreatedAt) may contain eligible exports. The loop
-                    // only exits when batch.Count == 0 (database exhausted, handled above) or via
-                    // the fast-path break above.
                 }
 
                 // Second pass: Exports with unresolved references (deferred)
@@ -1148,7 +1195,13 @@ public class ExportExecutionServer
                 // progress reports add deferred-phase progress to this fixed offset rather than
                 // resetting to a phase-local count (the "2,884 of 209,984" UI regression).
                 var immediateProcessedCount = result.SuccessCount + result.FailedCount;
-                await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
+
+                // The deferred batches are already in hand; each is taken once. A failed deferred batch does not stop the
+                // others, as it never has on this pass: each batch's references were resolved independently.
+                var remainingBatches = new Queue<List<PendingExport>>(deferredBatches);
+                await ProcessBatchesInParallelAsync(connectedSystem, connector,
+                    () => Task.FromResult(remainingBatches.TryDequeue(out var next) ? next : null),
+                    stopOnBatchFailure: false, result, options,
                     cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
                     processedExportsOffset: immediateProcessedCount, passTotal: passTotal,
                     unresolvedReferenceNotes: unresolvedReferenceNotes);
@@ -1428,16 +1481,36 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Processes multiple batches concurrently using separate DbContext and connector instances per batch.
-    /// Each batch task creates its own IRepository (with its own DbContext) and connector instance.
-    /// The batch's Pending Exports are re-loaded by ID from the batch's context to ensure proper
-    /// change tracking. Progress reporting is serialised via SemaphoreSlim to protect the caller's
-    /// shared DbContext.
+    /// Executes batches concurrently on up to <see cref="ExportExecutionOptions.MaxParallelism"/> workers. Each worker
+    /// keeps one connector for every batch it runs: worker 0 uses the primary connector, every other worker opens one of
+    /// its own from the factory on its first batch. A connector whose batch fails is discarded and the worker opens a fresh
+    /// one for its next batch. Each batch runs on a repository scope (and so a DbContext) of its own, re-loading its
+    /// Pending Exports by id.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Everything that touches the caller's own DbContext (taking the next batch, progress, the connector's narration, the
+    /// per-batch callback and persisting what a connector returns at close) goes through one gate, so the caller's context
+    /// is never used by two workers at once.
+    /// </para>
+    /// <para>
+    /// Batches are taken on demand rather than read ahead: each worker starts on a batch of its own, taken in order so the
+    /// primary connector gets the first, then takes the next one whenever it is free. With
+    /// <paramref name="stopOnBatchFailure"/> set, a failed batch stops every worker taking another; batches already running
+    /// finish and are recorded, and nothing is read that is not then sent, exactly as when the sequential path stops at
+    /// a failed batch.
+    /// </para>
+    /// </remarks>
+    /// <param name="takeNextBatch">Returns the next batch to execute, or null when there are no more. Called under the
+    /// caller's context gate, one call at a time.</param>
+    /// <param name="stopOnBatchFailure">Whether a failed batch stops further batches being taken.</param>
+    /// <param name="spanName">The connector span each batch's export is recorded under.</param>
+    /// <param name="batchExecuted">Told how many Pending Exports each batch held once its outcome is recorded.</param>
     private async Task ProcessBatchesInParallelAsync(
         ConnectedSystem connectedSystem,
         IConnectorExportUsingCalls primaryConnector,
-        List<List<PendingExport>> batches,
+        Func<Task<List<PendingExport>?>> takeNextBatch,
+        bool stopOnBatchFailure,
         ExportExecutionResult result,
         ExportExecutionOptions options,
         CancellationToken cancellationToken,
@@ -1448,22 +1521,17 @@ public class ExportExecutionServer
         int processedExportsOffset = 0,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
         int? passTotal = null,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
+        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
+        Action<int>? batchExecuted = null)
     {
-        Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
-            batches.Count, options.MaxParallelism);
-
-        // Collect batch ID lists - each batch task will re-load its entities from its own context
-        var batchIdLists = batches
-            .Select(batch => batch.Select(pe => pe.Id).ToList())
-            .ToList();
-
-        // Serialise progress reporting to protect the caller's shared DbContext
-        using var progressSemaphore = new SemaphoreSlim(1, 1);
+        // The one gate on the caller's DbContext; see the remarks above.
+        using var callerContextGate = new SemaphoreSlim(1, 1);
         var processedCount = 0;
+        var stopTaking = 0;
+        var batchCounter = 0;
 
-        // Sub-phase narration from the batch connectors, on the same gate as the per-batch progress
-        // below so that concurrent batches cannot report through the caller's DbContext at once.
+        // Sub-phase narration from the batch connectors, on the same gate as everything else that reaches the caller's
+        // DbContext, so that concurrent batches cannot report through it at once.
         using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
         {
             Phase = ExportPhase.Executing,
@@ -1472,278 +1540,361 @@ public class ExportExecutionServer
             PassTotal = passTotal,
             PassProcessed = passTotal.HasValue ? Volatile.Read(ref processedCount) : null,
             Message = subPhase
-        }, progressSemaphore);
+        }, callerContextGate);
 
         // Lock for thread-safe result aggregation
         var resultLock = new object();
 
-        using var throttle = new SemaphoreSlim(options.MaxParallelism, options.MaxParallelism);
-
-        var batchTasks = batchIdLists.Select((batchIds, batchIndex) => Task.Run(async () =>
+        async Task<T> UnderCallerContextGateAsync<T>(Func<Task<T>> action)
         {
-            await throttle.WaitAsync(cancellationToken);
-
-            // Set once this batch's outcome, success or failure, is in the shared result, so a failure closing its Connector
-            // afterwards is not counted as the batch failing a second time (#2083).
-            var batchOutcomeRecorded = false;
+            await callerContextGate.WaitAsync(cancellationToken);
             try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                // Create a per-batch repository scope with its own context; disposing it when
-                // the batch completes releases the context and its pooled connection (undisposed
-                // scopes pinned one connection per batch and exhausted the pool at scale).
-                using var batchScope = repositoryFactory();
-                var batchRepo = batchScope.Repository;
-
-                // Re-load this batch's Pending Exports from the batch's own context
-                var batch = await batchRepo.GetPendingExportsByIdsAsync(batchIds);
-                if (batch.Count == 0)
-                {
-                    Log.Warning("ProcessBatchesInParallelAsync: Batch {BatchIndex} returned 0 exports for {IdCount} IDs",
-                        batchIndex, batchIds.Count);
-                    return;
-                }
-
-                // Create a connector for this batch; one of its own is prepared and opened inside the try below
-                IConnectorExportUsingCalls batchConnector;
-                IConnector? ownedConnector = null;
-                if (batchIndex == 0)
-                {
-                    // First batch uses the already-opened primary connector
-                    batchConnector = primaryConnector;
-                }
-                else
-                {
-                    var newConnector = connectorFactory();
-                    if (newConnector is not IConnectorExportUsingCalls callsConnector)
-                    {
-                        Log.Error("ProcessBatchesInParallelAsync: Connector factory returned non-calls connector for batch {BatchIndex}", batchIndex);
-                        return;
-                    }
-                    batchConnector = callsConnector;
-                    ownedConnector = newConnector;
-                }
-
-                // Tracks whether this batch completed without throwing, mirroring the primary
-                // connector's exportPhaseSucceeded flag above: used by the finally block below to
-                // decide whether a persistence failure while handling CloseExportConnection's return
-                // value may propagate on its own, or must be logged and swallowed so it does not
-                // replace/mask a batch failure that is already unwinding through the same finally.
-                var batchExportSucceeded = false;
-
-                // Declared outside the try so the catches below, which record an interrupted batch through this batch's own
-                // repository while its scope is still alive, know what the batch was before it was sent (#2083). Null until
-                // the batch is marked: one whose Connector could not be opened was never touched.
-                ExecutingBatchMark? executingMark = null;
-                var batchResult = new ExportExecutionResult();
-                var batchResultMerged = false;
-
-                try
-                {
-                    // A batch connector of its own is prepared and opened inside the try, so one that fails
-                    // to open is still closed and disposed by the finally block below, and what it returns
-                    // at close (a pin the failure invalidated, issue #230) is still persisted (#1875).
-                    if (ownedConnector != null)
-                    {
-                        PrepareConnectorForExport(ownedConnector, connectedSystem);
-                        batchConnector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
-                    }
-
-                    // Mark batch as executing (raw SQL - context-independent)
-                    executingMark = await MarkBatchAsExecutingAsync(batch, batchRepo);
-
-                    // Decided on the instances this batch re-loaded, through the batch's own repository: a flag
-                    // set on the primary's copies would never reach this batch's connector (#2039, #2158).
-                    var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(batch, batchRepo, connectedSystem,
-                        batchConnector is IConnectorPasswordManagement);
-
-                    // Execute batch via connector. The batch was re-loaded from persisted state above,
-                    // which is why the reference resolutions and the writable/unresolved split (issue
-                    // #1398) are persisted before this path runs: ForConnector decides from what it reads.
-                    var (exportResults, batchClassRefused, batchContradictions) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
-
-                    // Process results using the batch's own repository
-                    batchResult.ClassMembershipRefusedCount = batchClassRefused;
-                    batchResult.SingleValuedContradictionRefusedCount = batchContradictions;
-                    await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
-
-                    // Aggregate results into shared result (thread-safe)
-                    lock (resultLock)
-                    {
-                        AccumulateBatchResult(result, batchResult, includeItems: batchCompletedCallback == null);
-                    }
-                    batchResultMerged = true;
-                    batchOutcomeRecorded = true;
-
-                    // Stream processed items per-batch (outside lock — callback may do async I/O)
-                    if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
-                    {
-                        await batchCompletedCallback(batchResult.ProcessedExportItems);
-                    }
-
-                    // Report progress (serialised to protect caller's DbContext)
-                    var newProcessedCount = Interlocked.Add(ref processedCount, batch.Count);
-                    if (progressCallback != null)
-                    {
-                        await progressSemaphore.WaitAsync(cancellationToken);
-                        try
-                        {
-                            await progressCallback(new ExportProgressInfo
-                            {
-                                Phase = ExportPhase.Executing,
-                                TotalExports = result.TotalPendingExports,
-                                ProcessedExports = processedExportsOffset + newProcessedCount,
-                                PassTotal = passTotal,
-                                PassProcessed = passTotal.HasValue ? newProcessedCount : null,
-                                CurrentBatchSize = batch.Count,
-                                Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
-                            });
-                        }
-                        finally
-                        {
-                            progressSemaphore.Release();
-                        }
-                    }
-
-                    // Reached only if nothing above threw; used by the finally block below to tell a
-                    // genuine batch failure apart from a clean run.
-                    batchExportSucceeded = true;
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    // The run was cancelled while the Connector held this batch, and it gave no results (#2083).
-                    if (executingMark != null)
-                        await ReleaseBatchAfterCancellationAsync(batch, executingMark, batchRepo, connectedSystem.Name);
-                    throw;
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
-                {
-                    // A failed attempt at this batch (#2083), recorded through the batch's own repository while its scope is
-                    // alive: its Pending Exports still Executing get one failed attempt each, with an execution item naming
-                    // their object. Results this batch already merged stand; the failure is reported on a result of its own.
-                    Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
-                    var failureResult = batchResultMerged ? new ExportExecutionResult() : batchResult;
-                    await RecordBatchFailureAsync(batch, executingMark, ex, failureResult, batchRepo, connectedSystem.Name);
-
-                    lock (resultLock)
-                    {
-                        AccumulateBatchResult(result, failureResult, includeItems: batchCompletedCallback == null);
-                    }
-                    batchOutcomeRecorded = true;
-
-                    if (batchCompletedCallback != null && failureResult.ProcessedExportItems.Count > 0)
-                    {
-                        try
-                        {
-                            await batchCompletedCallback(failureResult.ProcessedExportItems);
-                        }
-                        catch (Exception callbackEx) when (callbackEx is not OperationCanceledException)
-                        {
-                            Log.Error(callbackEx, "ProcessBatchesInParallelAsync: Could not record the execution items of failed batch {BatchIndex}", batchIndex);
-                        }
-                    }
-                }
-                finally
-                {
-                    // Close the batch connector (but not the primary - that's managed by the caller)
-                    if (batchIndex != 0)
-                    {
-                        // Before its connection closes, whether or not the batch succeeded (#2197).
-                        if (ownedConnector != null)
-                            CaptureCreatedContainers(ownedConnector, result, resultLock);
-
-                        string? closeReturn;
-                        try
-                        {
-                            closeReturn = batchConnector.CloseExportConnection();
-                        }
-                        finally
-                        {
-                            (batchConnector as IDisposable)?.Dispose();
-                        }
-
-                        // Persist connector state the connector chose to override at close (issue
-                        // #230). Null (the overwhelmingly common case) means "nothing to override".
-                        if (closeReturn != null)
-                        {
-                            try
-                            {
-                                await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
-                            }
-                            catch (Exception persistEx) when (!batchExportSucceeded)
-                            {
-                                // The batch itself already failed and that exception is propagating out
-                                // of this finally block. A .NET finally block that itself throws
-                                // replaces the in-flight exception rather than chaining it, which would
-                                // silently hide the batch's own failure behind an unrelated persistence
-                                // error. Log and let the original batch failure continue to unwind.
-                                Log.Error(persistEx,
-                                    "ProcessBatchesInParallelAsync: Failed to persist connector data returned by CloseExportConnection while batch {BatchIndex} is failing for Connected System {ConnectedSystemId}. The batch's own failure takes precedence and will propagate.",
-                                    batchIndex, connectedSystem.Id);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Let cancellation propagate
-                throw;
-            }
-            catch (Exception ex) when (batchOutcomeRecorded)
-            {
-                // The batch's outcome is already recorded, and only closing its Connector failed afterwards (#2083): reported
-                // once, as an item of its own, rather than as the batch failing again.
-                Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex}'s results were recorded, but closing its connection failed", batchIndex);
-                lock (resultLock)
-                {
-                    result.ProcessedExportItems.Add(new ProcessedExportItem
-                    {
-                        ChangeType = PendingExportChangeType.Update,
-                        Succeeded = false,
-                        ErrorMessage = $"A batch's results were recorded, but closing its connection failed: {ex.Message}",
-                        ErrorType = ConnectedSystemExportErrorType.General
-                    });
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
-            {
-                // Reached when the batch could not even be loaded (its repository scope or the reload failed), so no Pending
-                // Export of it was touched and none can be named; a batch that was loaded records its own failure above. Its
-                // exports are left for the next run.
-                Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
-
-                // Create ProcessedExportItems so the RPEI pipeline can record the failures. Without ProcessedExportItems,
-                // the activity would silently report Status: Complete with no error RPEIs. Each names its change from the
-                // caller's copy of the batch, since this batch's own reload is what failed.
-                lock (resultLock)
-                {
-                    result.FailedCount += batchIds.Count;
-                    foreach (var export in batches[batchIndex])
-                    {
-                        result.ProcessedExportItems.Add(new ProcessedExportItem
-                        {
-                            ChangeType = export.ChangeType,
-                            ConnectedSystemObject = export.ConnectedSystemObject,
-                            PendingExportId = export.Id,
-                            AttributeChangeCount = export.AttributeValueChanges.Count,
-                            AttributeValueChanges = export.AttributeValueChanges.ToList(),
-                            Succeeded = false,
-                            ErrorMessage = $"Batch export failed: {ex.Message}",
-                            ErrorCount = export.ErrorCount,
-                            ErrorType = ConnectedSystemExportErrorType.General
-                        }.WithCauseFrom(export));
-                    }
-                }
+                return await action();
             }
             finally
             {
-                throttle.Release();
+                callerContextGate.Release();
             }
-        }, cancellationToken)).ToList();
+        }
 
-        await Task.WhenAll(batchTasks);
+        async Task<List<PendingExport>?> TakeNextBatchAsync()
+        {
+            if (Volatile.Read(ref stopTaking) == 1)
+                return null;
+
+            return await UnderCallerContextGateAsync(async () =>
+            {
+                // Checked again under the gate: a worker may have stopped the run while this one waited for it.
+                if (Volatile.Read(ref stopTaking) == 1)
+                    return null;
+
+                try
+                {
+                    return await takeNextBatch();
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Reading the next batch failed: nothing more can be read, so no worker takes another.
+                    Volatile.Write(ref stopTaking, 1);
+                    throw;
+                }
+            });
+        }
+
+        // Each worker starts on a batch of its own, taken in order, so worker 0 (on the primary connector) runs the first.
+        var firstBatches = new List<List<PendingExport>>();
+        for (var i = 0; i < options.MaxParallelism; i++)
+        {
+            var batch = await TakeNextBatchAsync();
+            if (batch == null)
+                break;
+            firstBatches.Add(batch);
+        }
+
+        Log.Information("ProcessBatchesInParallelAsync: Processing batches with up to {Workers} worker(s) (MaxParallelism={MaxParallelism}, stop on a failed batch: {StopOnBatchFailure})",
+            firstBatches.Count, options.MaxParallelism, stopOnBatchFailure);
+
+        var workers = firstBatches
+            .Select((firstBatch, workerIndex) => Task.Run(() => RunWorkerAsync(workerIndex, firstBatch), cancellationToken))
+            .ToList();
+
+        await Task.WhenAll(workers);
+
+        async Task RunWorkerAsync(int workerIndex, List<PendingExport> firstBatch)
+        {
+            // This worker's connector, kept for every batch it runs. Worker 0 starts on the primary connector, which the
+            // caller opened and will close; any other connector is the worker's own, opened on first use and closed here.
+            IConnectorExportUsingCalls? connector = workerIndex == 0 ? primaryConnector : null;
+            IConnector? ownedConnector = null;
+
+            var completed = false;
+            try
+            {
+                var batch = firstBatch;
+                while (batch != null)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var batchIndex = Interlocked.Increment(ref batchCounter) - 1;
+                    if (!await ExecuteBatchAsync(batchIndex, batch))
+                    {
+                        // A connector whose batch failed may be broken: this worker opens a fresh one for its next batch.
+                        await DiscardConnectorAsync(unwinding: false);
+                        if (stopOnBatchFailure)
+                            Volatile.Write(ref stopTaking, 1);
+                    }
+
+                    batch = await TakeNextBatchAsync();
+                }
+
+                completed = true;
+            }
+            finally
+            {
+                // Whatever stopped this worker early (cancellation, or a failure it could not record) stops the others
+                // taking more; the batches they are running finish. Its connector is closed either way, without masking
+                // anything that is unwinding.
+                if (!completed)
+                    Volatile.Write(ref stopTaking, 1);
+                await DiscardConnectorAsync(unwinding: !completed);
+            }
+
+            // Executes one batch on this worker's connector. True when the batch's outcome was recorded as executed (its
+            // individual exports may still have failed); false when the batch failed as a whole.
+            async Task<bool> ExecuteBatchAsync(int batchIndex, List<PendingExport> callersBatch)
+            {
+                var batchIds = callersBatch.Select(pe => pe.Id).ToList();
+                try
+                {
+                    // A per-batch repository scope with its own context; disposing it when the batch completes releases
+                    // the context and its pooled connection (undisposed scopes pinned one connection per batch and
+                    // exhausted the pool at scale).
+                    using var batchScope = repositoryFactory();
+                    var batchRepo = batchScope.Repository;
+
+                    // Re-load this batch's Pending Exports from the batch's own context
+                    var batch = await batchRepo.GetPendingExportsByIdsAsync(batchIds);
+                    if (batch.Count == 0)
+                    {
+                        Log.Warning("ProcessBatchesInParallelAsync: Batch {BatchIndex} returned 0 exports for {IdCount} IDs",
+                            batchIndex, batchIds.Count);
+                        return true;
+                    }
+
+                    // Declared outside the try so the catches below, which record an interrupted batch through this batch's
+                    // own repository while its scope is still alive, know what the batch was before it was sent (#2083).
+                    // Null until the batch is marked: one whose Connector could not be opened was never touched.
+                    ExecutingBatchMark? executingMark = null;
+                    var batchResult = new ExportExecutionResult();
+                    var batchResultMerged = false;
+
+                    try
+                    {
+                        // The worker's own connector is prepared and opened inside the try, so one that fails to open
+                        // fails this batch and is still closed and disposed when it is discarded, and what it returns at
+                        // close (a pin the failure invalidated, issue #230) is still persisted (#1875).
+                        if (connector == null)
+                        {
+                            ownedConnector = connectorFactory();
+                            if (ownedConnector is not IConnectorExportUsingCalls callsConnector)
+                                throw new InvalidOperationException($"The connector factory returned a {ownedConnector.GetType().Name}, which cannot export using calls.");
+
+                            connector = callsConnector;
+                            PrepareConnectorForExport(ownedConnector, connectedSystem);
+                            connector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
+                        }
+
+                        // Mark batch as executing (raw SQL - context-independent)
+                        using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
+                            .SetTag("batchSize", batch.Count))
+                        {
+                            executingMark = await MarkBatchAsExecutingAsync(batch, batchRepo);
+                        }
+
+                        // Decided on the instances this batch re-loaded, through the batch's own repository: a flag
+                        // set on the caller's copies would never reach this batch's connector (#2039, #2158).
+                        var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(batch, batchRepo, connectedSystem,
+                            connector is IConnectorPasswordManagement);
+
+                        // Execute batch via connector. The batch was re-loaded from persisted state above, which is why the
+                        // deferred pass persists its reference resolutions and the writable/unresolved split (issue #1398)
+                        // before this path runs: ForConnector decides from what it reads.
+                        List<ConnectedSystemExportResult> exportResults;
+                        using (Diagnostics.Diagnostics.Connector.StartSpan(spanName)
+                            .SetTag("connectedSystemId", connectedSystem.Id)
+                            .SetTag("batchSize", batch.Count)
+                            .SetTag("worker", workerIndex))
+                        {
+                            (exportResults, var batchClassRefused, var batchContradictions) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
+                            batchResult.ClassMembershipRefusedCount = batchClassRefused;
+                            batchResult.SingleValuedContradictionRefusedCount = batchContradictions;
+                        }
+
+                        // Process results using the batch's own repository
+                        using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
+                            .SetTag("batchSize", batch.Count))
+                        {
+                            await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, batchResult, batchRepo,
+                                connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                        }
+
+                        // Aggregate results into shared result (thread-safe)
+                        lock (resultLock)
+                        {
+                            AccumulateBatchResult(result, batchResult, includeItems: batchCompletedCallback == null);
+                        }
+                        batchResultMerged = true;
+
+                        // Stream processed items per batch, through the caller's context
+                        if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
+                            await UnderCallerContextGateAsync(async () => { await batchCompletedCallback(batchResult.ProcessedExportItems); return true; });
+
+                        await RecordBatchExecutedAsync(batch.Count);
+                        return true;
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        // The run was cancelled while the Connector held this batch, and it gave no results (#2083).
+                        if (executingMark != null)
+                            await ReleaseBatchAfterCancellationAsync(batch, executingMark, batchRepo, connectedSystem.Name);
+                        throw;
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                    {
+                        // A failed attempt at this batch (#2083), recorded through the batch's own repository while its scope
+                        // is alive: its Pending Exports still Executing get one failed attempt each, with an execution item
+                        // naming their object. Results this batch already merged stand; the failure is reported on a result
+                        // of its own.
+                        Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
+                        var failureResult = batchResultMerged ? new ExportExecutionResult() : batchResult;
+                        await RecordBatchFailureAsync(batch, executingMark, ex, failureResult, batchRepo, connectedSystem.Name);
+
+                        lock (resultLock)
+                        {
+                            AccumulateBatchResult(result, failureResult, includeItems: batchCompletedCallback == null);
+                        }
+
+                        if (batchCompletedCallback != null && failureResult.ProcessedExportItems.Count > 0)
+                        {
+                            try
+                            {
+                                await UnderCallerContextGateAsync(async () => { await batchCompletedCallback(failureResult.ProcessedExportItems); return true; });
+                            }
+                            catch (Exception callbackEx) when (callbackEx is not OperationCanceledException)
+                            {
+                                Log.Error(callbackEx, "ProcessBatchesInParallelAsync: Could not record the execution items of failed batch {BatchIndex}", batchIndex);
+                            }
+                        }
+
+                        await RecordBatchExecutedAsync(batch.Count);
+                        return false;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                {
+                    // Reached when the batch could not even be loaded (its repository scope or the reload failed), so no
+                    // Pending Export of it was touched and none can be named; a batch that was loaded records its own
+                    // failure above. Its exports are left for the next run.
+                    Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
+
+                    // Create ProcessedExportItems so the RPEI pipeline can record the failures. Without them, the activity
+                    // would silently report Status: Complete with no error RPEIs. Each names its change from the caller's
+                    // copy of the batch, since this batch's own reload is what failed.
+                    lock (resultLock)
+                    {
+                        result.FailedCount += batchIds.Count;
+                        foreach (var export in callersBatch)
+                        {
+                            result.ProcessedExportItems.Add(new ProcessedExportItem
+                            {
+                                ChangeType = export.ChangeType,
+                                ConnectedSystemObject = export.ConnectedSystemObject,
+                                PendingExportId = export.Id,
+                                AttributeChangeCount = export.AttributeValueChanges.Count,
+                                AttributeValueChanges = export.AttributeValueChanges.ToList(),
+                                Succeeded = false,
+                                ErrorMessage = $"Batch export failed: {ex.Message}",
+                                ErrorCount = export.ErrorCount,
+                                ErrorType = ConnectedSystemExportErrorType.General
+                            }.WithCauseFrom(export));
+                        }
+                    }
+                    return false;
+                }
+            }
+
+            // Counts a batch as finished, and reports progress through the caller's context.
+            async Task RecordBatchExecutedAsync(int batchCount)
+            {
+                var newProcessedCount = Interlocked.Add(ref processedCount, batchCount);
+                batchExecuted?.Invoke(batchCount);
+
+                if (progressCallback == null)
+                    return;
+
+                await UnderCallerContextGateAsync(async () =>
+                {
+                    await progressCallback(new ExportProgressInfo
+                    {
+                        Phase = ExportPhase.Executing,
+                        TotalExports = result.TotalPendingExports,
+                        ProcessedExports = processedExportsOffset + newProcessedCount,
+                        PassTotal = passTotal,
+                        PassProcessed = passTotal.HasValue ? newProcessedCount : null,
+                        CurrentBatchSize = batchCount,
+                        Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
+                    });
+                    return true;
+                });
+            }
+
+            // Lets go of this worker's connector. The primary is only forgotten (the caller closes it); a connector of the
+            // worker's own is closed and disposed, what it created captured first and what it returns at close persisted.
+            async Task DiscardConnectorAsync(bool unwinding)
+            {
+                connector = null;
+                var toClose = ownedConnector;
+                ownedConnector = null;
+                if (toClose is not IConnectorExportUsingCalls closing)
+                    return;
+
+                // Before its connection closes, which forgets them, whether or not its batches succeeded (#2197).
+                CaptureCreatedContainers(toClose, result, resultLock);
+
+                string? closeReturn;
+                try
+                {
+                    try
+                    {
+                        closeReturn = closing.CloseExportConnection();
+                    }
+                    finally
+                    {
+                        (toClose as IDisposable)?.Dispose();
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Every batch this connector ran has its outcome recorded, and only closing its connection failed
+                    // afterwards (#2083): reported once, as an item of its own, rather than as a batch failing again.
+                    Log.Error(ex, "ProcessBatchesInParallelAsync: Worker {WorkerIndex}'s batch results were recorded, but closing its connection failed", workerIndex);
+                    lock (resultLock)
+                    {
+                        result.ProcessedExportItems.Add(new ProcessedExportItem
+                        {
+                            ChangeType = PendingExportChangeType.Update,
+                            Succeeded = false,
+                            ErrorMessage = $"A batch's results were recorded, but closing its connection failed: {ex.Message}",
+                            ErrorType = ConnectedSystemExportErrorType.General
+                        });
+                    }
+                    return;
+                }
+
+                // Persist connector state the connector chose to override at close (issue #230), through the caller's
+                // context. Null (the overwhelmingly common case) means "nothing to override".
+                if (closeReturn == null)
+                    return;
+
+                try
+                {
+                    await UnderCallerContextGateAsync(async () =>
+                    {
+                        await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
+                        return true;
+                    });
+                }
+                catch (Exception persistEx) when (unwinding)
+                {
+                    // Something is already unwinding through this worker. Throwing here would replace it rather than chain
+                    // it and hide the real failure behind an unrelated persistence error, so log and let it continue.
+                    Log.Error(persistEx,
+                        "ProcessBatchesInParallelAsync: Failed to persist connector data returned by CloseExportConnection while worker {WorkerIndex} is failing for Connected System {ConnectedSystemId}. The worker's own failure takes precedence and will propagate.",
+                        workerIndex, connectedSystem.Id);
+                }
+            }
+        }
     }
 
     /// <summary>

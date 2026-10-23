@@ -132,7 +132,11 @@ Export sends Pending Exports from the Connector Space to the target Connected Sy
 
 ### Batching and Parallelism
 
-Exports are processed in batches, and a Connector that supports it exports several batches at once: the LDAP Connector's export concurrency is a setting on the Connected System.
+JIM sends exports in batches of 100. Where the Connector supports it, a Connected System's **Max Export Parallelism** (under **Export Performance** on its Settings tab, or `-MaxExportParallelism` on `Set-JIMConnectedSystem`) sets how many batches JIM sends at once. Left empty, JIM uses the Connector's recommendation, and sends one batch at a time when the Connector makes none. JIM opens a connection to the target system for each batch it sends at once and keeps it for the whole run.
+
+Within a batch, a Connector can also send several changes at once; for the LDAP Connector, that is its [Export Concurrency](../connectors/jim-ldap-connector.md#export-settings). The two multiply: two batches at once, each with an Export Concurrency of 16, is up to 32 operations in flight against the directory. Set Max Export Parallelism to 1 for a target system that must not be loaded harder.
+
+A batch that fails as a whole (the target system stops answering, say) is recorded as a failed attempt for each of its changes, which stay Pending Exports for the next run. Batches already being sent alongside it finish and are recorded as normal.
 
 ### References That Cannot Resolve Yet
 
