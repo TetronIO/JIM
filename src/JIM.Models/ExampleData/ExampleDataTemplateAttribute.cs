@@ -247,7 +247,7 @@ public class ExampleDataTemplateAttribute
                 throw new ExampleDataTemplateAttributeException("Bool but using a pattern. This is not supported");
 
             if (BoolTrueDistribution is < 0 or > 100)
-                throw new ExampleDataTemplateAttributeException("BoolTrueDistribution must be between 0 and 100 (the percentage of values that are true)");
+                throw new ExampleDataTemplateAttributeException("BoolTrueDistribution must be between 0 and 100: the percentage of the objects given a value that are given true");
         }
 
         if (IsUsingNumbers())
