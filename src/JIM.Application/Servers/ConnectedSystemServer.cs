@@ -3861,17 +3861,17 @@ public partial class ConnectedSystemServer
 
     #region Connected System Directory Servers
     /// <summary>
-    /// Discovers the domain controllers in this Connected System's forest, with the Active Directory Site each
-    /// belongs to, so an administrator can be shown a choice for the Preferred Domain Controller setting rather
-    /// than having to already know a hostname (issue #1167).
+    /// Discovers the directory servers in this Connected System's directory (for the LDAP Connector, the domain
+    /// controllers in its forest, with the Active Directory Site each belongs to), so an administrator can be shown
+    /// a choice for the setting the Connector names rather than having to already know a hostname (issue #1167).
     /// <para>
     /// Deliberately not recorded as an Activity, for the same reason as <see cref="RunPasswordPreflightAsync"/>:
     /// it changes nothing in JIM or in the Connected System, it only reads. It also never writes to the
-    /// Preferred Domain Controller setting itself; the setting is intent, and only the administrator's own
-    /// selection in the portal, REST API caller, or PowerShell caller updates it.
+    /// setting it informs (<see cref="ConnectorDirectoryServerDiscovery.TargetSettingName"/>); the setting is intent,
+    /// and only the administrator's own selection in the portal, REST API caller, or PowerShell caller updates it.
     /// </para>
     /// </summary>
-    /// <param name="connectedSystemId">The Connected System whose directory to discover domain controllers in.</param>
+    /// <param name="connectedSystemId">The Connected System whose directory to discover servers in.</param>
     /// <param name="draftSettingValues">Connectivity settings entered on screen but not yet saved, applied over the saved ones (encrypted settings always come from the saved values). Supplied by the portal so an administrator configuring a system can discover before saving, mirroring <see cref="CertificateServer.ReadServerCertificateAsync"/>.</param>
     /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
     /// <exception cref="NotSupportedException">The Connector does not support directory server discovery, or (thrown by the Connector) the connected directory is not AD-family.</exception>
@@ -3895,21 +3895,35 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Whether this Connected System's Connector supports discovering directory servers at all, so the portal can
-    /// show the Discover action beside the Preferred Domain Controller field only where it means something.
+    /// What this Connected System's Connector says about directory server discovery (which setting it fills, and
+    /// what the directory calls its servers), or null when it does not support discovery. The portal places the
+    /// Discover action beside the setting the Connector names, so nothing above the Connector needs to know which
+    /// Connector it is.
     /// <para>
     /// A property of the Connector, not of the current settings: stable for the life of a Connected System, so it
     /// can be asked once, mirroring <see cref="JIM.Application.Servers.CertificateServer.SupportsServerCertificateReadAsync"/>.
     /// </para>
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task<bool> SupportsDirectoryServerDiscoveryAsync(int connectedSystemId)
+    public async Task<ConnectorDirectoryServerDiscovery?> GetDirectoryServerDiscoveryAsync(int connectedSystemId)
     {
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return false;
+            return null;
 
-        return CreateConnector(connectedSystem) is IConnectorDirectoryServers;
+        IConnector connector;
+        try
+        {
+            connector = CreateConnector(connectedSystem);
+        }
+        catch (NotSupportedException)
+        {
+            // A Connector Definition with no built-in Connector behind it supports nothing.
+            return null;
+        }
+
+        using var connectorDisposable = connector as IDisposable;
+        return (connector as IConnectorDirectoryServers)?.DirectoryServerDiscovery;
     }
     #endregion
 

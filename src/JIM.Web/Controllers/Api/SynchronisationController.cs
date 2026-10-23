@@ -2397,20 +2397,21 @@ public class SynchronisationController(
     #region Directory Servers
 
     /// <summary>
-    /// Discover the domain controllers in a Connected System's directory
+    /// Discover the directory servers in a Connected System's directory
     /// </summary>
     /// <remarks>
-    /// Lists the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site
-    /// each belongs to, using the Connected System's currently saved connectivity settings. Purely informational:
-    /// this never writes to the Preferred Domain Controller setting; only an administrator's own subsequent
-    /// update of the Connected System does that.
+    /// Lists the servers in the Connected System's directory, using its currently saved connectivity settings, so
+    /// a value can be chosen for the setting its Connector fills from discovery. For the LDAP Connector these are
+    /// the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site each
+    /// belongs to, and the setting is Preferred Domain Controller. Purely informational: this never writes to any
+    /// setting; only an administrator's own subsequent update of the Connected System does that.
     /// </remarks>
-    /// <param name="connectedSystemId">The Connected System whose directory to discover domain controllers in.</param>
-    /// <returns>The discovered domain controllers.</returns>
-    /// <response code="200">The domain controllers discovered.</response>
-    /// <response code="400">The Connector does not support directory server discovery, or the connected directory is not AD-family.</response>
+    /// <param name="connectedSystemId">The Connected System whose directory to discover servers in.</param>
+    /// <returns>The discovered directory servers.</returns>
+    /// <response code="200">The directory servers discovered.</response>
+    /// <response code="400">The Connector does not support directory server discovery, or does not support it for this directory (the LDAP Connector discovers only in Active Directory and Samba AD).</response>
     /// <response code="404">No Connected System with that identifier exists.</response>
-    /// <response code="502">JIM could not discover domain controllers, e.g. the directory was unreachable or refused the credentials.</response>
+    /// <response code="502">JIM could not discover directory servers, e.g. the directory was unreachable or refused the credentials.</response>
     [HttpGet("connected-systems/{connectedSystemId:int}/directory-servers", Name = "GetConnectedSystemDirectoryServers")]
     [ProducesResponseType(typeof(IEnumerable<ConnectedSystemDirectoryServerDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2425,7 +2426,7 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        if (!await _application.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(connectedSystemId))
+        if (await _application.ConnectedSystems.GetDirectoryServerDiscoveryAsync(connectedSystemId) == null)
             return BadRequest(ApiErrorResponse.BadRequest(
                 $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."));
 
