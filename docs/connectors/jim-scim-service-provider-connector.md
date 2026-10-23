@@ -19,6 +19,10 @@ The JIM SCIM 2.0 Service Provider Connector lets an identity provider push Users
 
 Every request an identity provider sends is answered straight away, from a store JIM keeps for that Connected System: a create, change or delete is checked against the Connected System's SCIM schemas, kept, and acknowledged in the same request. Nothing the identity provider sends touches the Connector Space or the Metaverse directly.
 
+--8<-- "assets/diagrams/scim-service-provider.svg"
+
+<p class="jim-diagram-caption">The request is answered and kept as it arrives; the Delta Import and Delta Synchronisation run on the Connected System's Schedule. Entra ID stands for any identity provider.<span class="jimdg-caption-motion"> Moving dots trace a change on its way to the Metaverse.</span></p>
+
 The Connector imports from that store through ordinary Full Import and Delta Import Run Profiles, and synchronisation then joins or projects what it imported, exactly as it does for a directory or a database. A change therefore reaches the Metaverse at the next scheduled Delta Import and Delta Synchronisation of the Connected System, not the moment the identity provider sends it; how often you schedule them decides the delay (see [Schedule the import](#schedule-the-import)).
 
 Because the store holds everything the identity provider sent, the Connector Space can be rebuilt from it at any time without the identity provider sending anything again.
