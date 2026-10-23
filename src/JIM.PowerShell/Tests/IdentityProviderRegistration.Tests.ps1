@@ -42,6 +42,7 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
                     WebApiApplications = @([PSCustomObject]@{
                         Name = 'JIM Identity Management - API'; Identifier = @('api://11111111-1111-1111-1111-111111111111')
                         AccessControlPolicyName = 'Permit everyone'; IssuanceTransformRules = $rules
+                        IssueOAuthRefreshTokensTo = 'AllDevices'
                     })
                     Permissions        = @(
                         [PSCustomObject]@{
@@ -52,7 +53,7 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
                         [PSCustomObject]@{
                             ObjectIdentifier = 'p2'; ClientRoleIdentifier = '22222222-2222-2222-2222-222222222222'
                             ServerRoleIdentifier = 'api://11111111-1111-1111-1111-111111111111'
-                            ScopeNames = @('openid', 'profile', 'offline_access')
+                            ScopeNames = @('openid', 'profile')
                         }
                     )
                 }
@@ -89,6 +90,7 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
             $api = $plan.Changes | Where-Object Action -eq 'NewWebApiApplication'
             $api.Arguments.Identifier | Should -Be @($plan.ApiIdentifier)
             $api.Arguments.AccessControlPolicyName | Should -Be 'Permit everyone'
+            $api.Arguments.IssueOAuthRefreshTokensTo | Should -Be 'AllDevices'
             $api.Arguments.IssuanceTransformRules | Should -Match 'objectGUID'
         }
     }
@@ -106,7 +108,8 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
             $portal = $grants | Where-Object { $_.Arguments.ClientRoleIdentifier -eq $plan.ClientId }
             $module = $grants | Where-Object { $_.Arguments.ClientRoleIdentifier -eq $plan.PublicClientId }
             $portal.Arguments.ScopeNames | Should -Be @('openid', 'profile', 'email', 'allatclaims')
-            $module.Arguments.ScopeNames | Should -Be @('openid', 'profile', 'offline_access')
+            # AD FS has no offline_access scope; the API's IssueOAuthRefreshTokensTo gives the module its refresh token.
+            $module.Arguments.ScopeNames | Should -Be @('openid', 'profile')
             $grants.Arguments.ServerRoleIdentifier | Sort-Object -Unique | Should -Be $plan.ApiIdentifier
         }
     }
@@ -143,6 +146,7 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
         $current.ServerApplications[0].RedirectUri = @('https://old-jim.example.com/signin-oidc')
         $current.NativeApplications[0].RedirectUri = @('http://localhost:8400/callback/')
         $current.WebApiApplications[0].AccessControlPolicyName = 'Permit specific group'
+        $current.WebApiApplications[0].IssueOAuthRefreshTokensTo = 'NoDevice'
         $current.WebApiApplications[0].IssuanceTransformRules = 'c:[Type == "upn"] => issue(Type = "sub", Value = c.Value);'
         $current.Permissions[0].ScopeNames = @('openid', 'profile', 'email')
 
@@ -156,6 +160,7 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
             $plan.Changes[0].Arguments.RedirectUri | Should -Contain 'https://jim.example.com/signin-oidc'
             $plan.Changes[2].Arguments.TargetName | Should -Be 'JIM Identity Management - API'
             $plan.Changes[2].Arguments.AccessControlPolicyName | Should -Be 'Permit everyone'
+            $plan.Changes[2].Arguments.IssueOAuthRefreshTokensTo | Should -Be 'AllDevices'
             $plan.Changes[2].Arguments.IssuanceTransformRules | Should -Match 'objectGUID'
             $plan.Changes[3].Arguments.TargetIdentifier | Should -Be 'p1'
             $plan.Changes[3].Arguments.ScopeNames | Should -Be @('openid', 'profile', 'email', 'allatclaims')
@@ -334,6 +339,22 @@ Describe 'Register-JIMIdentityProvider -Provider ADFS' {
 
             Should -Invoke New-JIMAdfsSession -Times 1
             Should -Invoke Remove-PSSession -Times 1
+        }
+    }
+
+    It 'Says how to get a new secret when a later change fails after the secret was made' {
+        InModuleScope JIM {
+            Mock Invoke-JIMAdfsRegistrationChange {
+                if ($Change.Action -eq 'NewServerApplication') { 'generated-secret' }
+                if ($Change.Action -eq 'GrantPermission') { throw 'MSIS7628' }
+            }
+
+            Mock Write-Warning { }
+
+            { Register-JIMIdentityProvider -Provider ADFS -Url 'https://jim.example.com' -Confirm:$false -ErrorAction Stop } |
+                Should -Throw '*MSIS7628*'
+
+            Should -Invoke Write-Warning -Times 1 -Exactly -ParameterFilter { $Message -match '-ResetClientSecret' }
         }
     }
 

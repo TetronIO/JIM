@@ -111,14 +111,23 @@ function Register-JIMIdentityProvider {
         $made = [System.Collections.Generic.List[string]]::new()
         $secret = $null
         $declined = $false
-        foreach ($change in $plan.Changes) {
-            if (-not $PSCmdlet.ShouldProcess($change.Target, $change.Description)) {
-                $declined = $true
-                continue
+        try {
+            foreach ($change in $plan.Changes) {
+                if (-not $PSCmdlet.ShouldProcess($change.Target, $change.Description)) {
+                    $declined = $true
+                    continue
+                }
+                $result = Invoke-JIMAdfsRegistrationChange -Session $activeSession -Change $change
+                if ($result) { $secret = ConvertTo-SecureString -String ([string]$result) -AsPlainText -Force }
+                $made.Add("$($change.Target): $($change.Description)")
             }
-            $result = Invoke-JIMAdfsRegistrationChange -Session $activeSession -Change $change
-            if ($result) { $secret = ConvertTo-SecureString -String ([string]$result) -AsPlainText -Force }
-            $made.Add("$($change.Target): $($change.Description)")
+        }
+        catch {
+            # AD FS shows a secret once, and the failure means it is never returned, so say how to get another.
+            if ($secret) {
+                Write-Warning "AD FS made the portal's client secret before this run failed, and it cannot be shown again. Once the cause is fixed, run this again with -ResetClientSecret for a new one."
+            }
+            throw
         }
 
         # Values are only worth returning once they exist on AD FS.

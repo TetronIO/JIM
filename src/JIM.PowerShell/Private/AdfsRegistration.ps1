@@ -13,9 +13,11 @@ $script:JIMLoopbackPorts = 8400..8409
 
 # What each client may ask the API for. The portal reads the person from its ID token, so it asks for allatclaims to
 # have the API's claim rules (the identifier, name and email) put there too; the PowerShell module reads the access
-# token, which carries them anyway, and needs offline_access for a refresh token (#2355).
+# token, which carries them anyway (#2355). AD FS has no offline_access scope, and refuses to grant one: the module's
+# refresh token comes from the API's IssueOAuthRefreshTokensTo instead.
 $script:JIMAdfsPortalScopes = @('openid', 'profile', 'email', 'allatclaims')
-$script:JIMAdfsModuleScopes = @('openid', 'profile', 'offline_access')
+$script:JIMAdfsModuleScopes = @('openid', 'profile')
+$script:JIMAdfsRefreshTokensTo = 'AllDevices'
 
 # What each planned action runs on the federation server. A change's Arguments are that cmdlet's parameters.
 $script:JIMAdfsActionCommands = @{
@@ -185,6 +187,10 @@ function Get-JIMAdfsRegistrationPlan {
             $apiArguments.AccessControlPolicyName = 'Permit everyone'
             $apiDrift.Add("set the access control policy to Permit everyone")
         }
+        if ([string]$api.IssueOAuthRefreshTokensTo -ne $script:JIMAdfsRefreshTokensTo) {
+            $apiArguments.IssueOAuthRefreshTokensTo = $script:JIMAdfsRefreshTokensTo
+            $apiDrift.Add("issue refresh tokens to $script:JIMAdfsRefreshTokensTo, as the PowerShell module needs")
+        }
         if (([string]$api.IssuanceTransformRules -replace '\s', '') -cne ($rules -replace '\s', '')) {
             $apiArguments.IssuanceTransformRules = $rules
             $apiDrift.Add('replace the issuance transform rules')
@@ -203,6 +209,7 @@ function Get-JIMAdfsRegistrationPlan {
             -Arguments @{
                 ApplicationGroupIdentifier = $Name; Name = $apiName; Identifier = @($apiIdentifier)
                 AccessControlPolicyName = 'Permit everyone'; IssuanceTransformRules = $rules
+                IssueOAuthRefreshTokensTo = $script:JIMAdfsRefreshTokensTo
             }))
         $currentApiIdentifiers = @()
     }
@@ -292,6 +299,7 @@ function Get-JIMAdfsRegistrationState {
                 [PSCustomObject]@{
                     Name = $_.Name; Identifier = @($_.Identifier); AccessControlPolicyName = [string]$_.AccessControlPolicyName
                     IssuanceTransformRules = [string]$_.IssuanceTransformRules
+                    IssueOAuthRefreshTokensTo = [string]$_.IssueOAuthRefreshTokensTo
                 }
             })
             Permissions        = @(Get-AdfsApplicationPermission | ForEach-Object {
