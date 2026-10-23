@@ -71,16 +71,8 @@ public class JimRoleEnrichmentMiddleware(RequestDelegate next)
             Log.Debug("JimRoleEnrichmentMiddleware: Looking up user with {ClaimType}={ClaimValue}",
                 serviceSettings.SSOUniqueIdentifierClaimType, uniqueIdClaimValue);
 
-            // Look up the Metaverse user
-            var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, false);
-            if (userType == null)
-            {
-                Log.Warning("JimRoleEnrichmentMiddleware: User object type not found.");
-                return;
-            }
-
-            var user = await jim.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(
-                userType, serviceSettings.SSOUniqueIdentifierMetaverseAttribute, uniqueIdClaimValue);
+            // Look up the Metaverse user, as sign-in does (a Guid-typed identifier attribute is matched as a GUID, #2438)
+            var user = await jim.Auth.FindSsoUserAsync(uniqueIdClaimValue);
 
             if (user == null)
             {

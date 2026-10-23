@@ -292,6 +292,12 @@ public interface IMetaverseRepository
 
     public Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue);
 
+    /// <summary>
+    /// Gets the Metaverse Object of a type whose Guid-typed attribute holds a value, such as the <c>Object GUID</c> an
+    /// SSO sign-in names (#2438).
+    /// </summary>
+    public Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, Guid attributeValue);
+
     public Task<int> GetMetaverseObjectCountAsync();
 
     public Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId);

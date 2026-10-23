@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -205,4 +206,148 @@ public class AuthServerProvisioningTests
         _mockMetaverse.Verify(r => r.CreateMetaverseObjectAsync(It.IsAny<MetaverseObject>()), Times.Never);
         _mockSecurity.Verify(r => r.AddObjectToRoleAsync(existingAdmin.Id, Constants.BuiltInRoles.Administrator), Times.Once);
     }
+
+    #region Guid-typed identifier attribute (AD FS objectGUID as oid, #2438)
+
+    private static readonly Guid PersonGuid = new("550e8400-e29b-41d4-a716-446655440000");
+
+    // PersonGuid's bytes in Microsoft byte order, base64-encoded: how AD FS issues objectGUID.
+    private const string PersonGuidAsAdfsIssuesIt = "AIQOVZvi1EGnFkRmVUQAAA==";
+
+    private MetaverseAttribute UseGuidIdentifierAttribute()
+    {
+        var objectGuid = new MetaverseAttribute { Id = 2, Name = Constants.BuiltInAttributes.ObjectGuid, Type = AttributeDataType.Guid };
+        _mockServiceSettings.Setup(r => r.GetServiceSettingsAsync()).ReturnsAsync(new ServiceSettings
+        {
+            SSOUniqueIdentifierClaimType = "oid",
+            SSOUniqueIdentifierMetaverseAttribute = objectGuid
+        });
+        return objectGuid;
+    }
+
+    [TestCase(PersonGuidAsAdfsIssuesIt)]
+    [TestCase("550e8400-e29b-41d4-a716-446655440000")]
+    [TestCase("{550E8400-E29B-41D4-A716-446655440000}")]
+    public async Task ResolveOrProvisionSsoIdentityAsync_GuidAttribute_MatchesTheUserByTheirGuidAsync(string claimValue)
+    {
+        var objectGuid = UseGuidIdentifierAttribute();
+        var existing = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType, Origin = MetaverseObjectOrigin.Projected };
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, objectGuid, PersonGuid))
+            .ReturnsAsync(existing);
+
+        var result = await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = claimValue });
+
+        Assert.That(result, Is.SameAs(existing));
+        _mockMetaverse.Verify(r => r.GetMetaverseObjectByTypeAndAttributeAsync(It.IsAny<MetaverseObjectType>(), It.IsAny<MetaverseAttribute>(), It.IsAny<string>()), Times.Never,
+            "a Guid attribute is never compared as text");
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_GuidAttributeAndClaimNotAGuid_ReturnsNullWithoutLookingUpAsync()
+    {
+        UseGuidIdentifierAttribute();
+        Environment.SetEnvironmentVariable(Constants.Config.SsoInitialAdmin, PersonGuid.ToString());
+
+        var result = await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "jbloggs@panoply.local" });
+
+        Assert.That(result, Is.Null);
+        _mockMetaverse.Verify(r => r.GetMetaverseObjectByTypeAndAttributeAsync(It.IsAny<MetaverseObjectType>(), It.IsAny<MetaverseAttribute>(), It.IsAny<Guid>()), Times.Never);
+        _mockMetaverse.Verify(r => r.CreateMetaverseObjectAsync(It.IsAny<MetaverseObject>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_GuidAttributeInitialAdminFirstContact_CreatesTheUserWithTheGuidAsync()
+    {
+        var objectGuid = UseGuidIdentifierAttribute();
+        // The administrator names the canonical GUID, in whatever case; AD FS sends the bytes.
+        Environment.SetEnvironmentVariable(Constants.Config.SsoInitialAdmin, PersonGuid.ToString().ToUpperInvariant());
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, objectGuid, PersonGuid))
+            .ReturnsAsync((MetaverseObject?)null);
+        MetaverseObject? created = null;
+        _mockMetaverse.Setup(r => r.CreateMetaverseObjectAsync(It.IsAny<MetaverseObject>()))
+            .Callback<MetaverseObject>(m => { m.Id = Guid.NewGuid(); created = m; })
+            .Returns(Task.CompletedTask);
+
+        var result = await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = PersonGuidAsAdfsIssuesIt });
+
+        Assert.That(result, Is.Not.Null);
+        var identifier = created!.AttributeValues.Single(av => av.Attribute!.Name == Constants.BuiltInAttributes.ObjectGuid);
+        Assert.Multiple(() =>
+        {
+            Assert.That(identifier.GuidValue, Is.EqualTo(PersonGuid));
+            Assert.That(identifier.StringValue, Is.Null);
+        });
+        _mockSecurity.Verify(r => r.AddObjectToRoleAsync(created.Id, Constants.BuiltInRoles.Administrator), Times.Once);
+    }
+
+    [Test]
+    public async Task FindSsoUserAsync_GuidAttributeAndBase64ObjectGuid_FindsTheUserByTheirGuidAsync()
+    {
+        var objectGuid = UseGuidIdentifierAttribute();
+        var existing = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, objectGuid, PersonGuid))
+            .ReturnsAsync(existing);
+
+        var result = await _application.Auth.FindSsoUserAsync(PersonGuidAsAdfsIssuesIt);
+
+        Assert.That(result, Is.SameAs(existing));
+    }
+
+    [Test]
+    public async Task FindSsoUserAsync_TextAttribute_FindsTheUserByTheClaimTextAsync()
+    {
+        var existing = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, _uniqueIdAttribute, "synced-user-sub"))
+            .ReturnsAsync(existing);
+
+        var result = await _application.Auth.FindSsoUserAsync("synced-user-sub");
+
+        Assert.That(result, Is.SameAs(existing));
+    }
+
+    [Test]
+    public async Task FindSsoUserAsync_GuidAttributeAndClaimNotAGuid_ReturnsNullAsync()
+    {
+        UseGuidIdentifierAttribute();
+
+        var result = await _application.Auth.FindSsoUserAsync("jbloggs@panoply.local");
+
+        Assert.That(result, Is.Null);
+        _mockMetaverse.Verify(r => r.GetMetaverseObjectByTypeAndAttributeAsync(It.IsAny<MetaverseObjectType>(), It.IsAny<MetaverseAttribute>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [TestCase(AttributeDataType.Text, null)]
+    [TestCase(AttributeDataType.Text, "admin-sub-0001")]
+    [TestCase(AttributeDataType.Guid, null)]
+    [TestCase(AttributeDataType.Guid, "550e8400-e29b-41d4-a716-446655440000")]
+    public void DescribeSsoIdentifierProblem_SupportedSettings_ReturnsNull(AttributeDataType type, string? initialAdmin)
+    {
+        var attribute = new MetaverseAttribute { Name = "Identifier", Type = type };
+
+        Assert.That(AuthServer.DescribeSsoIdentifierProblem(attribute, initialAdmin), Is.Null);
+    }
+
+    [Test]
+    public void DescribeSsoIdentifierProblem_GuidAttributeAndInitialAdminNotAGuid_NamesBothSettings()
+    {
+        var attribute = new MetaverseAttribute { Name = Constants.BuiltInAttributes.ObjectGuid, Type = AttributeDataType.Guid };
+
+        var problem = AuthServer.DescribeSsoIdentifierProblem(attribute, "jbloggs@panoply.local");
+
+        Assert.That(problem, Does.Contain(Constants.Config.SsoInitialAdmin).And.Contain(Constants.Config.SsoMvAttribute).And.Contain("GUID"));
+    }
+
+    [TestCase(AttributeDataType.Number)]
+    [TestCase(AttributeDataType.Reference)]
+    [TestCase(AttributeDataType.Binary)]
+    public void DescribeSsoIdentifierProblem_AttributeNeitherTextNorGuid_NamesTheAttributeAndItsType(AttributeDataType type)
+    {
+        var attribute = new MetaverseAttribute { Name = "Employee Number", Type = type };
+
+        var problem = AuthServer.DescribeSsoIdentifierProblem(attribute, null);
+
+        Assert.That(problem, Does.Contain("Employee Number").And.Contain(type.ToString()).And.Contain(Constants.Config.SsoMvAttribute));
+    }
+
+    #endregion
 }

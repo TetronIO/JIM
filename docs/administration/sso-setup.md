@@ -48,6 +48,10 @@ Using a different provider? The concepts on this page (a [confidential client](#
 
 Whichever provider you use, JIM is configured through a small set of `JIM_SSO_*` environment variables; the per-provider guides show the exact values to set. For the full list and defaults, see the [Configuration Reference](configuration.md).
 
+### How JIM recognises people
+
+JIM matches each person who signs in to a Metaverse Object: it reads one claim from their token (`JIM_SSO_CLAIM_TYPE`, usually `sub`) and finds the User whose Metaverse Attribute `JIM_SSO_MV_ATTRIBUTE` holds the same value. That attribute can hold text, such as `Subject Identifier`, or a GUID, such as `Object GUID`. Matching on `Object GUID` signs people in as the objects synchronisation from Active Directory created; see [Matching on a GUID](configuration.md#matching-on-a-guid).
+
 ---
 
 ## Confidential vs Public Clients

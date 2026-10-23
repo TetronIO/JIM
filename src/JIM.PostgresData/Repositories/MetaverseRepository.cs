@@ -2520,6 +2520,22 @@ public partial class MetaverseRepository : IMetaverseRepository
         return av?.MetaverseObject;
     }
 
+    public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, Guid attributeValue)
+    {
+        // AsTracking for the same reason as the text lookup above.
+        var av = await Repository.Database.MetaverseObjectAttributeValues
+            .AsTracking()
+            .Include(q => q.MetaverseObject)
+            .ThenInclude(mo => mo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(av =>
+                av.Attribute.Id == metaverseAttribute.Id &&
+                av.GuidValue == attributeValue &&
+                av.MetaverseObject.Type.Id == metaverseObjectType.Id);
+
+        return av?.MetaverseObject;
+    }
+
     public async Task<int> GetMetaverseObjectCountAsync()
     {
         return await Repository.Database.MetaverseObjects.CountAsync();
