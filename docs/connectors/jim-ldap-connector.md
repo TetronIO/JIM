@@ -175,11 +175,9 @@ A naming context or crossRef partition the service account cannot read (a least-
 |---------|-------------|---------|
 | Delete Behaviour | How to handle object deletions: Delete (remove the object) or Disable (set the disable attribute). | `Delete` |
 | Disable Attribute | Attribute to set when disabling objects. Only shown, and required, when Delete Behaviour is Disable. | `userAccountControl` |
-| Export Concurrency | Maximum number of concurrent LDAP operations during export. Recommended range: 2 to 8. | `4` |
+| Export Concurrency | Concurrent LDAP operations per export batch ([Export Performance](../configuration/export-performance.md)). Recommended range: 2 to 8. | `4` |
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
-
-Export Concurrency is how many changes each batch sends at once. JIM can also send several batches at once, each with its own Export Concurrency, so the load on the directory is the two multiplied. With an Export Concurrency of 8 or more, the Connector recommends two batches at once; [Batching and Parallelism](../concepts/synchronisation-pipeline.md#batching-and-parallelism) explains how to change that.
 
 ## Troubleshooting
 
