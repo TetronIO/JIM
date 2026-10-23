@@ -1503,9 +1503,9 @@ public class ExampleDataServer
 
     /// <summary>
     /// Gives a distributed Boolean its values over every object of the type at once, sequentially (#877). The objects that
-    /// get a value are those whose dependency (if any) holds, less the share PopulatedValuesPercentage leaves empty. That
-    /// share is chosen here rather than by RemoveUnnecessaryAttributeValues afterwards, because removing values after the
-    /// quota was applied would skew it. Exactly <see cref="CalculateBooleanTrueCount"/> of the objects given a value are
+    /// get a value are those whose dependency (if any) holds, less the share of them PopulatedValuesPercentage leaves
+    /// empty (#2448). That share is chosen here rather than by RemoveUnnecessaryAttributeValues afterwards, because
+    /// removing values after the quota was applied would skew it. Exactly <see cref="CalculateBooleanTrueCount"/> of the objects given a value are
     /// given true, chosen at random, and the rest false.
     /// </summary>
     private static void AssignDistributedBooleanValues(
@@ -1517,16 +1517,14 @@ public class ExampleDataServer
         var metaverseAttribute = templateAttribute.MetaverseAttribute ?? throw new ArgumentNullException(nameof(templateAttribute));
         var truePercentage = templateAttribute.BoolTrueDistribution ?? throw new ArgumentException("A distributed Boolean needs a BoolTrueDistribution.", nameof(templateAttribute));
 
-        // The share left empty is chosen by the same rule RemoveUnnecessaryAttributeValues applies to every other
-        // attribute (see ShuffleForPopulation), so the two cannot disagree.
-        var (indices, leaveEmpty) = ShuffleForPopulation(objectsOfType.Length, templateAttribute.PopulatedValuesPercentage, random);
+        // Only the objects whose condition holds qualify; the share left empty is a share of those, chosen by the same
+        // rule RemoveUnnecessaryAttributeValues applies to every other attribute (see ShuffleForPopulation), so the two
+        // cannot disagree.
+        var qualifying = dependency == null ? objectsOfType : objectsOfType.Where(dependency.IsMet).ToArray();
+        var (shuffled, leaveEmpty) = ShuffleForPopulation(qualifying, templateAttribute.PopulatedValuesPercentage, random);
 
         // The shuffle puts the objects in random order, so the first trueCount of those given a value are a random choice.
-        var objectsGivenAValue = indices
-            .Skip(leaveEmpty)
-            .Select(i => objectsOfType[i])
-            .Where(mvo => dependency == null || dependency.IsMet(mvo))
-            .ToArray();
+        var objectsGivenAValue = shuffled[leaveEmpty..];
         var trueCount = CalculateBooleanTrueCount(objectsGivenAValue.Length, truePercentage);
         for (var i = 0; i < objectsGivenAValue.Length; i++)
         {
@@ -1676,25 +1674,22 @@ public class ExampleDataServer
     }
 
     /// <summary>
-    /// The one rule for which objects of a type an attribute's PopulatedValuesPercentage leaves empty, shared by
+    /// The one rule for which objects an attribute's PopulatedValuesPercentage leaves empty, shared by
     /// <see cref="AssignDistributedBooleanValues"/> and <see cref="RemoveUnnecessaryAttributeValues"/> so the two cannot
-    /// drift. Returns every object index in random order; the first <c>LeaveEmptyCount</c> of them are the objects to
+    /// drift. The caller passes the objects that qualify for the attribute: every object of the type for an attribute
+    /// with no condition, or only those whose condition holds for a conditional one (#2448), so the share is exact
+    /// either way. Returns those objects in random order; the first <c>LeaveEmptyCount</c> of them are the objects to
     /// leave empty. They are distinct, so exactly that many are left empty (#2437). The count is
-    /// <c>objectCount * (100 - percentage) / 100</c>, rounded down, so the share kept rounds up.
-    /// <para>
-    /// The objects left empty are drawn from every object of the type, whether or not a conditional attribute's
-    /// condition holds for them. For an attribute with no condition, the share kept is therefore exact. For a
-    /// conditional attribute, an object left empty may be one that would never have had a value anyway, so the share
-    /// of the objects whose condition holds that keep a value equals the percentage on average rather than exactly.
-    /// </para>
+    /// <c>qualifyingCount * (100 - percentage) / 100</c>, rounded down, so the share kept rounds up.
     /// </summary>
-    private static (int[] ShuffledIndices, int LeaveEmptyCount) ShuffleForPopulation(int objectCount, int? populatedValuesPercentage, Random random)
+    private static (MetaverseObject[] Shuffled, int LeaveEmptyCount) ShuffleForPopulation(
+        IReadOnlyCollection<MetaverseObject> qualifyingObjects, int? populatedValuesPercentage, Random random)
     {
         var percentagePopulated = populatedValuesPercentage ?? 100;
-        var leaveEmpty = objectCount * (100 - percentagePopulated) / 100;
-        var indices = Enumerable.Range(0, objectCount).ToArray();
-        random.Shuffle(indices);
-        return (indices, leaveEmpty);
+        var shuffled = qualifyingObjects.ToArray();
+        var leaveEmpty = shuffled.Length * (100 - percentagePopulated) / 100;
+        random.Shuffle(shuffled);
+        return (shuffled, leaveEmpty);
     }
 
     private static void RemoveUnnecessaryAttributeValues(ExampleDataTemplate dataGenerationTemplate, IReadOnlyCollection<MetaverseObject> metaverseObjects, Random random)
@@ -1709,17 +1704,35 @@ public class ExampleDataServer
 
             var metaverseObjectsOfType = metaverseObjects.Where(m => m.Type == dataGenerationObjectType.MetaverseObjectType).ToList();
             // a distributed Boolean already left its share empty when its quota was applied (see AssignDistributedBooleanValues)
-            foreach (var dataGenAttributeToReduce in dataGenerationObjectType.TemplateAttributes.Where(q => q.PopulatedValuesPercentage < 100 && !HasBooleanTrueDistribution(q)))
-            {
-                // determine how many attributes we have
-                // determine how many we need to eliminate
-                // randomly clear that many from the Metaverse Objects
+            var attributesToReduce = dataGenerationObjectType.TemplateAttributes
+                .Where(q => q.PopulatedValuesPercentage < 100 && !HasBooleanTrueDistribution(q))
+                .ToList();
+            if (attributesToReduce.Count == 0)
+                continue;
 
+            // Population % for a conditional attribute is a share of the objects whose condition holds (#2448), so the
+            // qualifying objects are found by evaluating the condition itself, the same check generation applied. Using
+            // "objects that hold a value" instead would wrongly exclude a qualifying object left without a value for
+            // another reason (an expression that produced nothing), which an unconditional attribute counts in its base.
+            // Every attribute's qualifying set is taken before any value is removed: a condition may test an attribute
+            // that is itself reduced below, and the condition must be judged as it stood when the values were generated.
+            // Nothing else changes a depended-on value after generation (manager assignment writes a Reference
+            // attribute, and no condition operator applies to a Reference).
+            var dependencies = BuildDependencyChecks(dataGenerationObjectType);
+            var qualifyingObjects = attributesToReduce
+                .Select(attribute => dependencies.TryGetValue(attribute, out var dependency)
+                    ? metaverseObjectsOfType.Where(dependency.IsMet).ToList()
+                    : metaverseObjectsOfType)
+                .ToList();
+
+            for (var i = 0; i < attributesToReduce.Count; i++)
+            {
+                var dataGenAttributeToReduce = attributesToReduce[i];
                 // Distinct objects, so exactly the share Population % names is left empty (#2437). Every value the
                 // object holds for the attribute goes, so a multi-valued attribute is emptied, not thinned.
-                var (indices, leaveEmpty) = ShuffleForPopulation(metaverseObjectsOfType.Count, dataGenAttributeToReduce.PopulatedValuesPercentage, random);
-                foreach (var index in indices.Take(leaveEmpty))
-                    attributeValuesRemoved += metaverseObjectsOfType[index].AttributeValues.RemoveAll(q => q.Attribute == dataGenAttributeToReduce.MetaverseAttribute);
+                var (shuffled, leaveEmpty) = ShuffleForPopulation(qualifyingObjects[i], dataGenAttributeToReduce.PopulatedValuesPercentage, random);
+                foreach (var metaverseObject in shuffled.Take(leaveEmpty))
+                    attributeValuesRemoved += metaverseObject.AttributeValues.RemoveAll(q => q.Attribute == dataGenAttributeToReduce.MetaverseAttribute);
             }
         }
         stopwatch.Stop();

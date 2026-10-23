@@ -158,6 +158,45 @@ public class ExampleDataBooleanDistributionTests
         }
     }
 
+    [TestCase(500, 50, 20)]
+    [TestCase(1001, 30, 25)]
+    public async Task ExecuteTemplateAsync_BoolTrueDistributionOnConditionalAttributeWithPartialPopulation_EmptyShareAndQuotaOverConditionHoldersAsync(
+        int objects, int populated, int distribution)
+    {
+        // Only Staff qualify for the flag. Population % leaves exactly its share of Staff empty (#2448), and the quota
+        // applies to the Staff that remain, so both counts are exact whatever the Staff count turns out to be.
+        var category = new ExampleDataTemplateAttribute
+        {
+            Id = 2, MetaverseAttribute = _category, PopulatedValuesPercentage = 100,
+            WeightedStringValues =
+            [
+                new ExampleDataTemplateAttributeWeightedValue { Value = "Staff", Weight = 1 },
+                new ExampleDataTemplateAttributeWeightedValue { Value = "Guest", Weight = 1 }
+            ]
+        };
+        var flag = FlagAttribute(distribution, populated);
+        flag.AttributeDependency = new ExampleDataTemplateAttributeDependency
+        {
+            MetaverseAttribute = _category, ComparisonType = SearchComparisonType.Equals, StringValue = "Staff"
+        };
+        SetUpTemplate(objects, flag, category);
+
+        await _application.ExampleData.ExecuteTemplateAsync(TemplateId, CancellationToken.None);
+
+        var staffCount = _persistedObjects.Count(mvo => mvo.AttributeValues.Any(av => av.Attribute.Id == CategoryAttributeId && av.StringValue == "Staff"));
+        var guestsWithFlag = _persistedObjects.Count(mvo =>
+            mvo.AttributeValues.All(av => av.Attribute.Id != CategoryAttributeId || av.StringValue != "Staff") &&
+            mvo.AttributeValues.Any(av => av.Attribute.Id == FlagAttributeId));
+        var expectedWithValue = staffCount - staffCount * (100 - populated) / 100;
+        var values = FlagValues();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(guestsWithFlag, Is.Zero);
+            Assert.That(values, Has.Count.EqualTo(expectedWithValue));
+            Assert.That(values.Count(v => v), Is.EqualTo(ExampleDataServer.CalculateBooleanTrueCount(expectedWithValue, distribution)));
+        }
+    }
+
     [Test]
     public async Task ExecuteTemplateAsync_AttributeDependingOnDistributedBoolean_SeesTheFinalValueAsync()
     {

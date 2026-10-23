@@ -193,19 +193,20 @@ public class ExampleDataPopulationPercentageTests
         }
     }
 
-    [Test]
-    public async Task ExecuteTemplateAsync_ConditionalAttributeWithPopulation_LeavesThatShareOfConditionHoldersWithAValueAsync()
+    [TestCase(4000, 50)]
+    [TestCase(1001, 50)]
+    [TestCase(999, 33)]
+    public async Task ExecuteTemplateAsync_ConditionalAttributeWithPopulation_LeavesExactlyThatShareOfConditionHoldersWithAValueAsync(int objects, int populated)
     {
-        // Population % is applied over every object of the type, matching a distributed Boolean (#877), so the objects
-        // whose condition holds keep a value in that share on average rather than exactly. With 4,000 objects, about
-        // 2,000 Staff and 50% population, the standard deviation of the number kept is about 16; the band below is
-        // about six of those wide on each side, while drawing with replacement kept about 61% of Staff (some 210 over).
-        var text = TextAttribute(50);
+        // Population % is applied over the objects whose condition holds (#2448), so exactly that share of Staff keep a
+        // value, with the count left empty rounded down as for any other attribute. Before, the objects left empty were
+        // drawn from every object of the type, so the share of Staff kept was right only on average.
+        var text = TextAttribute(populated);
         text.AttributeDependency = new ExampleDataTemplateAttributeDependency
         {
             MetaverseAttribute = _category, ComparisonType = SearchComparisonType.Equals, StringValue = "Staff"
         };
-        SetUpTemplate(UserType(4000, text, CategoryAttribute("Staff", "Guest")));
+        SetUpTemplate(UserType(objects, text, CategoryAttribute("Staff", "Guest")));
 
         await _application.ExampleData.ExecuteTemplateAsync(TemplateId, CancellationToken.None);
 
@@ -216,7 +217,31 @@ public class ExampleDataPopulationPercentageTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(UsersWithValue(TextAttributeId), Is.EqualTo(staffWithValue), "Only objects whose condition holds may have a value.");
-            Assert.That(staffWithValue, Is.InRange(staffCount / 2 - 100, staffCount / 2 + 100));
+            Assert.That(staffWithValue, Is.EqualTo(staffCount - staffCount * (100 - populated) / 100));
+        }
+    }
+
+    [Test]
+    public async Task ExecuteTemplateAsync_ConditionOnAttributeWithPopulation_QualifyingObjectsAreThoseWhoseConditionHeldWhenGeneratedAsync()
+    {
+        // Every user is generated as Staff, then half lose their Category to its own Population %. Job Title was
+        // generated for all 200, so exactly half of those 200 keep it: whether the condition holds is judged as it
+        // stood when the values were generated, not after another attribute's share was emptied.
+        var category = CategoryAttribute("Staff");
+        category.PopulatedValuesPercentage = 50;
+        var text = TextAttribute(50);
+        text.AttributeDependency = new ExampleDataTemplateAttributeDependency
+        {
+            MetaverseAttribute = _category, ComparisonType = SearchComparisonType.Equals, StringValue = "Staff"
+        };
+        SetUpTemplate(UserType(200, category, text));
+
+        await _application.ExampleData.ExecuteTemplateAsync(TemplateId, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(StaffCount(), Is.EqualTo(100));
+            Assert.That(UsersWithValue(TextAttributeId), Is.EqualTo(100));
         }
     }
 }
