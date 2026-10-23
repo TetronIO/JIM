@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.History;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
@@ -2321,6 +2322,76 @@ public partial class MetaverseServer
     {
         return await Application.Repository.Metaverse.GetDeletedMvoChangesRangeAsync(
             offset, count, objectTypeId, fromDate, toDate, displayNameSearch, includeTotalCount);
+    }
+
+    /// <summary>
+    /// The most attribute conditions one Metaverse Object change search may combine. Each becomes a nested
+    /// predicate over the change tables, so the bound keeps a single request's query cost proportionate.
+    /// </summary>
+    public const int MaxChangeSearchConditions = 10;
+
+    /// <summary>
+    /// Searches Metaverse Object changes across every object (#1901), for the Object Changes page, its REST endpoint
+    /// and its cmdlet: a window of the changes matching <paramref name="criteria"/>, newest first, addressed by
+    /// absolute offset and count. Each attribute condition is checked against its attribute's definition and its
+    /// value parsed to that attribute's data type before anything is queried.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// The criteria cannot be searched: an attribute that does not exist, a value that is not of its attribute's type,
+    /// too many conditions, or a time range that ends before it starts. The message says which, for the administrator.
+    /// </exception>
+    public async Task<RangeResultSet<MetaverseObjectChangeSearchResult>> SearchMetaverseObjectChangesRangeAsync(
+        MetaverseObjectChangeSearchCriteria criteria,
+        int offset,
+        int count,
+        bool includeTotalCount = true)
+    {
+        var query = await ResolveChangeSearchAsync(criteria);
+        return await Application.Repository.Metaverse.SearchMetaverseObjectChangesRangeAsync(query, offset, count, includeTotalCount);
+    }
+
+    private async Task<MetaverseObjectChangeSearchQuery> ResolveChangeSearchAsync(MetaverseObjectChangeSearchCriteria criteria)
+    {
+        ArgumentNullException.ThrowIfNull(criteria);
+
+        if (criteria.FromDate.HasValue && criteria.ToDate.HasValue && criteria.FromDate.Value > criteria.ToDate.Value)
+            throw new ArgumentException("The time range ends before it starts.");
+
+        if (criteria.AttributeConditions.Count > MaxChangeSearchConditions)
+            throw new ArgumentException($"A search can combine at most {MaxChangeSearchConditions} attribute conditions.");
+
+        var conditions = new List<ResolvedAttributeChangeCondition>();
+        foreach (var condition in criteria.AttributeConditions)
+        {
+            if (!Enum.IsDefined(condition.Operator))
+                throw new ArgumentException($"'{condition.Operator}' is not a recognised attribute change operator.");
+
+            var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(condition.AttributeId)
+                ?? throw new ArgumentException($"There is no Metaverse Attribute with id {condition.AttributeId}.");
+
+            if (!AttributeChangeConditionParser.TryParse(attribute.Type, condition.Value, out var match, out var error))
+                throw new ArgumentException($"{attribute.Name}: {error}");
+
+            conditions.Add(new ResolvedAttributeChangeCondition
+            {
+                AttributeId = attribute.Id,
+                AttributeType = attribute.Type,
+                Operator = condition.Operator,
+                Match = match
+            });
+        }
+
+        return new MetaverseObjectChangeSearchQuery
+        {
+            FromDate = criteria.FromDate,
+            ToDate = criteria.ToDate,
+            ObjectTypeId = criteria.ObjectTypeId,
+            DisplayNameSearch = string.IsNullOrWhiteSpace(criteria.DisplayNameSearch) ? null : criteria.DisplayNameSearch.Trim(),
+            Conditions = conditions,
+            MatchMode = Enum.IsDefined(criteria.MatchMode)
+                ? criteria.MatchMode
+                : throw new ArgumentException($"'{criteria.MatchMode}' is not a recognised condition match mode.")
+        };
     }
 
     /// <summary>

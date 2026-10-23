@@ -29,4 +29,10 @@ public static class LikePattern
 
     /// <summary>A pattern matching any value that ends with the text.</summary>
     public static string EndsWith(string text) => $"%{Escape(text)}";
+
+    /// <summary>
+    /// A pattern matching the whole value, in which each <c>*</c> the administrator typed matches any run of
+    /// characters. Without a <c>*</c> it matches only a value equal to the text (case-insensitively under <c>ILIKE</c>).
+    /// </summary>
+    public static string Wildcard(string text) => Escape(text).Replace("*", "%");
 }

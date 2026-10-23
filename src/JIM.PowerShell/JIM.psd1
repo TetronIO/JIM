@@ -257,6 +257,7 @@
         # History
         'Get-JIMDeletedObject',
         'Get-JIMHistoryCount',
+        'Search-JIMMetaverseObjectChange',
         'Invoke-JIMHistoryCleanup',
 
         # Configuration Change Previews
