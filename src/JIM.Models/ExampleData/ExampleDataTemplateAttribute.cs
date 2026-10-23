@@ -27,11 +27,6 @@ public class ExampleDataTemplateAttribute
     /// </summary>
     public int? BoolTrueDistribution { get; set; }
 
-    /// <summary>
-    /// Has no effect on generation: Boolean values are random whenever BoolTrueDistribution is not set.
-    /// </summary>
-    public bool? BoolShouldBeRandom { get; set; }
-
     public DateTime? MinDate { get; set; }
 
     public DateTime? MaxDate { get; set; }
@@ -119,7 +114,6 @@ public class ExampleDataTemplateAttribute
             MetaverseAttribute = MetaverseAttribute,
             PopulatedValuesPercentage = PopulatedValuesPercentage,
             BoolTrueDistribution = BoolTrueDistribution,
-            BoolShouldBeRandom = BoolShouldBeRandom,
             MinDate = MinDate,
             MaxDate = MaxDate,
             MinNumber = MinNumber,
@@ -192,8 +186,8 @@ public class ExampleDataTemplateAttribute
         var attributePlurality = MetaverseAttribute.AttributePlurality;
         var attributeName = MetaverseAttribute.Name;
 
-        if (attributeDataType != AttributeDataType.Boolean && (BoolTrueDistribution != null || BoolShouldBeRandom != null))
-            throw new ExampleDataTemplateAttributeException("Not Bool and BoolTrueDistribution is not null or BoolShouldBeRandom is not null");
+        if (attributeDataType != AttributeDataType.Boolean && BoolTrueDistribution != null)
+            throw new ExampleDataTemplateAttributeException("Not Bool and BoolTrueDistribution is not null");
 
         if (attributeDataType != AttributeDataType.DateTime && IsUsingDates())
             throw new ExampleDataTemplateAttributeException("Not DateTime and MinDate is not null or MaxDate is not null");

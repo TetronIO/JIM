@@ -179,7 +179,7 @@ public class DataGeneratorTemplateAttributeFailTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            BoolTrueDistribution = 50
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject4.Validate);
     }
@@ -243,7 +243,7 @@ public class DataGeneratorTemplateAttributeFailTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            BoolTrueDistribution = 50
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject2.Validate);
 
@@ -271,7 +271,7 @@ public class DataGeneratorTemplateAttributeFailTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            BoolTrueDistribution = 50
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject1.Validate);
 
@@ -297,7 +297,7 @@ public class DataGeneratorTemplateAttributeFailTests
                 new() { Value = "Leaver", Weight = 0.05f }
             },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            BoolTrueDistribution = 50
         };
 
         Assert.Catch<ExampleDataTemplateAttributeException>(subject1.Validate);
