@@ -10,7 +10,7 @@
 <!-- snippets inlines this into markdown); structure uses <g> groups. -->
 <svg class="jim-diagram" viewBox="0 0 1160 260" role="img" aria-labelledby="jimdg-ssp-title jimdg-ssp-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-ssp-title">From a SCIM request to the Metaverse</title>
-  <desc id="jimdg-ssp-desc">An identity provider, here Entra ID, sends each change over HTTPS to its Connected System's SCIM endpoint in JIM. As each request arrives, the endpoint checks the key and the SCIM schema, keeps the change in that Connected System's store and answers straight away. On the Connected System's Schedule, a Delta Import reads the changes kept since the last import into the Connector Space, and Delta Synchronisation carries them into the Metaverse. Nothing the identity provider sends reaches the Connector Space or the Metaverse until the Schedule runs. The identity provider named is illustrative.</desc>
+  <desc id="jimdg-ssp-desc">An identity provider sends each change over HTTPS to its Connected System's SCIM endpoint in JIM. As each request arrives, the endpoint checks the key and the SCIM schema, keeps the change in that Connected System's store and answers straight away. On the Connected System's Schedule, a Delta Import reads the changes kept since the last import into the Connector Space, and Delta Synchronisation carries them into the Metaverse. Nothing the identity provider sends reaches the Connector Space or the Metaverse until the Schedule runs.</desc>
   <g id="jimdg-ssp-jim">
     <rect class="jimdg-hub" x="240" y="20" width="900" height="220" rx="8"/>
     <text class="jimdg-note jimdg-anchor-middle" x="442" y="82">as each request arrives</text>
@@ -20,10 +20,10 @@
     <text class="jimdg-system-sub" x="334" y="161">checks key &amp; schema</text>
     <path class="jimdg-stage" d="M470,112 A80,14 0 0 1 630,112 L630,178 A80,14 0 0 1 470,178 Z"/>
     <ellipse class="jimdg-stage" cx="550" cy="112" rx="80" ry="14"/>
-    <text class="jimdg-owner-name" x="550" y="146">Entra ID</text>
+    <text class="jimdg-owner-name" x="550" y="146">Identity Provider</text>
     <text class="jimdg-stage-label" x="550" y="167">Store</text>
     <rect class="jimdg-stage" x="700" y="100" width="160" height="90" rx="8"/>
-    <text class="jimdg-owner-name" x="780" y="130">Entra ID</text>
+    <text class="jimdg-owner-name" x="780" y="130">Identity Provider</text>
     <text class="jimdg-stage-label" x="780" y="154">Connector Space</text>
     <text class="jimdg-system-sub" x="780" y="175">CSOs</text>
     <rect class="jimdg-core" x="930" y="100" width="186" height="90" rx="8"/>
@@ -31,14 +31,14 @@
     <text class="jimdg-core-sub" x="1023" y="164">MVOs · fused identities</text>
   </g>
   <g id="jimdg-ssp-systems">
-    <rect class="jimdg-system" x="20" y="113" width="150" height="64" rx="8"/>
-    <text class="jimdg-system-name" x="95" y="141">Entra ID</text>
-    <text class="jimdg-system-sub" x="95" y="162">identity provider</text>
+    <rect class="jimdg-system" x="10" y="113" width="168" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="94" y="141">Identity Provider</text>
+    <text class="jimdg-system-sub" x="94" y="162">SCIM 2.0 client</text>
   </g>
   <g id="jimdg-ssp-edges">
-    <line class="jimdg-spoke" x1="170" y1="145" x2="244" y2="145"/>
+    <line class="jimdg-spoke" x1="178" y1="145" x2="244" y2="145"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(254,145) rotate(0)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-middle" x="205" y="133">HTTPS</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="211" y="133">HTTPS</text>
     <line class="jimdg-flow" x1="414" y1="145" x2="460" y2="145"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(470,145) rotate(0)"/>
     <text class="jimdg-flow-label jimdg-anchor-middle" x="442" y="226">kept</text>
@@ -51,7 +51,7 @@
   </g>
   <g id="jimdg-ssp-packets">
     <circle class="jimdg-packet" r="4.5">
-      <animateMotion dur="2s" begin="0s" repeatCount="indefinite" path="M170,145 L242,145"/>
+      <animateMotion dur="2s" begin="0s" repeatCount="indefinite" path="M178,145 L242,145"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2s" begin="0s" repeatCount="indefinite"/>
     </circle>
     <circle class="jimdg-packet" r="4.5">
