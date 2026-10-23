@@ -157,13 +157,22 @@ These variables control how JIM maps authenticated users to Metaverse Objects, e
 | Variable                | Description                                                                                                                                  | Default               | Example                   |
 |-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|---------------------------|
 | `JIM_SSO_CLAIM_TYPE`    | The JWT claim type containing the user's unique identifier. Use `sub` (standard OIDC subject identifier) for most providers.                | `sub`                 | `sub`                     |
-| `JIM_SSO_MV_ATTRIBUTE`  | The Metaverse Attribute to match the claim value against. This should be an attribute on the User object type that stores the unique identifier from your identity provider. | `Subject Identifier`  | `Subject Identifier`      |
-| `JIM_SSO_INITIAL_ADMIN` | The claim value for the initial admin user (used during first-time setup). See the [SSO Setup Guide](sso-setup.md) for instructions on finding this value. | *(none)*              | *(your admin's sub claim)* |
+| `JIM_SSO_MV_ATTRIBUTE`  | The Metaverse Attribute to match the claim value against. This should be an attribute on the User object type that stores the unique identifier from your identity provider. It must be a Text or Guid attribute; see [Matching on a GUID](#matching-on-a-guid). | `Subject Identifier`  | `Subject Identifier`, `Object GUID` |
+| `JIM_SSO_INITIAL_ADMIN` | The claim value for the initial admin user (used during first-time setup). When `JIM_SSO_MV_ATTRIBUTE` is a Guid attribute, the admin's GUID. See the [SSO Setup Guide](sso-setup.md) for instructions on finding this value. | *(none)*              | *(your admin's sub claim)* |
 
 !!! tip "Finding your admin's claim value"
     1. Log into JIM with your admin account
     2. Navigate to `/claims`
     3. Find the value of the claim type specified in `JIM_SSO_CLAIM_TYPE`
+
+### Matching on a GUID
+
+When `JIM_SSO_MV_ATTRIBUTE` names a Guid attribute, such as `Object GUID`, JIM reads the claim as a GUID and matches the person whose attribute holds the same GUID. This is how AD FS identifies people by their Active Directory `objectGUID`, which is always set, survives renames and is never reused. The person then signs in as the Metaverse Object that synchronisation from Active Directory created or joined.
+
+- The claim may carry GUID text (`550e8400-e29b-41d4-a716-446655440000`), or the GUID's 16 bytes base64-encoded, as AD FS issues `objectGUID`.
+- `JIM_SSO_INITIAL_ADMIN` is the admin's GUID as text, in any case, as the Metaverse Object shows it.
+- JIM refuses to start, naming the setting, when `JIM_SSO_MV_ATTRIBUTE` is neither a Text nor a Guid attribute, or is a Guid attribute and `JIM_SSO_INITIAL_ADMIN` is not a GUID.
+- A sign-in whose claim is not a GUID is refused, and the log says which claim and attribute to check.
 
 ---
 

@@ -1510,6 +1510,11 @@ public partial class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(metaverseObjectType, metaverseAttribute, attributeValue);
     }
 
+    public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, Guid attributeValue)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(metaverseObjectType, metaverseAttribute, attributeValue);
+    }
+
     /// <summary>
     /// Gets one row per Connected System Object joined to a Metaverse Object, for the Metaverse Object's
     /// Connections tab (#1519): the object's identity, its Connected System, its role (source/target, derived from

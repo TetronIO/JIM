@@ -93,6 +93,35 @@ public static class IdentifierParser
     }
 
     /// <summary>
+    /// Attempts to read a GUID from its string representation, or from 16 bytes in Microsoft GUID byte order encoded as
+    /// base64. The second is how AD FS issues an Active Directory <c>objectGUID</c> in a claim, since its claim language
+    /// cannot convert the bytes to GUID text.
+    /// </summary>
+    /// <param name="value">The GUID text (any form <see cref="TryFromString"/> accepts) or base64-encoded bytes.</param>
+    /// <param name="result">When this method returns, contains the GUID if successful; otherwise, <see cref="Guid.Empty"/>.</param>
+    /// <returns><c>true</c> if the value was either form; otherwise, <c>false</c>.</returns>
+    public static bool TryFromStringOrMicrosoftBase64(string? value, out Guid result)
+    {
+        if (TryFromString(value, out result))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        // GUID text never decodes to exactly 16 bytes (32 hex digits are 24 bytes of base64), so the forms cannot be
+        // confused.
+        Span<byte> bytes = stackalloc byte[18];
+        if (Convert.TryFromBase64String(value.Trim(), bytes, out var written) && written == 16)
+        {
+            result = new Guid(bytes[..16]);
+            return true;
+        }
+
+        result = Guid.Empty;
+        return false;
+    }
+
+    /// <summary>
     /// Creates a GUID from a 16-byte array in Microsoft GUID byte order.
     /// </summary>
     /// <remarks>
