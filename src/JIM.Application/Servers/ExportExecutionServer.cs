@@ -748,12 +748,10 @@ public class ExportExecutionServer
                         var eligibleExports = batch.Where(pe => IsReadyForExecution(pe)).ToList();
 
                         // Track all batch IDs as processed (even ineligible ones, to avoid re-fetching)
-                        foreach (var pe in batch)
-                            processedIds.Add(pe.Id);
+                        processedIds.UnionWith(batch.Select(pe => pe.Id));
 
                         // Track eligible export IDs for the result (used by preview mode and tests)
-                        foreach (var pe in eligibleExports)
-                            result.ProcessedPendingExportIds.Add(pe.Id);
+                        result.ProcessedPendingExportIds.AddRange(eligibleExports.Select(pe => pe.Id));
 
                         // Separate immediate from deferred exports
                         var immediateExports = eligibleExports.Where(pe => !pe.HasUnresolvedReferences).ToList();
@@ -1784,21 +1782,18 @@ public class ExportExecutionServer
                     lock (resultLock)
                     {
                         result.FailedCount += batchIds.Count;
-                        foreach (var export in callersBatch)
+                        result.ProcessedExportItems.AddRange(callersBatch.Select(export => new ProcessedExportItem
                         {
-                            result.ProcessedExportItems.Add(new ProcessedExportItem
-                            {
-                                ChangeType = export.ChangeType,
-                                ConnectedSystemObject = export.ConnectedSystemObject,
-                                PendingExportId = export.Id,
-                                AttributeChangeCount = export.AttributeValueChanges.Count,
-                                AttributeValueChanges = export.AttributeValueChanges.ToList(),
-                                Succeeded = false,
-                                ErrorMessage = $"Batch export failed: {ex.Message}",
-                                ErrorCount = export.ErrorCount,
-                                ErrorType = ConnectedSystemExportErrorType.General
-                            }.WithCauseFrom(export));
-                        }
+                            ChangeType = export.ChangeType,
+                            ConnectedSystemObject = export.ConnectedSystemObject,
+                            PendingExportId = export.Id,
+                            AttributeChangeCount = export.AttributeValueChanges.Count,
+                            AttributeValueChanges = export.AttributeValueChanges.ToList(),
+                            Succeeded = false,
+                            ErrorMessage = $"Batch export failed: {ex.Message}",
+                            ErrorCount = export.ErrorCount,
+                            ErrorType = ConnectedSystemExportErrorType.General
+                        }.WithCauseFrom(export)));
                     }
                     return false;
                 }

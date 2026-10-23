@@ -1748,9 +1748,13 @@ public class ExportExecutionParallelBatchTests
 
     private static void InterlockedMax(ref int target, int value)
     {
-        int current;
-        while (value > (current = Volatile.Read(ref target)) && Interlocked.CompareExchange(ref target, value, current) != current)
+        var current = Volatile.Read(ref target);
+        while (value > current)
         {
+            var seen = Interlocked.CompareExchange(ref target, value, current);
+            if (seen == current)
+                return;
+            current = seen;
         }
     }
 
