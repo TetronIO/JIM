@@ -138,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 With **Create containers as needed?** on, an LDAP export no longer fails an object because a parallel export batch created its new OU a moment earlier; the OU exists, so the object is created in it. (#1820)
 - 🐛 When an auxiliary class attribute's value goes away before it is exported, JIM now withdraws the class add queued with it too. Left behind, the add was refused at every export because nothing wrote the class's required attributes. (#492)
 - 🐛 The SCIM 2.0 Client Connector now sends a value added to, or set on, a multi-valued attribute such as a list of strings in a schema extension as a list, as SCIM requires. Service providers that check values against their schema refused it. (#2215)
 - 🐛 The SCIM 2.0 Client Connector now always imports `meta.version` where the provider supports entity tags, so updates carry `If-Match` and cannot overwrite a change made in the provider. Schema import selects it and keeps it selected; a refresh selects it on existing Connected Systems. (#2404)
