@@ -578,75 +578,111 @@ public class ExampleDataServer
             // Read and validate each dependency once, before any thread starts generating: an operator that does not
             // apply to the depended-on attribute's type, or a value that is not of that type, fails the template here.
             var dependencies = BuildDependencyChecks(objectType);
-            Parallel.For(0, objectType.ObjectsToCreate, generationParallelOptions,
-                index =>
-                {
-                    var metaverseObject = new MetaverseObject
+            // A Boolean attribute with a BoolTrueDistribution gets an exact quota of true values over the objects that
+            // end up with a value (#877). That count is only known once everything the attribute's generation depends on
+            // has been generated for every object, so the ordered attributes are split at each such Boolean into
+            // segments: each segment is generated in parallel exactly as before, and between segments the quota is
+            // settled in one sequential pass over the whole object set. This was chosen over a shared atomic counter
+            // drawn from inside the parallel loop because a counter needs the eligible total up front, which is unknown
+            // for a conditional attribute, and because it would hand the last true values to whichever threads finish
+            // last rather than spreading them at random. Settling the quota before the next segment also means any
+            // attribute that depends on the Boolean sees its final value. A template with no distributed Boolean has
+            // one segment, so its generation is unchanged.
+            var segments = SplitAtDistributedBooleans(orderedTemplateAttributes, out var distributedBooleans);
+            var objectsOfType = new MetaverseObject[objectType.ObjectsToCreate];
+            for (var segmentIndex = 0; segmentIndex < segments.Count; segmentIndex++)
+            {
+                var segment = segments[segmentIndex];
+                var isFirstSegment = segmentIndex == 0;
+                var isLastSegment = segmentIndex == segments.Count - 1;
+                Parallel.For(0, objectType.ObjectsToCreate, generationParallelOptions,
+                    index =>
                     {
-                        Type = objectType.MetaverseObjectType,
-                        Origin = MetaverseObjectOrigin.Internal
-                    };
-                    foreach (var templateAttribute in orderedTemplateAttributes)
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                        {
-                            Log.Verbose("ExecuteTemplateAsync: Cancellation requested. Returning from attribute processing prematurely.");
-                            return;
-                        }
+                        var metaverseObject = isFirstSegment
+                            ? objectsOfType[index] = new MetaverseObject { Type = objectType.MetaverseObjectType, Origin = MetaverseObjectOrigin.Internal }
+                            : objectsOfType[index];
 
-                        // only supporting Metaverse attributes for now.
-                        // generating values for Connector Space values will have to come later, subject to demand
-                        if (templateAttribute.MetaverseAttribute != null)
+                        foreach (var templateAttribute in segment)
                         {
-                            // is this attribute dependent upon another? It is generated only when the dependency holds.
-                            if (dependencies.TryGetValue(templateAttribute, out var dependency) && !dependency.IsMet(metaverseObject))
-                                continue;
-
-                            // handle each attribute type in dedicated functions
-                            switch (templateAttribute.MetaverseAttribute.Type)
+                            if (cancellationToken.IsCancellationRequested)
                             {
-                                case AttributeDataType.Text:
-                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, random, trackers);
-                                    break;
-                                case AttributeDataType.Guid:
-                                    GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
-                                    break;
-                                case AttributeDataType.Number:
-                                    GenerateMetaverseNumberValue(metaverseObject, templateAttribute, random, trackers);
-                                    break;
-                                case AttributeDataType.LongNumber:
-                                    GenerateMetaverseLongNumberValue(metaverseObject, templateAttribute, random, trackers);
-                                    break;
-                                case AttributeDataType.Decimal:
-                                    GenerateMetaverseDecimalValue(metaverseObject, templateAttribute, random, trackers);
-                                    break;
-                                case AttributeDataType.DateTime:
-                                    GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
-                                    break;
-                                case AttributeDataType.Boolean:
-                                    GenerateMetaverseBooleanValue(metaverseObject, templateAttribute, random);
-                                    break;
-                                case AttributeDataType.Reference:
-                                    GenerateMetaverseReferenceValue(metaverseObject, templateAttribute, random, create);
-                                    break;
-                                case AttributeDataType.NotSet:
-                                    break;
-                                case AttributeDataType.Binary:
-                                    break;
-                                default:
-                                    throw new ArgumentOutOfRangeException();
+                                Log.Verbose("ExecuteTemplateAsync: Cancellation requested. Returning from attribute processing prematurely.");
+                                return;
+                            }
+
+                            // only supporting Metaverse attributes for now.
+                            // generating values for Connector Space values will have to come later, subject to demand
+                            if (templateAttribute.MetaverseAttribute != null)
+                            {
+                                // is this attribute dependent upon another? It is generated only when the dependency holds.
+                                if (dependencies.TryGetValue(templateAttribute, out var dependency) && !dependency.IsMet(metaverseObject))
+                                    continue;
+
+                                // handle each attribute type in dedicated functions
+                                switch (templateAttribute.MetaverseAttribute.Type)
+                                {
+                                    case AttributeDataType.Text:
+                                        GenerateMetaverseStringValue(metaverseObject, templateAttribute, random, trackers);
+                                        break;
+                                    case AttributeDataType.Guid:
+                                        GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
+                                        break;
+                                    case AttributeDataType.Number:
+                                        GenerateMetaverseNumberValue(metaverseObject, templateAttribute, random, trackers);
+                                        break;
+                                    case AttributeDataType.LongNumber:
+                                        GenerateMetaverseLongNumberValue(metaverseObject, templateAttribute, random, trackers);
+                                        break;
+                                    case AttributeDataType.Decimal:
+                                        GenerateMetaverseDecimalValue(metaverseObject, templateAttribute, random, trackers);
+                                        break;
+                                    case AttributeDataType.DateTime:
+                                        GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
+                                        break;
+                                    case AttributeDataType.Boolean:
+                                        GenerateMetaverseBooleanValue(metaverseObject, templateAttribute, random);
+                                        break;
+                                    case AttributeDataType.Reference:
+                                        GenerateMetaverseReferenceValue(metaverseObject, templateAttribute, random, create);
+                                        break;
+                                    case AttributeDataType.NotSet:
+                                        break;
+                                    case AttributeDataType.Binary:
+                                        break;
+                                    default:
+                                        throw new ArgumentOutOfRangeException();
+                                }
                             }
                         }
-                    }
 
-                    lock (_metaverseObjectLock)
-                        create.Add(metaverseObject);
+                        if (isFirstSegment)
+                        {
+                            lock (_metaverseObjectLock)
+                                create.Add(metaverseObject);
+                        }
 
-                    // Atomic counters only; the background reporter (see above) reads objectsGeneratedHolder and does
-                    // the asynchronous progress write off this thread, so the loop never blocks on I/O.
-                    Interlocked.Increment(ref totalObjectsCreated);
-                    Interlocked.Increment(ref objectsGeneratedHolder[0]);
-                });
+                        if (!isLastSegment)
+                            return;
+
+                        // Atomic counters only; the background reporter (see above) reads objectsGeneratedHolder and does
+                        // the asynchronous progress write off this thread, so the loop never blocks on I/O.
+                        Interlocked.Increment(ref totalObjectsCreated);
+                        Interlocked.Increment(ref objectsGeneratedHolder[0]);
+                    });
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning from attribute generation prematurely.");
+                    return 0;
+                }
+
+                if (segmentIndex < distributedBooleans.Count)
+                {
+                    var distributedBoolean = distributedBooleans[segmentIndex];
+                    dependencies.TryGetValue(distributedBoolean, out var booleanDependency);
+                    AssignDistributedBooleanValues(objectsOfType, distributedBoolean, booleanDependency, random);
+                }
+            }
 
             // user manager attributes need assigning after all users have been prepared
             GenerateManagerAssignments(metaverseObjectsToCreate, objectType, random);
@@ -1425,27 +1461,99 @@ public class ExampleDataServer
         });
     }
 
+    /// <summary>
+    /// How many of <paramref name="valueCount"/> Boolean values a BoolTrueDistribution of
+    /// <paramref name="truePercentage"/> makes true: the nearest whole number, with halves rounded up, so 0% is always
+    /// none and 100% is always all.
+    /// </summary>
+    internal static int CalculateBooleanTrueCount(int valueCount, int truePercentage) =>
+        (int)(((long)valueCount * truePercentage + 50) / 100);
+
+    /// <summary>
+    /// Whether a template attribute's Boolean values are given by an exact quota rather than at random.
+    /// </summary>
+    private static bool HasBooleanTrueDistribution(ExampleDataTemplateAttribute templateAttribute) =>
+        templateAttribute.MetaverseAttribute?.Type == AttributeDataType.Boolean && templateAttribute.BoolTrueDistribution.HasValue;
+
+    /// <summary>
+    /// Splits the dependency-ordered attributes at each distributed Boolean (see <see cref="HasBooleanTrueDistribution"/>).
+    /// Returns one more segment than there are distributed Booleans: the Boolean at position n is settled after segment n.
+    /// </summary>
+    private static List<List<ExampleDataTemplateAttribute>> SplitAtDistributedBooleans(
+        IEnumerable<ExampleDataTemplateAttribute> orderedTemplateAttributes,
+        out List<ExampleDataTemplateAttribute> distributedBooleans)
+    {
+        var segments = new List<List<ExampleDataTemplateAttribute>> { new() };
+        distributedBooleans = [];
+        foreach (var templateAttribute in orderedTemplateAttributes)
+        {
+            if (HasBooleanTrueDistribution(templateAttribute))
+            {
+                distributedBooleans.Add(templateAttribute);
+                segments.Add([]);
+            }
+            else
+            {
+                segments[^1].Add(templateAttribute);
+            }
+        }
+
+        return segments;
+    }
+
+    /// <summary>
+    /// Gives a distributed Boolean its values over every object of the type at once, sequentially (#877). The objects that
+    /// get a value are those whose dependency (if any) holds, less the share PopulatedValuesPercentage leaves empty. That
+    /// share is chosen here rather than by RemoveUnnecessaryAttributeValues afterwards, because removing values after the
+    /// quota was applied would skew it. Exactly <see cref="CalculateBooleanTrueCount"/> of the objects given a value are
+    /// given true, chosen at random, and the rest false.
+    /// </summary>
+    private static void AssignDistributedBooleanValues(
+        MetaverseObject[] objectsOfType,
+        ExampleDataTemplateAttribute templateAttribute,
+        ExampleDataDependencyCheck? dependency,
+        Random random)
+    {
+        var metaverseAttribute = templateAttribute.MetaverseAttribute ?? throw new ArgumentNullException(nameof(templateAttribute));
+        var truePercentage = templateAttribute.BoolTrueDistribution ?? throw new ArgumentException("A distributed Boolean needs a BoolTrueDistribution.", nameof(templateAttribute));
+
+        // The share left empty is chosen by the same rule RemoveUnnecessaryAttributeValues applies to every other
+        // attribute (see ShuffleForPopulation), so the two cannot disagree.
+        var (indices, leaveEmpty) = ShuffleForPopulation(objectsOfType.Length, templateAttribute.PopulatedValuesPercentage, random);
+
+        // The shuffle puts the objects in random order, so the first trueCount of those given a value are a random choice.
+        var objectsGivenAValue = indices
+            .Skip(leaveEmpty)
+            .Select(i => objectsOfType[i])
+            .Where(mvo => dependency == null || dependency.IsMet(mvo))
+            .ToArray();
+        var trueCount = CalculateBooleanTrueCount(objectsGivenAValue.Length, truePercentage);
+        for (var i = 0; i < objectsGivenAValue.Length; i++)
+        {
+            objectsGivenAValue[i].AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Attribute = metaverseAttribute,
+                BoolValue = i < trueCount
+            });
+        }
+
+        Log.Verbose("AssignDistributedBooleanValues: {Attribute}: {TrueCount} of {ValueCount} values true ({Percentage}%); {EmptyCount} objects given no value",
+            LogSanitiser.Sanitise(metaverseAttribute.Name), trueCount, objectsGivenAValue.Length, truePercentage, objectsOfType.Length - objectsGivenAValue.Length);
+    }
+
+    /// <summary>
+    /// A Boolean value chosen at random, for a Boolean attribute with no BoolTrueDistribution. Distributed Booleans are
+    /// given their values by <see cref="AssignDistributedBooleanValues"/> instead.
+    /// </summary>
     private static void GenerateMetaverseBooleanValue(MetaverseObject metaverseObject, ExampleDataTemplateAttribute dataGenerationTemplateAttribute, Random random)
     {
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
-        bool value;
-        //if (dataGenerationTemplateAttribute.BoolTrueDistribution.HasValue)
-        //{
-        // a certain number of true values are required over the total number of objects created
-        // TODO (#877): implement true value distribution logic
-        //}
-        //else
-        //{
-        // bool should be random
-        value = Convert.ToBoolean(random.Next(0, 2));
-        //}
-
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
-            BoolValue = value
+            BoolValue = random.Next(0, 2) == 1
         });
     }
 
@@ -1567,6 +1675,28 @@ public class ExampleDataServer
         Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
     }
 
+    /// <summary>
+    /// The one rule for which objects of a type an attribute's PopulatedValuesPercentage leaves empty, shared by
+    /// <see cref="AssignDistributedBooleanValues"/> and <see cref="RemoveUnnecessaryAttributeValues"/> so the two cannot
+    /// drift. Returns every object index in random order; the first <c>LeaveEmptyCount</c> of them are the objects to
+    /// leave empty. They are distinct, so exactly that many are left empty (#2437). The count is
+    /// <c>objectCount * (100 - percentage) / 100</c>, rounded down, so the share kept rounds up.
+    /// <para>
+    /// The objects left empty are drawn from every object of the type, whether or not a conditional attribute's
+    /// condition holds for them. For an attribute with no condition, the share kept is therefore exact. For a
+    /// conditional attribute, an object left empty may be one that would never have had a value anyway, so the share
+    /// of the objects whose condition holds that keep a value equals the percentage on average rather than exactly.
+    /// </para>
+    /// </summary>
+    private static (int[] ShuffledIndices, int LeaveEmptyCount) ShuffleForPopulation(int objectCount, int? populatedValuesPercentage, Random random)
+    {
+        var percentagePopulated = populatedValuesPercentage ?? 100;
+        var leaveEmpty = objectCount * (100 - percentagePopulated) / 100;
+        var indices = Enumerable.Range(0, objectCount).ToArray();
+        random.Shuffle(indices);
+        return (indices, leaveEmpty);
+    }
+
     private static void RemoveUnnecessaryAttributeValues(ExampleDataTemplate dataGenerationTemplate, IReadOnlyCollection<MetaverseObject> metaverseObjects, Random random)
     {
         Log.Verbose("RemoveUnnecessaryAttributeValues: Started...");
@@ -1578,20 +1708,18 @@ public class ExampleDataServer
             // that we need to reduce the number of assignments down for
 
             var metaverseObjectsOfType = metaverseObjects.Where(m => m.Type == dataGenerationObjectType.MetaverseObjectType).ToList();
-            foreach (var dataGenAttributeToReduce in dataGenerationObjectType.TemplateAttributes.Where(q => q.PopulatedValuesPercentage < 100))
+            // a distributed Boolean already left its share empty when its quota was applied (see AssignDistributedBooleanValues)
+            foreach (var dataGenAttributeToReduce in dataGenerationObjectType.TemplateAttributes.Where(q => q.PopulatedValuesPercentage < 100 && !HasBooleanTrueDistribution(q)))
             {
                 // determine how many attributes we have
                 // determine how many we need to eliminate
                 // randomly clear that many from the Metaverse Objects
 
-                var percentage = dataGenAttributeToReduce.PopulatedValuesPercentage ?? 100;
-                var needToRemove = metaverseObjectsOfType.Count * (100 - percentage) / 100;
-                for (var i = 0; i < needToRemove; i++)
-                {
-                    var indexToRemove = random.Next(0, metaverseObjectsOfType.Count);
-                    metaverseObjectsOfType[indexToRemove].AttributeValues.RemoveAll(q => q.Attribute == dataGenAttributeToReduce.MetaverseAttribute);
-                    attributeValuesRemoved++;
-                }
+                // Distinct objects, so exactly the share Population % names is left empty (#2437). Every value the
+                // object holds for the attribute goes, so a multi-valued attribute is emptied, not thinned.
+                var (indices, leaveEmpty) = ShuffleForPopulation(metaverseObjectsOfType.Count, dataGenAttributeToReduce.PopulatedValuesPercentage, random);
+                foreach (var index in indices.Take(leaveEmpty))
+                    attributeValuesRemoved += metaverseObjectsOfType[index].AttributeValues.RemoveAll(q => q.Attribute == dataGenAttributeToReduce.MetaverseAttribute);
             }
         }
         stopwatch.Stop();

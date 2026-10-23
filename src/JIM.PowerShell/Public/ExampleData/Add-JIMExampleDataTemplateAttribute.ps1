@@ -43,10 +43,12 @@ function Add-JIMExampleDataTemplateAttribute {
         What percentage of generated objects receive a value for this attribute.
 
     .PARAMETER BoolTrueDistribution
-        For boolean attributes, what percentage of values are true.
+        For boolean attributes, the percentage of the objects given a value that are given true.
+        The share is exact, rounded to the nearest object with halves rounded up; when omitted,
+        each object is given true or false at random.
 
     .PARAMETER BoolShouldBeRandom
-        For boolean attributes, whether values are generated randomly.
+        Has no effect on generation: boolean values are random whenever BoolTrueDistribution is not set.
 
     .PARAMETER MinDate
         For date attributes, the earliest value to generate.
