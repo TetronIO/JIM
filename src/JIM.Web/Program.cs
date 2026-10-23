@@ -387,37 +387,16 @@ try
                 }
             };
         })
+        // Resolve (and, for the initial admin, just-in-time provision) the JIM identity for
+        // bearer-token callers too, so the PowerShell module / REST API can administer a fresh
+        // deployment without anyone first signing in to the web portal. The resolved roles and
+        // MetaverseObject id are attached to this request's principal. The scheme's settings live in
+        // JimJwtBearerOptions so the tests drive the same ones.
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-        {
-            options.Authority = authority;
-            options.Audience = apiAudience;
-
-            if (authority != null && authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-                options.RequireHttpsMetadata = false;
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidIssuers = validIssuers,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true
-            };
-
-            // Preserve standard OIDC claim names for API requests
-            options.MapInboundClaims = false;
-
-            options.TokenValidationParameters.RoleClaimType = Constants.BuiltInRoles.RoleClaimType;
-
-            // Resolve (and, for the initial admin, just-in-time provision) the JIM identity for
-            // bearer-token callers too, so the PowerShell module / REST API can administer a fresh
-            // deployment without anyone first signing in to the web portal. The resolved roles and
-            // MetaverseObject id are attached to this request's principal.
-            // A token that fails validation is recorded in the security audit log (#2108); see JimJwtBearerEvents.
-            options.Events = JimJwtBearerEvents.Create(async ctx =>
+            JimJwtBearerOptions.Configure(options, authority, apiAudience, validIssuers, async ctx =>
             {
                 await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
-            });
-        });
+            }));
 
     // Both handlers reach the identity provider through one back-channel, which also accepts a chain the JIM certificate
     // store vouches for when a certificate there is trusted for sign-in (#2363): an identity provider whose certificate
