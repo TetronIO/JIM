@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261023103213_AddMetaverseObjectChangeTimeIndex")]
+    [Migration("20261023121903_AddMetaverseObjectChangeTimeIndex")]
     partial class AddMetaverseObjectChangeTimeIndex
     {
         /// <inheritdoc />
@@ -1545,9 +1545,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("AttributeDependencyId")
                         .HasColumnType("integer");
-
-                    b.Property<bool?>("BoolShouldBeRandom")
-                        .HasColumnType("boolean");
 
                     b.Property<int?>("BoolTrueDistribution")
                         .HasColumnType("integer");
