@@ -864,20 +864,6 @@ public class SyncImportTaskProcessor
                 // value writes (inside CreateConnectedSystemObjectsAsync) have committed.
                 await StampBatchImportStateAsync(csoBatch, batchRpeis);
 
-                // Add newly created CSOs to the lookup cache
-                foreach (var newCso in csoBatch)
-                {
-                    var extIdValue = newCso.ExternalIdAttributeValue;
-                    if (extIdValue?.StringValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
-                    else if (extIdValue?.IntValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
-                    else if (extIdValue?.LongValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
-                    else if (extIdValue?.GuidValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
-                }
-
                 // Track committed CSO IDs so future batches can preserve FK references to them
                 foreach (var cso in csoBatch)
                     committedCsoIds.Add(cso.Id);
@@ -935,27 +921,6 @@ public class SyncImportTaskProcessor
                     batchStart, batchStart + batchSize, totalToUpdate);
                 var csoBatch = connectedSystemObjectsToBeUpdated.GetRange(batchStart, batchSize);
 
-                // Capture old external ID values BEFORE the update mutates AttributeValues,
-                // so we can evict stale cache entries if external IDs changed during import.
-                var oldExternalIds = new Dictionary<Guid, (string? primaryIdValue, string? secondaryIdValue)>();
-                foreach (var cso in csoBatch)
-                {
-                    var oldPrimaryValue = cso.ExternalIdAttributeValue;
-                    var oldPrimaryId = oldPrimaryValue?.StringValue
-                        ?? oldPrimaryValue?.IntValue?.ToString()
-                        ?? oldPrimaryValue?.LongValue?.ToString()
-                        ?? oldPrimaryValue?.GuidValue?.ToString();
-
-                    string? oldSecondaryId = null;
-                    if (cso.SecondaryExternalIdAttributeId.HasValue)
-                    {
-                        var oldSecondaryValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                        oldSecondaryId = oldSecondaryValue?.StringValue;
-                    }
-
-                    oldExternalIds[cso.Id] = (oldPrimaryId, oldSecondaryId);
-                }
-
                 // Extract just the RPEIs for this batch of CSOs.
                 // Update-phase CSOs already have real IDs, so we match by ConnectedSystemObjectId.
                 var batchCsoIds = new HashSet<Guid>(csoBatch.Select(c => c.Id));
@@ -981,50 +946,7 @@ public class SyncImportTaskProcessor
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
                 await FlushImportRpeisAsync(batchRpeis);
 
-                // Update cache for CSOs that were updated during import.
-                // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
-                // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
-                // For Normal CSOs: refresh the cache with the current primary external ID.
-                // If any external ID changed (e.g. DN rename), evict the stale cache entry.
-                foreach (var updatedCso in csoBatch)
-                {
-                    var extIdValue = updatedCso.ExternalIdAttributeValue;
-                    if (extIdValue == null)
-                        continue;
-
-                    var newPrimaryId = extIdValue.StringValue
-                        ?? extIdValue.IntValue?.ToString()
-                        ?? extIdValue.LongValue?.ToString()
-                        ?? extIdValue.GuidValue?.ToString();
-
-                    oldExternalIds.TryGetValue(updatedCso.Id, out var oldIds);
-
-                    // Evict old primary cache entry if primary external ID changed
-                    if (oldIds.primaryIdValue != null && newPrimaryId != null
-                        && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _syncServer.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
-                    }
-
-                    // Evict old secondary cache entry if this CSO has a secondary external ID
-                    if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
-                    {
-                        _syncServer.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
-                    }
-
-                    // Add/refresh primary external ID cache entry
-                    if (extIdValue.StringValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
-                    else if (extIdValue.IntValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
-                    else if (extIdValue.LongValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
-                    else if (extIdValue.GuidValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
-                }
-
-                // Release this batch's hydrated AttributeValues now that it's been persisted and
-                // the cache eviction/refresh above has read what it needed from them. See
+                // Release this batch's hydrated AttributeValues now that it's been persisted. See
                 // ReleaseHydratedAttributeValues for why this is safe (#1079 Regression B: an OOM
                 // kill on 2026-07-21 traced to these values otherwise staying resident for the
                 // rest of the run). Note this batch was hydrated via GetConnectedSystemObjectsByIdsAsync
@@ -3501,7 +3423,7 @@ public class SyncImportTaskProcessor
 
     /// <summary>
     /// The import object's External ID value in the form the pre-fetched lookup keys carry it (the same form
-    /// <c>GetAllCsoExternalIdMappingsAsync</c> builds for stored values). Throws for an import object whose External
+    /// <c>GetAllCsoImportStateLookupAsync</c> builds for stored values). Throws for an import object whose External
     /// ID attribute is missing, multi-valued or empty, which the per-object loop reports against its own item.
     /// </summary>
     /// <param name="caseExact">Whose case-exact declaration folds a Text value: the External ID attribute's own unless the

@@ -1,6 +1,7 @@
 ﻿@page "/admin/example-data/templates/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities
+@using JIM.Models.Exceptions
 @using JIM.Models.ExampleData
 @using JIM.Models.Core
 @using JIM.Models.Tasking
@@ -481,7 +482,17 @@
 
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.ExampleData.DeleteTemplateAsync(_template.Id, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
+        try
+        {
+            await jim.ExampleData.DeleteTemplateAsync(_template.Id, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
+        }
+        catch (ExampleDataTemplateException ex)
+        {
+            // a built-in template, which the server refuses; the delete action is hidden for those, so this is a stale page.
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+
         Snackbar.Add($"Deleted \"{name}\".", Severity.Success);
         NavManager.NavigateTo("/admin/example-data");
     }

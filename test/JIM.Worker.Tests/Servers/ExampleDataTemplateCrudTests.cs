@@ -9,6 +9,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
+using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Exceptions;
 using JIM.Models.Security;
 using Moq;
@@ -209,6 +210,69 @@ public class ExampleDataTemplateCrudTests
         await _jim.ExampleData.UpdateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin", replaceObjectTypes: false);
         _exampleRepo.Verify(r => r.UpdateTemplateAsync(template, false), Times.Once,
             "replaceObjectTypes: false must reach the repository");
+    }
+
+    // -- built-in protection (#2431) ---------------------------------------------------------------------------------
+
+    [Test]
+    public void UpdateTemplateAsync_BuiltInTemplate_ThrowsAndRecordsNoActivity()
+    {
+        // the incoming template claims not to be built in; the server must decide from the persisted row.
+        var template = BuildValidTemplate(TemplateId, "Users and Groups");
+        template.BuiltIn = false;
+        _exampleRepo.Setup(r => r.GetTemplateHeaderAsync(TemplateId))
+            .ReturnsAsync(new ExampleDataTemplateHeader { Id = TemplateId, Name = "Users and Groups", BuiltIn = true });
+
+        Assert.That(async () => await _jim.ExampleData.UpdateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<ExampleDataTemplateException>());
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never,
+            "an update of a built-in template must record no Activity");
+        _exampleRepo.Verify(r => r.UpdateTemplateAsync(It.IsAny<ExampleDataTemplate>(), It.IsAny<bool>()), Times.Never,
+            "an update of a built-in template must persist nothing");
+    }
+
+    [Test]
+    public void UpdateTemplateAsync_BuiltInTemplateRenameOnly_ThrowsAndPersistsNothing()
+    {
+        var rename = new ExampleDataTemplate { Id = TemplateId, Name = "Renamed Template" };
+        _exampleRepo.Setup(r => r.GetTemplateHeaderAsync(TemplateId))
+            .ReturnsAsync(new ExampleDataTemplateHeader { Id = TemplateId, Name = "Users and Groups", BuiltIn = true });
+
+        Assert.That(async () => await _jim.ExampleData.UpdateTemplateAsync(rename, ActivityInitiatorType.User, Guid.NewGuid(), "Admin", replaceObjectTypes: false),
+            Throws.TypeOf<ExampleDataTemplateException>());
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never);
+        _exampleRepo.Verify(r => r.UpdateTemplateAsync(It.IsAny<ExampleDataTemplate>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Test]
+    public void DeleteTemplateAsync_BuiltInTemplate_ThrowsAndDeletesNothing()
+    {
+        var template = BuildValidTemplate(TemplateId, "Users and Groups");
+        template.BuiltIn = true;
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(template);
+
+        Assert.That(async () => await _jim.ExampleData.DeleteTemplateAsync(TemplateId, ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<ExampleDataTemplateException>());
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never,
+            "a delete of a built-in template must record no Activity");
+        _exampleRepo.Verify(r => r.DeleteTemplateAsync(It.IsAny<int>()), Times.Never,
+            "a delete of a built-in template must delete nothing");
+    }
+
+    [Test]
+    public async Task DeleteTemplateAsync_CustomTemplate_DeletesAndRecordsActivityAsync()
+    {
+        var template = BuildValidTemplate(TemplateId, "Users and Groups");
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(template);
+
+        await _jim.ExampleData.DeleteTemplateAsync(TemplateId, ActivityInitiatorType.User, Guid.NewGuid(), "Admin");
+
+        _exampleRepo.Verify(r => r.DeleteTemplateAsync(TemplateId), Times.Once);
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.Is<Activity>(a =>
+            a.TargetOperationType == ActivityTargetOperationType.Delete)), Times.Once);
     }
 
     // -- helpers -----------------------------------------------------------------------------------------------------

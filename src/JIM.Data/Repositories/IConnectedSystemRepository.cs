@@ -146,18 +146,10 @@ public interface IConnectedSystemRepository
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a Connected System.
-    /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
-    /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
-    /// Used for cache warming to eliminate N+1 import lookups.
-    /// </summary>
-    /// <param name="connectedSystemId">The Connected System to load mappings for.</param>
-    /// <returns>A dictionary of cache key → CSO GUID mappings.</returns>
-    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
-
-    /// <summary>
     /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
-    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
+    /// dictionary, keyed by <c>CsoLookupKey</c> ("cso:{connectedSystemId}:{attributeId}:{value}", the value
+    /// folded unless the anchor attribute is case-exact). Each CSO is keyed by its primary external ID, or by its
+    /// secondary external ID when it has no primary yet (Pending Provisioning).
     /// </summary>
     public Task<Dictionary<string, JIM.Models.Staging.CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
 
@@ -943,6 +935,18 @@ public interface IConnectedSystemRepository
     /// <param name="pageSize">Rows per page; clamp to a sensible upper bound at the call site.</param>
     /// <returns>The page of changes plus the total count of change records for the CSO.</returns>
     Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize);
+
+    /// <summary>
+    /// The change a Run Profile Execution Item recorded on its Connected System Object, in the change-history shape
+    /// (#2033); null when it recorded none. Read by item, so a change whose object has since been deleted is found.
+    /// </summary>
+    Task<CsoChangeHistoryDto?> GetCsoChangeForExecutionItemAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
+    /// The Connected System Object changes with the given ids, in the change-history shape (#2033); ids with no change
+    /// are skipped. Used for the snapshots a synchronisation's staged Pending Exports recorded.
+    /// </summary>
+    Task<List<CsoChangeHistoryDto>> GetCsoChangesAsync(IReadOnlyCollection<Guid> changeIds);
 
     /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).

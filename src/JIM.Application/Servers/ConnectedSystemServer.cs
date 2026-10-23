@@ -30,7 +30,6 @@ using JIM.Application.Services;
 using JIM.Application.Utilities;
 using JIM.Models.Search;
 using JIM.Utilities;
-using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -6044,181 +6043,6 @@ public partial class ConnectedSystemServer
             connectedSystemId, modifiedSince);
     }
 
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
-    {
-        var cacheKey = BuildCsoCacheKey(connectedSystemId, connectedSystemAttributeId, attributeValue.ToLowerInvariant());
-        return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
-            Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue));
-    }
-
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
-    {
-        var cacheKey = BuildCsoCacheKey(connectedSystemId, connectedSystemAttributeId, attributeValue.ToString());
-        return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
-            Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue));
-    }
-
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue)
-    {
-        var cacheKey = BuildCsoCacheKey(connectedSystemId, connectedSystemAttributeId, attributeValue.ToString());
-        return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
-            Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue));
-    }
-
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
-    {
-        var cacheKey = BuildCsoCacheKey(connectedSystemId, connectedSystemAttributeId, attributeValue.ToString().ToLowerInvariant());
-        return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
-            Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue));
-    }
-
-    #region CSO Lookup Cache
-
-    /// <summary>
-    /// Builds the cache key for a CSO external ID lookup.
-    /// Format: "cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}"
-    /// </summary>
-    public static string BuildCsoCacheKey(int connectedSystemId, int attributeId, string externalIdValue)
-    {
-        return $"cso:{connectedSystemId}:{attributeId}:{externalIdValue}";
-    }
-
-    /// <summary>
-    /// Looks up a CSO using the cache index. On cache hit, loads the entity by PK.
-    /// On cache miss, falls back to the provided DB query and populates the cache.
-    /// </summary>
-    private async Task<ConnectedSystemObject?> GetCsoWithCacheLookupAsync(int connectedSystemId, string cacheKey, Func<Task<ConnectedSystemObject?>> dbFallback)
-    {
-        var cache = Application.Cache;
-        if (cache == null)
-        {
-            // No cache available (e.g., JIM.Web) — fall back to direct DB query
-            return await dbFallback();
-        }
-
-        // Check cache for CSO GUID
-        if (cache.TryGetValue(cacheKey, out Guid cachedCsoId))
-        {
-            Log.Verbose("GetCsoWithCacheLookupAsync: Cache hit for key '{CacheKey}' → CSO {CsoId}", cacheKey, cachedCsoId);
-
-            // Cache hit — load entity by PK (fast indexed lookup)
-            var cso = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, cachedCsoId);
-            if (cso != null)
-                return cso;
-
-            // CSO was deleted since cached — evict stale entry and fall through to DB query
-            cache.Remove(cacheKey);
-            Log.Debug("GetCsoWithCacheLookupAsync: Cache hit for key '{CacheKey}' but CSO {CsoId} no longer exists. Evicted stale entry.", cacheKey, cachedCsoId);
-        }
-        else
-        {
-            Log.Verbose("GetCsoWithCacheLookupAsync: Cache miss for key '{CacheKey}'. Falling back to DB query.", cacheKey);
-        }
-
-        // Cache miss — query DB by attribute value
-        var result = await dbFallback();
-        if (result != null)
-        {
-            // Populate cache with the result
-            cache.Set(cacheKey, result.Id);
-            Log.Verbose("GetCsoWithCacheLookupAsync: Auto-populated cache for key '{CacheKey}' → CSO {CsoId}", cacheKey, result.Id);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Warms the CSO lookup cache for a Connected System by bulk-loading all external ID → GUID mappings.
-    /// Should be called at Worker startup for each Connected System.
-    /// </summary>
-    public async Task WarmCsoCacheAsync(int connectedSystemId, string? connectedSystemName = null)
-    {
-        var cache = Application.Cache;
-        if (cache == null) return;
-
-        var csLabel = connectedSystemName != null
-            ? $"{connectedSystemName} ({connectedSystemId})"
-            : connectedSystemId.ToString();
-
-        Log.Debug("WarmCsoCacheAsync: Starting cache warm for Connected System {ConnectedSystem}", csLabel);
-
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var mappings = await Application.Repository.ConnectedSystems.GetAllCsoExternalIdMappingsAsync(connectedSystemId);
-
-        var total = mappings.Count;
-        var processed = 0;
-        var lastReportedPercentage = 0;
-
-        foreach (var mapping in mappings)
-        {
-            cache.Set(mapping.Key, mapping.Value);
-            processed++;
-
-            // Report progress at every 10% increment
-            if (total > 0)
-            {
-                var percentage = processed * 100 / total;
-                if (percentage >= lastReportedPercentage + 10)
-                {
-                    lastReportedPercentage = percentage / 10 * 10; // Round down to nearest 10
-                    Log.Verbose("WarmCsoCacheAsync: Connected System {ConnectedSystem} cache warm progress: {Percentage}% ({Processed}/{Total})",
-                        csLabel, lastReportedPercentage, processed, total);
-                }
-            }
-        }
-
-        stopwatch.Stop();
-        Log.Debug("WarmCsoCacheAsync: Completed cache warm for Connected System {ConnectedSystem}. Loaded {Count} mappings in {ElapsedMs}ms",
-            csLabel, total, stopwatch.ElapsedMilliseconds);
-    }
-
-    /// <summary>
-    /// Adds a CSO to the lookup cache after it has been created and persisted.
-    /// </summary>
-    public void AddCsoToCache(int connectedSystemId, int attributeId, string externalIdValue, Guid csoId)
-    {
-        var cache = Application.Cache;
-        if (cache == null) return;
-
-        var cacheKey = BuildCsoCacheKey(connectedSystemId, attributeId, externalIdValue.ToLowerInvariant());
-        cache.Set(cacheKey, csoId);
-        Log.Verbose("AddCsoToCache: Added cache entry '{CacheKey}' → CSO {CsoId}", cacheKey, csoId);
-    }
-
-    /// <summary>
-    /// Evicts a CSO from the lookup cache when it has been deleted.
-    /// </summary>
-    public void EvictCsoFromCache(int connectedSystemId, int attributeId, string externalIdValue)
-    {
-        var cache = Application.Cache;
-        if (cache == null) return;
-
-        var cacheKey = BuildCsoCacheKey(connectedSystemId, attributeId, externalIdValue.ToLowerInvariant());
-        cache.Remove(cacheKey);
-        Log.Verbose("EvictCsoFromCache: Evicted cache entry '{CacheKey}'", cacheKey);
-    }
-
-    #endregion
-
-    /// <summary>
-    /// Gets a Connected System Object by its secondary external ID attribute value.
-    /// Used to find PendingProvisioning CSOs during import reconciliation.
-    /// Routes through the CSO lookup cache using the secondary external ID attribute ID as the cache key component.
-    /// </summary>
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue, int? secondaryExternalIdAttributeId = null)
-    {
-        // If we have the attribute ID, route through the cache for O(1) lookup
-        if (secondaryExternalIdAttributeId.HasValue)
-        {
-            var cacheKey = BuildCsoCacheKey(connectedSystemId, secondaryExternalIdAttributeId.Value, secondaryExternalIdValue.ToLowerInvariant());
-            return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
-                Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue));
-        }
-
-        // No attribute ID available — fall back to direct DB query
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
-    }
-
     /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value across ALL object types.
     /// This is used for reference resolution where the referenced object can be of any type.
@@ -9594,6 +9418,23 @@ public partial class ConnectedSystemServer
             .SetTag("page", page)
             .SetTag("pageSize", pageSize);
         return await Application.Repository.ConnectedSystems.GetCsoChangeHistoryAsync(connectedSystemObjectId, page, pageSize);
+    }
+
+    /// <summary>
+    /// The change a Run Profile Execution Item recorded on its Connected System Object (#2033), in the change-history
+    /// shape; null when it recorded none. Found even when the object has since been deleted.
+    /// </summary>
+    public async Task<CsoChangeHistoryDto?> GetCsoChangeForExecutionItemAsync(Guid runProfileExecutionItemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetCsoChangeForExecutionItemAsync(runProfileExecutionItemId);
+    }
+
+    /// <summary>
+    /// The Connected System Object changes with the given ids, in the change-history shape (#2033).
+    /// </summary>
+    public async Task<List<CsoChangeHistoryDto>> GetCsoChangesAsync(IReadOnlyCollection<Guid> changeIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetCsoChangesAsync(changeIds);
     }
 
     /// <summary>

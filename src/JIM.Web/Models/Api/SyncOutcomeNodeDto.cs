@@ -74,6 +74,12 @@ public class SyncOutcomeNodeDto
     public string? MatchedValue { get; set; }
 
     /// <summary>
+    /// On a recorded Pending Export outcome, the id of the change in the item's <c>stagedExportChanges</c> that says what
+    /// the Pending Export would write; null on every other outcome and in a Sync Preview.
+    /// </summary>
+    public Guid? ConnectedSystemObjectChangeId { get; set; }
+
+    /// <summary>
     /// Ordering among siblings, for consistent display order.
     /// </summary>
     public int Ordinal { get; set; }
@@ -96,6 +102,7 @@ public class SyncOutcomeNodeDto
         ObjectMatchingRuleId = model.ObjectMatchingRuleId,
         ObjectMatchingRuleDescriptionSnapshot = model.ObjectMatchingRuleDescriptionSnapshot,
         MatchedValue = model.MatchedValue,
+        ConnectedSystemObjectChangeId = model.ConnectedSystemObjectChangeId,
         Ordinal = model.Ordinal,
         Children = [.. model.Children.Select(FromModel)]
     };

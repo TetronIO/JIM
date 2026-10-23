@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Connected System attributes now say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable by administrators (Schema tab, REST, `-CaseExact`). New Object Matching Rules on them respect case. (#2051)
 - ✨ Scoping criteria and Predefined Searches gain **has a value** and **has no value** for every attribute type, and scoping gains **matches pattern** and **does not match pattern** for text, using a regular expression checked when you save. Also via REST and PowerShell. (#2053)
 - ✨ A portal page's info button now links to the documentation that explains it, and detail pages such as an Activity, a Connected System, a Connector or a Synchronisation Rule gain an info button of their own. (#1454)
+- ✨ Scripts can read what a run did to an object, outcome by outcome, and the attribute values it changed, as the execution item page shows them, even after the object is deleted: `Get-JIMActivityExecutionItem -IncludeOutcomes -IncludeChanges`, or REST. (#2033)
 - ✨ An import's execution item lists every value a Connector could not read under **Attribute Values Not Imported**: what came in, what was expected and why it was refused, with the file and row for a file. Also via REST and `Get-JIMActivityExecutionItem`. (#2066)
 - ✨ See which references an import could not link, and why: an object's page and its execution items list each with its likely cause (a Container not in scope, say), where to fix it and the next step. Also via REST and `Get-JIMConnectedSystemObjectUnresolvedReference`. (#959)
 - ✨ The Connected System page shows how many references are unresolved and opens the Connector Space filtered to the objects holding them, under "Where they point": the changes that would fix them. Also via REST and `Get-JIMConnectedSystemUnresolvedReferenceSummary`. (#959)
@@ -130,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ The Worker no longer loads every Connected System Object into memory before it takes work, so it starts sooner and holds less memory; the `JIM_CACHE_WARM_PARALLELISM` setting that tuned that load is gone. (#2246)
 - 🗑️ The File Connector no longer reads a repeated column header (`member,member`) as a multi-valued attribute: schema discovery, imports and exports refuse such a file, naming the column. Put the values in one column, separated by the Multi-Value Delimiter. (#2186)
 - 🗑️ The Pending Export **Failed** status, its five-attempt limit and the wait between attempts are gone: `maxRetries` and `nextRetryAt` are removed from the REST API and PowerShell output, and `Failed` from `-Status`. Pending Exports left Failed are queued again on upgrade. (#2119)
 - 🗑️ Export, Full Synchronisation and Delta Synchronisation Run Profiles no longer take a **File Path**: an export always writes to the file the Connected System's **File Path** names, so the field did nothing. It is gone from the portal, the REST API and `-FilePath` refuse it, and any already stored is cleared on upgrade.

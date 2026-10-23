@@ -372,7 +372,7 @@ gh run watch <run-id>
 pwsh -File ./scripts/Test-PreReleaseGate.ps1 -Sha "$(git rev-parse HEAD)"
 ```
 
-If no run started (`VERSION` unchanged, or the run was cancelled), dispatch one with `gh workflow run pre-release.yml --ref main`. Do NOT tag until the script exits 0; on exit 1, tell the user the state and run link it prints. The remedy is a fix and another run, never a way round the gate: the `jim-pre-release-gate` job in `release.yml` runs the same script.
+If no run started (`VERSION` unchanged, or the run was cancelled), dispatch one with `gh workflow run pre-release.yml --ref main -f screenshots=true` (a dispatch captures the release's screenshots only when asked to). Do NOT tag until the script exits 0; on exit 1, tell the user the state and run link it prints. The remedy is a fix and another run, never a way round the gate: the `jim-pre-release-gate` job in `release.yml` runs the same script.
 
 **Gate (only while `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`; see Pre-Flight check 8): the deployment lab must have passed on this exact commit, before you tag it.** Merging the release PR started `deploy-lab.yml` on the merge commit by itself (like `pre-release.yml`, it runs on every push to `main` that changes `VERSION`), so do not dispatch it; find that run, wait for it (about 45 minutes, inside the pre-release suite's time), then check:
 

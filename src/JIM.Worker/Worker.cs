@@ -86,15 +86,6 @@ public class Worker : BackgroundService
         _dbContextFactory = dbContextFactory;
     }
 
-    /// <summary>
-    /// Maximum number of Connected Systems to warm concurrently during startup.
-    /// Configurable via JIM_CACHE_WARM_PARALLELISM environment variable.
-    /// </summary>
-    private static int CacheWarmParallelism =>
-        int.TryParse(Environment.GetEnvironmentVariable("JIM_CACHE_WARM_PARALLELISM"), out var value) && value > 0
-            ? value
-            : 3;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         InitialiseLogging();
@@ -128,10 +119,6 @@ public class Worker : BackgroundService
         await HealthcheckFile.KeepFreshWhileAsync(async () =>
         {
             await mainLoopJim.InitialiseDatabaseAsync();
-
-            // Warm the CSO lookup cache for all Connected Systems before accepting tasks.
-            // This is a blocking operation — tasks queue until warming is complete.
-            await WarmCsoCacheForAllConnectedSystemsAsync(mainLoopJim);
 
             // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
             // this scenario is expected to be for when the worker unexpectedly quits and can't execute cancellations.
@@ -925,55 +912,6 @@ public class Worker : BackgroundService
     {
         lock (_currentTasksLock)
             return CurrentTasks.ToList();
-    }
-
-    /// <summary>
-    /// Warms the CSO lookup cache for all Connected Systems at startup.
-    /// Connected Systems are warmed with limited parallelism to balance startup speed against database load.
-    /// This is a blocking operation — the Worker does not accept tasks until warming is complete.
-    /// </summary>
-    private async Task WarmCsoCacheForAllConnectedSystemsAsync(JimApplication jim)
-    {
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var connectedSystems = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
-
-        if (connectedSystems.Count == 0)
-        {
-            Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: No Connected Systems found. Cache warming skipped.");
-            return;
-        }
-
-        var parallelism = CacheWarmParallelism;
-        Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: Warming CSO lookup cache for {Count} Connected System(s) with parallelism {Parallelism}...",
-            connectedSystems.Count, parallelism);
-
-        using var semaphore = new SemaphoreSlim(parallelism);
-        var warmingTasks = connectedSystems.Select(async cs =>
-        {
-            await semaphore.WaitAsync();
-            try
-            {
-                // Each warming task needs its own JimApplication/DbContext to avoid connection sharing issues
-                using var warmJim = _jimFactory.Create();
-                await warmJim.ConnectedSystems.WarmCsoCacheAsync(cs.Id, cs.Name);
-            }
-            catch (Exception ex)
-            {
-                // Log but don't fail startup — the cache will warm on demand for this CS
-                Log.Warning(ex, "WarmCsoCacheForAllConnectedSystemsAsync: Failed to warm cache for Connected System {ConnectedSystemName} ({ConnectedSystemId}). Cache will populate on demand.",
-                    cs.Name, cs.Id);
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        await Task.WhenAll(warmingTasks);
-
-        stopwatch.Stop();
-        Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: Cache warming complete for {Count} Connected System(s) in {ElapsedMs}ms",
-            connectedSystems.Count, stopwatch.ElapsedMilliseconds);
     }
 
     /// <summary>

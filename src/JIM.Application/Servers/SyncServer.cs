@@ -64,16 +64,6 @@ public class SyncServer : ISyncServer
 
     #endregion
 
-    #region CSO Lookup Cache
-
-    public void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId)
-        => _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, externalIdAttributeId, externalIdValue, csoId);
-
-    public void EvictCsoFromCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue)
-        => _jim.ConnectedSystems.EvictCsoFromCache(connectedSystemId, externalIdAttributeId, externalIdValue);
-
-    #endregion
-
     #region Object Matching
 
     public Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules)
