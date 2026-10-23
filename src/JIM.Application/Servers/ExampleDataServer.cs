@@ -1517,12 +1517,9 @@ public class ExampleDataServer
         var metaverseAttribute = templateAttribute.MetaverseAttribute ?? throw new ArgumentNullException(nameof(templateAttribute));
         var truePercentage = templateAttribute.BoolTrueDistribution ?? throw new ArgumentException("A distributed Boolean needs a BoolTrueDistribution.", nameof(templateAttribute));
 
-        // The share left empty follows the rule RemoveUnnecessaryAttributeValues applies to every other attribute, over
-        // the same set (every object of the type), but draws distinct objects so the number left empty is exact.
-        var percentagePopulated = templateAttribute.PopulatedValuesPercentage ?? 100;
-        var leaveEmpty = objectsOfType.Length * (100 - percentagePopulated) / 100;
-        var indices = Enumerable.Range(0, objectsOfType.Length).ToArray();
-        random.Shuffle(indices);
+        // The share left empty is chosen by the same rule RemoveUnnecessaryAttributeValues applies to every other
+        // attribute (see ShuffleForPopulation), so the two cannot disagree.
+        var (indices, leaveEmpty) = ShuffleForPopulation(objectsOfType.Length, templateAttribute.PopulatedValuesPercentage, random);
 
         // The shuffle puts the objects in random order, so the first trueCount of those given a value are a random choice.
         var objectsGivenAValue = indices
@@ -1678,6 +1675,28 @@ public class ExampleDataServer
         Log.Verbose($"ExecuteTemplateAsync: Assigning managers to binary tree took: {assignManagersStopwatch.Elapsed}");
     }
 
+    /// <summary>
+    /// The one rule for which objects of a type an attribute's PopulatedValuesPercentage leaves empty, shared by
+    /// <see cref="AssignDistributedBooleanValues"/> and <see cref="RemoveUnnecessaryAttributeValues"/> so the two cannot
+    /// drift. Returns every object index in random order; the first <c>LeaveEmptyCount</c> of them are the objects to
+    /// leave empty. They are distinct, so exactly that many are left empty (#2437). The count is
+    /// <c>objectCount * (100 - percentage) / 100</c>, rounded down, so the share kept rounds up.
+    /// <para>
+    /// The objects left empty are drawn from every object of the type, whether or not a conditional attribute's
+    /// condition holds for them. For an attribute with no condition, the share kept is therefore exact. For a
+    /// conditional attribute, an object left empty may be one that would never have had a value anyway, so the share
+    /// of the objects whose condition holds that keep a value equals the percentage on average rather than exactly.
+    /// </para>
+    /// </summary>
+    private static (int[] ShuffledIndices, int LeaveEmptyCount) ShuffleForPopulation(int objectCount, int? populatedValuesPercentage, Random random)
+    {
+        var percentagePopulated = populatedValuesPercentage ?? 100;
+        var leaveEmpty = objectCount * (100 - percentagePopulated) / 100;
+        var indices = Enumerable.Range(0, objectCount).ToArray();
+        random.Shuffle(indices);
+        return (indices, leaveEmpty);
+    }
+
     private static void RemoveUnnecessaryAttributeValues(ExampleDataTemplate dataGenerationTemplate, IReadOnlyCollection<MetaverseObject> metaverseObjects, Random random)
     {
         Log.Verbose("RemoveUnnecessaryAttributeValues: Started...");
@@ -1696,14 +1715,11 @@ public class ExampleDataServer
                 // determine how many we need to eliminate
                 // randomly clear that many from the Metaverse Objects
 
-                var percentage = dataGenAttributeToReduce.PopulatedValuesPercentage ?? 100;
-                var needToRemove = metaverseObjectsOfType.Count * (100 - percentage) / 100;
-                for (var i = 0; i < needToRemove; i++)
-                {
-                    var indexToRemove = random.Next(0, metaverseObjectsOfType.Count);
-                    metaverseObjectsOfType[indexToRemove].AttributeValues.RemoveAll(q => q.Attribute == dataGenAttributeToReduce.MetaverseAttribute);
-                    attributeValuesRemoved++;
-                }
+                // Distinct objects, so exactly the share Population % names is left empty (#2437). Every value the
+                // object holds for the attribute goes, so a multi-valued attribute is emptied, not thinned.
+                var (indices, leaveEmpty) = ShuffleForPopulation(metaverseObjectsOfType.Count, dataGenAttributeToReduce.PopulatedValuesPercentage, random);
+                foreach (var index in indices.Take(leaveEmpty))
+                    attributeValuesRemoved += metaverseObjectsOfType[index].AttributeValues.RemoveAll(q => q.Attribute == dataGenAttributeToReduce.MetaverseAttribute);
             }
         }
         stopwatch.Stop();
