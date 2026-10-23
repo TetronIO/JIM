@@ -27,7 +27,7 @@ function ConvertTo-JIMExampleDataTemplateRequest {
     )
 
     $scalarFields = @(
-        'populatedValuesPercentage', 'boolTrueDistribution', 'boolShouldBeRandom',
+        'populatedValuesPercentage', 'boolTrueDistribution',
         'minDate', 'maxDate', 'minNumber', 'maxNumber', 'sequentialNumbers', 'randomNumbers',
         'pattern', 'expression', 'managerDepthPercentage', 'mvaRefMinAssignments', 'mvaRefMaxAssignments'
     )

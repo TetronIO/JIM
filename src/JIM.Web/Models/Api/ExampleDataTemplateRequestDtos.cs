@@ -128,11 +128,6 @@ public class ExampleDataTemplateAttributeRequest
     public int? BoolTrueDistribution { get; set; }
 
     /// <summary>
-    /// Has no effect on generation: boolean values are random whenever BoolTrueDistribution is not set.
-    /// </summary>
-    public bool? BoolShouldBeRandom { get; set; }
-
-    /// <summary>
     /// For date attributes, the earliest value to generate (UTC).
     /// </summary>
     public DateTime? MinDate { get; set; }

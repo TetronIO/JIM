@@ -242,11 +242,6 @@ public class ExampleDataTemplateAttributeDto
     public int? BoolTrueDistribution { get; set; }
 
     /// <summary>
-    /// Has no effect on generation: boolean values are random whenever BoolTrueDistribution is not set.
-    /// </summary>
-    public bool? BoolShouldBeRandom { get; set; }
-
-    /// <summary>
     /// For date attributes, the earliest value to generate.
     /// </summary>
     public DateTime? MinDate { get; set; }
@@ -333,7 +328,6 @@ public class ExampleDataTemplateAttributeDto
             MetaverseAttributeName = entity.MetaverseAttribute?.Name,
             PopulatedValuesPercentage = entity.PopulatedValuesPercentage,
             BoolTrueDistribution = entity.BoolTrueDistribution,
-            BoolShouldBeRandom = entity.BoolShouldBeRandom,
             MinDate = entity.MinDate,
             MaxDate = entity.MaxDate,
             MinNumber = entity.MinNumber,

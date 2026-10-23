@@ -92,7 +92,7 @@ function ConvertTo-JIMExampleDataTemplateAttributeRequest {
 
     $allowedKeys = @(
         'MetaverseAttribute', 'MetaverseAttributeId',
-        'PopulatedValuesPercentage', 'BoolTrueDistribution', 'BoolShouldBeRandom',
+        'PopulatedValuesPercentage', 'BoolTrueDistribution',
         'MinDate', 'MaxDate', 'MinNumber', 'MaxNumber', 'SequentialNumbers', 'RandomNumbers',
         'Pattern', 'Expression', 'ExampleDataSets', 'WeightedStringValues',
         'ManagerDepthPercentage', 'MvaRefMinAssignments', 'MvaRefMaxAssignments',
@@ -124,7 +124,6 @@ function ConvertTo-JIMExampleDataTemplateAttributeRequest {
     $scalarKeyMap = @{
         PopulatedValuesPercentage = 'populatedValuesPercentage'
         BoolTrueDistribution      = 'boolTrueDistribution'
-        BoolShouldBeRandom        = 'boolShouldBeRandom'
         MinDate                   = 'minDate'
         MaxDate                   = 'maxDate'
         MinNumber                 = 'minNumber'
