@@ -21,8 +21,8 @@ function Get-JIMConnectedSystemDirectoryServer {
         The ID of the Connected System.
 
     .OUTPUTS
-        One entry per server found: its HostName, and the Active Directory Site it belongs to (null for
-        directories that have no Sites).
+        One entry per server found: its HostName, the Active Directory Site it belongs to (null for directories
+        that have no Sites), and the id and name of the setting its host name is a value for.
 
     .EXAMPLE
         Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 1
@@ -38,6 +38,13 @@ function Get-JIMConnectedSystemDirectoryServer {
         Get-JIMConnectedSystem -Name "Corp AD" | Get-JIMConnectedSystemDirectoryServer
 
         Discovers domain controllers for the Connected System named "Corp AD".
+
+    .EXAMPLE
+        $server = Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 1 | Where-Object { $_.Site -eq 'London' } | Select-Object -First 1
+        Set-JIMConnectedSystem -Id 1 -SettingValues @{ $server.TargetSettingId = @{ stringValue = $server.HostName } }
+
+        Discovers a server in the London Site and sets it as the value of the setting discovery fills (Preferred
+        Domain Controller, for the LDAP connector), without needing to know that setting's id.
 
     .LINK
         Get-JIMConnectedSystem

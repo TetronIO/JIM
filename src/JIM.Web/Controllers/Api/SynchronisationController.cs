@@ -2407,7 +2407,7 @@ public class SynchronisationController(
     /// setting; only an administrator's own subsequent update of the Connected System does that.
     /// </remarks>
     /// <param name="connectedSystemId">The Connected System whose directory to discover servers in.</param>
-    /// <returns>The discovered directory servers.</returns>
+    /// <returns>The discovered directory servers, each naming the setting (by id and name) its host name is a value for.</returns>
     /// <response code="200">The directory servers discovered.</response>
     /// <response code="400">The Connector does not support directory server discovery, or does not support it for this directory (the LDAP Connector discovers only in Active Directory and Samba AD).</response>
     /// <response code="404">No Connected System with that identifier exists.</response>
@@ -2426,14 +2426,20 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        if (await _application.ConnectedSystems.GetDirectoryServerDiscoveryAsync(connectedSystemId) == null)
+        var discovery = await _application.ConnectedSystems.GetDirectoryServerDiscoveryAsync(connectedSystemId);
+        if (discovery == null)
             return BadRequest(ApiErrorResponse.BadRequest(
                 $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."));
+
+        // Each server names the setting it is a value for, by id as well as name, so a caller can set it without
+        // knowing which Connector it is talking to (Set-JIMConnectedSystem keys settings by id).
+        var targetSettingId = connectedSystem.SettingValues
+            .FirstOrDefault(sv => sv.Setting.Name == discovery.TargetSettingName)?.Setting.Id;
 
         try
         {
             var directoryServers = await _application.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(connectedSystemId);
-            return Ok(directoryServers.Select(ConnectedSystemDirectoryServerDto.FromModel));
+            return Ok(directoryServers.Select(s => ConnectedSystemDirectoryServerDto.FromModel(s, discovery.TargetSettingName, targetSettingId)));
         }
         catch (NotSupportedException ex)
         {
