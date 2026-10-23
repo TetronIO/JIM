@@ -100,10 +100,11 @@ BEGIN
     -- STEP 3: Create User MVOs
     -- ========================================================================
 
+    -- Origin 1 = Internal (housekeeping never deletes it), Status 0 = Normal, DeletionInitiatedByType 0 = NotSet.
     -- Create Alice
     alice_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (alice_id, user_type_id, 1, 1, NOW() - INTERVAL '30 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (alice_id, user_type_id, 1, 0, 0, NOW() - INTERVAL '30 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), alice_id, attr_displayname_id, 'Alice Anderson');
@@ -127,8 +128,8 @@ BEGIN
 
     -- Create Bob
     bob_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (bob_id, user_type_id, 1, 1, NOW() - INTERVAL '25 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (bob_id, user_type_id, 1, 0, 0, NOW() - INTERVAL '25 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), bob_id, attr_displayname_id, 'Bob Brown');
@@ -156,8 +157,8 @@ BEGIN
 
     -- Create Charlie
     charlie_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (charlie_id, user_type_id, 1, 1, NOW() - INTERVAL '28 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (charlie_id, user_type_id, 1, 0, 0, NOW() - INTERVAL '28 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), charlie_id, attr_displayname_id, 'Charlie Cooper');
@@ -176,8 +177,8 @@ BEGIN
 
     -- Create Diana
     diana_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (diana_id, user_type_id, 1, 1, NOW() - INTERVAL '26 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (diana_id, user_type_id, 1, 0, 0, NOW() - INTERVAL '26 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), diana_id, attr_displayname_id, 'Diana Davis');
@@ -196,8 +197,8 @@ BEGIN
 
     -- Create Eve
     eve_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (eve_id, user_type_id, 1, 1, NOW() - INTERVAL '24 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (eve_id, user_type_id, 1, 0, 0, NOW() - INTERVAL '24 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), eve_id, attr_displayname_id, 'Eve Evans');
@@ -216,8 +217,8 @@ BEGIN
 
     -- Create Frank
     frank_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (frank_id, user_type_id, 1, 1, NOW() - INTERVAL '22 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (frank_id, user_type_id, 1, 0, 0, NOW() - INTERVAL '22 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), frank_id, attr_displayname_id, 'Frank Foster');
@@ -236,8 +237,8 @@ BEGIN
 
     -- Create Grace
     grace_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (grace_id, user_type_id, 1, 1, NOW() - INTERVAL '21 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (grace_id, user_type_id, 1, 0, 0, NOW() - INTERVAL '21 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), grace_id, attr_displayname_id, 'Grace Green');
@@ -256,8 +257,8 @@ BEGIN
 
     -- Create Henry
     henry_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (henry_id, user_type_id, 1, 1, NOW() - INTERVAL '19 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (henry_id, user_type_id, 1, 0, 0, NOW() - INTERVAL '19 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), henry_id, attr_displayname_id, 'Henry Harris');
@@ -276,8 +277,8 @@ BEGIN
 
     -- Create Engineers Group
     engineers_group_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "Created")
-    VALUES (engineers_group_id, group_type_id, 1, 1, NOW() - INTERVAL '20 days');
+    INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Status", "DeletionInitiatedByType", "Created")
+    VALUES (engineers_group_id, group_type_id, 1, 0, 0, NOW() - INTERVAL '20 days');
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), engineers_group_id, attr_displayname_id, 'Software Engineers');
@@ -306,6 +307,15 @@ BEGIN
 
     RAISE NOTICE 'Created Engineers Group: %', engineers_group_id;
 
+    -- JIM keeps each object's display name denormalised in CachedDisplayName on every write; list pages, name
+    -- searches and reference names read it, so the seeded objects need it set too.
+    UPDATE "MetaverseObjects" mo
+    SET "CachedDisplayName" = av."StringValue"
+    FROM "MetaverseObjectAttributeValues" av
+    WHERE av."MetaverseObjectId" = mo."Id"
+      AND av."AttributeId" = attr_displayname_id
+      AND mo."Id" IN (alice_id, bob_id, charlie_id, diana_id, eve_id, frank_id, grace_id, henry_id, engineers_group_id);
+
     -- ========================================================================
     -- STEP 4: Create Connected System and Sync Rule for Attribution
     -- ========================================================================
@@ -325,8 +335,9 @@ BEGIN
     -- Create HR Connected System (or find existing)
     SELECT "Id" INTO hr_system_id FROM "ConnectedSystems" WHERE "Name" = 'HR System (Test)' LIMIT 1;
     IF hr_system_id IS NULL THEN
-        INSERT INTO "ConnectedSystems" ("Name", "Description", "Created", "LastUpdated", "Status", "ConnectorDefinitionId", "SettingValuesValid", "ObjectMatchingRuleMode")
-        VALUES ('HR System (Test)', 'Test HR system for change history seed data', NOW() - INTERVAL '60 days', NOW() - INTERVAL '60 days', 1, connector_def_id, true, 0)
+        -- Status 1 = Disabled: a stand-in that must never run. CreatedByType/LastUpdatedByType 3 = System.
+        INSERT INTO "ConnectedSystems" ("Name", "Description", "Created", "LastUpdated", "Status", "ConnectorDefinitionId", "SettingValuesValid", "ObjectMatchingRuleMode", "CreatedByType", "LastUpdatedByType")
+        VALUES ('HR System (Test)', 'Test HR system for change history seed data', NOW() - INTERVAL '60 days', NOW() - INTERVAL '60 days', 1, connector_def_id, true, 0, 3, 3)
         RETURNING "Id" INTO hr_system_id;
         RAISE NOTICE 'Created HR Connected System: %', hr_system_id;
     ELSE
@@ -347,8 +358,8 @@ BEGIN
     -- Create HR Import Sync Rule (or find existing)
     SELECT "Id" INTO hr_sync_rule_id FROM "SyncRules" WHERE "Name" = 'HR User Import' AND "ConnectedSystemId" = hr_system_id LIMIT 1;
     IF hr_sync_rule_id IS NULL THEN
-        INSERT INTO "SyncRules" ("Name", "Created", "ConnectedSystemId", "ConnectedSystemObjectTypeId", "MetaverseObjectTypeId", "Direction", "ProvisionToConnectedSystem", "ProjectToMetaverse", "Enabled", "OutboundDeprovisionAction", "InboundOutOfScopeAction", "EnforceState")
-        VALUES ('HR User Import', NOW() - INTERVAL '60 days', hr_system_id, hr_user_type_id, user_type_id, 1, false, true, true, 0, 0, true)
+        INSERT INTO "SyncRules" ("Name", "Created", "ConnectedSystemId", "ConnectedSystemObjectTypeId", "MetaverseObjectTypeId", "Direction", "ProvisionToConnectedSystem", "ProjectToMetaverse", "Enabled", "OutboundDeprovisionAction", "InboundOutOfScopeAction", "EnforceState", "CreatedByType", "LastUpdatedByType")
+        VALUES ('HR User Import', NOW() - INTERVAL '60 days', hr_system_id, hr_user_type_id, user_type_id, 1, false, true, true, 0, 0, true, 3, 3)
         RETURNING "Id" INTO hr_sync_rule_id;
         RAISE NOTICE 'Created HR User Import Sync Rule: %', hr_sync_rule_id;
     ELSE
@@ -369,23 +380,31 @@ BEGIN
         "TargetType", "TargetOperationType",
         "TargetName", "TargetContext",
         "ConnectedSystemRunType",
-        "ObjectsToProcess", "ObjectsProcessed"
+        "ObjectsToProcess", "ObjectsProcessed",
+        "TotalAdded", "TotalUpdated", "TotalDeleted", "TotalProjected", "TotalJoined", "TotalAttributeFlows",
+        "TotalDisconnected", "TotalDisconnectedOutOfScope", "TotalOutOfScopeRetainJoin", "TotalDriftCorrections",
+        "TotalProvisioned", "TotalExported", "TotalDeprovisioned", "TotalCreated", "TotalPendingExports",
+        "TotalErrors", "PendingExportsConfirmed"
     )
     VALUES (
         activity_id,
         NOW() - INTERVAL '30 days',  -- Created 30 days ago
         NOW() - INTERVAL '30 days',  -- Executed immediately
-        3,  -- Completed
+        2,  -- Complete
         1,  -- User
         alice_id,
         'Alice Anderson',
-        2,  -- ConnectedSystemRunProfile
-        1,  -- Execute
+        3,  -- ConnectedSystemRunProfile
+        5,  -- Execute
         'Full Synchronisation',
         'HR System',
         3,  -- FullSync
         18, -- ObjectsToProcess (4 Alice + 3 Bob + 11 Group changes)
-        18  -- ObjectsProcessed
+        18, -- ObjectsProcessed
+        0, 0, 0, 0, 0, 18,   -- TotalAdded, TotalUpdated, TotalDeleted, TotalProjected, TotalJoined, TotalAttributeFlows
+        0, 0, 0, 0,          -- TotalDisconnected, TotalDisconnectedOutOfScope, TotalOutOfScopeRetainJoin, TotalDriftCorrections
+        0, 0, 0, 0, 0,       -- TotalProvisioned, TotalExported, TotalDeprovisioned, TotalCreated, TotalPendingExports
+        0, 0                 -- TotalErrors, PendingExportsConfirmed
     );
 
     RAISE NOTICE 'Created Activity: %', activity_id;

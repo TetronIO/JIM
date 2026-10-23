@@ -19,7 +19,7 @@ function New-JIMExampleDataTemplate {
         Metaverse Object Type name or id; required), ObjectsToCreate (how many objects to generate; 1 if omitted)
         and Attributes, an optional array of attribute generation hashtables using the API's request field names
         (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate,
-        BoolTrueDistribution, BoolShouldBeRandom, SequentialNumbers, RandomNumbers, WeightedStringValues,
+        BoolTrueDistribution, SequentialNumbers, RandomNumbers, WeightedStringValues,
         ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds,
         AttributeDependency), except that MetaverseAttribute may be a
         Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids, in order.

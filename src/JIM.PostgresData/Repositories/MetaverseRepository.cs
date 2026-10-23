@@ -22,7 +22,7 @@ using Serilog;
 using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
 
-public class MetaverseRepository : IMetaverseRepository
+public partial class MetaverseRepository : IMetaverseRepository
 {
     // Picked up by the JIM diagnostic listener via the "JIM." prefix; named distinctly
     // from the Application-layer "JIM.Database" source to keep tooling traces unambiguous.

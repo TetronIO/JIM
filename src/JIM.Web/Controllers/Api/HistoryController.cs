@@ -6,6 +6,7 @@ using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.History;
 using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
@@ -273,6 +274,66 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         };
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Search changes to Metaverse Objects
+    /// </summary>
+    /// <remarks>
+    /// Finds changes across every Metaverse Object, newest first: by when they were made, by Metaverse Object Type, by
+    /// display name, and by how named attributes changed (for example, Employee Status changed to Disabled). With
+    /// several attribute conditions, <c>All</c> requires every condition to be met by the same change, to one
+    /// Metaverse Object in one Activity; <c>Any</c> requires one. Changes to objects since deleted are included.
+    ///
+    /// Only changes JIM recorded can be found: none are recorded while Metaverse Object change tracking is turned off,
+    /// and history retention removes older ones.
+    /// </remarks>
+    /// <param name="request">The search criteria and the page wanted.</param>
+    /// <returns>One page of matching changes, with the attributes each one changed.</returns>
+    /// <response code="200">Returns the page of matching changes.</response>
+    /// <response code="400">If a condition names an attribute that does not exist or a value not of its type, or the page is too deep.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpPost("metaverse-object-changes/search", Name = "SearchMetaverseObjectChanges")]
+    [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectChangeSearchItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SearchMetaverseObjectChangesAsync([FromBody] MetaverseObjectChangeSearchRequest request)
+    {
+        var page = Math.Max(request.Page, 1);
+        var pageSize = Math.Clamp(request.PageSize, 1, PaginationLimits.MaxPageSize);
+        if (!PaginationLimits.IsWithinDepth(page, pageSize))
+            return BadRequest(ApiErrorResponse.BadRequest(PaginationLimits.DepthExceededMessage(page, pageSize)));
+
+        var criteria = new MetaverseObjectChangeSearchCriteria
+        {
+            FromDate = request.FromDate,
+            ToDate = request.ToDate,
+            ObjectTypeId = request.ObjectTypeId,
+            DisplayNameSearch = request.DisplayNameSearch,
+            MatchMode = request.MatchMode,
+            AttributeConditions = request.Conditions
+                .Select(c => new MetaverseObjectChangeAttributeCondition { AttributeId = c.AttributeId, Operator = c.Operator, Value = c.Value })
+                .ToList()
+        };
+
+        _logger.LogDebug("Searching Metaverse Object changes - Type:{ObjectTypeId}, Conditions:{ConditionCount}, Page:{Page}",
+            request.ObjectTypeId, criteria.AttributeConditions.Count, page);
+
+        try
+        {
+            var result = await _application.Metaverse.SearchMetaverseObjectChangesRangeAsync(
+                criteria, offset: (page - 1) * pageSize, count: pageSize);
+
+            return Ok(PaginatedResponse<MetaverseObjectChangeSearchItem>.Create(
+                result.Results.Select(MetaverseObjectChangeSearchItem.FromResult),
+                result.TotalResults ?? 0,
+                page,
+                pageSize));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
     }
 
     #region Private Helpers

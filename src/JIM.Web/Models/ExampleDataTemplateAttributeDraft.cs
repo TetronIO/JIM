@@ -45,6 +45,9 @@ public class ExampleDataTemplateAttributeDraft
 
     public int? ManagerDepthPercentage { get; set; }
 
+    /// <summary>The percentage of the objects given a Boolean value that are given true; null for true or false at random.</summary>
+    public int? BoolTrueDistribution { get; set; }
+
     public int? MvaMin { get; set; }
 
     public int? MvaMax { get; set; }
@@ -73,6 +76,8 @@ public class ExampleDataTemplateAttributeDraft
 
     public bool ShowsManagerDepth => IsManager;
 
+    public bool ShowsBooleanDistribution => Type == AttributeDataType.Boolean;
+
     public bool ShowsReferenceCountRange => ShowsReferenceTargets && Attribute!.AttributePlurality == AttributePlurality.MultiValued;
 
     /// <summary>Manager depth decides how many Users get a manager, so the Manager attribute takes no population percentage.</summary>
@@ -100,6 +105,7 @@ public class ExampleDataTemplateAttributeDraft
             MaxDate = entity.MaxDate,
             ReferenceObjectTypes = entity.ReferenceMetaverseObjectTypes?.ToList() ?? [],
             ManagerDepthPercentage = entity.ManagerDepthPercentage,
+            BoolTrueDistribution = entity.BoolTrueDistribution,
             MvaMin = entity.MvaRefMinAssignments,
             MvaMax = entity.MvaRefMaxAssignments
         };
@@ -187,6 +193,9 @@ public class ExampleDataTemplateAttributeDraft
         if (ShowsManagerDepth)
             entity.ManagerDepthPercentage = ManagerDepthPercentage;
 
+        if (ShowsBooleanDistribution)
+            entity.BoolTrueDistribution = BoolTrueDistribution;
+
         if (HasCondition && ConditionAttribute != null)
         {
             entity.AttributeDependency = new ExampleDataTemplateAttributeDependency
@@ -241,6 +250,9 @@ public class ExampleDataTemplateAttributeDraft
             else if (ManagerDepthPercentage.Value is < 1 or > 99)
                 errors.Add("The manager depth must be between 1 and 99.");
         }
+
+        if (ShowsBooleanDistribution && BoolTrueDistribution is < 0 or > 100)
+            errors.Add("The percentage of objects given true must be between 0 and 100.");
 
         if (HasCondition)
             ValidateCondition(errors);

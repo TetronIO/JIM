@@ -147,12 +147,12 @@ For testing the Change History UI (CSO and MVO change timelines), use the SQL se
 
 ```bash
 # Run against your development/test database
-docker compose exec jim.database psql -U jim -d jim_test -f /workspaces/JIM/test/data/seed-change-history.sql
+docker compose exec jim.database psql -U jim -d jim_test -f /workspaces/JIM/test/data/seed-change-history-simple.sql
 ```
 
 **Maintaining the SQL Script:**
 
-The SQL script at `test/data/seed-change-history.sql` generates realistic change history data for UI testing. **If the database schema changes** (e.g., new columns, renamed tables, changed relationships for MetaverseObjectChanges, ConnectedSystemObjectChanges, or related tables), you MUST regenerate this script:
+The SQL script at `test/data/seed-change-history-simple.sql` generates realistic change history data for UI testing. **If the database schema changes** (e.g., new columns, renamed tables, changed relationships for MetaverseObjectChanges, ConnectedSystemObjectChanges, or related tables), you MUST regenerate this script:
 
 1. **When to regenerate:**
    - Migrations added/changed for MetaverseObjectChanges, MetaverseObjectChangeAttributes, MetaverseObjectChangeAttributeValues tables
@@ -161,7 +161,7 @@ The SQL script at `test/data/seed-change-history.sql` generates realistic change
    - Changes to MetaverseObject, MetaverseAttribute, or navigation property structures
 
 2. **How to regenerate:**
-   - Read the current `test/data/seed-change-history.sql` to understand the data scenario
+   - Read the current `test/data/seed-change-history-simple.sql` to understand the data scenario
    - Review recent migrations in `src/JIM.PostgresData/Migrations/` to understand schema changes
    - Rewrite the SQL script to match the new schema while preserving the same realistic test scenario:
      - Alice (Person): 5-7 changes including promotions, department moves, email updates, salary changes

@@ -823,7 +823,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         {
             PopulatedValuesPercentage = request.PopulatedValuesPercentage,
             BoolTrueDistribution = request.BoolTrueDistribution,
-            BoolShouldBeRandom = request.BoolShouldBeRandom,
             MinDate = request.MinDate,
             MaxDate = request.MaxDate,
             MinNumber = request.MinNumber,

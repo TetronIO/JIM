@@ -1,13 +1,13 @@
 ---
 title: History
-description: "The cmdlets that query Configuration Change History and deleted objects, and count and clean up change history."
+description: "The cmdlets that query Configuration Change History, deleted objects and changes to Metaverse Objects, and count and clean up change history."
 type: reference
 audience: automation-author
 ---
 
 # History
 
-Cmdlets for querying Configuration Change History, querying deleted objects, and managing change history retention. These cmdlets provide access to the configuration audit trail, the audit trail for deleted objects, and let you control how long change history records are kept.
+Cmdlets for querying Configuration Change History, querying deleted objects, searching changes to Metaverse Objects, and managing change history retention. These cmdlets provide access to the configuration audit trail, the audit trail for deleted objects and the history of every Metaverse Object, and let you control how long change history records are kept.
 
 ---
 
@@ -240,6 +240,89 @@ Get-JIMDeletedObject -ObjectType CSO -ConnectedSystemId 5
 
 ```powershell title="Paginate through large result sets"
 Get-JIMDeletedObject -Page 3 -PageSize 100
+```
+
+---
+
+## Search-JIMMetaverseObjectChange
+
+Searches changes to Metaverse Objects across every object, newest first: by when they were made, by Metaverse Object Type, by display name, and by how named attributes changed. Use it to answer questions such as "who was disabled this month?" or "who moved out of Finance?" without knowing which objects to look at. Each result names the object (including objects since deleted), the Activity the change was made in, and every attribute the change touched, with the values added and removed.
+
+An attribute condition matches a value added (`ChangedTo`), removed (`ChangedFrom`) or either (`AnyChange`). For a single-valued attribute, a change from Active to Disabled records Disabled as added and Active as removed, so `ChangedTo Disabled` finds it and `ChangedFrom Disabled` finds the later re-enablement. With several conditions, `-MatchMode All` requires every condition to be met by the same change, to one Metaverse Object in one Activity.
+
+Only recorded changes can be found: none are recorded while Metaverse Object change tracking is turned off, and history retention removes older ones.
+
+<!-- BEGIN GENERATED: Search-JIMMetaverseObjectChange -->
+### Syntax
+
+```powershell
+# Attribute (default)
+Search-JIMMetaverseObjectChange [-Attribute <string>] [-Operator <string>] [-Value <string>] [-MatchMode <string>] [-ObjectTypeName <string>] [-ObjectTypeId <int>] [-DisplayName <string>] [-FromDate <datetime>] [-ToDate <datetime>] [-All] [-Force] [-Page <int>] [-PageSize <int>]
+
+# Conditions
+Search-JIMMetaverseObjectChange -Condition <hashtable[]> [-MatchMode <string>] [-ObjectTypeName <string>] [-ObjectTypeId <int>] [-DisplayName <string>] [-FromDate <datetime>] [-ToDate <datetime>] [-All] [-Force] [-Page <int>] [-PageSize <int>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Attribute` | `string` | No (Attribute) |  | The name of the Metaverse Attribute whose changes to find. |
+| `Operator` | `string` | No (Attribute) | `'AnyChange'` | How the attribute changed. ChangedTo finds a value added (a single-valued attribute changed to it), ChangedFrom a value removed, and AnyChange either. One of `AnyChange`, `ChangedTo` or `ChangedFrom`. |
+| `Value` | `string` | No (Attribute) |  | The value the attribute changed to or from. Leave it out to match any value. Text and Reference values match case-insensitively, a Reference value against the referenced Metaverse Object's display name, and * matches any run of characters. A date is yyyy-MM-dd, matching the whole day in UTC. |
+| `Condition` | `hashtable[]` | Yes (Conditions) |  | Several attribute conditions, one hashtable each, with the keys Attribute (a name) or AttributeId, Operator (AnyChange when left out) and Value (any value when left out). At most ten. |
+| `MatchMode` | `string` | No | `'All'` | With several conditions, All requires every condition to be met by the same change; Any requires one. One of `All` or `Any`. |
+| `ObjectTypeName` | `string` | No |  | Only changes to Metaverse Objects of the Metaverse Object Type with this name. |
+| `ObjectTypeId` | `int` | No |  | Only changes to Metaverse Objects of the Metaverse Object Type with this id. |
+| `DisplayName` | `string` | No |  | Only changes to Metaverse Objects whose display name contains this text. |
+| `FromDate` | `datetime` | No |  | Only changes made on or after this time. |
+| `ToDate` | `datetime` | No |  | Only changes made on or before this time. |
+| `All` | `switch` | No |  | Returns every page of changes rather than one. It stops after 1,000 pages with a warning; `-Force` reads on. |
+| `Force` | `switch` | No |  | With `-All`, reads every page, past the 1,000-page limit. |
+| `Page` | `int` | No | `1` | The page of changes to return, counting from 1. Ignored with `-All`. At least 1. |
+| `PageSize` | `int` | No | `25` | How many changes each page holds. From 1 to 100. |
+
+### Output
+
+One object per change, newest first, with the attributes it changed and the values added and removed.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `guid` | The change's id. |
+| `ChangeTime` | `datetime` | When the change was made (UTC). |
+| `ChangeType` | `string` | What kind of change it was. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
+| `MetaverseObjectId` | `guid` | The changed Metaverse Object's id. For an object since deleted, the id it had. Empty when the change record predates the object's id being preserved. |
+| `MetaverseObjectDeleted` | `bool` | Whether the Metaverse Object has since been deleted. |
+| `MetaverseObjectDisplayName` | `string` | The Metaverse Object's display name, or as it was when it was deleted. Empty when it has none. |
+| `MetaverseObjectTypeId` | `int` | The Metaverse Object Type's id. Empty when it cannot be known. |
+| `MetaverseObjectTypeName` | `string` | The Metaverse Object Type's name. Empty when it cannot be known. |
+| `InitiatedByType` | `string` | The kind of principal that made the change. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
+| `InitiatedByName` | `string` | The name of the principal that made the change, as it was at the time. |
+| `SyncRuleName` | `string` | The Synchronisation Rule that made the change, as it was named at the time. Empty for a change not made by a synchronisation. |
+| `ActivityId` | `guid` | The Activity the change was made in. Empty for a change not made by a synchronisation. |
+| `AttributeChanges` | `object[]` | The attributes that changed, with the values added and removed. Each has `AttributeId`, `AttributeName`, `Matched`, `AddedValues` and `RemovedValues`. |
+<!-- END GENERATED: Search-JIMMetaverseObjectChange -->
+
+### Examples
+
+```powershell title="Find everyone disabled in the last 30 days"
+Search-JIMMetaverseObjectChange -ObjectTypeName 'Person' -Attribute 'Employee Status' -Operator ChangedTo -Value 'Disabled' -FromDate (Get-Date).AddDays(-30) -All
+```
+
+```powershell title="Find changes that set two attributes at once"
+Search-JIMMetaverseObjectChange -Condition @(
+    @{ Attribute = 'Employee Status'; Operator = 'ChangedTo'; Value = 'Disabled' },
+    @{ Attribute = 'Department'; Operator = 'ChangedTo'; Value = 'Leavers' }
+) -All
+```
+
+```powershell title="List who moved out of any Finance department, and when"
+Search-JIMMetaverseObjectChange -Attribute 'Department' -Operator ChangedFrom -Value 'Finance*' -All |
+    Select-Object ChangeTime, MetaverseObjectDisplayName
+```
+
+```powershell title="Find every change to one person's manager"
+Search-JIMMetaverseObjectChange -DisplayName 'Ana Ruiz' -Attribute 'Manager' -All
 ```
 
 ---
