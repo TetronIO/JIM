@@ -29,10 +29,6 @@ public static class ExampleDataTemplateEditorSave
         if (template == null)
             return new Result("This Data Generation Template no longer exists.", []);
 
-        // the REST API refuses the same; the portal hides its editing controls for these, so this guards a stale page.
-        if (template.BuiltIn)
-            return new Result("Built-in Data Generation Templates cannot be changed. Duplicate it to make a version you can change.", []);
-
         try
         {
             edit(template);
@@ -44,6 +40,8 @@ public static class ExampleDataTemplateEditorSave
         }
         catch (ExampleDataTemplateException ex)
         {
+            // includes a built-in template, which the server refuses; the portal hides its editing controls for
+            // those, so reaching here means a stale page.
             return new Result(ex.Message, []);
         }
         catch (ExampleDataTemplateAttributeException ex)
