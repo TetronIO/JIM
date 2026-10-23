@@ -14,10 +14,9 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Divider)
 }
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String && ShowDirectoryServerDiscovery)
 {
-    @* The one field the Discover Domain Controllers action (issue #1167) fills in, identified by the
-       connector-agnostic ConnectorSettingNames constant the parent matched against, never by display text
-       here. The field itself stays ordinary free text; only the administrator's own selection in the dialog
-       ever writes to it. *@
+    @* The one field the Discover action (issue #1167) fills in, as named by the Connector and matched by the
+       parent, never by display text here. The field itself stays ordinary free text; only the administrator's
+       own selection in the dialog ever writes to it. *@
     <div class="d-flex align-start @CssClass">
         <MudTextField T="string"
                       Label="@SettingValue.Setting.Name"
@@ -29,7 +28,7 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String && ShowD
                       HelperText="@SettingValue.Setting.Description"
                       Variant="Variant.Outlined"
                       Class="flex-grow-1" />
-        <MudTooltip Text="Enter the connectivity settings above before discovering domain controllers." Arrow="true" Placement="Placement.Top" Disabled="@DirectoryServerDiscoveryEnabled">
+        <MudTooltip Text="@($"Enter the connectivity settings above before discovering {DirectoryServerTerm}.")" Arrow="true" Placement="Placement.Top" Disabled="@DirectoryServerDiscoveryEnabled">
             <MudButton Variant="Variant.Outlined" Class="ml-2 jim-field-action"
                        StartIcon="@Icons.Material.Filled.Search"
                        Disabled="@(!DirectoryServerDiscoveryEnabled)"
@@ -184,11 +183,10 @@ else
     public EventCallback FileSelected { get; set; }
 
     /// <summary>
-    /// Whether this field is the one the Discover Domain Controllers action (issue #1167) targets, and so
-    /// should render a Discover... action beside it. The parent decides this by matching the setting's name
-    /// against <see cref="JIM.Models.Staging.ConnectorSettingNames.LdapPreferredDomainController"/> and
-    /// confirming the Connected System's Connector implements <c>IConnectorDirectoryServers</c>; this
-    /// component renders whatever it is told without knowing why.
+    /// Whether this field is the one the Discover action (issue #1167) targets, and so should render a
+    /// Discover... action beside it. The parent decides this by matching the setting's name against the target
+    /// the Connected System's Connector names through <c>IConnectorDirectoryServers</c>; this component renders
+    /// whatever it is told without knowing why.
     /// </summary>
     [Parameter]
     public bool ShowDirectoryServerDiscovery { get; set; }
@@ -202,7 +200,7 @@ else
     public bool DirectoryServerDiscoveryEnabled { get; set; }
 
     /// <summary>
-    /// The Connected System the Discover... action discovers domain controllers for. Only meaningful when
+    /// The Connected System the Discover... action discovers servers for. Only meaningful when
     /// <see cref="ShowDirectoryServerDiscovery"/> is true.
     /// </summary>
     [Parameter]
@@ -215,6 +213,14 @@ else
     /// </summary>
     [Parameter]
     public Func<IReadOnlyCollection<ConnectedSystemSettingValueDraft>>? DirectoryServerDiscoveryDraftSettings { get; set; }
+
+    /// <summary>
+    /// What the Connector calls the servers the Discover... action finds, plural and lower case (e.g. "domain
+    /// controllers"), for the tooltip and the dialog. Only meaningful when <see cref="ShowDirectoryServerDiscovery"/>
+    /// is true.
+    /// </summary>
+    [Parameter]
+    public string? DirectoryServerTerm { get; set; }
 
     private bool _passwordVisible;
 
@@ -253,14 +259,14 @@ else
     }
 
     /// <summary>
-    /// Opens the Discover Domain Controllers dialog and, only if the administrator selects a domain controller,
+    /// Opens the Discover dialog and, only if the administrator selects a server,
     /// fills this field with their choice. The setting is intent and the pin JIM later records against it is
     /// fact (issue #1167): discovery only ever informs the administrator's decision here, it never writes to
     /// the field on its own, and cancelling or closing the dialog leaves the field exactly as it was.
     /// </summary>
     private async Task OpenDirectoryServerDiscoveryDialogAsync()
     {
-        var selectedHostName = await DirectoryServerDiscoveryDialog.ShowAsync(DialogService, ConnectedSystemId, DirectoryServerDiscoveryDraftSettings?.Invoke());
+        var selectedHostName = await DirectoryServerDiscoveryDialog.ShowAsync(DialogService, ConnectedSystemId, DirectoryServerTerm, DirectoryServerDiscoveryDraftSettings?.Invoke());
         if (string.IsNullOrEmpty(selectedHostName))
             return;
 

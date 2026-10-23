@@ -6,10 +6,11 @@ using JIM.Models.Staging;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// API representation of a directory server (domain controller) discovered within a Connected System's
-/// directory (issue #1167). Purely informational: JIM never writes this back to the Preferred Domain Controller
-/// setting automatically; only an administrator's own selection does.
+/// A directory server discovered within a Connected System's directory (for the LDAP Connector, a domain
+/// controller). Purely informational: JIM never writes it to any setting automatically; only an administrator's
+/// own selection does.
 /// </summary>
+/// <remarks>Issue #1167.</remarks>
 public class ConnectedSystemDirectoryServerDto
 {
     /// <summary>

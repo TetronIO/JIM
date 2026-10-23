@@ -120,7 +120,7 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPartition
 
 ## Get-JIMConnectedSystemDirectoryServer
 
-Discovers the domain controllers in a Connected System's directory, with the Active Directory Site each belongs to. Only Connected Systems using the LDAP Connector against an Active Directory or Samba AD directory support this; other connectors, and non-AD-family LDAP directories (OpenLDAP, Generic), return an error naming why. Purely informational: it never writes anything. Aliased as `Get-JIMConnectedSystemDomainController`.
+Discovers the directory servers in a Connected System's directory, for choosing a value for the setting its Connector fills from discovery. For the LDAP Connector these are the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site each belongs to, and the setting is Preferred Domain Controller; Connectors that do not support discovery, and LDAP directories that are not AD-family (OpenLDAP, 389 Directory Server, Generic), return an error naming why. Purely informational: it never writes anything. Aliased as `Get-JIMConnectedSystemDomainController`.
 
 <!-- BEGIN GENERATED: Get-JIMConnectedSystemDirectoryServer -->
 ### Syntax
@@ -137,7 +137,7 @@ Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int>
 
 ### Output
 
-One entry per domain controller found: its HostName, and the Active Directory Site it belongs to.
+One entry per server found: its HostName, and the Active Directory Site it belongs to (empty for directories that have no Sites).
 
 | Property | Type | Description |
 |----------|------|-------------|
