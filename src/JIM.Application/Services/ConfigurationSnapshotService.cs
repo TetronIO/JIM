@@ -1431,7 +1431,6 @@ public class ConfigurationSnapshotService
             Add(children, "minDate", Render(attribute.MinDate), "Minimum date");
             Add(children, "maxDate", Render(attribute.MaxDate), "Maximum date");
             Add(children, "boolTrueDistribution", Render(attribute.BoolTrueDistribution), "Boolean true distribution");
-            Add(children, "boolShouldBeRandom", Render(attribute.BoolShouldBeRandom), "Boolean random");
             Add(children, "managerDepthPercentage", Render(attribute.ManagerDepthPercentage), "Manager depth (%)");
             Add(children, "mvaRefMinAssignments", Render(attribute.MvaRefMinAssignments), "Min reference assignments");
             Add(children, "mvaRefMaxAssignments", Render(attribute.MvaRefMaxAssignments), "Max reference assignments");

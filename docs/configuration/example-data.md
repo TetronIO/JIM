@@ -44,7 +44,7 @@ Each attribute's rules decide its values:
 | Reference | Objects of the chosen Object Types, between a minimum and maximum number for a multi-valued attribute; a Manager attribute builds a reporting hierarchy |
 | Identifier | A new identifier for each object |
 
-**Population %** gives the attribute a value on exactly that share of the objects, rounded up to a whole object, and leaves it empty on the rest. An attribute can depend on another one's value, such as an email address only for distribution groups. For a dependent attribute, Population % is still taken over every object of the type, so about that share of the objects meeting the condition get a value rather than exactly that share. A true-or-false share counts only the objects that end up with a value, so an attribute at 50% Population % and 20% true on 200 objects gives 100 values, 20 of them true.
+**Population %** gives the attribute a value on exactly that share of the objects, rounded up to a whole object, and leaves it empty on the rest. An attribute can depend on another one's value, such as an email address only for distribution groups. For a dependent attribute, Population % is a share of the objects meeting the condition, rounded up to a whole object in the same way. A true-or-false share counts only the objects that end up with a value, so an attribute at 50% Population % and 20% true on 200 objects gives 100 values, 20 of them true.
 
 ### Generate the objects
 

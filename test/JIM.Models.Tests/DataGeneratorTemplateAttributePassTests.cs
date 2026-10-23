@@ -237,8 +237,7 @@ public class DataGeneratorTemplateAttributePassTests
         var subject1 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
-            PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            PopulatedValuesPercentage = 100
         };
         Assert.That(subject1.Validate, Throws.Nothing);
 
@@ -246,7 +245,7 @@ public class DataGeneratorTemplateAttributePassTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = false
+            BoolTrueDistribution = 1
         };
         Assert.That(subject2.Validate, Throws.Nothing);
 
@@ -254,7 +253,7 @@ public class DataGeneratorTemplateAttributePassTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
-            BoolTrueDistribution = 1
+            BoolTrueDistribution = 50
         };
         Assert.That(subject3.Validate, Throws.Nothing);
 
@@ -262,26 +261,9 @@ public class DataGeneratorTemplateAttributePassTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
-            BoolTrueDistribution = 50
-        };
-        Assert.That(subject4.Validate, Throws.Nothing);
-
-        var subject5 = new ExampleDataTemplateAttribute
-        {
-            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
-            PopulatedValuesPercentage = 100,
             BoolTrueDistribution = 100
         };
-        Assert.That(subject5.Validate, Throws.Nothing);
-
-        var subject6 = new ExampleDataTemplateAttribute
-        {
-            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
-            PopulatedValuesPercentage = 100,
-            BoolTrueDistribution = 100,
-            BoolShouldBeRandom = true
-        };
-        Assert.That(subject6.Validate, Throws.Nothing);
+        Assert.That(subject4.Validate, Throws.Nothing);
     }
 
     [Test]

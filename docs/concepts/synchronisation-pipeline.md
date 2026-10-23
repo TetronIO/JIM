@@ -132,7 +132,7 @@ Export sends Pending Exports from the Connector Space to the target Connected Sy
 
 ### Batching and Parallelism
 
-Exports are processed in batches, and a Connector that supports it exports several batches at once: the LDAP Connector's export concurrency is a setting on the Connected System.
+Exports are sent in batches, several at once where the Connector supports it; [Export Performance](../configuration/export-performance.md) explains how many, and how to raise or limit it.
 
 ### References That Cannot Resolve Yet
 

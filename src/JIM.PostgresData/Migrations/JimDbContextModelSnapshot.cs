@@ -998,6 +998,9 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ActivityRunProfileExecutionItemId")
                         .IsUnique();
 
+                    b.HasIndex("ChangeTime")
+                        .HasDatabaseName("IX_MetaverseObjectChanges_ChangeTime");
+
                     b.HasIndex("DeletedMetaverseObjectId")
                         .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
                         .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");
@@ -1539,9 +1542,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("AttributeDependencyId")
                         .HasColumnType("integer");
-
-                    b.Property<bool?>("BoolShouldBeRandom")
-                        .HasColumnType("boolean");
 
                     b.Property<int?>("BoolTrueDistribution")
                         .HasColumnType("integer");

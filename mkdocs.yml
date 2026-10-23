@@ -132,6 +132,7 @@ nav:
       - Connected System Schema: configuration/connected-system-schema.md
       - Connected System Attributes: configuration/connected-system-attributes.md
       - Connected System Passwords: configuration/connected-system-passwords.md
+      - Export Performance: configuration/export-performance.md
       - Removing a Connected System: configuration/removing-a-connected-system.md
       - Run Profiles: configuration/run-profiles.md
       - Synchronisation Rules: configuration/synchronisation-rules.md
@@ -149,6 +150,7 @@ nav:
       - Metaverse Objects: configuration/metaverse-objects.md
       - Predefined Searches: configuration/predefined-searches.md
       - Deleted Objects: configuration/deleted-objects.md
+      - Object Changes: configuration/object-changes.md
       - Example Data: configuration/example-data.md
       - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md

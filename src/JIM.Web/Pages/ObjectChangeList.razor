@@ -1,0 +1,377 @@
+@page "/activity/object-changes"
+@attribute [Authorize(Roles = "User")]
+@using JIM.Models.Core
+@using JIM.Models.History
+@using JIM.Utilities
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject NavigationManager NavManager
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<PageTitle>Object Changes</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ManageHistory" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Object Changes
+    <PageInfo Title="Object Changes" DocsPage="configuration/object-changes.md">
+        Find changes to Metaverse Objects across every object: when they were made, to which type of object, and how
+        their attributes changed. Only changes JIM recorded can be found, so none appear while Metaverse Object change
+        tracking is turned off, and history retention removes older ones.
+    </PageInfo>
+</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
+@* ─── Filters ─── *@
+<MudPaper Outlined="true" Class="pa-4 mt-2">
+    <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.End">
+        <MudItem Class="flex-grow-1" Style="max-width: 280px;">
+            <MudDateRangePicker Label="Changed between" Variant="Variant.Outlined"
+                                DateRange="@DateRange" DateRangeChanged="OnDateRangeChangedAsync"
+                                Clearable="true" AutoClose="true" />
+        </MudItem>
+        <MudItem Class="flex-grow-1" Style="max-width: 280px;">
+            <MudSelect T="int?" Label="Metaverse Object Type" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                       Value="_state.ObjectTypeId" ValueChanged="OnObjectTypeChangedAsync">
+                @foreach (var objectType in _objectTypes)
+                {
+                    <MudSelectItem T="int?" Value="@objectType.Id">@objectType.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudStack>
+
+    <MudStack Spacing="2" Class="mt-4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="flex-wrap">
+            <MudText Typo="Typo.subtitle2">Attribute changes</MudText>
+            @if (_state.Conditions.Count(c => c.AttributeId.HasValue) > 1)
+            {
+                <SegmentedToggle TValue="AttributeConditionMatchMode" Options="@MatchModeOptions" Value="@_state.MatchMode"
+                                 ValueChanged="OnMatchModeChangedAsync" AriaLabel="How conditions combine" Dense="true" />
+            }
+        </MudStack>
+        @foreach (var condition in _state.Conditions)
+        {
+            <MudStack @key="condition.Key" Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
+                <div style="width: 260px;">
+                    <MudSelect T="int?" Label="Attribute" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                               Value="condition.AttributeId" ValueChanged="@(v => OnConditionAttributeChangedAsync(condition, v))">
+                        @foreach (var metaverseAttribute in _attributes)
+                        {
+                            <MudSelectItem T="int?" Value="@metaverseAttribute.Id">@metaverseAttribute.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div style="width: 220px;">
+                    <MudSelect T="AttributeChangeOperator" Label="Condition" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                               Value="condition.Operator" ValueChanged="@(v => OnConditionOperatorChangedAsync(condition, v))">
+                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.ChangedTo">changed to</MudSelectItem>
+                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.ChangedFrom">changed from</MudSelectItem>
+                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.AnyChange">changed (to or from)</MudSelectItem>
+                    </MudSelect>
+                </div>
+                @* Commits on blur or Enter rather than per keystroke: each commit re-runs the search across every
+                   recorded change, and a half-typed value is not a question worth asking the database. *@
+                <div style="flex: 1 1 220px; min-width: 220px;">
+                    <MudTextField T="string" Label="Value" Placeholder="@ValueHint(condition)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  @bind-Value="condition.Value" @bind-Value:after="ApplyFilterChangeAsync" />
+                </div>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Remove condition"
+                               OnClick="@(() => RemoveConditionAsync(condition))" />
+            </MudStack>
+        }
+        <div>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" DropShadow="false"
+                       Disabled="@(_state.Conditions.Count >= JIM.Application.Servers.MetaverseServer.MaxChangeSearchConditions)"
+                       OnClick="AddCondition">Add Condition</MudButton>
+        </div>
+    </MudStack>
+</MudPaper>
+
+@if (_searchError != null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">@_searchError</MudAlert>
+}
+
+<VirtualisedDataGrid @ref="_grid" T="MetaverseObjectChangeSearchResult"
+                     ContainerId="object-change-list"
+                     StateKey="/activity/object-changes"
+                     DefaultSortBy="changed"
+                     DefaultSortDescending="true"
+                     LoadWindow="LoadWindowAsync"
+                     RowClicked="HandleRowClicked"
+                     SingularName="Change"
+                     PluralName="Changes"
+                     SearchPlaceholder="Search Metaverse Object name">
+    <Columns>
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Changed" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <CellTemplate>
+                <MudTooltip Text="@context.Item.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Item.Change.ChangeTime.ToRelativeTime()
+                </MudTooltip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Metaverse Object" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <CellTemplate>
+                <div class="jim-one-line-list">
+                    <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@context.Item.MetaverseObjectTypeName"
+                                Name="@context.Item.MetaverseObjectDisplayName" Href="@ObjectHref(context.Item)" Class="ma-0" />
+                    @if (context.Item.MetaverseObjectDeleted)
+                    {
+                        <span class="mud-text-secondary ml-2">(deleted)</span>
+                    }
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Change" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <CellTemplate>
+                @context.Item.Change.ChangeType.ToString().SplitOnCapitalLetters()
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Attributes" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+            <CellTemplate>
+                <OverflowList TItem="ObjectChangeSummary" Items="@ObjectChangeSummary.Summarise(context.Item)" Title="Attribute changes">
+                    <ItemTemplate Context="summary">
+                        <span class="jim-one-line">
+                            <span class="@(summary.Matched ? "" : "mud-text-secondary") mr-1">@summary.AttributeName:</span>
+                            @if (summary.SingleValued)
+                            {
+                                @if (summary.RemovedValues.Count > 0)
+                                {
+                                    <span class="mud-text-secondary" style="text-decoration: line-through;">@summary.RemovedValues[0]</span>
+                                    <span> → </span>
+                                }
+                                @if (summary.AddedValues.Count > 0)
+                                {
+                                    <strong>@summary.AddedValues[0]</strong>
+                                }
+                                else
+                                {
+                                    <span class="mud-text-secondary">(cleared)</span>
+                                }
+                            }
+                            else
+                            {
+                                @foreach (var added in summary.AddedValues)
+                                {
+                                    <span class="mr-1">+@added</span>
+                                }
+                                @foreach (var removed in summary.RemovedValues)
+                                {
+                                    <span class="mud-text-secondary mr-1">−@removed</span>
+                                }
+                            }
+                        </span>
+                    </ItemTemplate>
+                    <EmptyContent><EmptyValue /></EmptyContent>
+                </OverflowList>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Made by" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <CellTemplate>
+                @if (MadeBy(context.Item) is { } madeBy)
+                {
+                    <OneLineText Text="@madeBy" />
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Activity" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <CellTemplate>
+                @if (context.Item.ActivityId is { } activityId)
+                {
+                    <MudLink Href="@($"/activity/{activityId}")" @onclick:stopPropagation="true">View Activity</MudLink>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No changes to Metaverse Objects named like \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different name, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else if (_state.HasActiveFilters)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                             PrimaryText="No changes match the current filters"
+                             SecondaryText="Widen the time range, or adjust or clear the attribute conditions."
+                             ActionText="Clear Filters"
+                             OnAction="ClearFiltersAsync" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.ManageHistory"
+                             PrimaryText="No changes recorded"
+                             SecondaryText="Changes to Metaverse Objects appear here as synchronisations and administrators make them, while Metaverse Object change tracking is turned on." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
+
+@code {
+    private static readonly IReadOnlyList<SegmentedToggleOption<AttributeConditionMatchMode>> MatchModeOptions =
+    [
+        new(AttributeConditionMatchMode.All, "All conditions", Tooltip: "Every condition met by the same change: one Metaverse Object, in one Activity"),
+        new(AttributeConditionMatchMode.Any, "Any condition", Tooltip: "At least one condition met")
+    ];
+
+    private readonly List<BreadcrumbItem> _breadcrumbs =
+    [
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Object Changes", href: null, disabled: true)
+    ];
+
+    private VirtualisedDataGrid<MetaverseObjectChangeSearchResult>? _grid;
+    private ObjectChangeSearchState _state = new();
+    private List<MetaverseObjectType> _objectTypes = [];
+    private List<MetaverseAttribute> _attributes = [];
+    private string? _searchError;
+
+    private DateRange? DateRange => _state.From.HasValue || _state.To.HasValue ? new DateRange(_state.From, _state.To) : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        _state = ObjectChangeSearchState.FromQuery(System.Web.HttpUtility.ParseQueryString(uri.Query));
+
+        using var jim = JimFactory.Create();
+        _objectTypes = (await jim.Metaverse.GetMetaverseObjectTypesAsync(false)).OrderBy(t => t.Name).ToList();
+        _attributes = (await jim.Metaverse.GetMetaverseAttributesAsync() ?? []).OrderBy(a => a.Name).ToList();
+    }
+
+    private async Task<VirtualisedWindow<MetaverseObjectChangeSearchResult>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken cancellationToken)
+    {
+        using var jim = JimFactory.Create();
+        try
+        {
+            var result = await jim.Metaverse.SearchMetaverseObjectChangesRangeAsync(
+                _state.ToCriteria(request.SearchText), request.StartIndex, request.Count, request.IncludeTotalCount);
+
+            if (_searchError != null)
+            {
+                _searchError = null;
+                await InvokeAsync(StateHasChanged);
+            }
+
+            return new VirtualisedWindow<MetaverseObjectChangeSearchResult>(result.Results, result.TotalResults);
+        }
+        catch (ArgumentException ex)
+        {
+            // A condition the search cannot run (a value not of its attribute's type) is the reader's to fix, so it
+            // is shown above the grid rather than treated as a failure.
+            _searchError = ex.Message;
+            await InvokeAsync(StateHasChanged);
+            return new VirtualisedWindow<MetaverseObjectChangeSearchResult>([], 0);
+        }
+    }
+
+    private static string? ObjectHref(MetaverseObjectChangeSearchResult result) =>
+        !result.MetaverseObjectDeleted && result.MetaverseObjectId is { } id && !string.IsNullOrWhiteSpace(result.MetaverseObjectTypePluralName)
+            ? JIM.Utilities.Utilities.GetMetaverseObjectHref(id, result.MetaverseObjectTypePluralName)
+            : null;
+
+    private static string? MadeBy(MetaverseObjectChangeSearchResult result) =>
+        result.Change.SyncRuleName
+        ?? result.Change.InitiatedByName
+        ?? (result.Change.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.NotSet
+            ? null
+            : result.Change.InitiatedByType.ToString().SplitOnCapitalLetters());
+
+    private string ValueHint(ObjectChangeConditionRow condition)
+    {
+        var type = _attributes.FirstOrDefault(a => a.Id == condition.AttributeId)?.Type;
+        return type switch
+        {
+            AttributeDataType.Text => "Any value; * matches anything",
+            AttributeDataType.Reference => "The referenced object's name; * matches anything",
+            AttributeDataType.DateTime => "yyyy-MM-dd for the whole day",
+            AttributeDataType.Boolean => "true or false",
+            AttributeDataType.Binary => "Leave empty; Binary values are not recorded",
+            _ => "Any value"
+        };
+    }
+
+    private void HandleRowClicked(MetaverseObjectChangeSearchResult result)
+    {
+        var href = ObjectHref(result);
+        if (href != null)
+            NavManager.NavigateTo(href);
+    }
+
+    private void AddCondition()
+    {
+        _state.Conditions.Add(new ObjectChangeConditionRow());
+    }
+
+    private async Task RemoveConditionAsync(ObjectChangeConditionRow condition)
+    {
+        _state.Conditions.Remove(condition);
+        if (condition.AttributeId.HasValue)
+            await ApplyFilterChangeAsync();
+    }
+
+    private async Task OnConditionAttributeChangedAsync(ObjectChangeConditionRow condition, int? attributeId)
+    {
+        condition.AttributeId = attributeId;
+        await ApplyFilterChangeAsync();
+    }
+
+    private async Task OnConditionOperatorChangedAsync(ObjectChangeConditionRow condition, AttributeChangeOperator op)
+    {
+        condition.Operator = op;
+        if (condition.AttributeId.HasValue)
+            await ApplyFilterChangeAsync();
+    }
+
+    private async Task OnMatchModeChangedAsync(AttributeConditionMatchMode matchMode)
+    {
+        _state.MatchMode = matchMode;
+        await ApplyFilterChangeAsync();
+    }
+
+    private async Task OnObjectTypeChangedAsync(int? objectTypeId)
+    {
+        _state.ObjectTypeId = objectTypeId;
+        await ApplyFilterChangeAsync();
+    }
+
+    private async Task OnDateRangeChangedAsync(DateRange? range)
+    {
+        _state.From = range?.Start;
+        _state.To = range?.End;
+        await ApplyFilterChangeAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _state = new ObjectChangeSearchState();
+        await ApplyFilterChangeAsync();
+    }
+
+    /// <summary>
+    /// Writes the filters into the URL, so the search can be bookmarked and shared, then re-counts and reloads the
+    /// grid from the top: the old total and scroll position describe a match set that no longer exists.
+    /// </summary>
+    private async Task ApplyFilterChangeAsync()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        _state.WriteTo(query);
+        var newQuery = query.ToString();
+        NavManager.NavigateTo(string.IsNullOrEmpty(newQuery) ? uri.AbsolutePath : $"{uri.AbsolutePath}?{newQuery}", replace: true);
+
+        if (_grid != null)
+        {
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
+    }
+}
