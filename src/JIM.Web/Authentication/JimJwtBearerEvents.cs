@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 namespace JIM.Web.Authentication;
 
@@ -10,22 +12,90 @@ namespace JIM.Web.Authentication;
 /// </summary>
 public static class JimJwtBearerEvents
 {
+    private const string BearerPrefix = "Bearer ";
+
     /// <summary>
     /// Creates the events for the JWT bearer scheme.
     /// </summary>
     /// <param name="onTokenValidated">Resolves and attaches the caller's JIM identity once the token has validated.</param>
-    public static JwtBearerEvents Create(Func<TokenValidatedContext, Task> onTokenValidated)
+    /// <param name="signingKeyRecovery">Validates a token signed by a key JIM has not fetched yet against the identity
+    /// provider's current key set (#2442).</param>
+    public static JwtBearerEvents Create(Func<TokenValidatedContext, Task> onTokenValidated, BearerSigningKeyRecovery signingKeyRecovery)
     {
         ArgumentNullException.ThrowIfNull(onTokenValidated);
+        ArgumentNullException.ThrowIfNull(signingKeyRecovery);
 
         return new JwtBearerEvents
         {
             OnTokenValidated = onTokenValidated,
 
-            // Security audit events (#2108): a token that fails validation is recorded as failed API keys and
-            // interactive sign-ins are. That includes a mistyped API key prefix, since every bearer token without
-            // the key prefix is validated here.
-            OnAuthenticationFailed = AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync
+            OnAuthenticationFailed = async context =>
+            {
+                // A token signed by a key the identity provider has introduced without publishing it first is accepted
+                // here, once JIM has fetched the key set, rather than refused (#2442).
+                if (await TryRecoverUnknownSigningKeyAsync(context, onTokenValidated, signingKeyRecovery))
+                    return;
+
+                // Security audit events (#2108): a token that fails validation is recorded as failed API keys and
+                // interactive sign-ins are. That includes a mistyped API key prefix, since every bearer token without
+                // the key prefix is validated here.
+                await AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync(context);
+            }
         };
     }
+
+    /// <summary>
+    /// Completes the authentication of a token that failed only because JIM did not hold its signing key, when the
+    /// identity provider's current key set holds it, as JwtBearerHandler completes one that validated first time.
+    /// </summary>
+    private static async Task<bool> TryRecoverUnknownSigningKeyAsync(AuthenticationFailedContext context,
+        Func<TokenValidatedContext, Task> onTokenValidated, BearerSigningKeyRecovery signingKeyRecovery)
+    {
+        if (!IsSigningKeyNotFound(context.Exception))
+            return false;
+
+        string authorization = context.Request.Headers.Authorization.ToString();
+        if (!authorization.StartsWith(BearerPrefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var token = authorization[BearerPrefix.Length..].Trim();
+        var result = await signingKeyRecovery.TryValidateAsync(token, context.Options, context.HttpContext.RequestAborted);
+        if (result == null)
+            return false;
+
+        var validated = new TokenValidatedContext(context.HttpContext, context.Scheme, context.Options)
+        {
+            Principal = new ClaimsPrincipal(result.ClaimsIdentity),
+            SecurityToken = result.SecurityToken
+        };
+        validated.Properties.ExpiresUtc = ToUtc(result.SecurityToken.ValidTo);
+        validated.Properties.IssuedUtc = ToUtc(result.SecurityToken.ValidFrom);
+
+        await onTokenValidated(validated);
+
+        // OnTokenValidated may decide the outcome itself; otherwise the token is accepted.
+        if (validated.Result is { Succeeded: false } decided)
+        {
+            if (decided.Failure != null)
+                context.Fail(decided.Failure);
+            else
+                context.NoResult();
+            return true;
+        }
+
+        context.Principal = validated.Principal;
+        context.Properties = validated.Properties;
+        context.Success();
+        return true;
+    }
+
+    private static bool IsSigningKeyNotFound(Exception? exception) => exception switch
+    {
+        SecurityTokenSignatureKeyNotFoundException => true,
+        AggregateException aggregate => aggregate.InnerExceptions.Any(IsSigningKeyNotFound),
+        _ => false
+    };
+
+    private static DateTimeOffset? ToUtc(DateTime value) =>
+        value == DateTime.MinValue ? null : new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 }

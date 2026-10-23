@@ -11,10 +11,11 @@ namespace JIM.Web.Authentication;
 /// Configures the SSO JWT bearer scheme that guards <c>/api</c>, so the options Program.cs installs are the options
 /// the tests drive (the signing key rollover tests, #2442, run the real handler with them).
 /// <para>
-/// The configuration manager is left to the framework, with IdentityModel's refresh defaults: the identity provider's
-/// discovery document and key set are fetched again every 12 hours, and early (at most every 5 minutes) when a token
-/// names a key JIM has not seen. The back-channel those fetches use is set separately, by
-/// <see cref="IdentityProviderTrustServiceCollectionExtensions.AddIdentityProviderTrust"/>.
+/// The configuration manager is created by the framework: the identity provider's discovery document and key set are
+/// fetched again every 12 hours, and early (at most every 30 seconds, <see cref="IdentityProviderSigningKeys"/>) when a
+/// token names a key JIM has not seen. The back-channel those fetches use is set separately, by
+/// <see cref="IdentityProviderTrustServiceCollectionExtensions.AddIdentityProviderTrust"/>, and the last known good
+/// configuration is turned off by <see cref="IdentityProviderSigningKeys.AddIdentityProviderSigningKeyPolicy"/>.
 /// </para>
 /// </summary>
 public static class JimJwtBearerOptions
@@ -52,7 +53,12 @@ public static class JimJwtBearerOptions
 
         options.TokenValidationParameters.RoleClaimType = Constants.BuiltInRoles.RoleClaimType;
 
-        // A token that fails validation is recorded in the security audit log (#2108); see JimJwtBearerEvents.
-        options.Events = JimJwtBearerEvents.Create(onTokenValidated);
+        // A token signed by a key JIM has not seen makes it fetch the key set early; see IdentityProviderSigningKeys.
+        options.RefreshInterval = IdentityProviderSigningKeys.RefreshInterval;
+
+        // A token signed by a key the identity provider introduced without notice is accepted once JIM has fetched it
+        // (#2442), and a token that still fails validation is recorded in the security audit log (#2108); see
+        // JimJwtBearerEvents.
+        options.Events = JimJwtBearerEvents.Create(onTokenValidated, new BearerSigningKeyRecovery(TimeProvider.System));
     }
 }

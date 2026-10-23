@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using NUnit.Framework;
 
 namespace JIM.Web.Api.Tests;
@@ -80,6 +81,16 @@ public class OidcSignInRecoveryTests
     public void ShouldRestartSignIn_UnrecognisedFailure_DoesNotRestart()
     {
         Assert.That(OidcSignInRecovery.ShouldRestartSignIn(new InvalidOperationException("IDX20803: unable to obtain configuration")), Is.False);
+    }
+
+    [Test]
+    public void ShouldRestartSignIn_IdTokenSignedByAKeyJimHasNotFetched_Restarts()
+    {
+        // The identity provider rolled its signing key without publishing the new one first (#2442). The failed
+        // sign-in has already asked for the key set again, so the next attempt, a round trip later, has the key.
+        var failure = new SecurityTokenSignatureKeyNotFoundException("IDX10503: Signature validation failed.");
+
+        Assert.That(OidcSignInRecovery.ShouldRestartSignIn(failure), Is.True);
     }
 
     [Test]
@@ -167,6 +178,21 @@ public class OidcSignInRecoveryTests
             CookieSecurePolicy.Always, isHttps: true, new HostString("jim.example.test"));
 
         Assert.That(action, Is.EqualTo(OidcRemoteFailureAction.StopRestartLimitReached));
+    }
+
+    [Test]
+    public void DecideAction_SigningKeyStillNotFoundAfterARestart_Surfaces()
+    {
+        // A second miss is not lost cookies, so the sign-in failed page's cookie advice would mislead: let the error
+        // page report it instead.
+        var properties = new AuthenticationProperties();
+        properties.Items[OidcSignInRecovery.RestartCountItemKey] = "1";
+
+        var action = OidcSignInRecovery.DecideAction(
+            new SecurityTokenSignatureKeyNotFoundException("IDX10503: Signature validation failed."), properties,
+            CookieSecurePolicy.Always, isHttps: true, new HostString("jim.example.test"));
+
+        Assert.That(action, Is.EqualTo(OidcRemoteFailureAction.Surface));
     }
 
     [Test]

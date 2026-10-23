@@ -289,6 +289,10 @@ try
                 options.NonceCookie.SameSite = SameSiteMode.Lax;
                 options.NonceCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
             }
+            // An ID token signed by a key JIM has not seen makes it fetch the key set early, at most every 30 seconds
+            // rather than IdentityModel's 5 minutes, so the sign-in restarted after one succeeds (#2442).
+            options.RefreshInterval = IdentityProviderSigningKeys.RefreshInterval;
+
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";
@@ -403,6 +407,9 @@ try
     // comes from an internal certificate authority (AD FS, an on-premises Keycloak) then works without an image
     // rebuild, and trusting its authority takes effect on the next sign-in.
     builder.Services.AddIdentityProviderTrust();
+
+    // Neither handler accepts a token signed by a key the identity provider has retired (#2442).
+    builder.Services.AddIdentityProviderSigningKeyPolicy();
 
     // setup authorisation policies
     builder.Services.AddJimAuthorisation();

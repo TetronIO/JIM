@@ -19,7 +19,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using NUnit.Framework;
 
@@ -27,37 +26,29 @@ namespace JIM.Web.Api.Tests;
 
 /// <summary>
 /// What JIM's <c>/api</c> bearer scheme does when the identity provider rolls its token-signing key (#2442). Each test
-/// runs the real <see cref="JwtBearerHandler"/>, configured by <see cref="JimJwtBearerOptions"/> exactly as Program.cs
-/// configures it, against a fake identity provider over HTTPS behind <see cref="IdentityProviderBackchannel"/>, whose
-/// key set the test swaps at runtime.
+/// runs the real <see cref="JwtBearerHandler"/>, configured by <see cref="JimJwtBearerOptions"/> and
+/// <see cref="IdentityProviderSigningKeys"/> exactly as Program.cs configures it, against a fake identity provider over
+/// HTTPS behind <see cref="IdentityProviderBackchannel"/>, whose key set the test swaps at runtime.
 /// <para>
-/// Findings these pin (IdentityModel 8.19, ASP.NET Core 10):
+/// What these pin (IdentityModel 8.19, ASP.NET Core 10):
 /// </para>
 /// <list type="bullet">
 /// <item>A key published before it is used, and fetched by JIM, is accepted on first use.</item>
-/// <item>After an unannounced rollover the first request signed by the new key is refused (401, audited as
-/// "Access token signing key not found"). The refusal starts a key set refresh on a background thread rather than
-/// waiting for one, so the request that triggered it never sees the new key; the next request after that one
-/// round trip to the identity provider is accepted.</item>
-/// <item>The early refresh is rate-limited by <c>RefreshInterval</c> (5 minutes) from the last early refresh, not
-/// from the last fetch. A rollover within 5 minutes of an earlier early refresh (an earlier rollover, or any token
-/// naming an unknown key) is refused on every request until that window has passed.</item>
-/// <item>A token signed by the retired key is still accepted after the refresh, from IdentityModel's last known good
-/// configuration, for up to an hour.</item>
+/// <item>After an unannounced rollover the first request signed by the new key is accepted: JIM fetches the key set
+/// and waits for it before refusing a token whose key it has not seen.</item>
+/// <item>That fetch happens at most once per <see cref="IdentityProviderSigningKeys.RefreshInterval"/> (30 seconds),
+/// however many such tokens arrive, so a rollover within that time of an earlier fetch is refused until it has
+/// passed.</item>
+/// <item>A token signed by a key the identity provider no longer publishes is refused: IdentityModel's last known
+/// good configuration, which would accept it for up to an hour, is turned off.</item>
 /// </list>
-/// <para>
-/// The fake identity provider holds its key set response until the first request after the switch has been
-/// answered. That models the round trip to a real identity provider, which always outlasts the in-process
-/// validation that follows the refresh request, and keeps the tests deterministic. A change that made the refresh
-/// wait for the fetch would answer the first request only after the hold is released (5 seconds), accepted, and
-/// fail the "refused" assertions here: the point at which these tests, and the guidance built on them, change.
-/// </para>
 /// </summary>
 [TestFixture]
 public class SigningKeyRolloverTests
 {
     private const string Audience = "jim-api";
-    private static readonly TimeSpan HoldLimit = TimeSpan.FromSeconds(5);
+    private const string JimIdentityClaim = "jim-test-resolved";
+    private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(5);
 
     private X509Certificate2 _root = null!;
     private X509Certificate2 _server = null!;
@@ -94,26 +85,35 @@ public class SigningKeyRolloverTests
     [TearDown]
     public void TearDown()
     {
-        _identityProvider.ReleaseKeySet();
         _services?.Dispose();
     }
 
     [Test]
-    public void Configure_JimBearerScheme_KeepsIdentityModelsRefreshDefaults()
+    public void Configure_JimBearerScheme_RefreshesTheKeySetEarlyAtMostEvery30Seconds()
     {
-        // The timings below extrapolate from these: an early refresh at most every 5 minutes, a scheduled one every
-        // 12 hours, and an early refresh when a token names a key JIM has not seen.
         var options = new JwtBearerOptions();
 
         JimJwtBearerOptions.Configure(options, "https://idp.example.com/realms/jim", Audience, ["https://idp.example.com/realms/jim"], _ => Task.CompletedTask);
 
         Assert.Multiple(() =>
         {
-            Assert.That(options.RefreshInterval, Is.EqualTo(TimeSpan.FromMinutes(5)));
+            Assert.That(options.RefreshInterval, Is.EqualTo(TimeSpan.FromSeconds(30)));
+            Assert.That(options.RefreshInterval, Is.EqualTo(IdentityProviderSigningKeys.RefreshInterval));
             Assert.That(options.AutomaticRefreshInterval, Is.EqualTo(TimeSpan.FromHours(12)));
             Assert.That(options.RefreshOnIssuerKeyNotFound, Is.True);
             Assert.That(options.TokenValidationParameters.ValidateIssuerSigningKey, Is.True);
         });
+    }
+
+    [Test]
+    public void AddIdentityProviderSigningKeyPolicy_JimBearerScheme_TurnsOffTheLastKnownGoodConfiguration()
+    {
+        BuildBearerScheme();
+
+        var manager = _services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>().Get(JwtBearerDefaults.AuthenticationScheme).ConfigurationManager;
+
+        Assert.That(manager, Is.InstanceOf<BaseConfigurationManager>());
+        Assert.That(((BaseConfigurationManager)manager!).UseLastKnownGoodConfiguration, Is.False);
     }
 
     [Test]
@@ -137,7 +137,7 @@ public class SigningKeyRolloverTests
     }
 
     [Test]
-    public async Task AuthenticateAsync_UnannouncedRolloverWithinRefreshIntervalOfLastFetch_FirstRefusedNextAcceptedAsync()
+    public async Task AuthenticateAsync_UnannouncedRolloverSoonAfterJimFetchedTheKeySet_FirstRequestAcceptedAsync()
     {
         using var old = SigningKey.Create("old");
         using var replacement = SigningKey.Create("replacement");
@@ -147,49 +147,60 @@ public class SigningKeyRolloverTests
 
         // Seconds after that fetch, the provider replaces its key without notice (a Keycloak key change).
         _identityProvider.Publish(replacement);
-        var (first, next, recovery) = await RequestAcrossRolloverAsync(replacement);
+        var first = await AuthenticateAsync(replacement);
 
-        Record("unannounced, within the refresh interval of the last fetch (no early refresh before)", first, next, recovery);
         Assert.Multiple(() =>
         {
-            Assert.That(first, Is.False, "first request signed by the new key");
-            Assert.That(next, Is.True, "next request, once the background refresh has landed");
-            Assert.That(_audit.Reasons, Is.EqualTo(new[] { "Access token signing key not found" }));
+            Assert.That(first, Is.True, "first request signed by the new key");
+            Assert.That(_audit.Reasons, Is.Empty, "nothing was refused, so nothing is audited");
         });
     }
 
     [Test]
-    public async Task AuthenticateAsync_UnannouncedRolloverLongAfterLastFetch_FirstRefusedNextAcceptedAsync()
+    public async Task AuthenticateAsync_UnannouncedRolloverLongAfterAnEarlierEarlyRefresh_FirstRequestAcceptedAsync()
     {
         using var old = SigningKey.Create("old");
         using var stray = SigningKey.Create("stray");
         using var replacement = SigningKey.Create("replacement");
         _identityProvider.Publish(old);
 
-        // A long-running JIM: it fetched the key set, and has since made an early refresh (here forced by a token
-        // naming a key the provider never published) whose rate-limit window has since passed. The window is
-        // shortened to 1 second so the test need not wait JIM's 5 minutes.
+        // A long-running JIM: it fetched the key set, and has since refreshed it early (here forced by a token naming a
+        // key the provider never published), longer ago than the refresh interval. The interval is shortened to 1
+        // second so the test need not wait JIM's 30.
         var refreshInterval = TimeSpan.FromSeconds(1);
         BuildBearerScheme(refreshInterval);
         Assert.That(await AuthenticateAsync(old), Is.True, "baseline");
-        Assert.That(await AuthenticateAsync(stray), Is.False, "a token naming an unknown key forces an early refresh");
-        await WaitForKeySetFetchesAsync(2);
+        Assert.That(await AuthenticateAsync(stray), Is.False, "a token naming a key the provider never published");
         await Task.Delay(refreshInterval + TimeSpan.FromMilliseconds(500));
 
         _identityProvider.Publish(replacement);
-        var (first, next, recovery) = await RequestAcrossRolloverAsync(replacement);
+        var first = await AuthenticateAsync(replacement);
 
-        Record("unannounced, long after the last fetch and early refresh", first, next, recovery);
         Assert.Multiple(() =>
         {
-            Assert.That(first, Is.False, "first request signed by the new key");
-            Assert.That(next, Is.True, "next request, once the background refresh has landed");
-            Assert.That(_identityProvider.KeySetFetches, Is.EqualTo(3), "one key set fetch, prompted by the first request");
+            Assert.That(first, Is.True, "first request signed by the new key");
+            Assert.That(_audit.Reasons, Is.EqualTo(new[] { "Access token signing key not found" }), "only the stray token is audited");
         });
     }
 
     [Test]
-    public async Task AuthenticateAsync_TokenSignedByRetiredKeyAfterRollover_StillAcceptedFromLastKnownGoodConfigurationAsync()
+    public async Task AuthenticateAsync_UnannouncedRollover_ResolvesTheCallersJimIdentityAsync()
+    {
+        using var old = SigningKey.Create("old");
+        using var replacement = SigningKey.Create("replacement");
+        _identityProvider.Publish(old);
+        BuildBearerScheme();
+        Assert.That(await AuthenticateAsync(old), Is.True, "baseline");
+
+        _identityProvider.Publish(replacement);
+        var result = await AuthenticateForResultAsync(replacement);
+
+        Assert.That(result.Succeeded, Is.True);
+        Assert.That(result.Principal!.HasClaim(JimIdentityClaim, "true"), Is.True, "OnTokenValidated ran for the accepted token");
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_TokenSignedByRetiredKeyAfterRollover_RefusedAsync()
     {
         using var old = SigningKey.Create("old");
         using var replacement = SigningKey.Create("replacement");
@@ -197,92 +208,91 @@ public class SigningKeyRolloverTests
         BuildBearerScheme();
         Assert.That(await AuthenticateAsync(old), Is.True, "baseline");
         _identityProvider.Publish(replacement);
-        var (_, next, _) = await RequestAcrossRolloverAsync(replacement);
-        Assert.That(next, Is.True, "JIM now holds the provider's new key set, which no longer carries the old key");
+        Assert.That(await AuthenticateAsync(replacement), Is.True, "JIM now holds the provider's new key set, which no longer carries the old key");
+        await WaitUntilJimHoldsAsync(replacement.KeyId);
 
-        // The retired key is gone from the key set JIM holds, yet a token it signs is still accepted: IdentityModel
-        // retries a "signing key not found" failure against its last known good configurations, which by default it
-        // keeps for an hour (BaseConfigurationManager.LastKnownGoodLifetime). After a rollover made because the old key
-        // was compromised (AD FS Update-AdfsCertificate -Urgent), that is an hour in which a token forged with it is
-        // still accepted. Recorded on #2442; a change that stops this fails here.
+        // After a rollover made because the old key was compromised (AD FS Update-AdfsCertificate -Urgent), a token
+        // forged with it must be refused at once, not accepted from the last known good configuration for an hour.
         var retired = await AuthenticateAsync(old);
 
-        Record("token signed by the retired key, after the refresh", retired, retired, TimeSpan.Zero);
-        Assert.That(retired, Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(retired, Is.False);
+            Assert.That(_audit.Reasons, Is.EqualTo(new[] { "Access token signing key not found" }));
+        });
     }
 
     [Test]
-    public async Task AuthenticateAsync_UnannouncedRolloverWithinRefreshIntervalOfEarlyRefresh_RefusedUntilIntervalPassesAsync()
+    public async Task AuthenticateAsync_ManyTokensNamingUnknownKeys_FetchTheKeySetOnceAsync()
+    {
+        using var old = SigningKey.Create("old");
+        _identityProvider.Publish(old);
+        BuildBearerScheme();
+        Assert.That(await AuthenticateAsync(old), Is.True, "baseline");
+
+        // Anyone can send a token naming a key JIM has not seen; that must not let them make JIM fetch the key set on
+        // every request.
+        var strays = Enumerable.Range(0, 10).Select(i => SigningKey.Create($"stray{i}")).ToList();
+        try
+        {
+            var results = await Task.WhenAll(strays.Select(AuthenticateAsync));
+            await Task.Delay(TimeSpan.FromSeconds(1));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(results, Is.All.False);
+                // The baseline fetch, JIM's own fetch, and the configuration manager's background refresh.
+                Assert.That(_identityProvider.KeySetFetches, Is.LessThanOrEqualTo(3));
+            });
+        }
+        finally
+        {
+            strays.ForEach(s => s.Dispose());
+        }
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_UnannouncedRolloverWithinRefreshIntervalOfEarlierFetch_RefusedUntilIntervalPassesAsync()
     {
         using var old = SigningKey.Create("old");
         using var stray = SigningKey.Create("stray");
         using var replacement = SigningKey.Create("replacement");
         _identityProvider.Publish(old);
 
-        // JIM uses a 5-minute window; 10 seconds here keeps the test short while leaving room for the early refresh's
-        // own fetch, which can take a few seconds on a Windows machine (localhost is tried over IPv6 first, and the
-        // fake identity provider listens on IPv4 only). Every interval scales with it.
+        // JIM uses 30 seconds; 10 here keeps the test short while leaving room for the fetches themselves, which can
+        // take a few seconds on a Windows machine (localhost is tried over IPv6 first, and the fake identity provider
+        // listens on IPv4 only).
         var refreshInterval = TimeSpan.FromSeconds(10);
         BuildBearerScheme(refreshInterval);
         Assert.That(await AuthenticateAsync(old), Is.True, "baseline");
-        var earlyRefresh = Stopwatch.StartNew();
-        Assert.That(await AuthenticateAsync(stray), Is.False, "a token naming an unknown key forces an early refresh");
-        await WaitForKeySetFetchesAsync(2);
+        var earlyFetch = Stopwatch.StartNew();
+        Assert.That(await AuthenticateAsync(stray), Is.False, "a token naming an unknown key makes JIM fetch the key set");
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+        var fetchesBeforeWindow = _identityProvider.KeySetFetches;
 
-        // The provider rolls its key inside the window that early refresh opened.
+        // The provider rolls its key inside the window that fetch opened.
         _identityProvider.Publish(replacement);
         var refusedInsideWindow = 0;
-        while (earlyRefresh.Elapsed < refreshInterval - TimeSpan.FromMilliseconds(750))
+        while (earlyFetch.Elapsed < refreshInterval - TimeSpan.FromMilliseconds(750))
         {
             Assert.That(await AuthenticateAsync(replacement), Is.False, "inside the window every request is refused");
             refusedInsideWindow++;
             await Task.Delay(200);
         }
 
-        Assert.That(_identityProvider.KeySetFetches, Is.EqualTo(2), "no key set fetch inside the window");
+        Assert.That(_identityProvider.KeySetFetches, Is.EqualTo(fetchesBeforeWindow), "no key set fetch inside the window");
 
-        var restOfWindow = refreshInterval - earlyRefresh.Elapsed + TimeSpan.FromMilliseconds(250);
+        var restOfWindow = refreshInterval - earlyFetch.Elapsed + TimeSpan.FromMilliseconds(250);
         if (restOfWindow > TimeSpan.Zero)
             await Task.Delay(restOfWindow);
-        var (first, next, recovery) = await RequestAcrossRolloverAsync(replacement);
+        var first = await AuthenticateAsync(replacement);
 
-        Record($"unannounced, within the refresh interval of an early refresh ({refusedInsideWindow} refusals inside the window)",
-            first, next, recovery);
         Assert.Multiple(() =>
         {
             Assert.That(refusedInsideWindow, Is.GreaterThan(0));
-            Assert.That(first, Is.False, "first request after the window also refuses, and prompts the fetch");
-            Assert.That(next, Is.True, "next request, once that fetch has landed");
-            Assert.That(_identityProvider.KeySetFetches, Is.EqualTo(3));
+            Assert.That(first, Is.True, "first request after the window fetches the key set and is accepted");
         });
     }
-
-    /// <summary>
-    /// Sends the first request signed by <paramref name="key"/> while the provider holds its key set response, then
-    /// releases it, waits for the refreshed key set to reach JIM, and sends the next.
-    /// </summary>
-    private async Task<(bool First, bool Next, TimeSpan Recovery)> RequestAcrossRolloverAsync(SigningKey key)
-    {
-        var clock = Stopwatch.StartNew();
-        _identityProvider.HoldKeySet();
-        var firstRequest = AuthenticateAsync(key);
-        await Task.WhenAny(firstRequest, Task.Delay(HoldLimit));
-        _identityProvider.ReleaseKeySet();
-        var first = await firstRequest;
-
-        await WaitUntilJimHoldsAsync(key.KeyId);
-        var next = await AuthenticateAsync(key);
-        return (first, next, clock.Elapsed);
-    }
-
-    /// <summary>
-    /// Writes the outcome to the test output, the evidence quoted on #2442. The time is from the first request to
-    /// the refreshed key set reaching JIM, which is one round trip to the identity provider (here dominated by the
-    /// test machine's certificate chain checks, not by anything JIM waits for).
-    /// </summary>
-    private static void Record(string scenario, bool first, bool next, TimeSpan recovery) =>
-        TestContext.Out.WriteLine($"{scenario}: first request {(first ? "accepted" : "refused")}; next request " +
-                                  $"{(next ? "accepted" : "refused")}, {recovery.TotalMilliseconds:F0} ms after the first was sent");
 
     private void BuildBearerScheme(TimeSpan? refreshInterval = null)
     {
@@ -295,51 +305,47 @@ public class SigningKeyRolloverTests
         services.AddSingleton<IFailedAuthenticationRecorder>(_audit);
         services.AddAuthentication().AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
         {
-            JimJwtBearerOptions.Configure(options, _identityProvider.Issuer, Audience, [_identityProvider.Issuer], _ => Task.CompletedTask);
+            JimJwtBearerOptions.Configure(options, _identityProvider.Issuer, Audience, [_identityProvider.Issuer], ctx =>
+            {
+                // Stands in for ResolveAndAttachJimIdentityAsync.
+                ((ClaimsIdentity)ctx.Principal!.Identity!).AddClaim(new Claim(JimIdentityClaim, "true"));
+                return Task.CompletedTask;
+            });
             if (refreshInterval is { } interval)
                 options.RefreshInterval = interval;
         });
 
-        // As AddIdentityProviderTrust does in Program.cs.
+        // As AddIdentityProviderTrust and AddIdentityProviderSigningKeyPolicy do in Program.cs.
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure(options => options.BackchannelHttpHandler = backchannel.CreateHandler());
+        services.AddIdentityProviderSigningKeyPolicy();
         _services = services.BuildServiceProvider();
     }
 
-    private async Task<bool> AuthenticateAsync(SigningKey key)
+    private async Task<bool> AuthenticateAsync(SigningKey key) => (await AuthenticateForResultAsync(key)).Succeeded;
+
+    private async Task<AuthenticateResult> AuthenticateForResultAsync(SigningKey key)
     {
         // One scope per request, as ASP.NET Core gives each request: the handler, and the result it caches, are scoped.
         await using var scope = _services.CreateAsyncScope();
         var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
         context.Request.Headers.Authorization = $"Bearer {key.IssueToken(_identityProvider.Issuer, Audience)}";
-        var result = await context.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
-        return result.Succeeded;
+        return await context.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
     }
 
     private async Task WaitUntilJimHoldsAsync(string keyId)
     {
         var manager = _services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>().Get(JwtBearerDefaults.AuthenticationScheme).ConfigurationManager!;
         var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < HoldLimit)
+        while (deadline.Elapsed < WaitLimit)
         {
-            var configuration = (OpenIdConnectConfiguration)await manager.GetConfigurationAsync(CancellationToken.None);
+            var configuration = await manager.GetConfigurationAsync(CancellationToken.None);
             if (configuration.SigningKeys.Any(k => k.KeyId == keyId))
                 return;
             await Task.Delay(20);
         }
 
-        Assert.Fail($"JIM never fetched the key set holding '{keyId}'.");
-    }
-
-    private async Task WaitForKeySetFetchesAsync(int count)
-    {
-        var deadline = Stopwatch.StartNew();
-        while (_identityProvider.KeySetFetches < count && deadline.Elapsed < HoldLimit)
-            await Task.Delay(20);
-        Assert.That(_identityProvider.KeySetFetches, Is.EqualTo(count), "key set fetches");
-
-        // The fetch has been answered; give the configuration manager a moment to take it in.
-        await Task.Delay(200);
+        Assert.Fail($"JIM's configuration manager never fetched the key set holding '{keyId}'.");
     }
 
     /// <summary>
@@ -348,7 +354,6 @@ public class SigningKeyRolloverTests
     private sealed class FakeIdentityProvider
     {
         private volatile string _keySet = """{"keys":[]}""";
-        private readonly ManualResetEventSlim _keySetReleased = new(true);
         private int _keySetFetches;
 
         public int Port { get; set; }
@@ -360,16 +365,11 @@ public class SigningKeyRolloverTests
         public void Reset()
         {
             _keySet = """{"keys":[]}""";
-            _keySetReleased.Set();
             Interlocked.Exchange(ref _keySetFetches, 0);
         }
 
         public void Publish(params SigningKey[] keys) =>
             _keySet = JsonSerializer.Serialize(new { keys = keys.Select(k => k.ToJwk()).ToArray() });
-
-        public void HoldKeySet() => _keySetReleased.Reset();
-
-        public void ReleaseKeySet() => _keySetReleased.Set();
 
         public string? Respond(string path)
         {
@@ -384,10 +384,8 @@ public class SigningKeyRolloverTests
 
             if (path.EndsWith("/protocol/openid-connect/certs", StringComparison.Ordinal))
             {
-                _keySetReleased.Wait(HoldLimit);
-                var keySet = _keySet;
                 Interlocked.Increment(ref _keySetFetches);
-                return keySet;
+                return _keySet;
             }
 
             return null;

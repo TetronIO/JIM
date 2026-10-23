@@ -339,7 +339,7 @@ public class AccessTokenAuthenticationAuditTests
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = SigningKey
             },
-            Events = JimJwtBearerEvents.Create(onTokenValidated)
+            Events = JimJwtBearerEvents.Create(onTokenValidated, new BearerSigningKeyRecovery(TimeProvider.System))
         };
         var monitor = new Mock<IOptionsMonitor<JwtBearerOptions>>();
         monitor.Setup(m => m.Get(It.IsAny<string>())).Returns(options);
