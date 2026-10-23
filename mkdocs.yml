@@ -251,6 +251,7 @@ nav:
       - Execution Items: powershell/execution-items.md
       - API Keys: powershell/api-keys.md
       - Certificates: powershell/certificates.md
+      - Identity Providers: powershell/identity-providers.md
       - Service Settings: powershell/service-settings.md
       - Feature Flags: powershell/feature-flags.md
       - Security: powershell/security.md

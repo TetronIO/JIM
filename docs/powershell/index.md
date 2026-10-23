@@ -99,6 +99,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Execution Items](execution-items.md) | 2 | Read what happened to one object in a run, what caused it, and what it went on to cause |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
 | [Certificates](certificates.md) | 8 | Manage trusted certificates for connector authentication, and approve the certificate a Connected System's server presents |
+| [Identity Providers](identity-providers.md) | 1 | Register JIM with its identity provider, and repair the registration |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Feature Flags](feature-flags.md) | 3 | View and toggle Preview features |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
