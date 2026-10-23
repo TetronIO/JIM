@@ -201,6 +201,86 @@ public class ExampleDataTemplateCrudDatabaseTests
             Throws.InstanceOf<InvalidOperationException>(), "An update against a template that no longer exists must fail fast, not silently do nothing.");
     }
 
+    [Test]
+    public async Task CreateTemplateAsync_CloneOfAPersistedTemplate_InsertsANewTemplateWithoutDuplicatingReferencesAsync()
+    {
+        // the Duplicate path (#1466): the source is read back through the retrieval the portal uses, cloned, and the
+        // clone created on a different (no-tracking) context, as ExampleDataServer.CopyTemplateAsync does.
+        await SeedReferenceDataAsync();
+        int sourceId;
+        await using (var seed = NewContext())
+        {
+            var repository = new PostgresDataRepository(seed);
+            var source = await BuildTemplateGraphAsync(seed, "Users", ["Display Name", "Job Title"]);
+            await repository.ExampleData.CreateTemplateAsync(source);
+            sourceId = source.Id;
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var source = await repository.ExampleData.GetTemplateAsync(sourceId);
+            var copy = source!.CloneGraph();
+            copy.Name = "Users (copy)";
+            Assert.That(async () => await repository.ExampleData.CreateTemplateAsync(copy), Throws.Nothing);
+        }
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.ExampleDataTemplates.CountAsync(), Is.EqualTo(2));
+            Assert.That(await verify.ExampleDataObjectTypes.CountAsync(), Is.EqualTo(2));
+            Assert.That(await verify.ExampleDataTemplateAttributes.CountAsync(), Is.EqualTo(4));
+            Assert.That(await verify.MetaverseObjectTypes.CountAsync(), Is.EqualTo(1), "The referenced Metaverse Object Type must not be duplicated.");
+            Assert.That(await verify.MetaverseAttributes.CountAsync(), Is.EqualTo(2), "The referenced Metaverse Attributes must not be duplicated.");
+            Assert.That(await verify.ExampleDataSets.CountAsync(), Is.EqualTo(1), "The referenced Example Data Set must not be duplicated.");
+            Assert.That(await verify.ExampleDataSetValues.CountAsync(), Is.EqualTo(2));
+        }
+
+        var original = await verify.ExampleDataTemplates.Include(t => t.ObjectTypes).ThenInclude(ot => ot.TemplateAttributes).SingleAsync(t => t.Id == sourceId);
+        Assert.That(original.ObjectTypes.Single().TemplateAttributes, Has.Count.EqualTo(2), "Copying must leave the source template intact.");
+    }
+
+    [Test]
+    public async Task UpdateTemplateAsync_PersistedTemplateLoadedMutatedAndSaved_ReplacesTheGraphAsync()
+    {
+        // the portal editor's shape (#1466): load through the full retrieval, change one attribute and remove another,
+        // then save the same (detached) instance on a fresh context.
+        await SeedReferenceDataAsync();
+        int templateId;
+        await using (var seed = NewContext())
+        {
+            var repository = new PostgresDataRepository(seed);
+            var template = await BuildTemplateGraphAsync(seed, "Users", ["Display Name", "Job Title"]);
+            await repository.ExampleData.CreateTemplateAsync(template);
+            templateId = template.Id;
+        }
+
+        await using (var load = NewContext())
+        {
+            var repository = new PostgresDataRepository(load);
+            var template = await repository.ExampleData.GetTemplateAsync(templateId);
+            var attributes = template!.ObjectTypes.Single().TemplateAttributes;
+            attributes.Single(a => a.MetaverseAttribute!.Name == "Job Title").PopulatedValuesPercentage = 40;
+            attributes.RemoveAll(a => a.MetaverseAttribute!.Name == "Display Name");
+
+            await using var save = NewContext();
+            Assert.That(async () => await new PostgresDataRepository(save).ExampleData.UpdateTemplateAsync(template, replaceObjectTypes: true), Throws.Nothing);
+        }
+
+        await using var verify = NewContext();
+        var updated = await verify.ExampleDataTemplates.Include(t => t.ObjectTypes).ThenInclude(ot => ot.TemplateAttributes).ThenInclude(ta => ta.MetaverseAttribute).SingleAsync();
+        var remaining = updated.ObjectTypes.Single().TemplateAttributes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(remaining.MetaverseAttribute!.Name, Is.EqualTo("Job Title"));
+            Assert.That(remaining.PopulatedValuesPercentage, Is.EqualTo(40));
+            Assert.That(await verify.ExampleDataTemplateAttributes.CountAsync(), Is.EqualTo(1), "The removed attribute's row must be deleted, not orphaned.");
+            Assert.That(await verify.MetaverseAttributes.CountAsync(), Is.EqualTo(2));
+            Assert.That(await verify.ExampleDataSetValues.CountAsync(), Is.EqualTo(2));
+        }
+    }
+
     // -- helpers -----------------------------------------------------------------------------------------------------
 
     /// <summary>

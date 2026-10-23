@@ -146,19 +146,12 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue);
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a Connected System into a lightweight dictionary.
-    /// Returns a dictionary mapping cache keys ("cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}")
-    /// to CSO GUIDs. Used as the lookup phase of the import pipeline to answer "does this CSO exist?"
-    /// in O(1) without loading full entity graphs.
-    /// </summary>
-    Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
-
-    /// <summary>
     /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
-    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
-    /// Widens that method's projection with the stored content hash, schema fingerprint, status,
-    /// and partition, so a Full Import can evaluate the SPEC-1082 skip predicate for every matched
-    /// object without any additional database round trip.
+    /// dictionary, keyed by <c>CsoLookupKey</c> ("cso:{connectedSystemId}:{attributeId}:{value}", the value
+    /// folded unless the anchor attribute is case-exact). This is the lookup phase of the import pipeline:
+    /// it answers "does this CSO exist?" in O(1) without loading full entity graphs, and carries the stored
+    /// content hash, schema fingerprint, status and partition so a Full Import can evaluate the SPEC-1082 skip
+    /// predicate for every matched object without any additional database round trip.
     /// </summary>
     Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
 

@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -2559,25 +2560,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a Connected System.
-    /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
-    /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
-    /// Handles all external ID data types (string, int, long, Guid).
-    /// Delegates to <see cref="GetAllCsoImportStateLookupAsync"/> (SPEC-1082 D8) so there is a
-    /// single query implementation; ConnectedSystemServer.cs:3208 still consumes this Guid-only shape.
-    /// </summary>
-    public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
-    {
-        var lookup = await GetAllCsoImportStateLookupAsync(connectedSystemId);
-        return lookup.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.CsoId, CsoLookupKey.Comparer);
-    }
-
-    /// <summary>
     /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
-    /// dictionary, keyed by the same composite cache key as the external-id-only mapping above.
-    /// Widens that query's projection with the stored content hash, schema fingerprint, status,
-    /// and partition, so a Full Import can evaluate the skip predicate for every matched object
-    /// without any additional database round trip. Uses AsNoTracking; results are read-only index data.
+    /// dictionary, keyed by <see cref="CsoLookupKey"/>. Each entry carries the CSO ID with the stored
+    /// content hash, schema fingerprint, status, and partition, so a Full Import can evaluate the skip
+    /// predicate for every matched object without any additional database round trip. Handles all
+    /// external ID data types. Uses AsNoTracking; results are read-only index data.
     /// </summary>
     public async Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
@@ -7206,6 +7193,100 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    // Reference values can belong to any Connected System, so their name candidates are matched by attribute name
+    // rather than by pre-resolved ids. Lowered here so the comparison translates to a plain lower(...) = ... in SQL.
+    // Coalesced in tier order in the projection below; extend alongside ObjectNaming.ConnectedSystemNameAttributes
+    // (guarded by ConnectedSystemNameAttributeTierCountTests).
+    private static readonly string CsoChangeReferenceNameCandidate1 = ObjectNaming.ConnectedSystemNameAttributes[0].ToLower();
+    private static readonly string CsoChangeReferenceNameCandidate2 = ObjectNaming.ConnectedSystemNameAttributes[1].ToLower();
+    private static readonly string CsoChangeReferenceNameCandidate3 = ObjectNaming.ConnectedSystemNameAttributes[2].ToLower();
+
+    /// <summary>
+    /// The one projection from a Connected System Object change row to the change-history shape, shared by object
+    /// change history and an Activity item's changes (#2033) so the two can never describe a change differently. Flat:
+    /// no Includes; EF generates the joins from the Select. Reference target display labels come from a small set of
+    /// known attributes via correlated subqueries rather than materialising the reference target's attribute graph
+    /// (the source of a ~3 s eager-load cost).
+    /// </summary>
+    private static readonly Expression<Func<ConnectedSystemObjectChange, CsoChangeHistoryDto>> CsoChangeHistoryProjection =
+        c => new CsoChangeHistoryDto
+        {
+            Id = c.Id,
+            ChangeType = c.ChangeType,
+            ChangeTime = c.ChangeTime,
+            InitiatedByType = c.InitiatedByType,
+            InitiatedById = c.InitiatedById,
+            InitiatedByName = c.InitiatedByName,
+            ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
+            RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.TargetName
+                : null,
+            AttributeChanges = c.AttributeChanges
+                .OrderBy(ac => ac.AttributeName)
+                .Select(ac => new CsoAttributeChangeDto
+                {
+                    AttributeName = ac.AttributeName,
+                    AttributeType = ac.AttributeType,
+                    AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : Models.Core.AttributePlurality.SingleValued,
+                    ValueChanges = ac.ValueChanges
+                        .Select(vc => new CsoValueChangeDto
+                        {
+                            ValueChangeType = vc.ValueChangeType,
+                            StringValue = vc.StringValue,
+                            DateTimeValue = vc.DateTimeValue,
+                            IntValue = vc.IntValue,
+                            LongValue = vc.LongValue,
+                            DecimalValue = vc.DecimalValue,
+                            ByteValueLength = vc.ByteValueLength,
+                            GuidValue = vc.GuidValue,
+                            BoolValue = vc.BoolValue,
+                            ReferenceValue = vc.ReferenceValue == null
+                                ? null
+                                : new CsoChangeReferenceDto
+                                {
+                                    Id = vc.ReferenceValue.Id,
+                                    ConnectedSystemId = vc.ReferenceValue.ConnectedSystemId,
+                                    TypeName = vc.ReferenceValue.Type.Name,
+                                    // Best-effort label, mirroring ConnectedSystemObject.NameOrId: the
+                                    // ordered name candidates, then external id, then secondary external id.
+                                    DisplayName =
+                                        vc.ReferenceValue.AttributeValues
+                                            .Where(av => av.Attribute.Name.ToLower() == CsoChangeReferenceNameCandidate1 && av.StringValue != null)
+                                            .Select(av => av.StringValue)
+                                            .FirstOrDefault()
+                                        ?? vc.ReferenceValue.AttributeValues
+                                            .Where(av => av.Attribute.Name.ToLower() == CsoChangeReferenceNameCandidate2 && av.StringValue != null)
+                                            .Select(av => av.StringValue)
+                                            .FirstOrDefault()
+                                        ?? vc.ReferenceValue.AttributeValues
+                                            .Where(av => av.Attribute.Name.ToLower() == CsoChangeReferenceNameCandidate3 && av.StringValue != null)
+                                            .Select(av => av.StringValue)
+                                            .FirstOrDefault()
+                                        ?? vc.ReferenceValue.AttributeValues
+                                            .Where(av => av.AttributeId == vc.ReferenceValue.ExternalIdAttributeId && av.StringValue != null)
+                                            .Select(av => av.StringValue)
+                                            .FirstOrDefault()
+                                        ?? (vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
+                                            ? vc.ReferenceValue.AttributeValues
+                                                .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId && av.StringValue != null)
+                                                .Select(av => av.StringValue)
+                                                .FirstOrDefault()
+                                            : null),
+                                    SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
+                                        ? vc.ReferenceValue.AttributeValues
+                                            .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId && av.StringValue != null)
+                                            .Select(av => av.StringValue)
+                                            .FirstOrDefault()
+                                        : null
+                                },
+                            SyncRuleId = vc.SyncRuleId,
+                            SyncRuleName = vc.SyncRuleName
+                        })
+                        .ToList()
+                })
+                .ToList()
+        };
+
     /// <inheritdoc />
     public async Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize)
     {
@@ -7218,14 +7299,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         span?.SetTag("page", page);
         span?.SetTag("pageSize", pageSize);
 
-        // Reference values can belong to any Connected System, so their name candidates are matched by
-        // attribute name rather than by pre-resolved ids. Lowered here so the comparison translates to
-        // a plain lower(...) = ... in SQL. Coalesced in tier order below; extend alongside
-        // ObjectNaming.ConnectedSystemNameAttributes (guarded by ConnectedSystemNameAttributeTierCountTests).
-        var nameCandidate1 = ObjectNaming.ConnectedSystemNameAttributes[0].ToLower();
-        var nameCandidate2 = ObjectNaming.ConnectedSystemNameAttributes[1].ToLower();
-        var nameCandidate3 = ObjectNaming.ConnectedSystemNameAttributes[2].ToLower();
-
         var baseQuery = Repository.Database.ConnectedSystemObjectChanges
             .AsNoTracking()
             .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId);
@@ -7234,96 +7307,41 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (totalCount == 0)
             return (new List<CsoChangeHistoryDto>(), 0);
 
-        // Flat projection. No Includes; EF generates the joins from the Select. Reference target
-        // display labels are sourced from a small set of known attributes via correlated subqueries
-        // rather than materialising the full reference target's attribute graph (the source of the
-        // ~3 s eager-load cost).
         var items = await baseQuery
             .OrderByDescending(c => c.ChangeTime)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(c => new CsoChangeHistoryDto
-            {
-                Id = c.Id,
-                ChangeType = c.ChangeType,
-                ChangeTime = c.ChangeTime,
-                InitiatedByType = c.InitiatedByType,
-                InitiatedById = c.InitiatedById,
-                InitiatedByName = c.InitiatedByName,
-                ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
-                RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.TargetName
-                    : null,
-                AttributeChanges = c.AttributeChanges
-                    .OrderBy(ac => ac.AttributeName)
-                    .Select(ac => new CsoAttributeChangeDto
-                    {
-                        AttributeName = ac.AttributeName,
-                        AttributeType = ac.AttributeType,
-                        AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : Models.Core.AttributePlurality.SingleValued,
-                        ValueChanges = ac.ValueChanges
-                            .Select(vc => new CsoValueChangeDto
-                            {
-                                ValueChangeType = vc.ValueChangeType,
-                                StringValue = vc.StringValue,
-                                DateTimeValue = vc.DateTimeValue,
-                                IntValue = vc.IntValue,
-                                LongValue = vc.LongValue,
-                                DecimalValue = vc.DecimalValue,
-                                ByteValueLength = vc.ByteValueLength,
-                                GuidValue = vc.GuidValue,
-                                BoolValue = vc.BoolValue,
-                                ReferenceValue = vc.ReferenceValue == null
-                                    ? null
-                                    : new CsoChangeReferenceDto
-                                    {
-                                        Id = vc.ReferenceValue.Id,
-                                        ConnectedSystemId = vc.ReferenceValue.ConnectedSystemId,
-                                        TypeName = vc.ReferenceValue.Type.Name,
-                                        // Best-effort label, mirroring ConnectedSystemObject.NameOrId: the
-                                        // ordered name candidates, then external id, then secondary external id.
-                                        DisplayName =
-                                            vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate1 && av.StringValue != null)
-                                                .Select(av => av.StringValue)
-                                                .FirstOrDefault()
-                                            ?? vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate2 && av.StringValue != null)
-                                                .Select(av => av.StringValue)
-                                                .FirstOrDefault()
-                                            ?? vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate3 && av.StringValue != null)
-                                                .Select(av => av.StringValue)
-                                                .FirstOrDefault()
-                                            ?? vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.AttributeId == vc.ReferenceValue.ExternalIdAttributeId && av.StringValue != null)
-                                                .Select(av => av.StringValue)
-                                                .FirstOrDefault()
-                                            ?? (vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
-                                                ? vc.ReferenceValue.AttributeValues
-                                                    .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId && av.StringValue != null)
-                                                    .Select(av => av.StringValue)
-                                                    .FirstOrDefault()
-                                                : null),
-                                        SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
-                                            ? vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId && av.StringValue != null)
-                                                .Select(av => av.StringValue)
-                                                .FirstOrDefault()
-                                            : null
-                                    },
-                                SyncRuleId = vc.SyncRuleId,
-                                SyncRuleName = vc.SyncRuleName
-                            })
-                            .ToList()
-                    })
-                    .ToList()
-            })
+            .Select(CsoChangeHistoryProjection)
             .ToListAsync();
 
         span?.SetTag("returned", items.Count);
         span?.SetTag("totalCount", totalCount);
         return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<CsoChangeHistoryDto?> GetCsoChangeForExecutionItemAsync(Guid runProfileExecutionItemId)
+    {
+        // At most one: the change's Run Profile Execution Item foreign key is unique.
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .AsNoTracking()
+            .Where(c => c.ActivityRunProfileExecutionItemId == runProfileExecutionItemId)
+            .Select(CsoChangeHistoryProjection)
+            .SingleOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<CsoChangeHistoryDto>> GetCsoChangesAsync(IReadOnlyCollection<Guid> changeIds)
+    {
+        if (changeIds.Count == 0)
+            return [];
+
+        var ids = changeIds.ToList();
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .AsNoTracking()
+            .Where(c => ids.Contains(c.Id))
+            .Select(CsoChangeHistoryProjection)
+            .ToListAsync();
     }
 
     public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)

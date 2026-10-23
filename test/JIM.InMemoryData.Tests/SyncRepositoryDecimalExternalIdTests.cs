@@ -53,20 +53,7 @@ public class SyncRepositoryDecimalExternalIdTests
     }
 
     [Test]
-    public async Task GetAllCsoExternalIdMappingsAsync_DecimalAnchor_IndexesTheObjectAsync()
-    {
-        var csoId = Guid.NewGuid();
-        _repo.SeedConnectedSystemObject(CreateCsoWithDecimalAnchor(csoId, decimal.Parse("4200", CultureInfo.InvariantCulture)));
-
-        var mappings = await _repo.GetAllCsoExternalIdMappingsAsync(CsId);
-
-        Assert.That(mappings, Is.Not.Empty, "a Decimal-anchored object must be indexed, or every import duplicates it");
-        Assert.That(mappings.ContainsKey($"cso:{CsId}:{AttrId}:4200"), Is.True);
-        Assert.That(mappings[$"cso:{CsId}:{AttrId}:4200"], Is.EqualTo(csoId));
-    }
-
-    [Test]
-    public async Task GetAllCsoExternalIdMappingsAsync_DecimalAnchorWithTrailingZeros_KeysCanonicallyAsync()
+    public async Task GetAllCsoImportStateLookupAsync_DecimalAnchorWithTrailingZeros_KeysCanonicallyAsync()
     {
         // The database can hand back the same numeric anchor at a different scale to the one the
         // Connector read on import. The key must not depend on that, or the object silently
@@ -74,9 +61,9 @@ public class SyncRepositoryDecimalExternalIdTests
         var csoId = Guid.NewGuid();
         _repo.SeedConnectedSystemObject(CreateCsoWithDecimalAnchor(csoId, decimal.Parse("4200.00", CultureInfo.InvariantCulture)));
 
-        var mappings = await _repo.GetAllCsoExternalIdMappingsAsync(CsId);
+        var lookup = await _repo.GetAllCsoImportStateLookupAsync(CsId);
 
-        Assert.That(mappings.ContainsKey($"cso:{CsId}:{AttrId}:4200"), Is.True);
+        Assert.That(lookup.ContainsKey($"cso:{CsId}:{AttrId}:4200"), Is.True);
     }
 
     [Test]

@@ -30,6 +30,14 @@ function Get-JIMActivityExecutionItem {
     .PARAMETER Id
         The execution item to get. The rows of Get-JIMActivity -ExecutionItems can be piped straight in.
 
+    .PARAMETER IncludeOutcomes
+        Add the item's outcome tree as Outcomes: what the run did to the object, each outcome with the outcomes that
+        followed from it in Children.
+
+    .PARAMETER IncludeChanges
+        Add the attribute changes recorded with the item as Changes: its Metaverse Object change, its Connected System
+        Object change, and what each Pending Export it staged would write.
+
     .PARAMETER Causes
         Return what caused the item instead, one row per cohort of causes.
 
@@ -58,12 +66,15 @@ function Get-JIMActivityExecutionItem {
         Fetch past the 1000-page limit of -All.
 
     .OUTPUTS
-        Without a switch, the item. With -Causes, what caused it, and with -Consequences what it went on to cause,
+        Without a switch, the item; -IncludeOutcomes and -IncludeChanges add its Outcomes and Changes, which are
+        otherwise empty. With -Causes, what caused it, and with -Consequences what it went on to cause,
         in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row
         with a Count), with Level 1 for the nearest and one more per step. With an object's id, the object's
         timeline, one row per execution item, newest first; where the deployment records no Metaverse Object
         changes, a Metaverse Object's timeline holds only what its joined Connected System Objects recorded, and a
         warning says so.
+
+        JIM.ActivityRunProfileExecutionItemDetailDto: With -Id
 
         JIM.CauseCohort
         ExecutionItemId (guid): The execution item the walk started from.
@@ -150,6 +161,23 @@ function Get-JIMActivityExecutionItem {
         made the join.
 
     .EXAMPLE
+        $item = Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -IncludeChanges
+        $item.Changes.MetaverseObjectChange.AttributeChanges |
+            Select-Object AttributeName,
+                @{ Name = 'Added'; Expression = { ($_.ValueChanges | Where-Object ValueChangeType -eq 'Add').StringValue } },
+                @{ Name = 'Removed'; Expression = { ($_.ValueChanges | Where-Object ValueChangeType -eq 'Remove').StringValue } }
+
+        Shows which Metaverse Object attributes a synchronisation changed, with the text values it added and removed.
+
+    .EXAMPLE
+        function Get-Outcome($Outcomes) { foreach ($o in $Outcomes) { $o; Get-Outcome $o.Children } }
+        $item = Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -IncludeOutcomes
+        Get-Outcome $item.Outcomes | Where-Object OutcomeType -eq 'PendingExportCreated' |
+            Select-Object TargetEntityDescription, SyncRuleName, StagedChangeType
+
+        Lists the Pending Exports a synchronisation staged for one object, walking the outcome tree to every depth.
+
+    .EXAMPLE
         Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Causes |
             Format-Table Level, EdgeType, ReasonCode, Count, ObjectType, ConnectedSystem, Members
 
@@ -194,6 +222,12 @@ function Get-JIMActivityExecutionItem {
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'Causes')]
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'Consequences')]
         [guid]$Id,
+
+        [Parameter(ParameterSetName = 'Item')]
+        [switch]$IncludeOutcomes,
+
+        [Parameter(ParameterSetName = 'Item')]
+        [switch]$IncludeChanges,
 
         [Parameter(Mandatory, ParameterSetName = 'Causes')]
         [switch]$Causes,
@@ -297,6 +331,14 @@ function Get-JIMActivityExecutionItem {
         }
 
         Write-Verbose "Getting execution item with ID: $Id"
-        Invoke-JIMApi -Endpoint "/api/v1/activities/items/$Id"
+        $include = @(
+            if ($IncludeOutcomes) { 'outcomes' }
+            if ($IncludeChanges) { 'changes' }
+        )
+        $endpoint = "/api/v1/activities/items/$Id"
+        if ($include.Count -gt 0) {
+            $endpoint += "?include=$($include -join ',')"
+        }
+        Invoke-JIMApi -Endpoint $endpoint
     }
 }

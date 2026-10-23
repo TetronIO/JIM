@@ -4,8 +4,9 @@
 namespace JIM.Models.Staging;
 
 /// <summary>
-/// SPEC-1082 D8: one entry in the pre-fetched Full Import lookup dictionary, keyed by the same
-/// composite external-id string as <c>ISyncRepository.GetAllCsoExternalIdMappingsAsync</c>. A
+/// SPEC-1082 D8: one entry in the pre-fetched Full Import lookup dictionary
+/// (<c>ISyncRepository.GetAllCsoImportStateLookupAsync</c>), keyed by the composite external-id
+/// string <c>CsoLookupKey</c> builds. A
 /// value-type record struct so the ~500k-entry dictionary used at scale adds no per-row heap
 /// allocation beyond the existing string keys (D13).
 /// </summary>

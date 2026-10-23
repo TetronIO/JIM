@@ -127,7 +127,6 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<int, HashSet<Guid>> _pendingExportsByCs = new();
     private readonly Dictionary<Guid, Guid> _pendingExportsByCsoId = new();
     private readonly Dictionary<Guid, HashSet<Guid>> _csosByMvo = new();
-    private readonly Dictionary<(int ConnectedSystemId, int ExternalIdAttributeId, string ExternalIdValue), Guid> _csoCache = new();
 
     // Configurable settings
     private int _syncPageSize = 100;
@@ -598,42 +597,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
-    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
-    {
-        var result = new Dictionary<string, Guid>(CsoLookupKey.Comparer);
-        foreach (var cso in GetCsosForSystem(connectedSystemId))
-        {
-            // Try primary external ID first
-            var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(cso, primaryAv);
-
-            if (primaryValue != null)
-            {
-                var cacheKey = CsoLookupKey.For(connectedSystemId, cso.ExternalIdAttributeId, primaryValue);
-                result.TryAdd(cacheKey, cso.Id);
-                continue;
-            }
-
-            // Fall back to secondary external ID (PendingProvisioning CSOs)
-            if (cso.SecondaryExternalIdAttributeId.HasValue)
-            {
-                var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(cso, secondaryAv);
-
-                if (secondaryValue != null)
-                {
-                    var cacheKey = CsoLookupKey.For(connectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryValue);
-                    result.TryAdd(cacheKey, cso.Id);
-                }
-            }
-        }
-        return Task.FromResult(result);
-    }
-
     /// <summary>
-    /// SPEC-1082 D8: honest in-memory equivalent of the Postgres widened projection - reuses the
-    /// same external-id resolution as <see cref="GetAllCsoExternalIdMappingsAsync"/> but carries the
-    /// stored hash/fingerprint/status/partition alongside the CSO ID.
+    /// SPEC-1082 D8: honest in-memory equivalent of the Postgres projection - keys each CSO by its
+    /// primary external ID, or its secondary when it has no primary yet, and carries the stored
+    /// hash/fingerprint/status/partition alongside the CSO ID.
     /// </summary>
     public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
@@ -2751,20 +2718,6 @@ public class SyncRepository : ISyncRepository
     public virtual void SetAutoDetectChangesEnabled(bool enabled)
     {
         // No-op — no EF change tracker in memory
-    }
-
-    #endregion
-
-    #region CSO Lookup Cache
-
-    public void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId)
-    {
-        _csoCache[(connectedSystemId, externalIdAttributeId, externalIdValue)] = csoId;
-    }
-
-    public void EvictCsoFromCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue)
-    {
-        _csoCache.Remove((connectedSystemId, externalIdAttributeId, externalIdValue));
     }
 
     #endregion

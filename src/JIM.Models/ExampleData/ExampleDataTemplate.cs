@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
@@ -35,6 +35,30 @@ public class ExampleDataTemplate : IAuditable
     /// </summary>
     [NotMapped]
     public List<string> SaveWarnings { get; } = [];
+
+    /// <summary>
+    /// Returns a detached copy of this template's graph (#1466) for saving as a new template: every template-owned row
+    /// (Object Types, Template Attributes, Example Data Set instances, weighted values, attribute dependencies) is a new
+    /// instance with no id, while the persisted entities they reference (Metaverse Object Types, Metaverse Attributes,
+    /// Example Data Sets) are shared rather than copied, so persisting the copy inserts a new template without
+    /// re-inserting or modifying anything it points at. The copy is never built in and carries no audit provenance.
+    /// </summary>
+    public ExampleDataTemplate CloneGraph()
+    {
+        var clone = new ExampleDataTemplate { Name = Name };
+        clone.ObjectTypes.AddRange(ObjectTypes.Select(objectType =>
+        {
+            var objectTypeClone = new ExampleDataObjectType
+            {
+                MetaverseObjectType = objectType.MetaverseObjectType,
+                ObjectsToCreate = objectType.ObjectsToCreate
+            };
+            objectTypeClone.TemplateAttributes.AddRange(objectType.TemplateAttributes.Select(a => a.CloneForNewTemplate()));
+            return objectTypeClone;
+        }));
+
+        return clone;
+    }
 
     public void Validate()
     {

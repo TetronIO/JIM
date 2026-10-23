@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -1733,6 +1734,77 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
+    /// <summary>
+    /// The one projection from a Metaverse Object change row to the change-history shape, shared by object change history
+    /// and an Activity item's changes (#2033) so the two can never describe a change differently. Flat: no Includes; EF
+    /// generates the joins from the Select. Reference target display names come from
+    /// <see cref="MetaverseObject.CachedDisplayName"/>. The contributing Connected System is resolved afterwards by
+    /// <see cref="ResolveChangeValueContributingSystemsAsync"/>.
+    /// </summary>
+    private static readonly Expression<Func<MetaverseObjectChange, MvoChangeHistoryDto>> MvoChangeHistoryProjection =
+        c => new MvoChangeHistoryDto
+        {
+            Id = c.Id,
+            ChangeType = c.ChangeType,
+            ChangeTime = c.ChangeTime,
+            InitiatedByType = c.InitiatedByType,
+            InitiatedById = c.InitiatedById,
+            InitiatedByName = c.InitiatedByName,
+            ChangeInitiatorType = c.ChangeInitiatorType,
+            SyncRuleId = c.SyncRuleId,
+            SyncRuleName = c.SyncRuleName,
+            ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
+            CsoId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ConnectedSystemObjectId : null,
+            CsoExternalId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ExternalIdSnapshot : null,
+            ConnectedSystemId = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemId
+                : null,
+            ConnectedSystemName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.TargetContext
+                : null,
+            RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.TargetName
+                : null,
+            ConnectedSystemRunType = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemRunType
+                : (ConnectedSystemRunType?)null,
+            AttributeChanges = c.AttributeChanges
+                .OrderBy(ac => ac.AttributeName)
+                .Select(ac => new MvoAttributeChangeDto
+                {
+                    AttributeName = ac.AttributeName,
+                    AttributeType = ac.AttributeType,
+                    AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : AttributePlurality.SingleValued,
+                    AttributeId = ac.Attribute != null ? ac.Attribute.Id : (int?)null,
+                    ValueChanges = ac.ValueChanges
+                        .Select(vc => new MvoValueChangeDto
+                        {
+                            ValueChangeType = vc.ValueChangeType,
+                            StringValue = vc.StringValue,
+                            DateTimeValue = vc.DateTimeValue,
+                            IntValue = vc.IntValue,
+                            LongValue = vc.LongValue,
+                            DecimalValue = vc.DecimalValue,
+                            ByteValueLength = vc.ByteValueLength,
+                            GuidValue = vc.GuidValue,
+                            BoolValue = vc.BoolValue,
+                            ReferenceValue = vc.ReferenceValue == null
+                                ? null
+                                : new MvoChangeReferenceDto
+                                {
+                                    Id = vc.ReferenceValue.Id,
+                                    DisplayName = vc.ReferenceValue.CachedDisplayName,
+                                    TypeName = vc.ReferenceValue.Type.Name,
+                                    TypePluralName = vc.ReferenceValue.Type.PluralName
+                                },
+                            ContributedBySyncRuleId = vc.ContributedBySyncRuleId,
+                            ContributedBySyncRuleName = vc.ContributedBySyncRuleName
+                        })
+                        .ToList()
+                })
+                .ToList()
+        };
+
     public async Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize)
     {
         if (page < 1)
@@ -1754,75 +1826,11 @@ public class MetaverseRepository : IMetaverseRepository
         if (totalCount == 0)
             return (new List<MvoChangeHistoryDto>(), 0);
 
-        // Flat projection. No Includes; EF generates the joins from the Select.
-        // Reference target display names come from MetaverseObject.CachedDisplayName,
-        // which avoids the AttributeValues filter-Include trick that the old query used.
         var items = await baseQuery
             .OrderByDescending(c => c.ChangeTime)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(c => new MvoChangeHistoryDto
-            {
-                Id = c.Id,
-                ChangeType = c.ChangeType,
-                ChangeTime = c.ChangeTime,
-                InitiatedByType = c.InitiatedByType,
-                InitiatedById = c.InitiatedById,
-                InitiatedByName = c.InitiatedByName,
-                ChangeInitiatorType = c.ChangeInitiatorType,
-                SyncRuleId = c.SyncRuleId,
-                SyncRuleName = c.SyncRuleName,
-                ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
-                CsoId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ConnectedSystemObjectId : null,
-                CsoExternalId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ExternalIdSnapshot : null,
-                ConnectedSystemId = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemId
-                    : null,
-                ConnectedSystemName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.TargetContext
-                    : null,
-                RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.TargetName
-                    : null,
-                ConnectedSystemRunType = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemRunType
-                    : (ConnectedSystemRunType?)null,
-                AttributeChanges = c.AttributeChanges
-                    .OrderBy(ac => ac.AttributeName)
-                    .Select(ac => new MvoAttributeChangeDto
-                    {
-                        AttributeName = ac.AttributeName,
-                        AttributeType = ac.AttributeType,
-                        AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : AttributePlurality.SingleValued,
-                        AttributeId = ac.Attribute != null ? ac.Attribute.Id : (int?)null,
-                        ValueChanges = ac.ValueChanges
-                            .Select(vc => new MvoValueChangeDto
-                            {
-                                ValueChangeType = vc.ValueChangeType,
-                                StringValue = vc.StringValue,
-                                DateTimeValue = vc.DateTimeValue,
-                                IntValue = vc.IntValue,
-                                LongValue = vc.LongValue,
-                                DecimalValue = vc.DecimalValue,
-                                ByteValueLength = vc.ByteValueLength,
-                                GuidValue = vc.GuidValue,
-                                BoolValue = vc.BoolValue,
-                                ReferenceValue = vc.ReferenceValue == null
-                                    ? null
-                                    : new MvoChangeReferenceDto
-                                    {
-                                        Id = vc.ReferenceValue.Id,
-                                        DisplayName = vc.ReferenceValue.CachedDisplayName,
-                                        TypeName = vc.ReferenceValue.Type.Name,
-                                        TypePluralName = vc.ReferenceValue.Type.PluralName
-                                    },
-                                ContributedBySyncRuleId = vc.ContributedBySyncRuleId,
-                                ContributedBySyncRuleName = vc.ContributedBySyncRuleName
-                            })
-                            .ToList()
-                    })
-                    .ToList()
-            })
+            .Select(MvoChangeHistoryProjection)
             .ToListAsync();
 
         await ResolveChangeValueContributingSystemsAsync(items);
@@ -1830,6 +1838,22 @@ public class MetaverseRepository : IMetaverseRepository
         span?.SetTag("returned", items.Count);
         span?.SetTag("totalCount", totalCount);
         return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<MvoChangeHistoryDto?> GetMvoChangeForExecutionItemAsync(Guid runProfileExecutionItemId)
+    {
+        // At most one: the change's Run Profile Execution Item foreign key is unique.
+        var change = await Repository.Database.Set<MetaverseObjectChange>()
+            .AsNoTracking()
+            .Where(c => c.ActivityRunProfileExecutionItemId == runProfileExecutionItemId)
+            .Select(MvoChangeHistoryProjection)
+            .SingleOrDefaultAsync();
+        if (change == null)
+            return null;
+
+        await ResolveChangeValueContributingSystemsAsync([change]);
+        return change;
     }
 
     /// <summary>

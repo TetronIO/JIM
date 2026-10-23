@@ -105,6 +105,47 @@ public class ExampleDataTemplateAttribute
     #endregion
 
     #region public methods
+    /// <summary>
+    /// A copy of this attribute for a new template (see <see cref="ExampleDataTemplate.CloneGraph"/>): new rows for
+    /// everything the attribute owns, the same persisted Metaverse Attributes, Object Types and Example Data Sets.
+    /// </summary>
+    public ExampleDataTemplateAttribute CloneForNewTemplate()
+    {
+        var clone = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = MetaverseAttribute,
+            PopulatedValuesPercentage = PopulatedValuesPercentage,
+            BoolTrueDistribution = BoolTrueDistribution,
+            BoolShouldBeRandom = BoolShouldBeRandom,
+            MinDate = MinDate,
+            MaxDate = MaxDate,
+            MinNumber = MinNumber,
+            MaxNumber = MaxNumber,
+            SequentialNumbers = SequentialNumbers,
+            RandomNumbers = RandomNumbers,
+            Pattern = Pattern,
+            Expression = Expression,
+            ManagerDepthPercentage = ManagerDepthPercentage,
+            MvaRefMinAssignments = MvaRefMinAssignments,
+            MvaRefMaxAssignments = MvaRefMaxAssignments,
+            WeightedStringValues = WeightedStringValues?.Select(v => new ExampleDataTemplateAttributeWeightedValue { Value = v.Value, Weight = v.Weight }).ToList(),
+            ReferenceMetaverseObjectTypes = ReferenceMetaverseObjectTypes?.ToList(),
+            AttributeDependency = AttributeDependency == null ? null : new ExampleDataTemplateAttributeDependency
+            {
+                MetaverseAttribute = AttributeDependency.MetaverseAttribute,
+                ComparisonType = AttributeDependency.ComparisonType,
+                StringValue = AttributeDependency.StringValue
+            }
+        };
+
+        clone.ExampleDataSetInstances = ExampleDataSetInstances
+            .Select(i => new ExampleDataSetInstance { ExampleDataSet = i.ExampleDataSet, ExampleDataTemplateAttribute = clone, Order = i.Order })
+            .ToList();
+
+        return clone;
+    }
+
+
     public bool IsUsingNumbers()
     {
         return (SequentialNumbers.HasValue && SequentialNumbers.Value) || (RandomNumbers.HasValue && RandomNumbers.Value) || MinNumber.HasValue || MaxNumber.HasValue;
