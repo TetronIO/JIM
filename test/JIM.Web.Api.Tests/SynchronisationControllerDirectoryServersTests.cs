@@ -8,12 +8,15 @@ using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
+using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -22,9 +25,8 @@ namespace JIM.Web.Api.Tests;
 /// <summary>
 /// Covers <c>GET /connected-systems/{id}/directory-servers</c> (issue #1167): an unknown Connected System id and
 /// a Connector that does not support directory server discovery are both reported as clean 4xx responses, never
-/// a 500. The success (200) path needs a live Active Directory / Samba AD directory to discover against, so it
-/// is not covered here; <see cref="ConnectedSystemDirectoryServerDtoTests"/> covers the response shape a
-/// successful discovery maps to, and <c>ConnectedSystemDirectoryServerDiscoveryTests</c> /
+/// a 500, and a successful discovery (through a stub Connector) names the setting each server fills.
+/// <see cref="ConnectedSystemDirectoryServerDtoTests"/> covers the response shape, and <c>ConnectedSystemDirectoryServerDiscoveryTests</c> /
 /// <c>LdapConnectorDirectoryServerDiscoveryTests</c> (JIM.Worker.Tests) cover the dispatch and DN-mapping logic
 /// behind it.
 /// </summary>
@@ -82,6 +84,51 @@ public class SynchronisationControllerDirectoryServersTests
         var result = await _controller.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId);
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDirectoryServersAsync_DiscoverySucceeds_NamesTheSettingEachServerFillsAsync()
+    {
+        // A script needs the setting's id, not just its name, because Set-JIMConnectedSystem keys settings by id.
+        const string stubConnectorName = "Stub Discovery Connector";
+        const int targetSettingId = 9;
+        var connector = new Mock<IConnector>();
+        connector.Setup(c => c.Name).Returns(stubConnectorName);
+        var discovery = connector.As<IConnectorDirectoryServers>();
+        discovery.Setup(c => c.DirectoryServerDiscovery).Returns(new ConnectorDirectoryServerDiscovery("Preferred Server", "directory servers"));
+        discovery.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), It.IsAny<Serilog.ILogger>()))
+            .ReturnsAsync([new ConnectorDirectoryServer { HostName = "server01.example.local", Site = "London" }]);
+        var connectorFactory = new Mock<IConnectorFactory>();
+        connectorFactory
+            .Setup(f => f.Create(stubConnectorName, It.IsAny<ICredentialProtection?>(), It.IsAny<ICertificateProvider?>()))
+            .Returns(connector.Object);
+        _application.ConnectedSystems.ConnectorFactory = connectorFactory.Object;
+
+        var settings = new List<ConnectorDefinitionSetting>
+        {
+            new() { Id = 8, Name = "Host", Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Connectivity },
+            new() { Id = targetSettingId, Name = "Preferred Server", Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Connectivity }
+        };
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(() => new ConnectedSystem
+            {
+                Id = ConnectedSystemId,
+                Name = "Stub",
+                ConnectorDefinition = new ConnectorDefinition { Id = 1, Name = stubConnectorName, Settings = settings },
+                SettingValues = settings.Select(s => new ConnectedSystemSettingValue { Setting = s }).ToList()
+            });
+
+        var result = await _controller.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId);
+
+        var servers = ((result as OkObjectResult)?.Value as IEnumerable<ConnectedSystemDirectoryServerDto>)?.ToList();
+        Assert.That(servers, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(servers![0].HostName, Is.EqualTo("server01.example.local"));
+            Assert.That(servers![0].TargetSettingId, Is.EqualTo(targetSettingId));
+            Assert.That(servers![0].TargetSettingName, Is.EqualTo("Preferred Server"));
+        }
     }
 
     private ConnectedSystem CreateFileConnectorConnectedSystem()

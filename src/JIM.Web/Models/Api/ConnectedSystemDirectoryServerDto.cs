@@ -24,12 +24,30 @@ public class ConnectedSystemDirectoryServerDto
     /// </summary>
     public string? Site { get; set; }
 
-    public static ConnectedSystemDirectoryServerDto FromModel(ConnectorDirectoryServer model)
+    /// <summary>
+    /// The id of the Connected System setting this server's host name is a value for (for the LDAP Connector,
+    /// Preferred Domain Controller): the key to use when setting it with <c>Set-JIMConnectedSystem -SettingValues</c>
+    /// or the update endpoint. Null only if the Connected System does not carry the setting its Connector names.
+    /// </summary>
+    public int? TargetSettingId { get; set; }
+
+    /// <summary>
+    /// The name of the Connected System setting this server's host name is a value for, e.g. "Preferred Domain
+    /// Controller".
+    /// </summary>
+    public string TargetSettingName { get; set; } = null!;
+
+    /// <param name="model">The discovered server.</param>
+    /// <param name="targetSettingName">The setting the Connector says discovery fills.</param>
+    /// <param name="targetSettingId">That setting's id on the Connected System, if it carries it.</param>
+    public static ConnectedSystemDirectoryServerDto FromModel(ConnectorDirectoryServer model, string targetSettingName, int? targetSettingId)
     {
         return new ConnectedSystemDirectoryServerDto
         {
             HostName = model.HostName,
-            Site = model.Site
+            Site = model.Site,
+            TargetSettingId = targetSettingId,
+            TargetSettingName = targetSettingName
         };
     }
 }

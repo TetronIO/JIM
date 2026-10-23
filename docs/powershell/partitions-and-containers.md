@@ -137,12 +137,14 @@ Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int>
 
 ### Output
 
-One entry per server found: its HostName, and the Active Directory Site it belongs to (empty for directories that have no Sites).
+One entry per server found: its HostName, the Active Directory Site it belongs to (empty for directories that have no Sites), and the id and name of the setting its host name is a value for.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `HostName` | `string` | The fully qualified domain name of the directory server, e.g. "dc01.corp.local". |
 | `Site` | `string` | The Active Directory Site the server belongs to, e.g. "Default-First-Site-Name". Empty for directories that have no concept of Sites. |
+| `TargetSettingId` | `int` | The id of the Connected System setting this server's host name is a value for (for the LDAP Connector, Preferred Domain Controller): the key to use when setting it with `Set-JIMConnectedSystem -SettingValues` or the update endpoint. Empty only if the Connected System does not carry the setting its Connector names. |
+| `TargetSettingName` | `string` | The name of the Connected System setting this server's host name is a value for, e.g. "Preferred Domain Controller". |
 <!-- END GENERATED: Get-JIMConnectedSystemDirectoryServer -->
 
 ### Examples

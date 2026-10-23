@@ -20,7 +20,7 @@ public class ConnectedSystemDirectoryServerDtoTests
     {
         var model = new ConnectorDirectoryServer { HostName = "dc01.corp.local", Site = "Default-First-Site-Name" };
 
-        var dto = ConnectedSystemDirectoryServerDto.FromModel(model);
+        var dto = ConnectedSystemDirectoryServerDto.FromModel(model, "Preferred Domain Controller", 5);
 
         using (Assert.EnterMultipleScope())
         {
@@ -34,7 +34,7 @@ public class ConnectedSystemDirectoryServerDtoTests
     {
         var model = new ConnectorDirectoryServer { HostName = "dc01.corp.local", Site = null };
 
-        var dto = ConnectedSystemDirectoryServerDto.FromModel(model);
+        var dto = ConnectedSystemDirectoryServerDto.FromModel(model, "Preferred Domain Controller", 5);
 
         Assert.That(dto.Site, Is.Null);
     }
