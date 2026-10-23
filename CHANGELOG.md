@@ -144,6 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 With **Create containers as needed?** on, an LDAP export no longer fails an object because a parallel export batch created its new OU a moment earlier; the OU exists, so the object is created in it. (#1820)
 - 🐛 Data Generation Templates now honour a true-or-false attribute's share of true values, which was accepted and ignored: at 20%, exactly 40 of 200 objects given a value are true. Set it as **Objects given true (%)** in the template editor, via REST or `-BoolTrueDistribution`; left empty, values stay random. (#877)
 - 🐛 A Data Generation Template attribute's **Population %** now leaves exactly that share of objects with a value: at 50%, 100 of 200 objects. It left too many before, about 124 of 200. For an attribute that depends on another one's value, the share is of the objects meeting the condition, so 50% of 120 Staff gives exactly 60 values. (#2437, #2448)
 - 🐛 When an auxiliary class attribute's value goes away before it is exported, JIM now withdraws the class add queued with it too. Left behind, the add was refused at every export because nothing wrote the class's required attributes. (#492)
