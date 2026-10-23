@@ -28,6 +28,7 @@ public class MetaverseServerChangeSearchTests
     [SetUp]
     public void SetUp()
     {
+        _queried = null;
         var repository = new Mock<IRepository>();
         _metaverse = new Mock<IMetaverseRepository>();
         repository.Setup(r => r.Metaverse).Returns(_metaverse.Object);
