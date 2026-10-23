@@ -388,6 +388,26 @@ public class ExampleDataControllerTemplateCrudTests
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
     }
 
+    [TestCase(-1)]
+    [TestCase(101)]
+    public async Task CreateTemplateAsync_BoolTrueDistributionOutOfRange_ReturnsBadRequestNamingTheFieldAsync(int distribution)
+    {
+        var booleanAttribute = new MetaverseAttribute { Id = 13, Name = "Account Disabled", Type = AttributeDataType.Boolean };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(13, It.IsAny<bool>())).ReturnsAsync(booleanAttribute);
+        var request = BuildValidCreateRequest();
+        request.ObjectTypes[0].Attributes = new List<ExampleDataTemplateAttributeRequest>
+        {
+            new() { MetaverseAttributeId = 13, BoolTrueDistribution = distribution }
+        };
+
+        var result = await _controller.CreateTemplateAsync(request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (ApiErrorResponse)((BadRequestObjectResult)result).Value!;
+        Assert.That(error.Message, Does.Contain("BoolTrueDistribution").And.Contain("between 0 and 100"));
+        _mockExampleDataRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
     [Test]
     public async Task CreateTemplateAsync_DuplicateName_ReturnsConflictAsync()
     {

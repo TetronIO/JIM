@@ -320,8 +320,8 @@ Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 | `ExampleDataSets` | `object[]` | The Example Data Sets values are drawn from, by name or ID. Order follows array order, which is what index-based patterns refer to. |
 | `WeightedStringValues` | `hashtable[]` | Specific values to choose from, weighted: `@{ Value = "active"; Weight = 0.9 }`. |
 | `PopulatedValuesPercentage` | `int` | What percentage of generated objects receive a value for this attribute. |
-| `BoolTrueDistribution` | `int` | For boolean attributes, what percentage of values are true. |
-| `BoolShouldBeRandom` | `bool` | For boolean attributes, whether values are generated randomly. |
+| `BoolTrueDistribution` | `int` | For boolean attributes, the percentage (0 to 100) of the objects given a value that are given true: an exact share, rounded to the nearest object with halves rounded up. Omit it for true or false at random. |
+| `BoolShouldBeRandom` | `bool` | Has no effect on generation: boolean values are random whenever BoolTrueDistribution is not set. |
 | `MinDate` / `MaxDate` | `datetime` | For date attributes, the earliest and latest values to generate. |
 | `MinNumber` / `MaxNumber` | `int` | For number attributes, the smallest and largest values to generate. |
 | `SequentialNumbers` / `RandomNumbers` | `bool` | For number attributes, whether values are generated sequentially or randomly. |
@@ -539,8 +539,8 @@ Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> 
 | `ExampleDataSet` | `object[]` | No |  | The Example Data Sets (names or ids) values are drawn from. Order follows array order, which is what index-based patterns like "{0} {1}" refer to. |
 | `WeightedValue` | `hashtable[]` | No |  | Specific string values to choose from, weighted to control their distribution: one @{ Value = ..; Weight = .. } hashtable per value. |
 | `PopulatedValuesPercentage` | `int` | No |  | What percentage of generated objects receive a value for this attribute. From 0 to 100. |
-| `BoolTrueDistribution` | `int` | No |  | For boolean attributes, what percentage of values are true. From 0 to 100. |
-| `BoolShouldBeRandom` | `bool` | No |  | For boolean attributes, whether values are generated randomly. |
+| `BoolTrueDistribution` | `int` | No |  | For boolean attributes, the percentage of the objects given a value that are given true. The share is exact, rounded to the nearest object with halves rounded up; when omitted, each object is given true or false at random. From 0 to 100. |
+| `BoolShouldBeRandom` | `bool` | No |  | Has no effect on generation: boolean values are random whenever BoolTrueDistribution is not set. |
 | `MinDate` | `datetime` | No |  | For date attributes, the earliest value to generate. |
 | `MaxDate` | `datetime` | No |  | For date attributes, the latest value to generate. |
 | `MinNumber` | `int` | No |  | For number attributes, the smallest value to generate. |

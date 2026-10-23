@@ -123,12 +123,12 @@ public class ExampleDataTemplateAttributeRequest
     public int? PopulatedValuesPercentage { get; set; }
 
     /// <summary>
-    /// For boolean attributes, what percentage of generated values are true.
+    /// For boolean attributes, the percentage (0 to 100) of the objects given a value that are given true. The share is exact, rounded to the nearest object with halves rounded up; when not set, each object is given true or false at random.
     /// </summary>
     public int? BoolTrueDistribution { get; set; }
 
     /// <summary>
-    /// For boolean attributes, whether values are generated randomly.
+    /// Has no effect on generation: boolean values are random whenever BoolTrueDistribution is not set.
     /// </summary>
     public bool? BoolShouldBeRandom { get; set; }
 

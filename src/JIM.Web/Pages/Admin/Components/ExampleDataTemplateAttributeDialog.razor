@@ -163,9 +163,10 @@
                                      HelperText="The percentage of Users who manage other Users. Every other User is given one of them as a manager." />
                 }
 
-                @if (_draft.Attribute?.Type == AttributeDataType.Boolean)
+                @if (_draft.ShowsBooleanDistribution)
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Each object is given true or false at random.</MudText>
+                    <MudNumericField T="int?" Label="Objects given true (%)" Variant="Variant.Outlined" Immediate="true" @bind-Value="_draft.BoolTrueDistribution" Min="0" Max="100"
+                                     HelperText="@BooleanDistributionHelperText()" />
                 }
 
                 @if (_draft.Attribute?.Type == AttributeDataType.Guid)
@@ -312,6 +313,11 @@
     private string? AttributeHelperText() => _attributeChoices.Count == 0
         ? "Every attribute of this Metaverse Object Type that can be generated already has rules in this template."
         : null;
+
+    // Says what the empty field means, since leaving it empty is a choice in its own right (random, not "none true").
+    private string BooleanDistributionHelperText() => _draft.BoolTrueDistribution.HasValue
+        ? "Exactly this share of the objects given a value are given true, rounded to the nearest object; the rest are given false."
+        : "Leave empty to give each object true or false at random.";
 
     private void OnAttributeChanged(MetaverseAttribute? attribute)
     {
