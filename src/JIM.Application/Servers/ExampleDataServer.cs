@@ -228,6 +228,15 @@ public class ExampleDataServer
         return await Application.Repository.ExampleData.GetTemplateHeaderAsync(id);
     }
 
+    // Built-in templates are JIM's own and are kept converged by seeding, which maintains them through the repository
+    // directly; every administrator-facing change goes through the mutators below, so this is where the rule lives.
+    // Copying is still allowed: it is how an administrator customises a built-in template.
+    private const string BuiltInTemplateCannotBeChangedMessage =
+        "Built-in Data Generation Templates cannot be changed. Duplicate it to make a version you can change.";
+
+    private const string BuiltInTemplateCannotBeDeletedMessage =
+        "Built-in Data Generation Templates cannot be deleted.";
+
     // Example Data Templates are administered through the REST API and PowerShell (#894) as well as created by seeding
     // (System), so these mutators are attributed via the initiator triad and each records a versioned configuration
     // snapshot like every other configuration object. Create and full update validate the template and enforce name
@@ -260,10 +269,15 @@ public class ExampleDataServer
     /// is fully validated first. When false, only the template's own fields are written (the rename case): the
     /// persisted graph is left alone and full graph validation is skipped, though a name is still required.
     /// </param>
-    /// <exception cref="ExampleDataTemplateException">The template is not valid.</exception>
+    /// <exception cref="ExampleDataTemplateException">The template is built in, or is not valid.</exception>
     /// <exception cref="InvalidOperationException">Another template already holds this template's name.</exception>
     public async Task UpdateTemplateAsync(ExampleDataTemplate template, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, bool replaceObjectTypes = true)
     {
+        // decided from the persisted row, never the incoming (detached, caller-supplied) template's own flag.
+        var persisted = await Application.Repository.ExampleData.GetTemplateHeaderAsync(template.Id);
+        if (persisted is { BuiltIn: true })
+            throw new ExampleDataTemplateException(BuiltInTemplateCannotBeChangedMessage);
+
         if (replaceObjectTypes)
         {
             // the incoming graph replaces the persisted one, so it must be valid in its own right.
@@ -312,11 +326,19 @@ public class ExampleDataServer
         return copy;
     }
 
+    /// <summary>
+    /// Deletes a Data Generation Template, recording a Delete Activity and a deletion snapshot. Does nothing when no
+    /// template has the id.
+    /// </summary>
+    /// <exception cref="ExampleDataTemplateException">The template is built in.</exception>
     public async Task DeleteTemplateAsync(int templateId, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
         var template = await Application.Repository.ExampleData.GetTemplateAsync(templateId);
         if (template == null)
             return;
+
+        if (template.BuiltIn)
+            throw new ExampleDataTemplateException(BuiltInTemplateCannotBeDeletedMessage);
 
         var activity = new Activity
         {

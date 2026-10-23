@@ -11,6 +11,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
+using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Security;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Middleware.Api;
@@ -570,7 +571,9 @@ public class ExampleDataControllerTemplateCrudTests
     [Test]
     public async Task UpdateTemplateAsync_BuiltIn_ReturnsBadRequestAsync()
     {
-        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(1)).ReturnsAsync(BuildExistingTemplate(1, "Built-in Template", builtIn: true));
+        var existing = BuildExistingTemplate(1, "Built-in Template", builtIn: true);
+        _mockExampleDataRepo.Setup(r => r.GetTemplateAsync(1)).ReturnsAsync(existing);
+        _mockExampleDataRepo.Setup(r => r.GetTemplateHeaderAsync(1)).ReturnsAsync(ExampleDataTemplateHeader.FromEntity(existing));
 
         var result = await _controller.UpdateTemplateAsync(1, new UpdateExampleDataTemplateRequest { Name = "New Name" });
 

@@ -327,9 +327,6 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (existing == null)
             return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
 
-        if (existing.BuiltIn)
-            return BadRequest(ApiErrorResponse.BadRequest("Built-in Data Generation Templates cannot be updated."));
-
         // A detached template carrying the existing identity and audit provenance; the server decides whether the
         // Object Type graph below it replaces the persisted one (see replaceObjectTypes).
         var template = new ExampleDataTemplate
@@ -404,10 +401,15 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         if (template == null)
             return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
 
-        if (template.BuiltIn)
-            return BadRequest(ApiErrorResponse.BadRequest("Built-in Data Generation Templates cannot be deleted."));
+        try
+        {
+            await _application.ExampleData.DeleteTemplateAsync(id, initiatorType, initiatorId, initiatorName, changeReason);
+        }
+        catch (ExampleDataTemplateException ex)
+        {
+            return TemplateRejected("deletion", ex);
+        }
 
-        await _application.ExampleData.DeleteTemplateAsync(id, initiatorType, initiatorId, initiatorName, changeReason);
         _logger.LogInformation("Deleted Data Generation Template {Id}", id);
 
         return NoContent();
@@ -756,8 +758,8 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     #endregion
 
     /// <summary>
-    /// Logs and builds the 400 response for a Data Generation Template the server refused as invalid. Shared by the
-    /// create, update and copy endpoints, which catch the same two validation exception types with the same handling.
+    /// Logs and builds the 400 response for a Data Generation Template the server refused: invalid, or built in and
+    /// so not changeable. Shared by the create, update, delete and copy endpoints.
     /// </summary>
     private BadRequestObjectResult TemplateRejected(string operation, OperationalException exception)
     {
