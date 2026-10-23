@@ -248,14 +248,14 @@ public class ImportBatchPrefetchTests
     #region Pre-fetch dictionary lookup tests (InMemory SyncRepository)
 
     [Test]
-    public async Task GetAllCsoExternalIdMappingsAsync_WithExistingCsos_ReturnsDictionaryAsync()
+    public async Task GetAllCsoImportStateLookupAsync_WithExistingCsos_ReturnsDictionaryAsync()
     {
         // Arrange
         InitialiseExistingCsos();
         SyncRepo = TestUtilities.CreateSyncRepository(csos: ConnectedSystemObjectsData, activity: ActivitiesData.First());
 
         // Act
-        var mappings = await SyncRepo.GetAllCsoExternalIdMappingsAsync(1);
+        var mappings = await SyncRepo.GetAllCsoImportStateLookupAsync(1);
 
         // Assert
         Assert.That(mappings.Count, Is.EqualTo(2), "Should have 2 mappings for 2 seeded CSOs.");
@@ -266,17 +266,17 @@ public class ImportBatchPrefetchTests
         var expectedKey1 = $"cso:1:{externalIdAttrId}:{TestConstants.CS_OBJECT_1_HR_ID.ToString().ToLowerInvariant()}";
         Assert.That(mappings.ContainsKey(expectedKey1), Is.True,
             $"Dictionary should contain key for CSO 1. Keys: {string.Join(", ", mappings.Keys)}");
-        Assert.That(mappings[expectedKey1], Is.EqualTo(TestConstants.CS_OBJECT_1_ID));
+        Assert.That(mappings[expectedKey1].CsoId, Is.EqualTo(TestConstants.CS_OBJECT_1_ID));
     }
 
     [Test]
-    public async Task GetAllCsoExternalIdMappingsAsync_EmptyConnectedSystem_ReturnsEmptyDictionaryAsync()
+    public async Task GetAllCsoImportStateLookupAsync_EmptyConnectedSystem_ReturnsEmptyDictionaryAsync()
     {
         // Arrange
         SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
 
         // Act
-        var mappings = await SyncRepo.GetAllCsoExternalIdMappingsAsync(1);
+        var mappings = await SyncRepo.GetAllCsoImportStateLookupAsync(1);
 
         // Assert
         Assert.That(mappings.Count, Is.EqualTo(0), "Empty CS should return empty dictionary.");

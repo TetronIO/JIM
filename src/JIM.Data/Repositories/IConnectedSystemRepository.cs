@@ -146,18 +146,10 @@ public interface IConnectedSystemRepository
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a Connected System.
-    /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
-    /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
-    /// Used for cache warming to eliminate N+1 import lookups.
-    /// </summary>
-    /// <param name="connectedSystemId">The Connected System to load mappings for.</param>
-    /// <returns>A dictionary of cache key → CSO GUID mappings.</returns>
-    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
-
-    /// <summary>
     /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
-    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
+    /// dictionary, keyed by <c>CsoLookupKey</c> ("cso:{connectedSystemId}:{attributeId}:{value}", the value
+    /// folded unless the anchor attribute is case-exact). Each CSO is keyed by its primary external ID, or by its
+    /// secondary external ID when it has no primary yet (Pending Provisioning).
     /// </summary>
     public Task<Dictionary<string, JIM.Models.Staging.CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
 

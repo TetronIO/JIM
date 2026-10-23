@@ -2559,25 +2559,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a Connected System.
-    /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
-    /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
-    /// Handles all external ID data types (string, int, long, Guid).
-    /// Delegates to <see cref="GetAllCsoImportStateLookupAsync"/> (SPEC-1082 D8) so there is a
-    /// single query implementation; ConnectedSystemServer.cs:3208 still consumes this Guid-only shape.
-    /// </summary>
-    public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
-    {
-        var lookup = await GetAllCsoImportStateLookupAsync(connectedSystemId);
-        return lookup.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.CsoId, CsoLookupKey.Comparer);
-    }
-
-    /// <summary>
     /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
-    /// dictionary, keyed by the same composite cache key as the external-id-only mapping above.
-    /// Widens that query's projection with the stored content hash, schema fingerprint, status,
-    /// and partition, so a Full Import can evaluate the skip predicate for every matched object
-    /// without any additional database round trip. Uses AsNoTracking; results are read-only index data.
+    /// dictionary, keyed by <see cref="CsoLookupKey"/>. Each entry carries the CSO ID with the stored
+    /// content hash, schema fingerprint, status, and partition, so a Full Import can evaluate the skip
+    /// predicate for every matched object without any additional database round trip. Handles all
+    /// external ID data types. Uses AsNoTracking; results are read-only index data.
     /// </summary>
     public async Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {

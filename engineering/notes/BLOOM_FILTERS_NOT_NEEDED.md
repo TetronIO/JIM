@@ -28,10 +28,10 @@ Three structural reasons:
 | Scenario | Current mechanism | Bloom filter useful? |
 |---|---|---|
 | CSO duplicate detection in import batch (`SyncImportTaskProcessor.cs` ~L2465) | 8 in-memory `Dictionary<>` keyed by ID attribute | No. Already O(1), and an exact answer is required. |
-| CSO existence by external ID (`ConnectedSystemServer.cs` ~L2783) | Warmed `IMemoryCache` of external-ID to Guid | No. Cache gives an exact answer; a Bloom in front of it adds no value. |
+| CSO existence by external ID during import (`SyncImportTaskProcessor`) | Per-run dictionary of external ID to CSO, pre-fetched once per import (#440) | No. The dictionary gives an exact answer; a Bloom in front of it adds no value. |
 | Reference resolution within batch (`SyncEngine.AttributeFlow.cs` ~L454) | `HashSet<Guid>.Contains` | No. Already exact and O(1). |
 | Object matching / join (CSO to MVO) (`MetaverseRepository.cs` ~L1438) | Indexed EF Core `Any()` query per CSO per rule | Marginal. False positive still forces the DB query, so it only helps if most rules miss. A negative-result memo is simpler and exact. |
-| Provisioning: does target CS object exist? | Falls through CSO cache | No. Cache covers it. |
+| Provisioning: does target CS object exist? | Per-page CSO lookup in the export evaluation cache | No. The lookup covers it. |
 | Web / API / PowerShell user-facing reads | Single indexed Postgres queries | No. Latency is dominated by request overhead. |
 
 ## Integrity constraint (why this matters more in JIM than elsewhere)

@@ -57,7 +57,7 @@ var host = Host.CreateDefaultBuilder(args)
             return new PostgresDataRepository(context);
         });
 
-        // JimApplication — transient (Scheduler does not need IMemoryCache)
+        // JimApplication — transient, each unit of work gets its own instance
         services.AddTransient<JimApplication>(sp =>
         {
             var repo = sp.GetRequiredService<IRepository>();

@@ -3152,15 +3152,7 @@ public class ExportEvaluationServer
 
         // Persist immediately unless caller requested deferred saving for batch operations
         if (!deferSave)
-        {
             await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
-
-            // Add to lookup cache so confirming imports can find this PendingProvisioning CSO
-            // by secondary external ID without a DB round-trip.
-            // When deferSave=true, the caller (FlushPendingExportOperationsAsync) handles cache population.
-            if (secondaryIdChange.StringValue != null)
-                Application.ConnectedSystems.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdChange.StringValue, cso.Id);
-        }
 
         Log.Debug("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
             LogSanitiser.Sanitise(secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown"), cso.Id, deferSave);
