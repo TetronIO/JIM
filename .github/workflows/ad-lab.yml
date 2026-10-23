@@ -147,6 +147,30 @@ jobs:
             exit 1
           }
 
+      # Ubuntu's daily upgrade runs needrestart, which restarts services whose libraries changed. On 23 Oct 2026 it
+      # restarted this runner's service mid-job and cancelled the nightly, so the runner VM exempts the runner, Docker
+      # and containerd (TetronIO/ci-runners writes the exclusion; see "The runner VM" in
+      # test/integration/ad-lab/README.md). A warning, not a failure: a run on a day with no upgrades is still sound.
+      - name: Check the runner is exempt from automatic service restarts
+        run: |
+          Write-Host "Daily upgrade schedule: $(systemctl show apt-daily-upgrade.timer -p TimersCalendar --value 2>$null)"
+          if (-not (Test-Path -Path '/etc/needrestart')) {
+            Write-Host 'needrestart is not installed, so nothing restarts services after an upgrade.'
+            exit 0
+          }
+          $config = (Get-ChildItem -Path '/etc/needrestart/needrestart.conf', '/etc/needrestart/conf.d/*.conf' -ErrorAction SilentlyContinue |
+            Get-Content -Raw) -join "`n"
+          # q() or qr(): needrestart treats either as a pattern.
+          $missing = @('actions\.runner\.', 'docker', 'containerd') | Where-Object {
+            $config -notmatch ('\{qr?\(\^' + [regex]::Escape($_) + '\)\}\s*=\s*0\s*;')
+          }
+          if ($missing) {
+            Write-Host "::warning title=The runner can be restarted mid-run::needrestart does not exempt $($missing -join ', '), so an automatic upgrade can cancel this run. See 'The runner VM' in test/integration/ad-lab/README.md."
+          }
+          else {
+            Write-Host 'needrestart exempts the runner, Docker and containerd.'
+          }
+
       # The private key of the jim-lab account, for Invoke-LabControl's ssh calls. Written to a 0600 file under the
       # job's temp folder, created empty and restricted before the key goes in, and deleted by the last step.
       - name: Write the control-plane SSH key
