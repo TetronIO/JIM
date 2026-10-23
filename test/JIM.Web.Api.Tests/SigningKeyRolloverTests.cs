@@ -265,15 +265,18 @@ public class SigningKeyRolloverTests
         var refreshInterval = TimeSpan.FromSeconds(10);
         BuildBearerScheme(refreshInterval);
         Assert.That(await AuthenticateAsync(old), Is.True, "baseline");
-        var earlyFetch = Stopwatch.StartNew();
+        // JIM opens the window part-way through the stray request, so it opens no earlier than the first clock starts
+        // and no later than the second: the first bounds the requests made inside it, the second the wait for its end.
+        var windowOpenedNoEarlier = Stopwatch.StartNew();
         Assert.That(await AuthenticateAsync(stray), Is.False, "a token naming an unknown key makes JIM fetch the key set");
+        var windowOpenedNoLater = Stopwatch.StartNew();
         await Task.Delay(TimeSpan.FromMilliseconds(500));
         var fetchesBeforeWindow = _identityProvider.KeySetFetches;
 
         // The provider rolls its key inside the window that fetch opened.
         _identityProvider.Publish(replacement);
         var refusedInsideWindow = 0;
-        while (earlyFetch.Elapsed < refreshInterval - TimeSpan.FromMilliseconds(750))
+        while (windowOpenedNoEarlier.Elapsed < refreshInterval - TimeSpan.FromMilliseconds(750))
         {
             Assert.That(await AuthenticateAsync(replacement), Is.False, "inside the window every request is refused");
             refusedInsideWindow++;
@@ -282,7 +285,7 @@ public class SigningKeyRolloverTests
 
         Assert.That(_identityProvider.KeySetFetches, Is.EqualTo(fetchesBeforeWindow), "no key set fetch inside the window");
 
-        var restOfWindow = refreshInterval - earlyFetch.Elapsed + TimeSpan.FromMilliseconds(250);
+        var restOfWindow = refreshInterval - windowOpenedNoLater.Elapsed + TimeSpan.FromMilliseconds(250);
         if (restOfWindow > TimeSpan.Zero)
             await Task.Delay(restOfWindow);
         var first = await AuthenticateAsync(replacement);
