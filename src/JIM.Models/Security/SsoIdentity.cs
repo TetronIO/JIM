@@ -28,4 +28,7 @@ public record SsoIdentity
 
     /// <summary>Optional user principal name (OIDC <c>preferred_username</c> claim).</summary>
     public string? UserPrincipalName { get; init; }
+
+    /// <summary>Optional email address (OIDC <c>email</c> claim).</summary>
+    public string? Email { get; init; }
 }

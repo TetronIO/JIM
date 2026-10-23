@@ -297,7 +297,10 @@ try
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";
             options.UsePkce = true;
-            options.Scope.Add("profile");
+
+            // openid, profile and email from every provider; from AD FS, also the Web API as the resource with
+            // allatclaims, so the API's claim rules shape the ID token too (#2439). See PortalSignInRequest.
+            PortalSignInRequest.Configure(options, authority, apiScope, clientId);
 
             // Disable Pushed Authorization Requests (PAR), enabled by default in .NET 10.
             // JIM must work with any OIDC provider; PAR support varies widely (e.g. Entra ID
@@ -1020,7 +1023,8 @@ static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrinc
         DisplayName = principal.FindFirstValue("name"),
         FirstName = principal.FindFirstValue("given_name"),
         LastName = principal.FindFirstValue("family_name"),
-        UserPrincipalName = principal.FindFirstValue("preferred_username")
+        UserPrincipalName = principal.FindFirstValue("preferred_username"),
+        Email = principal.FindFirstValue("email")
     };
 
     var user = await jim.Auth.ResolveOrProvisionSsoIdentityAsync(ssoIdentity);

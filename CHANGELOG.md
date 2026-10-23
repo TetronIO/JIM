@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Signing in copies your email address from the identity provider to your Metaverse Object's **Email** when it has none: the portal now asks every provider for the `email` scope. (#2439)
 - ✨ Directory servers discovered over REST or `Get-JIMConnectedSystemDirectoryServer` now name the setting they fill, by id and name, so a script can discover a domain controller and set it as Preferred Domain Controller in one step. (#2456)
 - ✨ Find changes across every Metaverse Object by how their attributes changed, such as everyone disabled this month: the new Object Changes page filters by time, Metaverse Object Type, name and attribute value. Also via REST and `Search-JIMMetaverseObjectChange`. (#1901)
 - ✨ Register JIM with AD FS in one command: `Register-JIMIdentityProvider -Provider ADFS` creates the Application Group the SSO guide describes and returns the `JIM_SSO_*` values. Run it again to repair drift, or with `-WhatIf` to see it. (#2364)
@@ -90,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 With AD FS, the portal now asks for JIM's Web API as its resource with the `allatclaims` scope, so the Web API's claim rules shape the portal's sign-in as they do the API's. Permit `allatclaims` to JIM's server application in AD FS, or sign-in is refused. (#2439)
 - 🔄 The LDAP Connector discovers INTEGER attributes on OpenLDAP, 389 Directory Server and other non-Active Directory directories, such as `uidNumber` and `gidNumber`, as Long Number rather than Number, so values beyond 2,147,483,647 import. Map them to Long Number Metaverse Attributes. Active Directory and Samba AD are unchanged. (#2154)
 - 🔄 JIM never gives up on a Pending Export: one the Connected System refuses, or whose value an import never confirms, is attempted again at every export run, with no waiting in between, and reported on every run until the cause is fixed. Lists show **Failing Since** and **Failing only**, the Connected System page counts **Failing Exports**, and REST and `Get-JIMPendingExport -Failing` filter them. (#2119)
 - 🔄 A Delta Import from Keycloak's SCIM API now reads every resource and says why on the Activity, whatever Change Detection is set to: Keycloak leaves a resource's last-modified date alone for most changes, so a filtered import missed them. (#2094)

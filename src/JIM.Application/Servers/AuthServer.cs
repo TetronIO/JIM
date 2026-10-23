@@ -135,6 +135,7 @@ public class AuthServer
             await AddAttributeFromValueAsync(user, identity.FirstName, Constants.BuiltInAttributes.FirstName);
             await AddAttributeFromValueAsync(user, identity.LastName, Constants.BuiltInAttributes.LastName);
             await AddAttributeFromValueAsync(user, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName);
+            await AddAttributeFromValueAsync(user, identity.Email, Constants.BuiltInAttributes.Email);
 
             await Application.Metaverse.CreateMetaverseObjectAsync(
                 user,
@@ -216,6 +217,7 @@ public class AuthServer
         await AddMissingAttributeAsync(user, additions, identity.FirstName, Constants.BuiltInAttributes.FirstName);
         await AddMissingAttributeAsync(user, additions, identity.LastName, Constants.BuiltInAttributes.LastName);
         await AddMissingAttributeAsync(user, additions, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName);
+        await AddMissingAttributeAsync(user, additions, identity.Email, Constants.BuiltInAttributes.Email);
 
         if (additions.Count > 0)
         {
