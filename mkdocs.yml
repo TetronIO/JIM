@@ -149,6 +149,7 @@ nav:
       - Metaverse Objects: configuration/metaverse-objects.md
       - Predefined Searches: configuration/predefined-searches.md
       - Deleted Objects: configuration/deleted-objects.md
+      - Object Changes: configuration/object-changes.md
       - Example Data: configuration/example-data.md
       - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md

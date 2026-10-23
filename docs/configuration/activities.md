@@ -104,6 +104,8 @@ The Activity page in the admin portal filters a busy list down to what you are r
 - **Schedule filters**<br /> On the Operations > History tab, **Scheduled only** narrows the list to work a [Schedule](schedules.md) produced, and the Schedule filter narrows it to particular ones. Combined with the outcome filter, this answers whether a step has been failing repeatedly or only once: filter to the Schedule, set the outcome to the failure you saw, and read down the dates.
 - **Shareable URLs**<br /> The filter state is reflected in the page URL, so a filtered view can be bookmarked or shared; opening the link reproduces the same view. For example, reviewing user-made configuration changes over the last week is one URL an auditor can return to each review cycle.
 
+An Activity is a whole operation, such as a synchronisation run touching thousands of objects. To find changes to particular objects by how their attributes changed (everyone whose status changed to Disabled this month, say), use [Object Changes](object-changes.md) instead.
+
 Automation gets the same filters, not a subset of them. `GET /api/v1/activities` accepts `search`, `targetType`, `initiatorType`, `operation`, `outcome`, `status`, `initiatedById`, `initiatedBy`, `hasChildActivities`, `createdFrom`, `createdTo`, `connectedSystem`, `runProfile`, `scheduledOnly` and `scheduleId`; repeat a query parameter to pass several values, which combine with OR within that filter, while separate filters narrow each other. `Get-JIMActivity` exposes the same set as parameters (see the [Activity cmdlets](../powershell/activities.md#get-jimactivity)). The portal, the REST API and PowerShell all run the same query, so the same filters return the same Activities on every surface.
 
 ## Configuration Change History {#configuration-change-history}
@@ -152,6 +154,7 @@ While a Run Profile runs, its Activity reports progress live: in the portal, fro
 
 ## See also
 
+- [Object Changes](object-changes.md): search changes to Metaverse Objects by attribute and value
 - [Run Profiles](run-profiles.md): the operations that produce most activities
 - [Schedules](schedules.md): the Activities a Schedule's steps produce, and the Schedule Execution view that links them
 - [Security Audit Events](../administration/security-audit-events.md): interactive sign-in, API key and SSO access token authentication events, aggregation, and their own retention period

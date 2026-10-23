@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Find changes across every Metaverse Object by how their attributes changed, such as everyone disabled this month: the new Object Changes page filters by time, Metaverse Object Type, name and attribute value. Also via REST and `Search-JIMMetaverseObjectChange`. (#1901)
 - ✨ Register JIM with AD FS in one command: `Register-JIMIdentityProvider -Provider ADFS` creates the Application Group the SSO guide describes and returns the `JIM_SSO_*` values. Run it again to repair drift, or with `-WhatIf` to see it. (#2364)
 - ✨ Create, edit, duplicate and delete Data Generation Templates in the portal: add Object Types and attributes, choose how each attribute's values are made, and duplicate a built-in template to customise it. Copying is also via REST and `Copy-JIMExampleDataTemplate`. (#1466)
 - ✨ Identity providers can push Users and Groups to JIM over SCIM 2.0 (Preview): the new JIM SCIM 2.0 Service Provider Connector gives a Connected System its own SCIM endpoint and keys, and imports what arrives on its Schedule. Also via REST and `*-JIMScimKey`. (#124)

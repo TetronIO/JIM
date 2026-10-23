@@ -33,6 +33,11 @@ public class MetaverseObjectChangeSearchResult
     public string? MetaverseObjectTypeName { get; set; }
 
     /// <summary>
+    /// The Metaverse Object Type's plural name, which the object's portal address is built from.
+    /// </summary>
+    public string? MetaverseObjectTypePluralName { get; set; }
+
+    /// <summary>
     /// The Activity the change was made in, when it was made by a synchronisation.
     /// </summary>
     public Guid? ActivityId { get; set; }

@@ -450,6 +450,8 @@ public class MetaverseObjectChangeSearchDatabaseTests
             Assert.That(carol.MetaverseObjectId, Is.EqualTo(_seed.CarolId));
             Assert.That(carol.MetaverseObjectDisplayName, Is.EqualTo("Carol"));
             Assert.That(carol.MetaverseObjectTypeName, Is.EqualTo("Person"));
+            Assert.That(carol.MetaverseObjectTypePluralName, Is.EqualTo("People"));
+            Assert.That(bob.MetaverseObjectTypePluralName, Is.EqualTo("People"));
             Assert.That(bob.MetaverseObjectDeleted, Is.False);
             Assert.That(bob.MetaverseObjectDisplayName, Is.EqualTo("Bob"));
             Assert.That(bob.MetaverseObjectTypeId, Is.EqualTo(_seed.PersonTypeId));
