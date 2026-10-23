@@ -176,7 +176,6 @@ public class ExampleDataTemplateCloneGraphTests
             MetaverseAttribute = _firstName,
             PopulatedValuesPercentage = 50,
             BoolTrueDistribution = 30,
-            BoolShouldBeRandom = true,
             MinDate = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             MaxDate = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             MinNumber = 1,

@@ -179,7 +179,7 @@ public class DataGeneratorTemplateAttributeFailTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            BoolTrueDistribution = 50
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject4.Validate);
     }
@@ -243,7 +243,7 @@ public class DataGeneratorTemplateAttributeFailTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            BoolTrueDistribution = 50
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject2.Validate);
 
@@ -271,7 +271,7 @@ public class DataGeneratorTemplateAttributeFailTests
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            BoolTrueDistribution = 50
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject1.Validate);
 
@@ -297,7 +297,7 @@ public class DataGeneratorTemplateAttributeFailTests
                 new() { Value = "Leaver", Weight = 0.05f }
             },
             PopulatedValuesPercentage = 100,
-            BoolShouldBeRandom = true
+            BoolTrueDistribution = 50
         };
 
         Assert.Catch<ExampleDataTemplateAttributeException>(subject1.Validate);
@@ -420,5 +420,34 @@ public class DataGeneratorTemplateAttributeFailTests
             MvaRefMaxAssignments = 10
         };
         Assert.Catch<ExampleDataTemplateAttributeException>(subject6.Validate);
+    }
+
+    [TestCase(-1)]
+    [TestCase(101)]
+    public void Validate_BoolTrueDistributionOutOfRange_Throws(int distribution)
+    {
+        var subject = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
+            PopulatedValuesPercentage = 100,
+            BoolTrueDistribution = distribution
+        };
+
+        var ex = Assert.Throws<ExampleDataTemplateAttributeException>(subject.Validate);
+        Assert.That(ex!.Message, Does.Contain("BoolTrueDistribution"));
+    }
+
+    [TestCase(0)]
+    [TestCase(100)]
+    public void Validate_BoolTrueDistributionAtRangeLimits_DoesNotThrow(int distribution)
+    {
+        var subject = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
+            PopulatedValuesPercentage = 100,
+            BoolTrueDistribution = distribution
+        };
+
+        Assert.That(subject.Validate, Throws.Nothing);
     }
 }

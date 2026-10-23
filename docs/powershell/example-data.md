@@ -291,7 +291,7 @@ New-JIMExampleDataTemplate [-Name] <string> -ObjectType <hashtable[]> [-ChangeRe
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Name` | `string` | Yes |  | The name for the Data Generation Template. Can be given by position, as the first argument. |
-| `ObjectType` | `hashtable[]` | Yes |  | One hashtable per Object Type the template generates objects for. Each takes MetaverseObjectType (a Metaverse Object Type name or id; required), ObjectsToCreate (how many objects to generate; 1 if omitted) and Attributes, an optional array of attribute generation hashtables using the API's request field names (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate, BoolTrueDistribution, BoolShouldBeRandom, SequentialNumbers, RandomNumbers, WeightedStringValues, ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds, AttributeDependency), except that MetaverseAttribute may be a Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids, in order. Unknown keys throw, so a typo is caught before anything is sent. |
+| `ObjectType` | `hashtable[]` | Yes |  | One hashtable per Object Type the template generates objects for. Each takes MetaverseObjectType (a Metaverse Object Type name or id; required), ObjectsToCreate (how many objects to generate; 1 if omitted) and Attributes, an optional array of attribute generation hashtables using the API's request field names (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate, BoolTrueDistribution, SequentialNumbers, RandomNumbers, WeightedStringValues, ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds, AttributeDependency), except that MetaverseAttribute may be a Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids, in order. Unknown keys throw, so a typo is caught before anything is sent. |
 | `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the created Data Generation Template. |
 
@@ -320,8 +320,7 @@ Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 | `ExampleDataSets` | `object[]` | The Example Data Sets values are drawn from, by name or ID. Order follows array order, which is what index-based patterns refer to. |
 | `WeightedStringValues` | `hashtable[]` | Specific values to choose from, weighted: `@{ Value = "active"; Weight = 0.9 }`. |
 | `PopulatedValuesPercentage` | `int` | What percentage of generated objects receive a value for this attribute. |
-| `BoolTrueDistribution` | `int` | For boolean attributes, what percentage of values are true. |
-| `BoolShouldBeRandom` | `bool` | For boolean attributes, whether values are generated randomly. |
+| `BoolTrueDistribution` | `int` | For boolean attributes, the percentage (0 to 100) of the objects given a value that are given true: an exact share, rounded to the nearest object with halves rounded up. Omit it for true or false at random. |
 | `MinDate` / `MaxDate` | `datetime` | For date attributes, the earliest and latest values to generate. |
 | `MinNumber` / `MaxNumber` | `int` | For number attributes, the smallest and largest values to generate. |
 | `SequentialNumbers` / `RandomNumbers` | `bool` | For number attributes, whether values are generated sequentially or randomly. |
@@ -520,10 +519,10 @@ Supply `-MetaverseAttribute` to say which attribute values are generated for.
 
 ```powershell
 # ById (default)
-Add-JIMExampleDataTemplateAttribute -TemplateId <int> -ObjectType <object> [-MetaverseAttribute <object>] [-Pattern <string>] [-Expression <string>] [-ExampleDataSet <object[]>] [-WeightedValue <hashtable[]>] [-PopulatedValuesPercentage <int>] [-BoolTrueDistribution <int>] [-BoolShouldBeRandom <bool>] [-MinDate <datetime>] [-MaxDate <datetime>] [-MinNumber <int>] [-MaxNumber <int>] [-SequentialNumbers <bool>] [-RandomNumbers <bool>] [-ManagerDepthPercentage <int>] [-MvaRefMinAssignments <int>] [-MvaRefMaxAssignments <int>] [-ReferenceMetaverseObjectType <object[]>] [-AttributeDependency <hashtable>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+Add-JIMExampleDataTemplateAttribute -TemplateId <int> -ObjectType <object> [-MetaverseAttribute <object>] [-Pattern <string>] [-Expression <string>] [-ExampleDataSet <object[]>] [-WeightedValue <hashtable[]>] [-PopulatedValuesPercentage <int>] [-BoolTrueDistribution <int>] [-MinDate <datetime>] [-MaxDate <datetime>] [-MinNumber <int>] [-MaxNumber <int>] [-SequentialNumbers <bool>] [-RandomNumbers <bool>] [-ManagerDepthPercentage <int>] [-MvaRefMinAssignments <int>] [-MvaRefMaxAssignments <int>] [-ReferenceMetaverseObjectType <object[]>] [-AttributeDependency <hashtable>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByName
-Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> [-MetaverseAttribute <object>] [-Pattern <string>] [-Expression <string>] [-ExampleDataSet <object[]>] [-WeightedValue <hashtable[]>] [-PopulatedValuesPercentage <int>] [-BoolTrueDistribution <int>] [-BoolShouldBeRandom <bool>] [-MinDate <datetime>] [-MaxDate <datetime>] [-MinNumber <int>] [-MaxNumber <int>] [-SequentialNumbers <bool>] [-RandomNumbers <bool>] [-ManagerDepthPercentage <int>] [-MvaRefMinAssignments <int>] [-MvaRefMaxAssignments <int>] [-ReferenceMetaverseObjectType <object[]>] [-AttributeDependency <hashtable>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> [-MetaverseAttribute <object>] [-Pattern <string>] [-Expression <string>] [-ExampleDataSet <object[]>] [-WeightedValue <hashtable[]>] [-PopulatedValuesPercentage <int>] [-BoolTrueDistribution <int>] [-MinDate <datetime>] [-MaxDate <datetime>] [-MinNumber <int>] [-MaxNumber <int>] [-SequentialNumbers <bool>] [-RandomNumbers <bool>] [-ManagerDepthPercentage <int>] [-MvaRefMinAssignments <int>] [-MvaRefMaxAssignments <int>] [-ReferenceMetaverseObjectType <object[]>] [-AttributeDependency <hashtable>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -539,8 +538,7 @@ Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> 
 | `ExampleDataSet` | `object[]` | No |  | The Example Data Sets (names or ids) values are drawn from. Order follows array order, which is what index-based patterns like "{0} {1}" refer to. |
 | `WeightedValue` | `hashtable[]` | No |  | Specific string values to choose from, weighted to control their distribution: one @{ Value = ..; Weight = .. } hashtable per value. |
 | `PopulatedValuesPercentage` | `int` | No |  | What percentage of generated objects receive a value for this attribute. From 0 to 100. |
-| `BoolTrueDistribution` | `int` | No |  | For boolean attributes, what percentage of values are true. From 0 to 100. |
-| `BoolShouldBeRandom` | `bool` | No |  | For boolean attributes, whether values are generated randomly. |
+| `BoolTrueDistribution` | `int` | No |  | For boolean attributes, the percentage of the objects given a value that are given true. The share is exact, rounded to the nearest object with halves rounded up; when omitted, each object is given true or false at random. From 0 to 100. |
 | `MinDate` | `datetime` | No |  | For date attributes, the earliest value to generate. |
 | `MaxDate` | `datetime` | No |  | For date attributes, the latest value to generate. |
 | `MinNumber` | `int` | No |  | For number attributes, the smallest value to generate. |
