@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Directory servers discovered over REST or `Get-JIMConnectedSystemDirectoryServer` now name the setting they fill, by id and name, so a script can discover a domain controller and set it as Preferred Domain Controller in one step. (#2456)
 - ✨ Find changes across every Metaverse Object by how their attributes changed, such as everyone disabled this month: the new Object Changes page filters by time, Metaverse Object Type, name and attribute value. Also via REST and `Search-JIMMetaverseObjectChange`. (#1901)
 - ✨ Register JIM with AD FS in one command: `Register-JIMIdentityProvider -Provider ADFS` creates the Application Group the SSO guide describes and returns the `JIM_SSO_*` values. Run it again to repair drift, or with `-WhatIf` to see it. (#2364)
 - ✨ Create, edit, duplicate and delete Data Generation Templates in the portal: add Object Types and attributes, choose how each attribute's values are made, and duplicate a built-in template to customise it. Copying is also via REST and `Copy-JIMExampleDataTemplate`. (#1466)
