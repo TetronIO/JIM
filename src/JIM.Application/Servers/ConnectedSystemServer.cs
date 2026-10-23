@@ -9421,6 +9421,23 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The change a Run Profile Execution Item recorded on its Connected System Object (#2033), in the change-history
+    /// shape; null when it recorded none. Found even when the object has since been deleted.
+    /// </summary>
+    public async Task<CsoChangeHistoryDto?> GetCsoChangeForExecutionItemAsync(Guid runProfileExecutionItemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetCsoChangeForExecutionItemAsync(runProfileExecutionItemId);
+    }
+
+    /// <summary>
+    /// The Connected System Object changes with the given ids, in the change-history shape (#2033).
+    /// </summary>
+    public async Task<List<CsoChangeHistoryDto>> GetCsoChangesAsync(IReadOnlyCollection<Guid> changeIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetCsoChangesAsync(changeIds);
+    }
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>

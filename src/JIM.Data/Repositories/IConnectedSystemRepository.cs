@@ -937,6 +937,18 @@ public interface IConnectedSystemRepository
     Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize);
 
     /// <summary>
+    /// The change a Run Profile Execution Item recorded on its Connected System Object, in the change-history shape
+    /// (#2033); null when it recorded none. Read by item, so a change whose object has since been deleted is found.
+    /// </summary>
+    Task<CsoChangeHistoryDto?> GetCsoChangeForExecutionItemAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
+    /// The Connected System Object changes with the given ids, in the change-history shape (#2033); ids with no change
+    /// are skipped. Used for the snapshots a synchronisation's staged Pending Exports recorded.
+    /// </summary>
+    Task<List<CsoChangeHistoryDto>> GetCsoChangesAsync(IReadOnlyCollection<Guid> changeIds);
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>
