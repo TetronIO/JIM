@@ -77,9 +77,9 @@ The summary band adds an **After this run** strip of what followed, separate fro
 
 ## The Causality Explorer
 
-The Lineage answers for one execution item. The Causality Explorer answers for an object, and lets you follow a story from object to run to object without losing your place. Open it from wherever the question starts:
+The Lineage answers for one execution item. The Causality Explorer answers for an object, and lets you follow a story from object to run to object without losing your place. It is for Administrators only, like the REST API reads behind it; other users see none of the ways in. Open it from wherever the question starts:
 
-- **Explore causality** on a Connected System Object or a Metaverse Object opens that object's causal timeline.
+- **Explore causality** on a Connected System Object opens that object's causal timeline. On a Metaverse Object it sits in the **Inspect** view: in the toolbar for the whole object, and beside **Open in Timeline** in an attribute's inspector.
 - **Open in explorer** in an execution item's causality panel opens the item's Lineage in the explorer.
 - **Queued by** on a Pending Export lists the synchronisation runs that queued the change, each with **Explore** beside it.
 
