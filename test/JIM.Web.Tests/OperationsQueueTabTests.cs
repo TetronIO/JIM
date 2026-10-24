@@ -219,6 +219,65 @@ public class OperationsQueueTabTests : JimComponentTestContext
     }
 
     [Test]
+    public async Task OperationsQueueTab_ProgressNotification_UpdatesTheRowInPlaceRatherThanRebuildingItAsync()
+    {
+        // The grid keys each row by its item, so a row handed a fresh header is torn down and rebuilt. Progress
+        // arrives many times a second during a large import, and a link rebuilt between a mouse press and its
+        // release never receives the click: the task's name could not be clicked through to its Activity.
+        var runningTask = Task("HR System - Full Import", WorkerTaskStatus.Processing);
+        runningTask.ActivityId = Guid.NewGuid();
+        runningTask.ObjectsToProcess = 12500;
+        runningTask.ObjectsProcessed = 8320;
+        var queue = new List<WorkerTaskHeader> { runningTask };
+        ArrangeQueue(queue);
+
+        var cut = Render<OperationsQueueTab>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("8,320 / 12,500")));
+        var progressBefore = cut.FindComponent<WorkerTaskProgress>().Instance;
+
+        var advanced = Task("HR System - Full Import", WorkerTaskStatus.Processing);
+        advanced.Id = runningTask.Id;
+        advanced.ActivityId = runningTask.ActivityId;
+        advanced.ObjectsToProcess = 12500;
+        advanced.ObjectsProcessed = 11000;
+        queue[0] = advanced;
+        _notifications.RaiseActivityProgressChanged(Guid.NewGuid());
+
+        await WaitUntilAsync(() => cut.Markup.Contains("11,000 / 12,500", StringComparison.Ordinal));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("11,000 / 12,500"), "the row must still show the new figures");
+            Assert.That(cut.FindComponent<WorkerTaskProgress>().Instance, Is.SameAs(progressBefore),
+                "a progress-only change must update the existing row, not rebuild it under the reader's cursor");
+        }
+    }
+
+    [Test]
+    public async Task OperationsQueueTab_TaskLeavesTheQueue_DisappearsFromItsGridAsync()
+    {
+        // A progress-only refresh no longer reloads the grids, so a change to which rows a grid holds has to.
+        var finishing = Task("HR System - Full Import", WorkerTaskStatus.Processing);
+        var next = Task("LDAP Directory - Full Import");
+        var queue = new List<WorkerTaskHeader> { finishing, next };
+        ArrangeQueue(queue);
+
+        var cut = Render<OperationsQueueTab>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("HR System - Full Import")));
+
+        queue.Remove(finishing);
+        _notifications.RaiseWorkerTaskChanged(new WorkerTaskChangeNotification());
+
+        await WaitUntilAsync(() => !cut.Markup.Contains("HR System - Full Import", StringComparison.Ordinal));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("HR System - Full Import"), "a finished task must leave the queue");
+            Assert.That(cut.Markup, Does.Contain("LDAP Directory - Full Import"), "the task behind it stays");
+        }
+    }
+
+    [Test]
     public async Task OperationsQueueTab_NewScheduleQueued_AppearsWithoutTheReaderActingAsync()
     {
         var nightly = Guid.NewGuid();

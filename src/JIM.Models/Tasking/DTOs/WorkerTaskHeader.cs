@@ -95,4 +95,67 @@ public class WorkerTaskHeader
     /// Settles where a step that left no record of its own sits relative to the Schedule's progress.
     /// </remarks>
     public int? ScheduleCurrentStepIndex { get; set; }
+
+    /// <summary>
+    /// Brings this header up to date with a later read of the same task, keeping this instance, and reports whether
+    /// anything changed.
+    /// </summary>
+    /// <remarks>
+    /// The Operations queue's grid keys each row by its item, so replacing a header with the fresh one a read returns
+    /// tears its row down and rebuilds it. Progress arrives many times a second during a large run, and a link
+    /// rebuilt between a mouse press and its release never receives the click. Updating in place lets the row be
+    /// redrawn where it stands. Change is judged on values, because every read returns fresh instances.
+    /// </remarks>
+    public bool UpdateFrom(WorkerTaskHeader latest)
+    {
+        var changed =
+            Name != latest.Name ||
+            Type != latest.Type ||
+            Timestamp != latest.Timestamp ||
+            Status != latest.Status ||
+            InitiatedByType != latest.InitiatedByType ||
+            InitiatedById != latest.InitiatedById ||
+            InitiatedByName != latest.InitiatedByName ||
+            ActivityId != latest.ActivityId ||
+            ObjectsToProcess != latest.ObjectsToProcess ||
+            ObjectsProcessed != latest.ObjectsProcessed ||
+            ProgressMessage != latest.ProgressMessage ||
+            !StepsEqual(Steps, latest.Steps) ||
+            ScheduleExecutionId != latest.ScheduleExecutionId ||
+            ScheduleExecutionName != latest.ScheduleExecutionName ||
+            ScheduleStepIndex != latest.ScheduleStepIndex ||
+            ScheduleTotalSteps != latest.ScheduleTotalSteps ||
+            ScheduleCurrentStepIndex != latest.ScheduleCurrentStepIndex;
+
+        Name = latest.Name;
+        Type = latest.Type;
+        Timestamp = latest.Timestamp;
+        Status = latest.Status;
+        InitiatedByType = latest.InitiatedByType;
+        InitiatedById = latest.InitiatedById;
+        InitiatedByName = latest.InitiatedByName;
+        ActivityId = latest.ActivityId;
+        ObjectsToProcess = latest.ObjectsToProcess;
+        ObjectsProcessed = latest.ObjectsProcessed;
+        ProgressMessage = latest.ProgressMessage;
+        Steps = latest.Steps;
+        ScheduleExecutionId = latest.ScheduleExecutionId;
+        ScheduleExecutionName = latest.ScheduleExecutionName;
+        ScheduleStepIndex = latest.ScheduleStepIndex;
+        ScheduleTotalSteps = latest.ScheduleTotalSteps;
+        ScheduleCurrentStepIndex = latest.ScheduleCurrentStepIndex;
+
+        return changed;
+    }
+
+    private static bool StepsEqual(RunPhaseSummary? a, RunPhaseSummary? b)
+    {
+        if (a == null || b == null)
+            return a == b;
+
+        return a.CurrentStepName == b.CurrentStepName &&
+               a.CurrentStepNumber == b.CurrentStepNumber &&
+               a.TotalSteps == b.TotalSteps &&
+               a.Steps.Select(s => (s.Order, s.Name, s.Status)).SequenceEqual(b.Steps.Select(s => (s.Order, s.Name, s.Status)));
+    }
 }
