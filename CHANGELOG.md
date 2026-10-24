@@ -146,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 History retention no longer stops removing Activities when a Metaverse Object change recorded in one outlives it. The cleanup failed on the same batch every run, so Activities stopped expiring. (#2460)
 - 🐛 When your identity provider changes its signing key without notice, the first API request and sign-in using the new key now succeed. They failed before, and could keep failing for up to 5 minutes. (#2442)
 - 🐛 **Max Export Parallelism** applies to every export again, not only to those waiting on references: JIM sends that many batches at once, or the Connector's recommendation when it is empty, keeping one connection per batch stream for the whole run, so large provisioning runs finish sooner. (#1820)
 - 🐛 With **Create containers as needed?** on, an LDAP export no longer fails an object because a parallel export batch created its new OU a moment earlier; the OU exists, so the object is created in it. (#1820)
