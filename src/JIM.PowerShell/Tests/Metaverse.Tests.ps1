@@ -1472,6 +1472,28 @@ Describe 'Get-JIMMetaverseObjectProvenance' {
             }
         }
 
+        It 'Returns a sign-in claim origin with its claim type as the API sent it' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        MetaverseObjectId = $mvoId
+                        Attributes        = @([PSCustomObject]@{
+                                AttributeId   = 7
+                                AttributeName = 'First Name'
+                                Origins       = @([PSCustomObject]@{ Kind = 'SignInClaim'; ClaimType = 'given_name' })
+                            })
+                    }
+                }
+
+                $result = Get-JIMMetaverseObjectProvenance -Id $mvoId
+
+                $result.Attributes[0].Origins[0].Kind | Should -Be 'SignInClaim'
+                $result.Attributes[0].Origins[0].ClaimType | Should -Be 'given_name'
+            }
+        }
+
         It 'Requests the attribute-level provenance endpoint directly with -AttributeId' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

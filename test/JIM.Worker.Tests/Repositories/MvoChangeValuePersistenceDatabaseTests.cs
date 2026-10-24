@@ -109,6 +109,63 @@ public class MvoChangeValuePersistenceDatabaseTests
     }
 
     /// <summary>
+    /// Real-PostgreSQL verification for #2472: the kind of source that set a value, and the sign-in claim type beside
+    /// it, must survive both raw change-history write paths (the sync engine's bulk COPY and the direct insert).
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task ChangeHistoryWritePaths_ContributorKindAndClaimType_PersistAsync(bool bulkPath)
+    {
+        await using var seedContext = NewContext();
+        var mvoType = new MetaverseObjectType { Name = $"TestType-{Guid.NewGuid():N}", PluralName = "TestTypes" };
+        var givenNameAttr = new MetaverseAttribute { Name = $"givenName-{Guid.NewGuid():N}", Type = AttributeDataType.Text };
+        var typeAttr = new MetaverseAttribute { Name = $"type-{Guid.NewGuid():N}", Type = AttributeDataType.Text };
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
+        seedContext.MetaverseAttributes.AddRange(givenNameAttr, typeAttr);
+        seedContext.MetaverseObjects.Add(mvo);
+        await seedContext.SaveChangesAsync();
+
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = bulkPath ? mvo : null,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = bulkPath ? ObjectChangeType.Created : ObjectChangeType.Deleted,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = givenNameAttr, AttributeId = givenNameAttr.Id, StringValue = "Jo", ContributedByKind = ValueContributorKind.SignInClaim, ContributedByClaimType = "given_name" },
+            ValueChangeType.Add);
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = typeAttr, AttributeId = typeAttr.Id, StringValue = "PersonEntity", ContributedByKind = ValueContributorKind.System },
+            ValueChangeType.Add);
+
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            if (bulkPath)
+                await new SyncRepository(repository).PersistPendingMvoChangesAsync(new List<MetaverseObjectChange> { change }, new List<MetaverseObjectChange>());
+            else
+                await repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+        }
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChangeAttributeValues
+            .Include(vc => vc.MetaverseObjectChangeAttribute)
+            .Where(vc => vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.Id == change.Id)
+            .ToListAsync();
+
+        var givenName = persisted.Single(vc => vc.MetaverseObjectChangeAttribute.AttributeName == givenNameAttr.Name);
+        var type = persisted.Single(vc => vc.MetaverseObjectChangeAttribute.AttributeName == typeAttr.Name);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(givenName.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(givenName.ContributedByClaimType, Is.EqualTo("given_name"));
+            Assert.That(type.ContributedByKind, Is.EqualTo(ValueContributorKind.System));
+            Assert.That(type.ContributedByClaimType, Is.Null);
+        }
+    }
+
+    /// <summary>
     /// Real-PostgreSQL verification for #399: the projecting Synchronisation Rule's scalar id and name
     /// snapshot, set on <see cref="MetaverseObjectChange.SyncRuleId"/>/<see cref="MetaverseObjectChange.SyncRuleName"/>
     /// (never the <see cref="MetaverseObjectChange.SyncRule"/> navigation), must survive the bulk COPY path

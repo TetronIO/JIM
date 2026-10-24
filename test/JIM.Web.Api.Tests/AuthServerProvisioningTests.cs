@@ -160,6 +160,47 @@ public class AuthServerProvisioningTests
     }
 
     /// <summary>
+    /// #2472: every value the initial administrator is created with records where it came from: the configured
+    /// identifier claim, the profile claims each value was read from, and JIM itself for the Type it fixes.
+    /// </summary>
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_InitialAdminFirstContact_RecordsEachValuesSourceAsync()
+    {
+        Environment.SetEnvironmentVariable(Constants.Config.SsoInitialAdmin, AdminSub);
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, _uniqueIdAttribute, AdminSub))
+            .ReturnsAsync((MetaverseObject?)null);
+
+        MetaverseObject? created = null;
+        _mockMetaverse.Setup(r => r.CreateMetaverseObjectAsync(It.IsAny<MetaverseObject>()))
+            .Callback<MetaverseObject>(m => { m.Id = Guid.NewGuid(); created = m; })
+            .Returns(Task.CompletedTask);
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity
+        {
+            UniqueId = AdminSub,
+            DisplayName = "Jay Admin",
+            FirstName = "Jay",
+            LastName = "Admin",
+            UserPrincipalName = "jay@panoply.local"
+        });
+
+        MetaverseObjectAttributeValue Value(string attributeName) => created!.AttributeValues.Single(av => av.Attribute!.Name == attributeName);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Value("Subject Identifier").ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(Value("Subject Identifier").ContributedByClaimType, Is.EqualTo("sub"), "the configured identifier claim");
+            Assert.That(Value(Constants.BuiltInAttributes.DisplayName).ContributedByClaimType, Is.EqualTo("name"));
+            Assert.That(Value(Constants.BuiltInAttributes.FirstName).ContributedByClaimType, Is.EqualTo("given_name"));
+            Assert.That(Value(Constants.BuiltInAttributes.LastName).ContributedByClaimType, Is.EqualTo("family_name"));
+            Assert.That(Value(Constants.BuiltInAttributes.UserPrincipalName).ContributedByClaimType, Is.EqualTo("preferred_username"));
+            Assert.That(new[] { Constants.BuiltInAttributes.DisplayName, Constants.BuiltInAttributes.FirstName, Constants.BuiltInAttributes.LastName, Constants.BuiltInAttributes.UserPrincipalName }
+                .Select(n => Value(n).ContributedByKind), Is.All.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(Value(Constants.BuiltInAttributes.Type).ContributedByKind, Is.EqualTo(ValueContributorKind.System), "Type is JIM's constant, not the token's");
+            Assert.That(Value(Constants.BuiltInAttributes.Type).ContributedByClaimType, Is.Null);
+        }
+    }
+
+    /// <summary>
     /// The initial administrator's Created change record must say System made it, inside the Activity that recorded the
     /// creation, so its history and the Object Changes page show who made it and link to how (#2460).
     /// </summary>
@@ -229,7 +270,10 @@ public class AuthServerProvisioningTests
         });
 
         Assert.That(result, Is.SameAs(existing));
-        Assert.That(existing.AttributeValues.Single(av => av.Attribute!.Name == Constants.BuiltInAttributes.DisplayName).StringValue, Is.EqualTo("Synced User"));
+        var supplemented = existing.AttributeValues.Single(av => av.Attribute!.Name == Constants.BuiltInAttributes.DisplayName);
+        Assert.That(supplemented.StringValue, Is.EqualTo("Synced User"));
+        Assert.That(supplemented.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim), "#2472: a supplemented value records the token as its source");
+        Assert.That(supplemented.ContributedByClaimType, Is.EqualTo("name"));
         _mockMetaverse.Verify(r => r.UpdateMetaverseObjectAsync(existing), Times.Once);
         _mockMetaverse.Verify(r => r.CreateMetaverseObjectAsync(It.IsAny<MetaverseObject>()), Times.Never);
         _mockSecurity.Verify(r => r.AddObjectToRoleAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);

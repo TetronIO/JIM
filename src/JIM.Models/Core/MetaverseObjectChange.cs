@@ -196,7 +196,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, value.StringValue)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.Number when value.IntValue != null:
@@ -204,7 +206,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, (int)value.IntValue)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.LongNumber when value.LongValue != null:
@@ -212,7 +216,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, value.LongValue.Value)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.Decimal when value.DecimalValue != null:
@@ -220,7 +226,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, value.DecimalValue.Value)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.Guid when value.GuidValue != null:
@@ -228,7 +236,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, (Guid)value.GuidValue)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.Boolean when value.BoolValue != null:
@@ -236,7 +246,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, (bool)value.BoolValue)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.DateTime when value.DateTimeValue.HasValue:
@@ -244,7 +256,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, value.DateTimeValue.Value)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.Binary when value.ByteValue != null:
@@ -252,7 +266,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, true, value.ByteValue.Length)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.Reference when value.ReferenceValue != null:
@@ -260,7 +276,9 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, value.ReferenceValue)
                 {
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.Reference when value.ReferenceValueId.HasValue:
@@ -274,7 +292,9 @@ public class MetaverseObjectChange
                     ValueChangeType = valueChangeType,
                     ReferenceValueId = value.ReferenceValueId.Value,
                     ContributedBySyncRuleId = contributedBySyncRuleId,
-                    ContributedBySyncRuleName = contributedBySyncRuleName
+                    ContributedBySyncRuleName = contributedBySyncRuleName,
+                    ContributedByKind = value.ContributedByKind,
+                    ContributedByClaimType = value.ContributedByClaimType
                 });
                 break;
             case AttributeDataType.Reference when value.UnresolvedReferenceValue != null:

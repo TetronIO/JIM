@@ -1799,7 +1799,9 @@ public partial class MetaverseRepository : IMetaverseRepository
                                     TypePluralName = vc.ReferenceValue.Type.PluralName
                                 },
                             ContributedBySyncRuleId = vc.ContributedBySyncRuleId,
-                            ContributedBySyncRuleName = vc.ContributedBySyncRuleName
+                            ContributedBySyncRuleName = vc.ContributedBySyncRuleName,
+                            ContributedByKind = vc.ContributedByKind,
+                            ContributedByClaimType = vc.ContributedByClaimType
                         })
                         .ToList()
                 })
@@ -2017,6 +2019,8 @@ public partial class MetaverseRepository : IMetaverseRepository
                 AttributeName = av.Attribute.Name,
                 av.ContributedBySystemId,
                 av.ContributedBySyncRuleId,
+                av.ContributedByKind,
+                av.ContributedByClaimType,
                 av.NullValue
             })
             .Select(g => new
@@ -2025,6 +2029,8 @@ public partial class MetaverseRepository : IMetaverseRepository
                 g.Key.AttributeName,
                 g.Key.ContributedBySystemId,
                 g.Key.ContributedBySyncRuleId,
+                g.Key.ContributedByKind,
+                g.Key.ContributedByClaimType,
                 g.Key.NullValue,
                 Count = g.Count()
             })
@@ -2061,7 +2067,9 @@ public partial class MetaverseRepository : IMetaverseRepository
                         g.ContributedBySyncRuleId,
                         g.NullValue,
                         g.ContributedBySystemId.HasValue ? systemNames.GetValueOrDefault(g.ContributedBySystemId.Value) : null,
-                        g.ContributedBySyncRuleId.HasValue ? ruleNames.GetValueOrDefault(g.ContributedBySyncRuleId.Value) : null),
+                        g.ContributedBySyncRuleId.HasValue ? ruleNames.GetValueOrDefault(g.ContributedBySyncRuleId.Value) : null,
+                        g.ContributedByKind,
+                        g.ContributedByClaimType),
                     g.Count
                 })
                 .OrderByDescending(x => x.Count)
@@ -2116,6 +2124,8 @@ public partial class MetaverseRepository : IMetaverseRepository
                 ContributedBySystemName = av.ContributedBySystem != null ? av.ContributedBySystem.Name : null,
                 av.ContributedBySyncRuleId,
                 ContributedBySyncRuleName = av.ContributedBySyncRule != null ? av.ContributedBySyncRule.Name : null,
+                av.ContributedByKind,
+                av.ContributedByClaimType,
                 av.NullValue,
                 av.ReferenceValueId,
                 ReferenceTypeName = av.ReferenceValue != null ? av.ReferenceValue.Type.Name : null,
@@ -2132,7 +2142,8 @@ public partial class MetaverseRepository : IMetaverseRepository
             ReferenceMetaverseObjectId = r.ReferenceValueId,
             ReferenceTypeName = r.ReferenceTypeName,
             ReferenceTypePluralName = r.ReferenceTypePluralName,
-            Origin = ProvenanceLogic.ResolveOrigin(r.ContributedBySystemId, r.ContributedBySyncRuleId, r.NullValue, r.ContributedBySystemName, r.ContributedBySyncRuleName)
+            Origin = ProvenanceLogic.ResolveOrigin(r.ContributedBySystemId, r.ContributedBySyncRuleId, r.NullValue, r.ContributedBySystemName,
+                r.ContributedBySyncRuleName, r.ContributedByKind, r.ContributedByClaimType)
         }).ToList();
 
         return (values, totalCount);
@@ -2286,6 +2297,8 @@ public partial class MetaverseRepository : IMetaverseRepository
                 ReferenceDisplayName = vc.ReferenceValue != null ? vc.ReferenceValue.CachedDisplayName : null,
                 vc.ContributedBySyncRuleId,
                 vc.ContributedBySyncRuleName,
+                vc.ContributedByKind,
+                vc.ContributedByClaimType,
                 ChangeTime = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime,
                 ActivityId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.Id
@@ -2308,6 +2321,8 @@ public partial class MetaverseRepository : IMetaverseRepository
                 r.ByteValueLength, r.ReferenceDisplayName, r.ReferenceValueId),
             SyncRuleId = r.ContributedBySyncRuleId,
             SyncRuleName = r.ContributedBySyncRuleName,
+            ContributedByKind = r.ContributedByKind,
+            ClaimType = r.ContributedByClaimType,
             Change = new ProvenanceChange
             {
                 ChangeTime = r.ChangeTime,
@@ -4008,7 +4023,7 @@ public partial class MetaverseRepository : IMetaverseRepository
               VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
         var insertValueSql =
             $@"INSERT INTO ""MetaverseObjectChangeAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)})
-              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}})";
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}}, {{14}}, {{15}})";
 
         // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChanges exactly.
         await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -4064,7 +4079,9 @@ public partial class MetaverseRepository : IMetaverseRepository
                     BulkSqlHelpers.NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
                     BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRule?.Id ?? valueChange.ContributedBySyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
-                    BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text),
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedByKind.HasValue ? (int?)valueChange.ContributedByKind.Value : null, NpgsqlTypes.NpgsqlDbType.Integer),
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedByClaimType, NpgsqlTypes.NpgsqlDbType.Text));
             }
         }
     }

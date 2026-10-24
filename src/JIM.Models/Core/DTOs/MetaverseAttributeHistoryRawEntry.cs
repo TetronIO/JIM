@@ -27,5 +27,11 @@ public class MetaverseAttributeHistoryRawEntry
 
     public string? SyncRuleName { get; set; }
 
+    /// <summary>What kind of source set the value at the time (#2472); null when none was recorded.</summary>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>The sign-in claim that supplied the value, when <see cref="ContributedByKind"/> is a sign-in claim.</summary>
+    public string? ClaimType { get; set; }
+
     public ProvenanceChange Change { get; set; } = new();
 }

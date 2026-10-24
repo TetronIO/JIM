@@ -48,6 +48,7 @@ internal static class MvoChangeBulkColumns
         "Id", "MetaverseObjectChangeAttributeId", "ValueChangeType",
         "StringValue", "DateTimeValue", "IntValue", "LongValue", "DecimalValue",
         "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId",
-        "ContributedBySyncRuleId", "ContributedBySyncRuleName"
+        "ContributedBySyncRuleId", "ContributedBySyncRuleName",
+        "ContributedByKind", "ContributedByClaimType"
     ];
 }

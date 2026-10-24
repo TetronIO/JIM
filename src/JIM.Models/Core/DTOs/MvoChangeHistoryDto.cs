@@ -176,6 +176,16 @@ public class MvoValueChangeDto
     public string? ContributedBySystemName { get; set; }
 
     /// <summary>
+    /// What kind of source set the value: SynchronisationRule, SignInClaim, System or Person. Null when no source was
+    /// recorded for the change.
+    /// </summary>
+    /// <remarks>#2472.</remarks>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>The sign-in claim that supplied the value, such as <c>given_name</c>, when the source is a sign-in claim; otherwise null.</summary>
+    public string? ContributedByClaimType { get; set; }
+
+    /// <summary>
     /// True when a Generated Value Attribute Flow produced this value (#399): the contributing Synchronisation Rule
     /// is the generating one and the value is one the generation produced. Set by
     /// <c>MetaverseServer.GetMvoChangeHistoryAsync</c>, not by the repository.

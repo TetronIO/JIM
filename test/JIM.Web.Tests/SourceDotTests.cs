@@ -47,6 +47,20 @@ public class SourceDotTests : JimComponentTestContext
     }
 
     [Test]
+    public void SourceDot_SignInClaimWithShowRule_NamesTheClaimBesideTheSourceAndOnTheTitle()
+    {
+        var group = Group(new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = "given_name" });
+
+        var cut = Render<SourceDot>(p => p.Add(c => c.Group, group).Add(c => c.ShowRule, true).Add(c => c.ClaimType, "given_name"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Find(".jim-source-dot-rule").TextContent, Is.EqualTo("given_name"));
+            Assert.That(cut.Find(".jim-source-dot-label").GetAttribute("title"), Does.EndWith("given_name"));
+        }
+    }
+
+    [Test]
     public void SourceDot_WithoutShowRule_NamesTheSystemOnlyAndKeepsTheRuleOnTheTitle()
     {
         var cut = Render<SourceDot>(p => p.Add(c => c.Group, Group(Hr)));

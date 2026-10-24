@@ -118,6 +118,56 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// #2472: a value read from a sign-in token states that source, and the claim, in the Source row; its history
+    /// entry names the claim where a synchronised value's names its rule.
+    /// </summary>
+    [Test]
+    public void Inspector_SignInClaimOrigin_StatesTheClaimInTheSourceRowAndTheHistory()
+    {
+        var history = new List<AttributeHistoryEntry>
+        {
+            new()
+            {
+                Kind = AttributeHistoryChangeKind.Added,
+                Value = "Engineer",
+                ContributedByKind = ValueContributorKind.SignInClaim,
+                ClaimType = "job_title",
+                Change = new ProvenanceChange { ChangeTime = DateTime.UtcNow }
+            }
+        };
+        var provenance = BuildProvenance(history: history);
+        provenance.CurrentValues[0].Origin = new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = "job_title" };
+        provenance.ContributingConnectedSystemObject = null;
+        provenance.LastSet = null;
+
+        var cut = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Source not recorded"));
+            Assert.That(cut.FindComponent<ValueOriginChip>().Instance.Origin.ClaimType, Is.EqualTo("job_title"));
+            Assert.That(cut.Find(".jim-inspector-meta").TextContent, Does.Contain("job_title"));
+        }
+    }
+
+    [Test]
+    public void Inspector_SystemOrigin_StatesJimAsTheSource()
+    {
+        var provenance = BuildProvenance();
+        provenance.CurrentValues[0].Origin = new ValueOrigin { Kind = ValueOriginKind.System };
+        provenance.ContributingConnectedSystemObject = null;
+        provenance.LastSet = null;
+
+        var cut = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Source not recorded"));
+            Assert.That(cut.FindComponent<ValueOriginChip>().Instance.Origin.Kind, Is.EqualTo(ValueOriginKind.System));
+        }
+    }
+
     [Test]
     public void Inspector_NotRecordedOrigin_RendersSourceNotRecordedInsteadOfTheSentence()
     {

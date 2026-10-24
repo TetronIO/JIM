@@ -149,7 +149,8 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
             ScopeReviewPending = true,
             LastScopeEvaluatedAt = lastScopeEvaluatedAt
         };
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs", ContributedBySystemId = s.ContributingSystemId, ContributedBySyncRuleId = s.ContributingSyncRuleId });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs", ContributedBySystemId = s.ContributingSystemId, ContributedBySyncRuleId = s.ContributingSyncRuleId, ContributedByKind = ValueContributorKind.SynchronisationRule });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo", ContributedByKind = ValueContributorKind.SignInClaim, ContributedByClaimType = "given_name" });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.NumberAttrId, IntValue = 42 });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.LongNumberAttrId, LongValue = 9999999999L });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.DecimalAttrId, DecimalValue = 3.14159m });
@@ -195,14 +196,18 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
             .AsNoTracking()
             .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == mvo.Id)
             .ToListAsync();
-        Assert.That(storedValues, Has.Count.EqualTo(11));
+        Assert.That(storedValues, Has.Count.EqualTo(12));
 
         using (Assert.EnterMultipleScope())
         {
-            var textValue = storedValues.Single(v => v.AttributeId == s.TextAttrId && !v.NullValue);
-            Assert.That(textValue.StringValue, Is.EqualTo("Jo Bloggs"));
+            var textValue = storedValues.Single(v => v.AttributeId == s.TextAttrId && v.StringValue == "Jo Bloggs");
             Assert.That(textValue.ContributedBySystemId, Is.EqualTo(s.ContributingSystemId));
             Assert.That(textValue.ContributedBySyncRuleId, Is.EqualTo(s.ContributingSyncRuleId));
+            Assert.That(textValue.ContributedByKind, Is.EqualTo(ValueContributorKind.SynchronisationRule));
+            Assert.That(textValue.ContributedByClaimType, Is.Null);
+            var claimValue = storedValues.Single(v => v.AttributeId == s.TextAttrId && v.StringValue == "Jo");
+            Assert.That(claimValue.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(claimValue.ContributedByClaimType, Is.EqualTo("given_name"));
             Assert.That(storedValues.Single(v => v.AttributeId == s.NumberAttrId).IntValue, Is.EqualTo(42));
             Assert.That(storedValues.Single(v => v.AttributeId == s.LongNumberAttrId).LongValue, Is.EqualTo(9999999999L));
             Assert.That(storedValues.Single(v => v.AttributeId == s.DecimalAttrId).DecimalValue, Is.EqualTo(3.14159m));

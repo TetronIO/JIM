@@ -42,6 +42,15 @@ public static class ValueOriginGrouping
     /// </summary>
     public const string GeneratedValueLabel = "Generated Value";
 
+    /// <summary>
+    /// How a value read from a sign-in token is named (#2472). The claim it came from follows, where there is room
+    /// for it, as a Synchronisation Rule follows its Connected System.
+    /// </summary>
+    public const string SignInClaimLabel = "Sign-in claim";
+
+    /// <summary>How a value JIM set itself (a fixed value rather than one read from anywhere) is named (#2472).</summary>
+    public const string SystemLabel = "Set by JIM";
+
     /// <summary>The colour every Generated Value takes, whichever Connected System it came through.</summary>
     public const string GeneratedValueColourToken = "--mud-palette-primary";
 
@@ -50,6 +59,9 @@ public static class ValueOriginGrouping
         ValueOriginKind.SynchronisationRule => $"sr:{origin.ConnectedSystemId}:{origin.SyncRuleId}:{origin.SyncRuleDeleted}",
         ValueOriginKind.GeneratedValue => $"gen:{origin.ConnectedSystemId}:{origin.SyncRuleId}",
         ValueOriginKind.SetByPerson => $"person:{origin.PersonId}",
+        // One source, as a Connected System is, whichever claim each value was read from.
+        ValueOriginKind.SignInClaim => "signin",
+        ValueOriginKind.System => "system",
         _ => "unrecorded"
     };
 
@@ -105,6 +117,8 @@ public static class ValueOriginGrouping
         var label = origin.Kind switch
         {
             ValueOriginKind.SetByPerson => $"Set by {origin.PersonName}",
+            ValueOriginKind.SignInClaim => SignInClaimLabel,
+            ValueOriginKind.System => SystemLabel,
             ValueOriginKind.GeneratedValue => origin.ConnectedSystemName == null
                 ? GeneratedValueLabel
                 : showRule
@@ -133,14 +147,16 @@ public static class ValueOriginGrouping
 
     /// <summary>
     /// The theme colour token for a source group: its Connected System's colour, except that Generated Values
-    /// take the primary colour and values a person set the secondary one, so those two never share a colour with a
-    /// system. "Not recorded" and "several sources" take the same neutral token, since neither names a real
-    /// source. The contribution bar, its legend and every source dot read their colour from here.
+    /// take the primary colour, values a person set the secondary one, values read from a sign-in token the dark one
+    /// and values JIM set the secondary text colour, so none of those shares a colour with a system. "Not recorded"
+    /// and "several sources" take the same neutral token, since neither names a real source. The contribution bar, its legend and every source dot read their colour from here.
     /// </summary>
     public static string ColourTokenFor(Group group) => group.Kind switch
     {
         ValueOriginKind.GeneratedValue => GeneratedValueColourToken,
         ValueOriginKind.SetByPerson => "--mud-palette-secondary",
+        ValueOriginKind.SignInClaim => "--mud-palette-dark",
+        ValueOriginKind.System => "--mud-palette-text-secondary",
         ValueOriginKind.SynchronisationRule when group.ConnectedSystemId is { } systemId => ColourTokenForConnectedSystem(systemId),
         _ => NeutralToken
     };

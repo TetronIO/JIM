@@ -82,7 +82,7 @@ public class AuthServer
 
         // Bootstrap the initial admin just-in-time on first contact (web or API/CLI).
         if (user == null && isInitialAdmin)
-            user = await CreateInitialAdminUserAsync(userType, identifierAttribute, identifierGuid, identity);
+            user = await CreateInitialAdminUserAsync(userType, identifierAttribute, identifierGuid, identity, serviceSettings.SSOUniqueIdentifierClaimType);
 
         // Unknown user who isn't the initial admin: they must be provisioned via synchronisation.
         if (user == null)
@@ -109,11 +109,13 @@ public class AuthServer
     /// <param name="uniqueIdentifierAttribute">The attribute sign-in matches people on.</param>
     /// <param name="identifierGuid">The identity's GUID, when that attribute is Guid-typed; it is stored in place of the claim text.</param>
     /// <param name="identity">The identity built from the validated token.</param>
+    /// <param name="identifierClaimType">The claim the identifier was read from, recorded as the identifier value's source.</param>
     private async Task<MetaverseObject> CreateInitialAdminUserAsync(
         MetaverseObjectType userType,
         MetaverseAttribute uniqueIdentifierAttribute,
         Guid? identifierGuid,
-        SsoIdentity identity)
+        SsoIdentity identity,
+        string? identifierClaimType)
     {
         Log.Information("AuthServer: Creating initial admin user just-in-time ({UniqueId}).", identity.UniqueId);
 
@@ -140,24 +142,27 @@ public class AuthServer
                 MetaverseObject = user,
                 Attribute = uniqueIdentifierAttribute,
                 StringValue = identifierGuid == null ? identity.UniqueId : null,
-                GuidValue = identifierGuid
+                GuidValue = identifierGuid,
+                ContributedByKind = ValueContributorKind.SignInClaim,
+                ContributedByClaimType = identifierClaimType
             });
 
-            // Type attribute (required)
+            // Type attribute (required). A value JIM fixes, not one the token supplied, so its source is JIM itself.
             var typeAttribute = await Application.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.Type) ??
                 throw new InvalidOperationException($"Couldn't get essential attribute: {Constants.BuiltInAttributes.Type}");
             user.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
                 MetaverseObject = user,
                 Attribute = typeAttribute,
-                StringValue = "PersonEntity"
+                StringValue = "PersonEntity",
+                ContributedByKind = ValueContributorKind.System
             });
 
             // populate optional attributes from the identity so everything is set in one go
-            await AddAttributeFromValueAsync(user, identity.DisplayName, Constants.BuiltInAttributes.DisplayName);
-            await AddAttributeFromValueAsync(user, identity.FirstName, Constants.BuiltInAttributes.FirstName);
-            await AddAttributeFromValueAsync(user, identity.LastName, Constants.BuiltInAttributes.LastName);
-            await AddAttributeFromValueAsync(user, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName);
+            await AddAttributeFromValueAsync(user, identity.DisplayName, Constants.BuiltInAttributes.DisplayName, SsoIdentity.DisplayNameClaimType);
+            await AddAttributeFromValueAsync(user, identity.FirstName, Constants.BuiltInAttributes.FirstName, SsoIdentity.FirstNameClaimType);
+            await AddAttributeFromValueAsync(user, identity.LastName, Constants.BuiltInAttributes.LastName, SsoIdentity.LastNameClaimType);
+            await AddAttributeFromValueAsync(user, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName, SsoIdentity.UserPrincipalNameClaimType);
 
             // System made the object, inside the Activity recording its creation, and the change record says both.
             await Application.Metaverse.CreateMetaverseObjectAsync(
@@ -280,9 +285,10 @@ public class AuthServer
     }
 
     /// <summary>
-    /// Adds an attribute value to a MetaverseObject during creation, if a value is present.
+    /// Adds an attribute value to a MetaverseObject during creation, if a value is present, recording the sign-in
+    /// claim it was read from as its source.
     /// </summary>
-    private async Task AddAttributeFromValueAsync(MetaverseObject user, string? value, string metaverseAttributeName)
+    private async Task AddAttributeFromValueAsync(MetaverseObject user, string? value, string metaverseAttributeName, string claimType)
     {
         if (string.IsNullOrEmpty(value))
             return;
@@ -295,7 +301,9 @@ public class AuthServer
         {
             MetaverseObject = user,
             Attribute = attribute,
-            StringValue = value
+            StringValue = value,
+            ContributedByKind = ValueContributorKind.SignInClaim,
+            ContributedByClaimType = claimType
         });
         Log.Verbose("AuthServer: Added {Attribute} from identity.", metaverseAttributeName);
     }
@@ -308,10 +316,10 @@ public class AuthServer
     {
         var additions = new List<MetaverseObjectAttributeValue>();
 
-        await AddMissingAttributeAsync(user, additions, identity.DisplayName, Constants.BuiltInAttributes.DisplayName);
-        await AddMissingAttributeAsync(user, additions, identity.FirstName, Constants.BuiltInAttributes.FirstName);
-        await AddMissingAttributeAsync(user, additions, identity.LastName, Constants.BuiltInAttributes.LastName);
-        await AddMissingAttributeAsync(user, additions, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName);
+        await AddMissingAttributeAsync(user, additions, identity.DisplayName, Constants.BuiltInAttributes.DisplayName, SsoIdentity.DisplayNameClaimType);
+        await AddMissingAttributeAsync(user, additions, identity.FirstName, Constants.BuiltInAttributes.FirstName, SsoIdentity.FirstNameClaimType);
+        await AddMissingAttributeAsync(user, additions, identity.LastName, Constants.BuiltInAttributes.LastName, SsoIdentity.LastNameClaimType);
+        await AddMissingAttributeAsync(user, additions, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName, SsoIdentity.UserPrincipalNameClaimType);
 
         if (additions.Count > 0)
         {
@@ -327,13 +335,14 @@ public class AuthServer
 
     /// <summary>
     /// Stages an attribute addition when the value is present and the user does not already
-    /// have a value for that attribute.
+    /// have a value for that attribute, recording the sign-in claim it was read from as its source.
     /// </summary>
     private async Task AddMissingAttributeAsync(
         MetaverseObject user,
         List<MetaverseObjectAttributeValue> additions,
         string? value,
-        string metaverseAttributeName)
+        string metaverseAttributeName,
+        string claimType)
     {
         if (string.IsNullOrEmpty(value))
             return;
@@ -348,7 +357,9 @@ public class AuthServer
         var attributeValue = new MetaverseObjectAttributeValue
         {
             Attribute = attribute,
-            StringValue = value
+            StringValue = value,
+            ContributedByKind = ValueContributorKind.SignInClaim,
+            ContributedByClaimType = claimType
         };
         user.AttributeValues.Add(attributeValue);
         additions.Add(attributeValue);

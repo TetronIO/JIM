@@ -1620,6 +1620,12 @@ a.jim-system-rule-chip-part:focus-visible {
     flex-shrink: 1;
 }
 
+/* The claim a sign-in value was read from (#2472): the claim's own name, in code type, read after the source as a
+   rule's name is. */
+.jim-value-origin-claim {
+    color: var(--mud-palette-text-secondary);
+}
+
 /* !important is required so the monospace font and size win over MudBlazor's
    table cell typography rules (e.g. .mud-table-root .mud-table-body .mud-table-cell
    and .mud-simple-table table * tr>td), which are more specific than a single class. */

@@ -82,7 +82,7 @@
     private static string FullSourceLabel(ValueOriginGrouping.Group group) => group.Kind switch
     {
         null => "Several sources",
-        ValueOriginKind.SetByPerson => group.Label,
+        ValueOriginKind.SetByPerson or ValueOriginKind.SignInClaim or ValueOriginKind.System => group.Label,
         ValueOriginKind.SynchronisationRule => group.SyncRuleDeleted
             ? $"{group.ConnectedSystemName} · rule deleted"
             : group.SyncRuleName != null

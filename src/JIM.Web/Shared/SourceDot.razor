@@ -17,6 +17,12 @@
         <span class="jim-source-dot-sep" aria-hidden="true">·</span>
         <span class="jim-source-dot-rule">@RuleText</span>
     }
+    @if (ShowRule && !string.IsNullOrEmpty(ClaimType))
+    {
+        @* A sign-in claim's counterpart of the rule: which claim the value was read from. *@
+        <span class="jim-source-dot-sep" aria-hidden="true">·</span>
+        <span class="jim-source-dot-rule">@ClaimType</span>
+    }
     @if (ShowsGeneratedValue)
     {
         @* The end of the path: the Attribute Flow generated the value rather than reading it (System · Rule · Generated Value). *@
@@ -36,6 +42,13 @@
     /// </summary>
     [Parameter]
     public bool ShowRule { get; set; }
+
+    /// <summary>
+    /// The sign-in claim this row's value was read from (#2472), named as secondary text where <see cref="ShowRule"/>
+    /// allows, and on the title. The group is the token as a whole, so the claim comes from the row's own origin.
+    /// </summary>
+    [Parameter]
+    public string? ClaimType { get; set; }
 
     /// <summary>A Generated Value that names the Connected System it came through, so the path has a system to end.</summary>
     private bool ShowsGeneratedValue => Group.Kind == ValueOriginKind.GeneratedValue && !string.IsNullOrEmpty(Group.ConnectedSystemName);
@@ -82,6 +95,7 @@
             else
             {
                 parts.Add(Group.Label);
+                parts.Add(ClaimType);
             }
             return string.Join(" · ", parts.Where(p => !string.IsNullOrEmpty(p)));
         }

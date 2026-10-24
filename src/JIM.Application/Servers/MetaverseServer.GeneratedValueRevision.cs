@@ -60,7 +60,8 @@ public partial class MetaverseServer
             IntValue = revision.NewNumericValue.HasValue && !revision.IsLongNumber ? (int?)revision.PreviousNumericValue : null,
             LongValue = revision.NewNumericValue.HasValue && revision.IsLongNumber ? revision.PreviousNumericValue : null,
             ContributedBySyncRuleId = revision.ContributedBySyncRuleId,
-            ContributedBySystemId = revision.ContributedBySystemId
+            ContributedBySystemId = revision.ContributedBySystemId,
+            ContributedByKind = ValueContributorKind.SynchronisationRule
         };
         var revised = new MetaverseObjectAttributeValue
         {
@@ -71,7 +72,8 @@ public partial class MetaverseServer
             IntValue = revision.NewNumericValue.HasValue && !revision.IsLongNumber ? (int?)revision.NewNumericValue : null,
             LongValue = revision.NewNumericValue.HasValue && revision.IsLongNumber ? revision.NewNumericValue : null,
             ContributedBySyncRuleId = revision.ContributedBySyncRuleId,
-            ContributedBySystemId = revision.ContributedBySystemId
+            ContributedBySystemId = revision.ContributedBySystemId,
+            ContributedByKind = ValueContributorKind.SynchronisationRule
         };
 
         MetaverseObjectChange? change = null;

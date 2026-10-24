@@ -55,7 +55,8 @@ public class MetaverseAttributeOriginSummaryDto
 
 /// <summary>
 /// API representation of a Metaverse Object attribute value's origin: a Connected System through a
-/// Synchronisation Rule (read, or produced by a Generated Value Attribute Flow), a person, or not recorded.
+/// Synchronisation Rule (read, or produced by a Generated Value Attribute Flow), a sign-in claim, JIM itself, a
+/// person, or not recorded.
 /// </summary>
 public class ValueOriginDto
 {
@@ -75,6 +76,11 @@ public class ValueOriginDto
 
     public bool Corrected { get; set; }
 
+    /// <summary>
+    /// The sign-in claim that supplied the value, such as <c>given_name</c>, when <c>Kind</c> is SignInClaim; otherwise null.
+    /// </summary>
+    public string? ClaimType { get; set; }
+
     public Guid? PersonId { get; set; }
 
     public string? PersonName { get; set; }
@@ -91,6 +97,7 @@ public class ValueOriginDto
             SyncRuleDeleted = model.SyncRuleDeleted,
             AssertsNoValue = model.AssertsNoValue,
             Corrected = model.Corrected,
+            ClaimType = model.ClaimType,
             PersonId = model.PersonId,
             PersonName = model.PersonName
         };
