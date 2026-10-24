@@ -160,6 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A running import's Activity page fills its Run Profile Execution Items table as the run saves them, rather than staying as it was when the page opened, and says items are still to come instead of that the run recorded none.
 - 🐛 The Connector Space's Secondary External Id column now appears as soon as the list loads, rather than only once the list had been searched, sorted or filtered.
 - 🐛 On the Operations page's Queue, a running task's name can now be clicked through to its Activity at any point in the run. While progress was arriving quickly, as during the import phase of a large Full Import, the click often did nothing.
 - 🐛 In a Metaverse Object's Inspect view, clicking an attribute's value now opens its inspector, as clicking its name or source does; a linked value, such as an email address or a reference, still follows its link.

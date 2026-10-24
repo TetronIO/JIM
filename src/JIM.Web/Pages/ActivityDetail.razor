@@ -1035,9 +1035,18 @@
                 }
                 else
                 {
-                    <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
-                                     PrimaryText="This Activity recorded no Run Profile Execution Items"
-                                     SecondaryText="Items appear here for every object the run added, updated, joined, projected, exported or failed on." />
+                    @if (_activity.Status == ActivityStatus.InProgress)
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                                         PrimaryText="No Run Profile Execution Items yet"
+                                         SecondaryText="Items appear here as the run saves them." />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                                         PrimaryText="This Activity recorded no Run Profile Execution Items"
+                                         SecondaryText="Items appear here for every object the run added, updated, joined, projected, exported or failed on." />
+                    }
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
@@ -1175,6 +1184,7 @@
 
     private Guid _loadedId;
     private VirtualisedDataGrid<ActivityRunProfileExecutionItemHeader>? _executionItemsGrid;
+    private readonly ExecutionItemsRefreshGate _executionItemsRefreshGate = new();
     private Activity? _activity;
 
     /// <summary>
@@ -1399,6 +1409,7 @@
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
             _phases = await jim.Activities.GetActivityPhasesAsync(_activity.Id);
             await LoadExcludedContainerNamesAsync(jim);
+            _executionItemsRefreshGate.Seed(_activityRunProfileExecutionStats.TotalObjectChangeCount, DateTime.UtcNow);
         }
 
         // Only the count is loaded here; the Child Activities table pages its rows from the data layer on demand.
@@ -1498,6 +1509,14 @@
         IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = _selectedErrorTypes.Count > 0 ? _selectedErrorTypes : null;
         IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = _selectedOutcomeTypes.Count > 0 ? _selectedOutcomeTypes : null;
 
+        // Unfiltered, the stats already hold the total (exact once the run has finished, and kept in step with the
+        // items as they are written while it runs), so the count, the expensive half of a window read over hundreds of
+        // thousands of items, is only made for a filtered or searched set the stats cannot answer for.
+        var statsTotal = objectTypeFilter == null && errorTypeFilter == null && outcomeTypeFilter == null
+                         && string.IsNullOrWhiteSpace(request.SearchText)
+            ? _activityRunProfileExecutionStats?.TotalObjectChangeCount
+            : null;
+
         using var jim = JimFactory.Create();
         var result = await jim.Activities.GetActivityRunProfileExecutionItemHeadersRangeAsync(
             Id,
@@ -1509,11 +1528,12 @@
             objectTypeFilter,
             errorTypeFilter,
             outcomeTypeFilter,
-            includeTotalCount: request.IncludeTotalCount);
+            includeTotalCount: request.IncludeTotalCount && statsTotal == null);
 
         // A null total means the count was not asked for, never that nothing matched; it is passed through as
         // null so the grid keeps the total it already holds.
-        return new VirtualisedWindow<ActivityRunProfileExecutionItemHeader>(result.Results, result.TotalResults);
+        var total = request.IncludeTotalCount && statsTotal != null ? statsTotal : result.TotalResults;
+        return new VirtualisedWindow<ActivityRunProfileExecutionItemHeader>(result.Results, total);
     }
 
     /// <summary>
@@ -1872,6 +1892,7 @@
 
             // The watermark the run reached is recorded only as it finishes, so describe it once it arrives.
             var watermarksChanged = updated.ImportWatermarkFrom != _activity?.ImportWatermarkFrom || updated.ImportWatermarkTo != _activity?.ImportWatermarkTo;
+            var runEnded = _activity?.Status == ActivityStatus.InProgress && updated.Status != ActivityStatus.InProgress;
             _activity = updated;
             _lastRefreshUtc = DateTime.UtcNow;
             if (watermarksChanged)
@@ -1888,6 +1909,13 @@
             }
 
             await InvokeAsync(StateHasChanged);
+
+            // The items grid holds the rows it last fetched, so follow the item total the stats just reported: a
+            // running import writes its items as it saves them, and the table would otherwise stay as it was when the
+            // page opened. Gated, because a large run moves the total thousands of times a second.
+            if (_executionItemsGrid != null && ShowsExecutionItems
+                && _executionItemsRefreshGate.ShouldReload(_activityRunProfileExecutionStats?.TotalObjectChangeCount, runEnded, DateTime.UtcNow))
+                await InvokeAsync(() => _executionItemsGrid.RefreshAsync(invalidateTotals: true));
 
             // The Child Activities grid streams its rows from the data layer; ask it to re-fetch the windows in
             // view, re-counting as it goes because a running Activity can spawn further children.
