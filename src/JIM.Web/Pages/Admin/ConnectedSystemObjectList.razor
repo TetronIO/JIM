@@ -566,7 +566,8 @@ else
             objectTypeFilter,
             joinTypeFilter,
             includeTotalCount: request.IncludeTotalCount,
-            hasUnresolvedReferences: FilteredToUnresolvedReferences ? true : null);
+            hasUnresolvedReferences: FilteredToUnresolvedReferences ? true : null,
+            cancellationToken: token);
 
         // Update column headers based on the window in hand; the grid re-renders its header templates when the
         // window arrives, so the new values paint without an explicit StateHasChanged.
