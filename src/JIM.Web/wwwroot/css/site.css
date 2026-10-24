@@ -5271,21 +5271,14 @@ html[lang] .jim-password-guidance.mud-alert {
     background-color: color-mix(in srgb, currentColor 14%, transparent);
 }
 
-/* A border triangle rather than an icon, so the head is sized to the line it ends. Which border
-   carries the colour decides which way it points. */
+/* A border triangle rather than an icon, so the head is sized to the line it ends. It always points
+   right: the strip puts the source on the left, whichever way the rule runs. */
 .jim-identity-flow-head {
     width: 0;
     height: 0;
     border-top: 0.3125rem solid transparent;
     border-bottom: 0.3125rem solid transparent;
-}
-
-.jim-identity-flow-outbound .jim-identity-flow-head {
     border-left: 0.4375rem solid currentColor;
-}
-
-.jim-identity-flow-inbound .jim-identity-flow-head {
-    border-right: 0.4375rem solid currentColor;
 }
 
 .jim-identity-strip-system {
