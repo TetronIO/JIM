@@ -1,0 +1,103 @@
+@inject IJSRuntime JS
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A collapsible section of a settings form (#2471): its title, and while closed a one-line summary of what it is set to,
+   so collapsing never hides a setting. A section opens itself when something in it starts to need attention. *@
+<div class="jim-settings-section @(_open ? "jim-settings-section-open" : null) @Class" @ref="_element">
+    <button type="button" class="jim-settings-section-header" aria-expanded="@(_open ? "true" : "false")" @onclick="ToggleAsync">
+        <MudIcon Icon="@(_open ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)" Size="Size.Small" Class="jim-settings-section-chevron" />
+        <span class="jim-settings-section-title">@Title</span>
+        @if (!_open && !string.IsNullOrEmpty(Summary))
+        {
+            <span class="jim-settings-section-summary">@Summary</span>
+        }
+        @if (!string.IsNullOrEmpty(Attention))
+        {
+            <span class="jim-settings-section-attention">
+                <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Size="Size.Small" Color="Color.Warning" />@Attention
+            </span>
+        }
+    </button>
+    @if (_open)
+    {
+        <div class="jim-settings-section-body">@ChildContent</div>
+    }
+</div>
+
+@code {
+    /// <summary>The section's name.</summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>What the section is set to, shown while it is closed.</summary>
+    [Parameter]
+    public string? Summary { get; set; }
+
+    /// <summary>
+    /// Something in the section that needs attention, shown in its header. The section opens when this appears; it can
+    /// be closed again once seen.
+    /// </summary>
+    [Parameter]
+    public string? Attention { get; set; }
+
+    /// <summary>
+    /// Whether the section is open. A form that opens a section by default passes this on every render, so the value is
+    /// taken only when it changes; the administrator's own opening and closing stands in between.
+    /// </summary>
+    [Parameter]
+    public bool Expanded { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> ExpandedChanged { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private ElementReference _element;
+    private bool _open;
+    private bool? _lastExpanded;
+    private string? _lastAttention;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_lastExpanded != Expanded)
+        {
+            _lastExpanded = Expanded;
+            _open = Expanded;
+        }
+
+        var attentionAppeared = !string.IsNullOrEmpty(Attention) && string.IsNullOrEmpty(_lastAttention);
+        _lastAttention = Attention;
+        if (attentionAppeared && !_open)
+            await SetExpandedAsync(true);
+    }
+
+    /// <summary>Opens the section and brings it into view: for a link elsewhere that points at this setting.</summary>
+    public async Task OpenAndRevealAsync()
+    {
+        await SetExpandedAsync(true);
+        StateHasChanged();
+        try
+        {
+            await JS.InvokeVoidAsync("jimScrollIntoView", _element);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is nothing to scroll.
+        }
+    }
+
+    private Task ToggleAsync() => SetExpandedAsync(!_open);
+
+    private async Task SetExpandedAsync(bool expanded)
+    {
+        _open = expanded;
+        if (ExpandedChanged.HasDelegate)
+            await ExpandedChanged.InvokeAsync(expanded);
+    }
+}

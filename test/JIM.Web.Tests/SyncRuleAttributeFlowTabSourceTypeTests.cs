@@ -13,6 +13,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.TestSupport;
 using JIM.Web.Pages.Admin.Components;
+using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MudBlazor;
@@ -95,7 +96,42 @@ public class SyncRuleAttributeFlowTabSourceTypeTests : JimComponentTestContext
 #pragma warning restore MUD0012
     }
 
+    [TestCase("Attribute", false)]
+    [TestCase("Expression", true)]
+    [TestCase("Generated", true)]
+    public async Task AddDialog_SourceTypeChosen_OffersTryItOnlyWhereThereIsSomethingToTryAsync(string sourceType, bool expected)
+    {
+        // An Attribute copies its value as it is; an Expression or a Generated Value is worked out, and the Try it pane
+        // beside the settings shows how (#2471).
+        BuildJim();
+        var (provider, tab) = OpenAddDialog();
+
+        await ChooseSourceTypeAsync(provider, tab, sourceType);
+
+        Assert.That(provider.FindComponent<AttributeFlowEditorLayout>().Instance.ShowTryIt, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public async Task AddDialog_ExpressionChosen_OffersTheTargetBeforeAnyExpressionIsTypedAsync()
+    {
+        // The target comes first (#2471), so the Try it pane can test the whole Attribute Flow from the first keystroke;
+        // it used to appear only once an Expression had been typed.
+        BuildJim();
+        var (provider, tab) = OpenAddDialog();
+
+        await ChooseSourceTypeAsync(provider, tab, "Expression");
+
+        Assert.That(provider.FindComponents<MudSelect<MetaverseAttribute>>().Any(select => select.Instance.Label == "Assign the value to"), Is.True);
+    }
+
     // ─── scaffolding ───
+
+    private static async Task ChooseSourceTypeAsync(IRenderedComponent<MudDialogProvider> provider, IRenderedComponent<SyncRuleAttributeFlowTab> tab, string sourceType)
+    {
+        var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");
+        await provider.InvokeAsync(() => sourceTypePicker.Instance.ValueChanged.InvokeAsync(sourceType));
+        tab.Render();
+    }
 
     private void BuildJim()
     {

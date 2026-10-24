@@ -12,11 +12,11 @@
 @if (TestsAttributeFlow)
 {
     <AttributeFlowTestPanel Expression="@Expression" SyncRule="SyncRule!" Mapping="Mapping!" Source="Source!" SampleValuesChanged="SampleValuesChanged"
-                            TriedBaseChanged="TriedBaseChanged" />
+                            TriedBaseChanged="TriedBaseChanged" GeneratedResult="GeneratedResult"
+                            MissingInputBehaviourName="@MissingInputBehaviourName" OnChangeMissingInputBehaviour="OnChangeMissingInputBehaviour" />
 }
 else if (!string.IsNullOrWhiteSpace(Expression))
 {
-    <MudText Typo="Typo.subtitle2" Class="mt-5">Test this Expression</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
         Supply a sample value for each attribute the Expression reads and see what it produces as you type. Leave an
         input empty to see what the Expression does when the object has no value for it.
@@ -106,6 +106,18 @@ else if (!string.IsNullOrWhiteSpace(Expression))
     /// </summary>
     [Parameter]
     public EventCallback<GeneratedBaseEvaluation?> TriedBaseChanged { get; set; }
+
+    /// <summary>For a Generated Value, what follows the base in the test: the candidates worked out from it.</summary>
+    [Parameter]
+    public RenderFragment? GeneratedResult { get; set; }
+
+    /// <summary>The Missing Input Behaviour as the form names it, shown with the "If an input has no value" table.</summary>
+    [Parameter]
+    public string? MissingInputBehaviourName { get; set; }
+
+    /// <summary>Raised from the "If an input has no value" table's Change link.</summary>
+    [Parameter]
+    public EventCallback OnChangeMissingInputBehaviour { get; set; }
 
     /// <summary>
     /// The Synchronisation Rule the Attribute Flow belongs to, whose object types give each sample its attribute's type.
