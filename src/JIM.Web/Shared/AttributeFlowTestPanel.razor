@@ -15,25 +15,10 @@
 @* Tests an Attribute Flow as a Synchronisation would run it (#2055): typed inputs from the schema, several values for a
    multi-valued attribute, "No value" distinct from empty text, values loaded from a real object, and a trace of each
    step of the pipeline synchronisation runs. *@
-@if (Generating)
-{
-    <MudText Typo="Typo.subtitle2" Class="mt-5">Test the base expression</MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-        Give each attribute the base expression reads a value, or load them from an object, and see the base a
-        Synchronisation would generate @_targetName from: each value is read as its attribute's type, and the result goes
-        through this Attribute Flow's Missing Input Behaviour and value processing. The test stops there, because which
-        value is free is decided when a Synchronisation runs.
-    </MudText>
-}
-else
-{
-    <MudText Typo="Typo.subtitle2" Class="mt-5">Test this Attribute Flow</MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-        Give each attribute the Expression reads a value, or load them from an object, and see what a Synchronisation would
-        do: each value is read as its attribute's type, and the result goes through this Attribute Flow's Missing Input
-        Behaviour, value processing and conversion to @_targetName.
-    </MudText>
-}
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+    Give each input a value, or load them from an object, and see what a Synchronisation would do with this Attribute
+    Flow as it stands. Each value is read as its attribute's type.
+</MudText>
 
 <SegmentedToggle TValue="bool" Options="_valueSourceOptions" Value="_fromObject" ValueChanged="SetFromObject"
                  AriaLabel="Where the values come from" Dense="true" />
@@ -47,7 +32,7 @@ else
 @if (_inputs.Count == 0)
 {
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-        This Expression reads no attributes, so it produces the same value for every object. Run the test to see it.
+        This Expression reads no attributes, so it produces the same value for every object.
     </MudText>
 }
 else
@@ -93,18 +78,19 @@ else
 
 <RunAsOfPicker Value="_asOf" ValueChanged="SetAsOf" Class="mt-3" />
 
-<MudButton Variant="Variant.Filled" Size="Size.Small" Class="mt-3" OnClick="RunTest">Run test</MudButton>
-
+@* The test runs as the Expression, the values and the Attribute Flow's settings change. A half-typed Expression is
+   the normal state while typing, and the editor already marks it, so it is noted here quietly rather than alarmed. *@
 @if (_parseError != null)
 {
-    <MudAlert Severity="Severity.Error" Class="mt-3">
-        @_parseError
-        @if (_errorPosition.HasValue)
-        {
-            var position = _errorPosition.Value;
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">Position @position</MudText>
-        }
-    </MudAlert>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+        No result until the Expression is complete: @_parseError@(_errorPosition is { } position ? $" (position {position})" : null)
+    </MudText>
+}
+else if (!Tried)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+        Enter a value for each input, or load them from an object, to see the result.
+    </MudText>
 }
 
 @if (_result is { InputErrors.Count: > 0 } inputProblem)
@@ -202,7 +188,7 @@ else
     @if (tested.IfInputHasNoValue.Count > 0)
     {
         <MudPaper Outlined="true" Class="pa-3 mt-3">
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">If an input has no value</MudText>
+            <MissingInputCaption Choice="@MissingInputBehaviourName" OnChange="OnChangeMissingInputBehaviour" />
             <MudSimpleTable Dense="true" Elevation="0" Class="mt-1">
                 <tbody>
                     @foreach (var absentOutcome in tested.IfInputHasNoValue)
@@ -274,6 +260,8 @@ else
                         }
                     </td>
                 </tr>
+                @if (GeneratedResult == null)
+                {
                 <tr>
                     <td class="mud-text-secondary" style="vertical-align: top">4. Result</td>
                     <td>
@@ -287,14 +275,17 @@ else
                         }
                     </td>
                 </tr>
+                }
             </tbody>
         </MudSimpleTable>
     </MudPaper>
 
+    @GeneratedResult
+
     @if (testedBase.GeneratedBaseIfInputHasNoValue.Count > 0)
     {
         <MudPaper Outlined="true" Class="pa-3 mt-3">
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">If an input has no value</MudText>
+            <MissingInputCaption Choice="@MissingInputBehaviourName" OnChange="OnChangeMissingInputBehaviour" />
             <MudSimpleTable Dense="true" Elevation="0" Class="mt-1">
                 <tbody>
                     @foreach (var absentOutcome in testedBase.GeneratedBaseIfInputHasNoValue)
@@ -312,6 +303,11 @@ else
             </MudSimpleTable>
         </MudPaper>
     }
+}
+
+@if (Generating && _result?.GeneratedBase == null)
+{
+    @GeneratedResult
 }
 
 @* A saved Attribute Flow's test can be kept as a test case (#2055 Phase 4), which runs against the flow as saved. *@
@@ -354,9 +350,40 @@ else
     public EventCallback<IReadOnlyDictionary<string, string?>> SampleValuesChanged { get; set; }
 
     /// <summary>
+    /// For a Generated Value, raised with the base the values tried give generation; null while nothing has been
+    /// tried. The Generated Value editor works its candidates out from it.
+    /// </summary>
+    [Parameter]
+    public EventCallback<GeneratedBaseEvaluation?> TriedBaseChanged { get; set; }
+
+    /// <summary>
+    /// For a Generated Value, what follows the base: the candidates worked out from it, in place of the trace's own
+    /// closing sentence. Shown whether or not anything has been tried yet.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? GeneratedResult { get; set; }
+
+    /// <summary>
+    /// The Missing Input Behaviour as the form names it, shown with the "If an input has no value" table; null leaves the
+    /// table's heading plain.
+    /// </summary>
+    [Parameter]
+    public string? MissingInputBehaviourName { get; set; }
+
+    /// <summary>Raised from the "If an input has no value" table's Change link, to take the administrator to the setting.</summary>
+    [Parameter]
+    public EventCallback OnChangeMissingInputBehaviour { get; set; }
+
+    /// <summary>
     /// Whether the Attribute Flow generates its value: the test then stops at the base, as a Synchronisation does.
     /// </summary>
     private bool Generating => Mapping.Generation != null;
+
+    /// <summary>
+    /// Whether there is anything to show a result for: a value given for an input, or an Expression that reads none.
+    /// Before that, a result would only report every input missing, which answers nothing the administrator asked.
+    /// </summary>
+    private bool Tried => _valuesGiven || _inputs.Count == 0;
 
     private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
     [
@@ -370,6 +397,9 @@ else
     private string? _resolvedFrom;
     private string _targetName = string.Empty;
     private bool _fromObject;
+    private bool _valuesGiven;
+    private string? _testedKey;
+    private GeneratedBaseEvaluation? _reportedBase;
     private AttributeFlowTestResult? _result;
     private SyncRuleMappingSource? _testedSource;
     private DateTime _ranAtUtc;
@@ -393,18 +423,30 @@ else
         ? $"Find a {SyncRule.MetaverseObjectType?.Name ?? "Metaverse Object"}"
         : $"Find a {SyncRule.ConnectedSystemObjectType?.Name ?? "Connected System Object"} in {SyncRule.ConnectedSystem?.Name ?? "the Connected System"}";
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         _targetName = (Exporting ? Mapping.TargetConnectedSystemAttribute?.Name : Mapping.TargetMetaverseAttribute?.Name) ?? "the target";
 
         // Inputs follow the Expression as it is edited; values entered for an input that is still read are kept.
-        if (_resolvedFrom == Expression)
-            return;
+        if (_resolvedFrom != Expression)
+        {
+            _resolvedFrom = Expression;
+            _inputs = AttributeFlowTester.DescribeInputs(SyncRule, Expression);
+        }
 
-        _resolvedFrom = Expression;
-        _inputs = AttributeFlowTester.DescribeInputs(SyncRule, Expression);
-        ClearResult();
+        // The settings are edited in place on the same Mapping and Source, so a change shows only in their values.
+        if (TestedKey() != _testedKey)
+            await RunTestAsync();
     }
+
+    /// <summary>
+    /// Everything the result depends on besides the inputs: the Expression and the Attribute Flow's settings that the
+    /// pipeline reads.
+    /// </summary>
+    private string TestedKey() => string.Join('|', Expression, Source.MissingInputBehaviour,
+        Mapping.TargetMetaverseAttribute?.Id, Mapping.TargetMetaverseAttribute?.Type,
+        Mapping.TargetConnectedSystemAttribute?.Id, Mapping.TargetConnectedSystemAttribute?.Type,
+        Mapping.InboundValueProcessing, Mapping.CaseNormalisation, Mapping.NullIsValue, Generating);
 
     private void ClearResult()
     {
@@ -428,16 +470,17 @@ else
 
     private async Task InputsChangedAsync()
     {
-        ClearResult();
+        _valuesGiven = true;
+        await RunTestAsync();
         if (SampleValuesChanged.HasDelegate)
             await SampleValuesChanged.InvokeAsync(_inputs.ToDictionary(input => input.Accessor,
                 input => StateOf(input.Accessor) is { NoValue: false, Values: [var first, ..] } ? first : null, StringComparer.Ordinal));
     }
 
-    private void SetAsOf(DateTime? asOf)
+    private async Task SetAsOf(DateTime? asOf)
     {
         _asOf = asOf;
-        ClearResult();
+        await RunTestAsync();
     }
 
     private void SetFromObject(bool fromObject) => _fromObject = fromObject;
@@ -478,6 +521,23 @@ else
         _ => ExpressionText.TryFormat(value, out var text) ? text ?? string.Empty : value.ToString() ?? string.Empty
     };
 
+    private async Task RunTestAsync()
+    {
+        _testedKey = TestedKey();
+        RunTest();
+
+        // Only a change is reported: the editor re-renders this panel on the report, which must not report again.
+        var tried = _result?.GeneratedBase;
+        if (TriedBaseChanged.HasDelegate && !SameBase(tried, _reportedBase))
+        {
+            _reportedBase = tried;
+            await TriedBaseChanged.InvokeAsync(tried);
+        }
+    }
+
+    private static bool SameBase(GeneratedBaseEvaluation? left, GeneratedBaseEvaluation? right) =>
+        left?.Outcome == right?.Outcome && left?.BaseValue == right?.BaseValue && left?.ErrorReason == right?.ErrorReason;
+
     private void RunTest()
     {
         ClearResult();
@@ -491,6 +551,9 @@ else
             _errorPosition = validation.ErrorPosition;
             return;
         }
+
+        if (!Tried)
+            return;
 
         var inputs = _inputs
             .Select(input => new AttributeFlowTestInput(input.Source, input.AttributeName, StateOf(input.Accessor).TestValues))

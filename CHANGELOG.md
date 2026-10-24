@@ -94,6 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 The Causality Explorer is for Administrators only, like the REST API reads it draws on, and other users no longer see links to it. On a Metaverse Object, **Explore causality** moves from beside the tabs into the **Inspect** view: beside **Where this object gets its values**, and in each attribute's inspector beside **Open in Timeline**.
 - 🖥️ Ordinary buttons across the portal are filled in the theme's default colour rather than outlined, so they read clearly as buttons beside the page's one main action; outlined is kept for dangerous actions.
+- 🔄 The Attribute Flow dialog puts the settings beside a **Try it** pane, so a change and its result are seen together. The result follows as you type and as the settings change, with no **Run test** button. A Generated Value shows one result from the values tried through to the candidates, worked out from the base as a Synchronisation would type and process it. The attribute to assign the value to comes first, and rarely changed settings fold away to a line saying what they are set to. (#2471)
 - 🔄 An Activity's Target and Parent Activity are shown as chips: the Connected System, object, Run Profile, Synchronisation Rule, Schedule or API key it acted on, and the parent Activity by its type and target.
 - 🔄 In the light theme, attribute tables' Attribute column is now a neutral grey matching the header row, rather than a blue-grey.
 - 🔄 Who did something is shown as a chip for what it is, wherever the portal names it: a Synchronisation Rule with its Connected System, a Schedule, a person as their Metaverse Object, an API key, or JIM itself as System. On the Object Changes page, change histories, Activity lists, and Created by and Last updated by.
@@ -142,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ The Causality Explorer no longer has a **Copy link** button; its address already carries the focus and trail, so the browser's own address bar gives the same link.
 - 🗑️ The Worker no longer loads every Connected System Object into memory before it takes work, so it starts sooner and holds less memory; the `JIM_CACHE_WARM_PARALLELISM` setting that tuned that load is gone. (#2246)
 - 🗑️ The File Connector no longer reads a repeated column header (`member,member`) as a multi-valued attribute: schema discovery, imports and exports refuse such a file, naming the column. Put the values in one column, separated by the Multi-Value Delimiter. (#2186)
 - 🗑️ The Pending Export **Failed** status, its five-attempt limit and the wait between attempts are gone: `maxRetries` and `nextRetryAt` are removed from the REST API and PowerShell output, and `Failed` from `-Status`. Pending Exports left Failed are queued again on upgrade. (#2119)

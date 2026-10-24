@@ -1,0 +1,35 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Attribute Flow dialog's two panes (#2471): settings on the left, and on the right a Try it pane that stays in view
+   while the settings scroll, so a change and its result are seen together. Where the dialog is too narrow for two
+   panes, Try it follows the settings. Whoever owns the tester's state renders the layout: the dialog for an Expression,
+   the Generated Value editor for a Generated Value. (Not a SectionOutlet: an outlet keys its content by the render
+   fragment, a new delegate on every render of its owner, so the tester would be rebuilt and lose its values on every
+   keystroke.) *@
+<div class="jim-flow-editor-frame">
+    <div class="jim-flow-editor @(ShowTryIt ? "jim-flow-editor-split" : null)">
+        <div class="jim-flow-editor-settings">@Settings</div>
+        @if (ShowTryIt)
+        {
+            <section class="jim-flow-editor-try" aria-labelledby="jim-flow-editor-try-heading">
+                <MudText Typo="Typo.overline" id="jim-flow-editor-try-heading" Class="jim-flow-editor-try-heading">Try it</MudText>
+                @TryIt
+            </section>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>The settings.</summary>
+    [Parameter]
+    public RenderFragment? Settings { get; set; }
+
+    /// <summary>What can be tried: the tester and its result.</summary>
+    [Parameter]
+    public RenderFragment? TryIt { get; set; }
+
+    /// <summary>Whether there is anything to try: an Attribute copied as it is has nothing.</summary>
+    [Parameter]
+    public bool ShowTryIt { get; set; }
+}
