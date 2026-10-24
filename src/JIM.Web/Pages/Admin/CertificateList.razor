@@ -38,7 +38,7 @@
     <ToolBarExtras>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload"
                    DropShadow="false" Class="me-2">Upload Certificate</MudButton>
-        <MudButton Variant="Variant.Outlined" OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder"
+        <MudButton Variant="Variant.Filled" OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder"
                    DropShadow="false">Reference File Path</MudButton>
     </ToolBarExtras>
     <Columns>
@@ -186,7 +186,7 @@
             HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
         <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
             <CustomContent>
-                <MudButton Variant="Variant.Outlined"
+                <MudButton Variant="Variant.Filled"
                     StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5"
                     OnClick="@context.OpenFilePickerAsync">
                     @(_uploadFile != null ? _uploadFile.Name : "Select Certificate File")

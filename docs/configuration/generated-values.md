@@ -21,7 +21,7 @@ A generated value is a **base expression** plus a **uniqueness token**:
 
 The base expression is an ordinary [expression](attribute-mappings.md#expression-mappings), for example `Lower(cs["firstName"]) + "." + Lower(cs["lastName"])`, and is [checked when you save it](../concepts/expressions.md#validation) like any other. It is required for "only if taken" and optional for the other two; with no base expression, the value is the number or token on its own. When the base value looks like an email address, the token goes before the `@`. A **Separator** (dot, hyphen, underscore, or up to three characters of your own) can sit between the base value and the token.
 
-**When JIM generates a value.** The editor states the three conditions for the mapping:
+**When JIM generates a value.** **How it works**, at the foot of the editor's **Try it** pane, states the three conditions for the mapping:
 
 1. The Metaverse Object has no value from a higher-priority source (see [Attribute Priority](attribute-mappings.md#attribute-priority)). This is the only precedence rule generation follows: it is a contribution like any other, and it contributes only when every higher-priority contribution is silent.
 2. Every attribute the base expression reads has a value, and so does every input of the values [checked with it](#values-built-from-a-generated-value). Generated mappings default to "Wait until every input has a value" (see [Missing Input Behaviour](attribute-mappings.md#missing-input-behaviour)), because a value built from a missing input would be kept for ever.
@@ -47,13 +47,13 @@ The base expression is an ordinary [expression](attribute-mappings.md#expression
 
 ## Testing the base expression
 
-**Test the base expression**, under the base expression in the editor, runs it as a Synchronisation would. Give each attribute it reads a value, or load them from an object, and see:
+The **Try it** pane beside the editor's settings runs the base expression as a Synchronisation would, as you type. Give each attribute it reads a value, or load them from an object, and see:
 
 - what the expression returns;
 - the Attribute Flow's value processing;
 - the base generation would start from, with what happens to it.
 
-The test stops there. Which value is free is decided when a Synchronisation runs, so it never shows a candidate; the preview below it shows the candidates the token would give. An input with no value shows what the mapping's [Missing Input Behaviour](attribute-mappings.md#missing-input-behaviour) does: by default generation waits (condition 2 above), and a mapping set to fail shows the error a Synchronisation would record. A base expression that returns several values, or a value with no text, also shows the error a Synchronisation would record.
+Under that, **Result** shows the value the token would give from that base, and the candidates that follow when it is taken. Which of them is free is decided when a Synchronisation runs, so the test never says which one an object would get. An input with no value shows what the mapping's [Missing Input Behaviour](attribute-mappings.md#missing-input-behaviour) does: by default generation waits (condition 2 above), and a mapping set to fail shows the error a Synchronisation would record. A base expression that returns several values, or a value with no text, also shows the error a Synchronisation would record.
 
 Over the REST API and PowerShell, test the Attribute Flow with [`Test-JIMExpression`](../powershell/expressions.md#test-jimexpression) `-SyncRuleId` and `-MappingId`: `GeneratedValue` is `$true`, and `BaseOutcome` and `BaseValue` say what generation would be given.
 
@@ -87,7 +87,7 @@ The switch belongs to Expression mappings, import and export; JIM refuses to swi
 
 **Where you see them.**
 
-- **Portal**<br /> An Attribute Flow building its value from a generated value shows a **Built from generated value** block with the **Keep unique with Account Name** switch and what it does there. It is marked **Not in effect** while the generated flow's Collision Remediation is off (the switch stays changeable), and has no switch for a value built from several. The generated flow's dialog lists every value built from it under **Values built from Account Name**: its rule and how it is built, where it is written unchanged, whether it is checked before issuing (where, or why not), and what happens if a target refuses it; its preview works out the values checked with each candidate. Change a value's switch on its own Attribute Flow; the list only reports it.
+- **Portal**<br /> An Attribute Flow building its value from a generated value shows a **Built from generated value** block with the **Keep unique with Account Name** switch and what it does there. It is marked **Not in effect** while the generated flow's Collision Remediation is off (the switch stays changeable), and has no switch for a value built from several. The generated flow's dialog lists every value built from it under **Values built from Account Name**, in **How it works**: its rule and how it is built, where it is written unchanged, whether it is checked before issuing (where, or why not), and what happens if a target refuses it; its **Result** works out the values checked with each candidate. Change a value's switch on its own Attribute Flow; the list only reports it.
 - **REST API**<br /> A mapping carries `keepUnique`; one that builds a value from a generated value also carries `builtFromGeneratedValue`, describing it as the panel does (`via`, `kind`, `exportedTo`, `checkedBeforeIssuing`, `probedIn`, `moveToSyncRuleName` and the generated flow's `collisionRemediation`). A generated mapping's `generation.builtValues` lists every value built from it. Create and update requests take `keepUnique`.
 - **PowerShell**<br /> `-KeepUnique` on `New-JIMSyncRuleMapping` and `Set-JIMSyncRuleMapping` for Expression mappings (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)); `Get-JIMSyncRuleMapping` returns `KeepUnique`, `BuiltFromGeneratedValue` and `Generation.BuiltValues`.
 
@@ -121,7 +121,7 @@ The REST API and PowerShell report the stored reason.
 
 **Where you see it.**
 
-- The editor's preview shows the first value and the candidates that follow when it is taken, using the sample values entered under "Test this Expression". For a saved rule it also counts the existing Metaverse Objects that would receive a value on the next Full Synchronisation, and for a sequence it shows the counter's state.
+- The editor's **Result** shows the first value and the candidates that follow when it is taken, worked out from the values tried in its **Try it** pane, or from placeholder values until you try some. For a saved rule it also counts the existing Metaverse Objects that would receive a value on the next Full Synchronisation, and for a sequence it shows the counter's state.
 - A synchronisation's Activity counts **Values Generated**, and each object's summary names the value it was given. A failure (no free value within the attempt limit, or a sequence that outgrew its width) is an ordinary Activity error naming the reason.
 - On the Metaverse Object page's [Inspect view](metaverse-objects.md#where-a-value-comes-from), a generated value's source reads **Connected System · Synchronisation Rule · Generated Value**, with its own share of the source bar, and its inspector gives the Source type as **Generated Value** (marked **Corrected** if a collision revised it).
 

@@ -15,8 +15,8 @@ Each case covers exactly one thing: one Attribute Flow, one Synchronisation Rule
 
 The quickest way to make a case is from a test you have just run.
 
-1. Open the tester: **Test this Attribute Flow** in an Attribute Flow's dialog, or **Test this scope** on a Synchronisation Rule's Scope tab.
-2. Give the inputs values and choose **Run test**.
+1. Open the tester: the **Try it** pane in an Attribute Flow's dialog, or **Test this scope** on a Synchronisation Rule's Scope tab.
+2. Give the inputs values. An Attribute Flow's result follows them as you type; for a scope, choose **Run test**.
 3. Choose **Save as test case**. The dialog holds the values you tested as the inputs, and today's result as what the case expects.
 4. Give the case a name that says what it checks, change anything you need, and choose **Save**.
 

@@ -39,7 +39,7 @@ To keep a check that an Attribute Flow still gives the value you expect, and run
 
 ### Missing Input Behaviour
 
-An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set beside the expression on each expression source, decides what JIM does instead:
+An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set under the expression on each expression source, decides what JIM does instead:
 
 | Behaviour | Effect |
 |-----------|--------|
@@ -107,7 +107,7 @@ Which vocabulary applies comes from the Connector: the LDAP Connector declares L
 
 ## Value processing (inbound)
 
-Source text is often dirty: stray padding, inconsistent casing, or a "value" that is really just spaces. For **import** mappings that target a **text** Metaverse attribute, you can clean and normalise the imported value before it flows to the Metaverse, configured per mapping in the Attribute Flow editor. Value processing applies to direct and expression mappings alike, and only to text attributes; it does not appear for export mappings or non-text targets.
+Source text is often dirty: stray padding, inconsistent casing, or a "value" that is really just spaces. For **import** mappings that target a **text** Metaverse attribute, you can clean and normalise the imported value before it flows to the Metaverse, configured per mapping under **Value handling** in the Attribute Flow dialog. Value processing applies to direct and expression mappings alike, and only to text attributes; it does not appear for export mappings or non-text targets.
 
 Four controls are available:
 

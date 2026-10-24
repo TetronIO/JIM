@@ -17,11 +17,11 @@
 <MudPaper Outlined="true" Class="@($"pa-4 {Class}")" data-testid="jim-test-cases-panel">
     <div class="d-flex align-center flex-wrap gap-2">
         <MudText Typo="Typo.h6" Class="flex-grow-1">Test cases</MudText>
-        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="RunAllAsync"
+        <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="RunAllAsync"
                    Disabled="@(_testCases.Count == 0 || _running)" data-testid="jim-test-cases-run-all">Run all</MudButton>
         @if (_coverageOptions.Count > 0)
         {
-            <MudMenu Label="New test case" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" EndIcon="@Icons.Material.Filled.ArrowDropDown"
+            <MudMenu Label="New test case" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                      data-testid="jim-test-cases-new">
                 @foreach (var option in _coverageOptions)
                 {

@@ -31,7 +31,7 @@
     @if (_connectedSystem != null)
     {
         <MudStack Row Spacing="3">
-            <MudButton Variant="Variant.Outlined"
+            <MudButton Variant="Variant.Filled"
                        StartIcon="@Icons.Material.Filled.Storage"
                        DropShadow="false"
                        Size="Size.Small"
@@ -39,7 +39,7 @@
                 Connector Space
                 <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
             </MudButton>
-            <MudButton Variant="Variant.Outlined"
+            <MudButton Variant="Variant.Filled"
                        StartIcon="@Icons.Material.Filled.Outbox"
                        DropShadow="false"
                        Size="Size.Small"
@@ -59,7 +59,7 @@
                 var failingText = failures.FailingCount == 1 ? "1 Pending Export is failing." : $"{failures.FailingCount:N0} Pending Exports are failing.";
                 <MudTooltip Arrow="true" Placement="Placement.Top"
                             Text="@($"{failingText}{oldestText} JIM attempts each again at every export run; open them to see what the Connected System refused.")">
-                    <MudButton Variant="Variant.Outlined"
+                    <MudButton Variant="Variant.Filled"
                                StartIcon="@Icons.Material.Filled.ErrorOutline"
                                DropShadow="false"
                                Size="Size.Small"
@@ -78,7 +78,7 @@
                 var amber = UnresolvedReferenceDisplay.SignpostTone(_connectedSystem.UnresolvedReferenceHandling) == UnresolvedReferenceTone.Warning;
                 <MudTooltip Arrow="true" Placement="Placement.Top">
                     <ChildContent>
-                        <MudButton Variant="Variant.Outlined"
+                        <MudButton Variant="Variant.Filled"
                                    StartIcon="@Icons.Material.Filled.LinkOff"
                                    DropShadow="false"
                                    Size="Size.Small"
