@@ -1,0 +1,64 @@
+@using JIM.Models.Activities
+@using JIM.Models.Core.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What an Activity acted on, as the chip for that kind of object: a Connected System, one of its objects or Run  *@
+@* Profiles, a Metaverse Object, a Synchronisation Rule, a Schedule or an API key. A target with no chip kind of its *@
+@* own (a setting, a certificate, housekeeping) renders ChildContent instead, which is the page's link or text.    *@
+@switch (Activity.TargetType)
+{
+    case ActivityTargetType.ConnectedSystem when Activity.ConnectedSystemId.HasValue:
+        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@Activity.TargetName" Class="ma-0"
+                    Href="@Helpers.GetConnectedSystemActivityHref(Activity.ConnectedSystemId, Activity.TargetOperationType)" />
+        break;
+    case ActivityTargetType.PasswordSynchronisation when Activity.ConnectedSystemId.HasValue:
+        @* A password delivered to one Connected System: the system it went to. *@
+        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@Activity.TargetName" Class="ma-0"
+                    Href="@($"/admin/connected-systems/{Activity.ConnectedSystemId}/")" />
+        break;
+    case ActivityTargetType.ConnectedSystemObject when Helpers.GetConnectedSystemObjectActivityHref(Activity.ConnectedSystemId, Activity.ConnectedSystemObjectId) is { } csoHref:
+        <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" Name="@Activity.TargetName" Href="@csoHref" Class="ma-0" />
+        break;
+    case ActivityTargetType.ConnectedSystemRunProfile when Activity.ConnectedSystemId.HasValue:
+        <ObjectChip Kind="ObjectChipKind.RunProfile" TypeName="@ConnectedSystemName" Name="@Activity.TargetName" Class="ma-0"
+                    Href="@($"/admin/connected-systems/{Activity.ConnectedSystemId}/?t=run-profiles")" />
+        break;
+    case ActivityTargetType.MetaverseObject when MetaverseObject != null:
+        <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@MetaverseObject.TypeName" Name="@MetaverseObject.NameOrId" Class="ma-0"
+                    Href="@JIM.Utilities.Utilities.GetMetaverseObjectHref(MetaverseObject.Id, MetaverseObject.TypePluralName)" />
+        break;
+    case ActivityTargetType.SynchronisationRule:
+        <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@Activity.TargetName" Class="ma-0"
+                    Href="@Helpers.GetSyncRuleActivityHref(Activity.SyncRuleId, Activity.TargetName)" />
+        break;
+    case ActivityTargetType.Schedule:
+        <ObjectChip Kind="ObjectChipKind.Schedule" Name="@Activity.TargetName" Href="/admin/operations?t=schedules" Class="ma-0" />
+        break;
+    case ActivityTargetType.ApiKey:
+        <ObjectChip Kind="ObjectChipKind.ApiKey" Name="@Activity.TargetName" Class="ma-0"
+                    Href="@(Activity.ApiKeyId is { } keyId ? $"/admin/apikeys/{keyId}" : null)" />
+        break;
+    default:
+        @ChildContent
+        break;
+}
+
+@code {
+    /// <summary>The Activity whose target to show.</summary>
+    [Parameter, EditorRequired]
+    public Activity Activity { get; set; } = null!;
+
+    /// <summary>The Connected System a Run Profile belongs to, which its chip names.</summary>
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>The target Metaverse Object, where the page has loaded it; without it the fallback renders.</summary>
+    [Parameter]
+    public MetaverseObjectHeader? MetaverseObject { get; set; }
+
+    /// <summary>What to render for a target with no chip kind of its own.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

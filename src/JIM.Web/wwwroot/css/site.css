@@ -1064,7 +1064,8 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
 .jim-object-chip-glyph.mvo,
 .jim-object-chip-glyph.key,
 .jim-object-chip-glyph.sch,
-.jim-object-chip-glyph.jim {
+.jim-object-chip-glyph.jim,
+.jim-object-chip-glyph.act {
     width: auto;
     min-width: 24px;
     padding: 0 6px;
@@ -1098,6 +1099,13 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
 .jim-object-chip-glyph.jim {
     background: color-mix(in srgb, var(--mud-palette-text-primary) 55%, transparent);
     color: var(--mud-palette-background);
+}
+
+/* An Activity (a parent Activity, say): a slate drawn from the primary, dark in both themes so its white text
+   holds, and distinct from System's neutral blend beside it in an Activity's Summary. */
+.jim-object-chip-glyph.act {
+    background: color-mix(in srgb, var(--mud-palette-primary) 30%, #37474f);
+    color: #fff;
 }
 
 .jim-object-chip-type {
