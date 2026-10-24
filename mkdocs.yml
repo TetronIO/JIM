@@ -157,6 +157,7 @@ nav:
       - Activities: configuration/activities.md
       - Execution Items: configuration/activity-execution-items.md
       - Live Progress: configuration/activity-progress.md
+      - Import Watermarks: configuration/import-watermarks.md
       - Causality: configuration/causality.md
       - API Keys: configuration/api-keys.md
       - Certificates: configuration/certificates.md

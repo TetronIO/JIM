@@ -4299,6 +4299,30 @@ html[lang] .jim-kv-table td:first-child {
     margin: 4px 0 0;
 }
 
+/* ─── Import read range (Activity Summary) ─── */
+
+/* A Connector's persisted state can be long (an LDAP Connector's lists every control the directory supports), so the
+   field may never widen its grid row, and the recorded state scrolls within itself rather than down the page. */
+.jim-import-read-range {
+    min-width: 0;
+}
+
+/* One line per Object Type or source, for a Connector that keeps a watermark for each. */
+.jim-import-read-range-point {
+    overflow-wrap: anywhere;
+}
+
+/* Sits under the reading it explains, as the stack trace toggle sits under its message. */
+.jim-import-read-range-toggle {
+    margin-top: 4px;
+}
+
+.jim-import-read-range-state {
+    max-height: 320px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
 /* ─── Tooltip measure ─── */
 
 /* MudBlazor sets no max-width on a tooltip, so a long explanatory one grows to a single line as wide
