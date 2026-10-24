@@ -157,6 +157,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 On the Operations page's Queue, a running task's name can now be clicked through to its Activity at any point in the run. While progress was arriving quickly, as during the import phase of a large Full Import, the click often did nothing.
 - 🐛 In a Metaverse Object's Inspect view, clicking an attribute's value now opens its inspector, as clicking its name or source does; a linked value, such as an email address or a reference, still follows its link.
 - 🐛 Every Metaverse Object change now links to the Activity it was made in, including deletions, scheduled deletions, the initial administrator's creation at sign-in and data generation; before, only changes a synchronisation recorded per object did. Also in `activityId` over REST and PowerShell. (#2460)
 - 🐛 The initial administrator's creation at first sign-in is recorded as made by System, rather than by nobody. (#2460)
