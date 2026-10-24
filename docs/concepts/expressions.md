@@ -458,7 +458,7 @@ If the attribute has the values Admin, Users, and Developers, this produces `Adm
 
 The Attribute Flow dialog tests an expression as you write it, so you find out what it produces before you save it rather than from the next synchronisation.
 
-Choose **Expression** as the source type, the attribute to assign the value to, and type your expression. The **Try it** pane beside the settings lists each attribute the expression reads, with its type from the schema and whether it holds one value or several. Give each a value and the pane shows what a synchronisation would do, using the same code a synchronisation runs. The result follows as you type, and as you change the Attribute Flow's settings, such as its Missing Input Behaviour or value processing.
+Choose **Expression** as the source type, choose the target attribute, and type your expression. The **Try it** pane lists each attribute the expression reads, with its type and whether it holds several values. Give each a value and it shows what a synchronisation would do, using the same code, updating as you type or change the settings.
 
 **Giving the inputs values:**
 
@@ -475,7 +475,7 @@ Choose **Expression** as the source type, the attribute to assign the value to, 
 3. **Converted for** the target: the values the target attribute would hold, in its type.
 4. **Result:** what the target would be given: these values, no value, or the error a synchronisation would record, such as a result the target's type cannot hold.
 
-**If an input has no value** then runs the flow again for each input you gave a value, with that one input absent, and shows what the Attribute Flow's Missing Input Behaviour would do. Its heading names the behaviour chosen, and **Change** opens that setting. This is how you check an expression against the hazard the previous section describes:
+**If an input has no value** then runs the flow again for each input you gave a value, with that one input absent, and shows what the Attribute Flow's Missing Input Behaviour would do. **Change** opens that setting. This is how you check an expression against the hazard the previous section describes:
 
 ```csharp
 Lower(cs["givenName"]) + "." + Lower(cs["sn"]) + "@corp.local"
