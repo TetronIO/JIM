@@ -67,7 +67,7 @@
 @if (Rows.Count < TotalCount && OnShowMore.HasDelegate)
 {
     <div class="jim-causality-timeline-more">
-        <MudButton Variant="Variant.Outlined" Class="jim-causality-show-more" Disabled="@Loading" OnClick="OnShowMore">
+        <MudButton Variant="Variant.Filled" Class="jim-causality-show-more" Disabled="@Loading" OnClick="OnShowMore">
             Show @Math.Min(ActivityServerPageSize, TotalCount - Rows.Count).ToString("N0") more
         </MudButton>
     </div>
