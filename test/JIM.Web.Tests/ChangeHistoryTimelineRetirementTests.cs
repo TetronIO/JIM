@@ -27,7 +27,7 @@ public class ChangeHistoryTimelineRetirementTests : JimComponentTestContext
     {
         ChangeType = ObjectChangeType.Updated,
         ChangeTime = when,
-        ChangeInitiatorType = "User",
+        InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.User,
         ChangeInitiatorName = "Ada Lovelace",
         ChangeMechanismType = "User",
         AttributeChanges =
