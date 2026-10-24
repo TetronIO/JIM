@@ -1,0 +1,165 @@
+@using System.Globalization
+@using JIM.Models.Staging
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    An import's watermarks, as one field of its Activity's Summary. What was recorded is the Connector's persisted data,
+    which commonly holds far more than a watermark (an LDAP Connector's is mostly its detected view of the directory),
+    so the field says in words what the Connector describes, and keeps the recorded values behind a toggle for support.
+    Renders a MudItem, so it sits in the Summary's MudGrid like the fields around it.
+*@
+
+@if (WatermarkFrom != null || WatermarkTo != null)
+{
+    <MudItem xs="12" Class="jim-import-read-range">
+        @if (_reading != null)
+        {
+            <MudText Typo="Typo.button" Class="mud-text-secondary">@_reading.Label:</MudText>
+            @foreach (var line in _reading.Lines)
+            {
+                <MudText Class="@(_reading.Scoped ? "jim-import-read-range-point" : null)">@line</MudText>
+            }
+            @if (_reading.Note != null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_reading.Note</MudText>
+            }
+        }
+
+        <MudButton Variant="Variant.Text"
+                   Size="Size.Small"
+                   Color="Color.Inherit"
+                   DropShadow="false"
+                   Class="jim-import-read-range-toggle"
+                   StartIcon="@(_stateShown ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                   OnClick="@(() => _stateShown = !_stateShown)">
+            @(_stateShown ? "Hide Connector state" : "Show Connector state")
+        </MudButton>
+
+        @if (_stateShown)
+        {
+            @if (WatermarkFrom != null)
+            {
+                <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">Before this run:</MudText>
+                <div class="jim-json-syntax jim-import-read-range-state">@((MarkupString)Helpers.HighlightJson(Helpers.FormatJson(WatermarkFrom)))</div>
+            }
+            @if (WatermarkTo != null)
+            {
+                <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">After this run:</MudText>
+                <div class="jim-json-syntax jim-import-read-range-state">@((MarkupString)Helpers.HighlightJson(Helpers.FormatJson(WatermarkTo)))</div>
+            }
+        }
+    </MudItem>
+}
+
+@code {
+    /// <summary>
+    /// The import's run type. A Delta Import reads the changes after a watermark; a Full Import reads everything, so
+    /// what it is shown for is the point the next Delta Import starts from.
+    /// </summary>
+    [Parameter]
+    public ConnectedSystemRunType? RunType { get; set; }
+
+    /// <summary>
+    /// The persisted connector data the import started from, as recorded on the Activity.
+    /// </summary>
+    [Parameter]
+    public string? WatermarkFrom { get; set; }
+
+    /// <summary>
+    /// The persisted connector data the import recorded once it had staged everything it read.
+    /// </summary>
+    [Parameter]
+    public string? WatermarkTo { get; set; }
+
+    /// <summary>
+    /// The Connector's description of both, or null where it gives none (the Connector does not describe its
+    /// watermarks, or the Connected System has since been deleted); only the recorded values are offered then.
+    /// </summary>
+    [Parameter]
+    public ImportReadRange? ReadRange { get; set; }
+
+    private Reading? _reading;
+    private bool _stateShown;
+
+    private sealed record Reading(string Label, IReadOnlyList<string> Lines, bool Scoped, string? Note);
+
+    protected override void OnParametersSet()
+    {
+        _reading = RunType == ConnectedSystemRunType.DeltaImport ? ReadDelta() : ReadFull();
+    }
+
+    /// <summary>
+    /// Where the next Delta Import starts: the point this run reached or, where it recorded none, the one it started
+    /// from, which is left in place.
+    /// </summary>
+    private Reading? ReadFull()
+    {
+        var watermark = ReadRange?.To ?? ReadRange?.From;
+        if (watermark == null || watermark.Points.Count == 0)
+            return null;
+
+        var scoped = IsScoped(watermark);
+        var lines = watermark.Points.Select(p => WithScope(scoped ? p.Scope : null, $"{Value(p)} ({watermark.Kind})")).ToList();
+        return new Reading("Next Delta Import Reads Changes After", lines, scoped, null);
+    }
+
+    private Reading? ReadDelta()
+    {
+        var from = ReadRange?.From;
+        var to = ReadRange?.To;
+        if ((from?.Points.Count ?? 0) == 0 && (to?.Points.Count ?? 0) == 0)
+            return null;
+
+        var scoped = (from != null && IsScoped(from)) || (to != null && IsScoped(to));
+        var scopes = (to?.Points ?? []).Concat(from?.Points ?? [])
+            .Select(p => scoped ? p.Scope : null)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var lines = scopes.Select(scope => WithScope(scope, DeltaSentence(
+            Find(from, scope, scoped), from?.Kind,
+            Find(to, scope, scoped), to?.Kind))).ToList();
+
+        var note = from != null && to == null
+            ? "No new watermark was recorded, so the next Delta Import reads from the same point."
+            : null;
+        return new Reading("Read Changes", lines, scoped, note);
+    }
+
+    private static string DeltaSentence(ImportWatermarkPoint? from, string? fromKind, ImportWatermarkPoint? to, string? toKind)
+    {
+        if (from != null && to != null)
+        {
+            var sameKind = fromKind == toKind;
+            if (sameKind && Value(from) == Value(to))
+                return $"No changes after {Value(from)} ({fromKind})";
+
+            return sameKind
+                ? $"After {Value(from)}, up to {Value(to)} ({toKind})"
+                : $"After {Value(from)} ({fromKind}), up to {Value(to)} ({toKind})";
+        }
+
+        return to != null
+            ? $"From the start, up to {Value(to)} ({toKind})"
+            : $"After {Value(from!)} ({fromKind})";
+    }
+
+    private static bool IsScoped(ImportWatermarkDescription watermark) => watermark.Points.Any(p => p.Scope != null);
+
+    private static ImportWatermarkPoint? Find(ImportWatermarkDescription? watermark, string? scope, bool scoped) =>
+        watermark?.Points.FirstOrDefault(p => !scoped || string.Equals(p.Scope, scope, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Prefixes a scoped line with what it belongs to, lower-casing the sentence's first letter to run on after it.
+    /// </summary>
+    private static string WithScope(string? scope, string sentence) =>
+        scope == null ? sentence : $"{scope}: {char.ToLowerInvariant(sentence[0])}{sentence[1..]}";
+
+    private static string Value(ImportWatermarkPoint point) =>
+        point.Number?.ToString("N0", CultureInfo.InvariantCulture)
+        ?? point.Time?.ToLocalTime().ToFriendlyDate()
+        ?? point.Text
+        ?? string.Empty;
+}
