@@ -58,11 +58,6 @@
         }
     </div>
     <div class="jim-causality-focus-acts">
-        @if (OnCopyLink.HasDelegate)
-        {
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Link" Class="jim-causality-copy-link"
-                       OnClick="OnCopyLink">Copy link</MudButton>
-        }
         @if (WayOut() is { } wayOut)
         {
             <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.OpenInNew" Href="@wayOut.Href"
@@ -83,12 +78,6 @@
     /// </summary>
     [Parameter]
     public CausalFocusLabels? Labels { get; set; }
-
-    /// <summary>
-    /// Copies the explorer's address; the button shows only where the host handles it.
-    /// </summary>
-    [Parameter]
-    public EventCallback OnCopyLink { get; set; }
 
     /// <summary>
     /// An item that recorded a Metaverse Object rather than a Connected System Object (an export scope review, #1971).

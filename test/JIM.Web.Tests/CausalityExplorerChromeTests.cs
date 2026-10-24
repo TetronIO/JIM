@@ -146,20 +146,6 @@ public class CausalityExplorerChromeTests : JimComponentTestContext
         }
     }
 
-    [Test]
-    public void FocusHeader_CopyLink_RaisesTheHostsCallback()
-    {
-        var copied = 0;
-        var cut = Render<CausalityFocusHeader>(ps => ps
-            .Add(c => c.Focus, First)
-            .Add(c => c.Labels, Labels())
-            .Add(c => c.OnCopyLink, () => copied++));
-
-        cut.Find("button.jim-causality-copy-link").Click();
-
-        Assert.That(copied, Is.EqualTo(1));
-    }
-
     private IRenderedComponent<CausalityFocusHeader> RenderHeader(CausalityFocus focus, CausalFocusLabels? labels = null) =>
         Render<CausalityFocusHeader>(ps => ps.Add(c => c.Focus, focus).Add(c => c.Labels, labels ?? Labels()));
 
