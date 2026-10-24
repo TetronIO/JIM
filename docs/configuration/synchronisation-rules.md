@@ -26,7 +26,7 @@ A rule's Connected System Object Type must be selected on the Connected System's
 
 A saved rule's Object Types cannot be changed: its Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of those types, and would read nothing on another. Neither the portal, the REST API nor PowerShell offers a way to change them once the rule is saved, and JIM refuses a save that would. To manage another Object Type, create a new Synchronisation Rule.
 
-A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. The Metaverse Object Type is always on the left and the Connected System Object Type on the right, with the arrow between them drawn the way data flows: towards the Connected System for an export rule, towards the Metaverse for an import rule. The Connected System's name links to it.
+A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. It reads left to right in the direction data flows: an import rule shows the Connected System Object Type, then the Metaverse Object Type; an export rule the reverse. The form that creates a rule orders its two Object Type pickers the same way. The Connected System's name links to it.
 
 Where a tab introduces a term you might not already know (Projection, Scoping, Object Matching Rules, Attribute Flow and others across JIM's configuration pages), an info icon sits beside it. Selecting it shows a short definition and a link to the full entry in the [glossary](../reference/glossary.md).
 
