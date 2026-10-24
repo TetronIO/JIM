@@ -3,6 +3,7 @@
 
 using JIM.Connectors.Sql.Providers;
 using JIM.Models.Connectors;
+using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -10,6 +11,7 @@ using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
 using System.Data.Common;
+using System.Globalization;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -25,7 +27,7 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -93,6 +95,37 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     public string? Description => "Enables bi-directional synchronisation with relational databases, including Microsoft SQL Server and Oracle Database.";
 
     public string? Url => "https://github.com/TetronIO/JIM";
+    #endregion
+
+    #region IConnectorImportWatermarkDescription members
+    /// <summary>
+    /// The watermark is one position per configured Object Type and, in Watermark Column mode, one per related table
+    /// as well, since each source keeps its own (see <see cref="SqlConnectorWatermark"/>). A number reads as a number;
+    /// anything else, a date included, reads as the Connector holds it, because it is compared only against its own
+    /// column's values and is never a point in time.
+    /// </summary>
+    public ImportWatermarkDescription? DescribeImportWatermark(string? persistedConnectorData, ILogger logger)
+    {
+        var watermark = SqlConnectorWatermark.TryRead(persistedConnectorData);
+        if (watermark == null)
+            return null;
+
+        var points = watermark.ObjectTypes
+            .Select(objectType => Point(objectType.Key, objectType.Value))
+            .Concat(watermark.RelatedTables.SelectMany(objectType => objectType.Value
+                .Select(relatedTable => Point($"{objectType.Key}: {relatedTable.Key}", relatedTable.Value))))
+            .ToList();
+        if (points.Count == 0)
+            return null;
+
+        var kind = watermark.Mode == SqlDeltaImportMode.ChangeLogTable ? "change log sequence" : "watermark column";
+        return new ImportWatermarkDescription { Kind = kind, Points = points };
+
+        static ImportWatermarkPoint Point(string scope, SqlDeltaValue value) =>
+            value.Type is AttributeDataType.Number or AttributeDataType.LongNumber && long.TryParse(value.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number)
+                ? new ImportWatermarkPoint { Scope = scope, Number = number }
+                : new ImportWatermarkPoint { Scope = scope, Text = value.Value };
+    }
     #endregion
 
     #region IConnectorCapabilities members

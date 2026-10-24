@@ -10,12 +10,13 @@ using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -471,6 +472,64 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         _ => "Generic"
 
     };
+    #endregion
+
+    #region IConnectorImportWatermarkDescription members
+    /// <summary>
+    /// Reads the one value in the persisted rootDSE that is a Delta Import watermark, chosen by the directory's delta
+    /// source: the highest committed Update Sequence Number (Active Directory, Samba AD), the access log time
+    /// (OpenLDAP), or the last change log entry (389 Directory Server and generic directories). Everything else
+    /// persisted is the directory's detected capabilities, not a position.
+    /// </summary>
+    public ImportWatermarkDescription? DescribeImportWatermark(string? persistedConnectorData, ILogger logger)
+    {
+        if (string.IsNullOrEmpty(persistedConnectorData))
+            return null;
+
+        LdapConnectorRootDse? rootDse;
+        try
+        {
+            rootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+        }
+        catch (JsonException ex)
+        {
+            logger.Warning(ex, "DescribeImportWatermark: Failed to deserialise persisted connector data. Describing no watermark.");
+            return null;
+        }
+
+        if (rootDse == null)
+            return null;
+
+        return rootDse.DeltaSourceKind switch
+        {
+            LdapDeltaSourceKind.Usn when rootDse.HighestCommittedUsn.HasValue =>
+                Watermark("Update Sequence Number", new ImportWatermarkPoint { Number = rootDse.HighestCommittedUsn }),
+            LdapDeltaSourceKind.Changelog when rootDse.LastChangeNumber.HasValue =>
+                Watermark("change log entry", new ImportWatermarkPoint { Number = rootDse.LastChangeNumber }),
+            LdapDeltaSourceKind.Accesslog when TryParseAccesslogTimestamp(rootDse.LastAccesslogTimestamp, out var time) =>
+                Watermark("access log", new ImportWatermarkPoint { Time = time }),
+            _ => null
+        };
+
+        static ImportWatermarkDescription Watermark(string kind, ImportWatermarkPoint point) => new() { Kind = kind, Points = [point] };
+    }
+
+    /// <summary>
+    /// The access log's reqStart values are GeneralizedTime in UTC, with or without a fraction of a second.
+    /// </summary>
+    private static bool TryParseAccesslogTimestamp(string? value, out DateTime utc)
+    {
+        utc = default;
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        if (!DateTime.TryParseExact(value, ["yyyyMMddHHmmss.FFFFFF'Z'", "yyyyMMddHHmmss'Z'"], CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
+            return false;
+
+        utc = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+        return true;
+    }
     #endregion
 
     #region IConnectorDirectoryServers members

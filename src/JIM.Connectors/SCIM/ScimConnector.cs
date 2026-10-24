@@ -21,7 +21,7 @@ namespace JIM.Connectors.SCIM;
 /// SCIM service providers to discover schemas, import resources, and export provisioning changes.
 /// Implementation plan: engineering/plans/doing/SCIM_CLIENT_CONNECTOR_DESIGN.md (issue #545).
 /// </summary>
-public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe
+public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe
 {
     private ICredentialProtection? _credentialProtection;
     private ICertificateProvider? _certificateProvider;
@@ -59,6 +59,19 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public string? Description => "Enables bi-directional synchronisation with any system that exposes a SCIM 2.0 service provider interface. JIM acts as the SCIM client, connecting out to the service provider.";
 
     public string? Url => "https://github.com/TetronIO/JIM";
+    #endregion
+
+    #region IConnectorImportWatermarkDescription members
+    /// <summary>
+    /// The watermark is the instant the next Delta Import asks the service provider for resources last modified after.
+    /// </summary>
+    public ImportWatermarkDescription? DescribeImportWatermark(string? persistedConnectorData, ILogger logger)
+    {
+        var watermark = ScimImportState.Read(persistedConnectorData, logger)?.Watermark;
+        return watermark == null
+            ? null
+            : new ImportWatermarkDescription { Kind = "last modified time", Points = [new ImportWatermarkPoint { Time = watermark.Value.UtcDateTime }] };
+    }
     #endregion
 
     #region IConnectorCapabilities members

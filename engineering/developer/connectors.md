@@ -65,6 +65,15 @@ With it set, an object that arrives under one Object Type with an External ID JI
 - **Leave it unset when values can repeat across your Object Types.** A SQL view shares its table's keys, and two tables' identity columns overlap, so the SQL Connector leaves it unset: the same value under two Object Types is two objects there, and declaring otherwise would refuse the second object of each such pair as a type change.
 - **Declare it because it is true of the system, not because your Object Types happen not to overlap today.** If your system never moves an object between types, there is nothing for the guard to catch, and an unset flag costs nothing.
 
+## Describing your import watermark
+
+Whatever your Connector returns as persisted connector data is stored on the Connected System and recorded on every import's Activity, before and after the run. JIM never reads it, so the Activity page cannot say what it means unless you do. Implement `IConnectorImportWatermarkDescription` if your Connector keeps a Delta Import watermark there: `DescribeImportWatermark` parses one recorded value and returns an `ImportWatermarkDescription`, its `Kind` (what the watermark counts in, phrased to follow a value: `access log`, `change sequence`) and one `ImportWatermarkPoint` per position you keep, each a `Number`, a UTC `Time` or a `Text`.
+
+- **Describe only the watermark.** Persisted data often carries more (the LDAP Connector's holds its detected view of the directory); leave the rest to `IConnectorDetectedCapabilities`.
+- **Give each position its own point, with a `Scope`, when you keep more than one.** The SQL Connector keeps one per Object Type and related table; one value standing for all of them would misstate what the next Delta Import reads.
+- **A date you only compare against its own column is `Text`, not `Time`.** `Time` is shown in the reader's local time, which is right only for a real point in time.
+- **Never throw.** It runs while a page or an API response is being built; return null for anything you cannot read, including values recorded before your Connector kept a watermark. Cover each shape in `ConnectorImportWatermarkDescriptionTests` (JIM.Worker.Tests), whose shared case checks null, empty and unreadable data for every built-in Connector listed in it.
+
 ## Reporting progress and errors
 
 A Connector is the only thing that knows what is happening inside a Connected System. JIM can count the objects you hand back and time how long you took, but everything else (which container you are reading, why one object could not be exported, that a Delta Import quietly became a Full Import) is invisible unless you report it.
