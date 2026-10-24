@@ -1061,7 +1061,10 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
    pill compact. The Connected System Object keeps the secondary colour and the Metaverse Object the primary,
    JIM's own. */
 .jim-object-chip-glyph.cso,
-.jim-object-chip-glyph.mvo {
+.jim-object-chip-glyph.mvo,
+.jim-object-chip-glyph.key,
+.jim-object-chip-glyph.sch,
+.jim-object-chip-glyph.jim {
     width: auto;
     min-width: 24px;
     padding: 0 6px;
@@ -1078,6 +1081,23 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
 .jim-object-chip-glyph.mvo {
     background: var(--mud-palette-primary);
     color: var(--mud-palette-primary-text, #fff);
+}
+
+/* Who did something (InitiatorChip): an API key, a Schedule, or JIM itself. A person is a Metaverse Object and a
+   Synchronisation Rule is a rule, so they keep those glyphs; these three are the initiators that are nothing else. */
+.jim-object-chip-glyph.key {
+    background: var(--mud-palette-success);
+    color: var(--mud-palette-success-text, #fff);
+}
+
+.jim-object-chip-glyph.sch {
+    background: var(--mud-palette-tertiary);
+    color: var(--mud-palette-tertiary-text, #fff);
+}
+
+.jim-object-chip-glyph.jim {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 55%, transparent);
+    color: var(--mud-palette-background);
 }
 
 .jim-object-chip-type {
@@ -2662,17 +2682,12 @@ html[lang] .jim-schema-change-table td {
     box-shadow: none !important;
 }
 
-/* Who started an Activity (<ActivityInitiator />): the icon stays beside the name, centred on its first line, however
-   narrow the column; a long name wraps beside the icon rather than under it. */
-.jim-activity-initiator {
+/* Who did something (<InitiatorChip />): the chip sits in running text ("Created 2 days ago by ...") as well as in
+   table cells, so it centres on the line and never grows past its container; the chip clips its own name. */
+.jim-initiator-chip {
     display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
+    max-width: 100%;
     vertical-align: middle;
-}
-
-.jim-activity-initiator > .mud-icon-root {
-    flex-shrink: 0;
 }
 
 /* Activity detail slide-out panel (Operations History) */

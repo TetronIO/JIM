@@ -1,0 +1,138 @@
+@using JIM.Models.Activities
+@using JIM.Models.Core
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Who did something, shown the same way wherever it appears (#2066), as the chip for what it is in JIM: a       *@
+@* Synchronisation Rule as the Connected System and rule pill (or the rule alone where its system is not known), *@
+@* a Schedule, a person as the Metaverse Object they are, an API key, or JIM itself as System. A rule outranks the *@
+@* principal: a synchronisation's change was made by its rule, whoever started the run.                        *@
+
+@if (!string.IsNullOrEmpty(SyncRuleName))
+{
+    <span class="jim-initiator-chip" data-testid="jim-initiator-sync-rule">
+        @if (!string.IsNullOrEmpty(ConnectedSystemName))
+        {
+            <SystemRuleChip ConnectedSystemName="@ConnectedSystemName" ConnectedSystemHref="@ConnectedSystemHref"
+                            SyncRuleName="@SyncRuleName" SyncRuleHref="@SyncRuleHref" Class="ma-0" />
+        }
+        else
+        {
+            <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@SyncRuleName" Href="@SyncRuleHref" Class="ma-0" />
+        }
+    </span>
+}
+else if (!string.IsNullOrEmpty(ScheduleName))
+{
+    <span class="jim-initiator-chip" data-testid="jim-initiator-schedule">
+        <ObjectChip Kind="ObjectChipKind.Schedule" Name="@ScheduleName" Class="ma-0"
+                    Href="@(ScheduleExecutionId is { } executionId ? $"/admin/operations/schedule-executions/{executionId}" : null)" />
+    </span>
+}
+else if (InitiatedByType == ActivityInitiatorType.System
+         || (InitiatedByType == ActivityInitiatorType.NotSet && ChangeInitiatorType == MetaverseObjectChangeInitiatorType.System))
+{
+    <span class="jim-initiator-chip" data-testid="jim-initiator-system">
+        <ObjectChip Kind="ObjectChipKind.System" Name="System" Class="ma-0" />
+    </span>
+}
+else if (InitiatedByType == ActivityInitiatorType.User)
+{
+    <span class="jim-initiator-chip" data-testid="jim-initiator-user">
+        <ObjectChip Kind="ObjectChipKind.MetaverseObject" Name="@DisplayName" Href="@UserLink" Class="ma-0" />
+    </span>
+}
+else if (InitiatedByType == ActivityInitiatorType.ApiKey)
+{
+    <span class="jim-initiator-chip" data-testid="jim-initiator-api-key">
+        <ObjectChip Kind="ObjectChipKind.ApiKey" Name="@(InitiatedByName ?? "API Key")" Class="ma-0"
+                    Href="@(InitiatedById is { } keyId ? $"/admin/apikeys/{keyId}" : null)" />
+    </span>
+}
+else if (InitiatedByType == ActivityInitiatorType.Anonymous)
+{
+    @* An unidentified, unauthenticated caller (a failed sign-in attempt): nothing in JIM, so no chip and no link. *@
+    <span class="mud-text-secondary" data-testid="jim-initiator-anonymous">Anonymous</span>
+}
+else if (!string.IsNullOrEmpty(InitiatedByName))
+{
+    <span>@InitiatedByName</span>
+}
+else
+{
+    <EmptyValue />
+}
+
+@code {
+    /// <summary>What kind of principal did it.</summary>
+    [Parameter]
+    public ActivityInitiatorType InitiatedByType { get; set; }
+
+    /// <summary>The principal's id: the person's Metaverse Object, or the API key.</summary>
+    [Parameter]
+    public Guid? InitiatedById { get; set; }
+
+    /// <summary>The principal's name when it was recorded.</summary>
+    [Parameter]
+    public string? InitiatedByName { get; set; }
+
+    /// <summary>The Schedule that produced the work, as named when it was recorded; null when none did.</summary>
+    [Parameter]
+    public string? ScheduleName { get; set; }
+
+    /// <summary>The Schedule Execution that produced the work, which the Schedule links to while it exists.</summary>
+    [Parameter]
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule that made a change, as named when it was recorded; null for anything a rule did not
+    /// make. When set, the rule is the initiator shown, whoever started the run.
+    /// </summary>
+    [Parameter]
+    public string? SyncRuleName { get; set; }
+
+    /// <summary>The Synchronisation Rule's id, which the rule links to; null once the rule has been deleted.</summary>
+    [Parameter]
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>The Connected System the rule belongs to, where the call site knows it.</summary>
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>The Connected System's id, which its half of the pill links to.</summary>
+    [Parameter]
+    public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// What within JIM made a change, for a change record whose initiator was never captured: System still shows as
+    /// System.
+    /// </summary>
+    [Parameter]
+    public MetaverseObjectChangeInitiatorType ChangeInitiatorType { get; set; }
+
+    /// <summary>
+    /// The person's Metaverse Object page, where the call site has resolved it under its Object Type; otherwise the
+    /// person links by id, as the configuration change history does, and a person with no id is named without a link.
+    /// </summary>
+    [Parameter]
+    public string? UserHref { get; set; }
+
+    /// <summary>
+    /// The call site looked the person up, so <see cref="UserHref"/> is the whole answer: when it is null the person
+    /// has no Metaverse Object (deleted since, or a history row the #2066 repair could not attribute), and a link by
+    /// id would lead to a page that does not exist. List rows leave this false and link by id without a lookup.
+    /// </summary>
+    [Parameter]
+    public bool UserLookedUp { get; set; }
+
+    private string DisplayName => InitiatedByName ?? InitiatedById?.ToString() ?? "Unknown";
+
+    private string? SyncRuleHref => SyncRuleId is { } id ? $"/admin/sync-rules/{id}" : null;
+
+    private string? ConnectedSystemHref => ConnectedSystemId is { } id ? $"/admin/connected-systems/{id}" : null;
+
+    private string? UserLink => !string.IsNullOrEmpty(UserHref) ? UserHref
+        : UserLookedUp ? null
+        : Helpers.GetInitiatorHref(InitiatedByType, InitiatedById);
+}
