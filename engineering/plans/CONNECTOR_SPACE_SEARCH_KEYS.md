@@ -1,7 +1,8 @@
 # Connector Space Search Keys
 
 - **Status:** Planned
-- **Related Plans:** none
+- **Issue:** [#2483](https://github.com/TetronIO/JIM/issues/2483)
+- **Related Issues:** [#482](https://github.com/TetronIO/JIM/issues/482) (list-query optimisation at scale)
 - **Last Updated:** 2026-10-24
 
 ## Overview
