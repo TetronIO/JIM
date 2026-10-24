@@ -92,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 The Attribute Flow dialog puts the settings beside a **Try it** pane, so a change and its result are seen together. The result follows as you type and as the settings change, with no **Run test** button. A Generated Value shows one result from the values tried through to the candidates, worked out from the base as a Synchronisation would type and process it. The attribute to assign the value to comes first, and rarely changed settings fold away to a line saying what they are set to. (#2471)
 - 🔄 An Activity's Target and Parent Activity are shown as chips: the Connected System, object, Run Profile, Synchronisation Rule, Schedule or API key it acted on, and the parent Activity by its type and target.
 - 🔄 In the light theme, attribute tables' Attribute column is now a neutral grey matching the header row, rather than a blue-grey.
 - 🔄 Who did something is shown as a chip for what it is, wherever the portal names it: a Synchronisation Rule with its Connected System, a Schedule, a person as their Metaverse Object, an API key, or JIM itself as System. On the Object Changes page, change histories, Activity lists, and Created by and Last updated by.

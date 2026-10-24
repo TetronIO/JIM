@@ -51,13 +51,6 @@ public class ExpressionTesterTests : JimComponentTestContext
         public JimApplication Create() => new(repository);
     }
 
-    /// <summary>
-    /// Clicks Run test by its label. A field rendered with Clearable also renders a button, and it comes first in
-    /// the markup, so finding "the button" clears an input instead of running anything.
-    /// </summary>
-    private static void ClickRunTest(IRenderedComponent<ExpressionTester> cut) =>
-        cut.FindAll("button").Single(b => b.TextContent.Contains("Run test")).Click();
-
     [Test]
     public void ExpressionTester_NoExpression_RendersNothing()
     {
@@ -90,7 +83,6 @@ public class ExpressionTesterTests : JimComponentTestContext
         // "The current thread is not associated with the Dispatcher".
         await cut.InvokeAsync(() => fields.Single(f => f.Instance.Label == "cs[\"firstName\"]").Instance.ValueChanged.InvokeAsync("Ada"));
         await cut.InvokeAsync(() => fields.Single(f => f.Instance.Label == "cs[\"lastName\"]").Instance.ValueChanged.InvokeAsync("Lovelace"));
-        ClickRunTest(cut);
 
         Assert.That(cut.Markup, Does.Contain("ada.lovelace@corp.local"));
     }
@@ -104,23 +96,24 @@ public class ExpressionTesterTests : JimComponentTestContext
         var cut = Render<ExpressionTester>(p => p.Add(c => c.Expression,
             "IIF(IsNullOrEmpty(cs[\"nickname\"]), \"no nickname\", cs[\"nickname\"])"));
 
-        ClickRunTest(cut);
-
         Assert.That(cut.Markup, Does.Contain("no nickname"));
     }
 
     [Test]
-    public void ExpressionTester_ExpressionEdited_DiscardsThePreviousOutput()
+    public void ExpressionTester_ExpressionEdited_ShowsTheNewOutputInPlaceOfThePrevious()
     {
-        // An output left standing beside a changed Expression reads as the answer to the question now on screen.
+        // The test runs as the Expression is typed, so the output always answers the Expression on screen.
         var cut = Render<ExpressionTester>(p => p.Add(c => c.Expression, "\"first answer\""));
-        ClickRunTest(cut);
         Assert.That(cut.Markup, Does.Contain("first answer"));
 
         cut.Render(p => p.Add(c => c.Expression, "\"second answer\""));
 
-        Assert.That(cut.Markup, Does.Not.Contain("first answer"),
-            "the previous output belongs to the previous Expression and must not survive it");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("first answer"),
+                "the previous output belongs to the previous Expression and must not survive it");
+            Assert.That(cut.Markup, Does.Contain("second answer"));
+        }
     }
 
     [Test]
@@ -128,8 +121,6 @@ public class ExpressionTesterTests : JimComponentTestContext
     {
         // Several values used to be shown as the list's type name (#2179), which says nothing about what flows.
         var cut = Render<ExpressionTester>(p => p.Add(c => c.Expression, "Split(\"SOFT101|SEC101\", \"|\")"));
-
-        ClickRunTest(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -144,8 +135,6 @@ public class ExpressionTesterTests : JimComponentTestContext
     {
         var cut = Render<ExpressionTester>(p => p.Add(c => c.Expression, "ParseDate(\"2026-03-15 10:30\", \"yyyy-MM-dd HH:mm\")"));
 
-        ClickRunTest(cut);
-
         Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()),
             Is.EqualTo(new[] { "2026-03-15 10:30:00Z" }), "the tester shows a date as JIM writes it to a Text attribute");
     }
@@ -154,8 +143,6 @@ public class ExpressionTesterTests : JimComponentTestContext
     public void ExpressionTester_ExpressionThatCannotBeParsed_ShowsTheReason()
     {
         var cut = Render<ExpressionTester>(p => p.Add(c => c.Expression, "cs[\"unclosed\""));
-
-        ClickRunTest(cut);
 
         Assert.That(cut.HasComponent<MudAlert>(), Is.True,
             "a malformed Expression must say so here rather than at the next Synchronisation");
@@ -208,7 +195,6 @@ public class ExpressionTesterTests : JimComponentTestContext
 
         await cut.InvokeAsync(() => cut.FindComponent<RunAsOfPicker>().Instance.ValueChanged
             .InvokeAsync(new DateTime(2031, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
-        ClickRunTest(cut);
 
         Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Does.Contain("2031-06-01"));
     }
@@ -220,7 +206,6 @@ public class ExpressionTesterTests : JimComponentTestContext
         var cut = RenderFlow(ImportFlow("FormatDate((DateTime)cs[\"hireDate\"], \"yyyy-MM-dd\")", AttributeDataType.Text));
 
         await EnterAsync(cut, "cs[\"hireDate\"]", "2026-03-02");
-        ClickRunTest(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -236,7 +221,6 @@ public class ExpressionTesterTests : JimComponentTestContext
         var cut = RenderFlow(ImportFlow("cs[\"givenName\"]", AttributeDataType.Number));
 
         await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
-        ClickRunTest(cut);
 
         Assert.That(cut.FindComponents<MudAlert>().Select(a => a.Instance.Severity), Does.Contain(Severity.Error));
     }
@@ -247,7 +231,6 @@ public class ExpressionTesterTests : JimComponentTestContext
         var cut = RenderFlow(ImportFlow("cs[\"hireDate\"]", AttributeDataType.DateTime));
 
         await EnterAsync(cut, "cs[\"hireDate\"]", "next Tuesday");
-        ClickRunTest(cut);
 
         Assert.That(cut.FindComponents<MudAlert>().Single().Instance.Severity, Is.EqualTo(Severity.Error));
     }
@@ -259,20 +242,49 @@ public class ExpressionTesterTests : JimComponentTestContext
         flow.Mapping.TargetMetaverseAttribute = null;
         var cut = RenderFlow(flow);
 
-        ClickRunTest(cut);
-
         Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Is.EqualTo(new[] { "x" }));
     }
 
-        [Test]
-    public void ExpressionTester_AttributeFlowInputLeftUntouched_IsTestedAsNoValue()
+    [Test]
+    public void ExpressionTester_AttributeFlowNothingTriedYet_ShowsNoResult()
     {
+        // Until a value is given for an input, a result would only report every input missing, which answers nothing
+        // the administrator asked.
         var cut = RenderFlow(ImportFlow("cs[\"givenName\"]", AttributeDataType.Text, MissingInputBehaviour.FailMapping));
 
-        ClickRunTest(cut);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindComponents<MudAlert>(), Is.Empty);
+            Assert.That(cut.FindAll(".jim-expression-output"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task ExpressionTester_AttributeFlowValueEntered_ShowsTheResultWithoutRunningAsync()
+    {
+        var cut = RenderFlow(ImportFlow("Upper(cs[\"givenName\"])", AttributeDataType.Text));
+
+        await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
+
+        Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Does.Contain("PRIYA"),
+            "the test runs as the values are entered");
+    }
+
+    [Test]
+    public async Task ExpressionTester_AttributeFlowMissingInputBehaviourChanged_ResultFollowsItAsync()
+    {
+        // The result used to stay as it was run, so a Missing Input Behaviour chosen afterwards was never reflected.
+        var flow = ImportFlow("cs[\"givenName\"]", AttributeDataType.Text, MissingInputBehaviour.EvaluateAnyway);
+        var cut = RenderFlow(flow);
+        var noValue = cut.FindComponents<MudCheckBox<bool>>().Single();
+        await cut.InvokeAsync(() => noValue.Instance.ValueChanged.InvokeAsync(true));
+        Assert.That(cut.FindComponents<MudAlert>(), Is.Empty, "evaluated anyway, a missing input is no error");
+
+        flow.Source.MissingInputBehaviour = MissingInputBehaviour.FailMapping;
+        cut.Render(p => p.Add(c => c.Source, flow.Source));
 
         Assert.That(cut.FindComponents<MudAlert>().Select(a => a.Instance.Severity), Does.Contain(Severity.Error),
-            "an untouched input has no value, so Fail this mapping reports an error");
+            "Fail this mapping now reports the missing input as an error");
     }
 
     [Test]
@@ -283,7 +295,6 @@ public class ExpressionTesterTests : JimComponentTestContext
 
         await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
         await EnterAsync(cut, "cs[\"givenName\"]", "");
-        ClickRunTest(cut);
 
         Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Does.Contain("empty"));
     }
@@ -296,7 +307,6 @@ public class ExpressionTesterTests : JimComponentTestContext
 
         var noValue = cut.FindComponents<MudCheckBox<bool>>().Single();
         await cut.InvokeAsync(() => noValue.Instance.ValueChanged.InvokeAsync(true));
-        ClickRunTest(cut);
 
         Assert.That(cut.FindComponents<MudAlert>().Select(a => a.Instance.Severity), Does.Contain(Severity.Error));
     }
@@ -311,7 +321,6 @@ public class ExpressionTesterTests : JimComponentTestContext
             await EnterAsync(cut, "cs[\"mail\"]", address);
             cut.FindAll("button").Single(b => b.TextContent.Contains("Add value")).Click();
         }
-        ClickRunTest(cut);
 
         Assert.That(cut.FindComponents<MudChip<string>>().Select(c => c.Instance.Text ?? c.Markup), Has.Some.Contains("b@example.org"),
             "each value added is held as a value of the multi-valued input");
@@ -333,7 +342,6 @@ public class ExpressionTesterTests : JimComponentTestContext
         await cut.InvokeAsync(() => cut.FindComponent<SegmentedToggle<bool>>().Instance.ValueChanged.InvokeAsync(true));
         await cut.InvokeAsync(() => cut.FindComponent<SearchField>().Instance.ValueChanged.InvokeAsync("Priya"));
         cut.FindAll("button").Single(b => b.GetAttribute("aria-label") == "Load values from Priya Shah").Click();
-        ClickRunTest(cut);
 
         Assert.That(cut.FindAll(".jim-expression-output").Select(e => e.TextContent.Trim()), Does.Contain("2026-03-02"));
     }
@@ -356,7 +364,6 @@ public class ExpressionTesterTests : JimComponentTestContext
         var cut = RenderFlow(GeneratedFlow("cs[\"givenName\"]"));
 
         await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
-        ClickRunTest(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -369,10 +376,11 @@ public class ExpressionTesterTests : JimComponentTestContext
     public async Task ExpressionTester_GeneratedValueSeveralValues_ShowsTheErrorAsync()
     {
         var cut = RenderFlow(GeneratedFlow("cs[\"mail\"]"));
-        var mail = cut.FindComponents<TestInputValueEditor>().Single(e => e.Instance.Label == "cs[\"mail\"]").Instance.State;
-        await cut.InvokeAsync(() => { mail.Pending = "a@corp.local"; mail.AddPending(); mail.Pending = "b@corp.local"; mail.AddPending(); });
-
-        ClickRunTest(cut);
+        foreach (var address in new[] { "a@corp.local", "b@corp.local" })
+        {
+            await EnterAsync(cut, "cs[\"mail\"]", address);
+            cut.FindAll("button").Single(b => b.TextContent.Contains("Add value")).Click();
+        }
 
         Assert.That(cut.FindComponents<MudAlert>().Select(a => a.Instance.Severity), Does.Contain(Severity.Error));
     }
@@ -393,6 +401,29 @@ public class ExpressionTesterTests : JimComponentTestContext
         await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
 
         Assert.That(reported?["cs[\"givenName\"]"], Is.EqualTo("Priya"));
+    }
+
+    [Test]
+    public async Task ExpressionTester_GeneratedValue_ReportsTheBaseItTriedAsync()
+    {
+        // The Generated Value's candidates are worked out from this base, typed and value-processed as a
+        // Synchronisation would, rather than from the raw sample text.
+        var reported = new List<GeneratedBaseEvaluation?>();
+        var flow = GeneratedFlow("cs[\"givenName\"]");
+        var cut = Render<ExpressionTester>(p => p
+            .Add(c => c.Expression, flow.Source.Expression)
+            .Add(c => c.SyncRule, flow.Rule)
+            .Add(c => c.Mapping, flow.Mapping)
+            .Add(c => c.Source, flow.Source)
+            .Add(c => c.TriedBaseChanged, tried => reported.Add(tried)));
+
+        await EnterAsync(cut, "cs[\"givenName\"]", "Priya");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reported.LastOrDefault()?.Outcome, Is.EqualTo(GeneratedBaseOutcome.Base));
+            Assert.That(reported.LastOrDefault()?.BaseValue, Is.EqualTo("priya"), "lower-cased by value processing");
+        }
     }
 
     #endregion

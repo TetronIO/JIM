@@ -59,7 +59,7 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
             AttributePlurality = AttributePlurality.SingleValued
         };
 
-        var picker = OpenAddDialogAndFindPicker(SyncRuleDirection.Export, attribute, "Connected System Attribute", "Attribute");
+        var picker = OpenAddDialogAndFindPicker(SyncRuleDirection.Export, attribute, "Assign the value to", "Attribute");
 
         using (Assert.EnterMultipleScope())
         {
