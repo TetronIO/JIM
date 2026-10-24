@@ -187,6 +187,40 @@ public class MvoDetailsTableTests : JimComponentTestContext
     }
 
     [Test]
+    public void DetailsTable_PlainValueCell_OpensTheInspectorWhenClicked()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+        int? selected = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, BuildProvenance((1, "Job Title", HrOrigin)))
+            .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
+
+        cut.Find(".jim-inspect-value").Click();
+
+        Assert.That(selected, Is.EqualTo(1), "a value with no link of its own opens the inspector like the rest of the row");
+    }
+
+    [Test]
+    public void DetailsTable_LinkedValue_FollowsItsLinkWithoutOpeningTheInspector()
+    {
+        var mvo = BuildObject(TextValue(1, Constants.BuiltInAttributes.Email, "jo@example.com"));
+        int? selected = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, BuildProvenance((1, Constants.BuiltInAttributes.Email, HrOrigin)))
+            .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
+
+        cut.Find("a[href^='mailto:']").Click();
+
+        Assert.That(selected, Is.Null, "a click on the email address is the link's, not the row's");
+    }
+
+    [Test]
     public void DetailsTable_GroupByToggle_RaisesOnGroupByChangedWithTheChosenOption()
     {
         var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
