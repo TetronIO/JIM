@@ -883,23 +883,6 @@ public static class Helpers
 
     #region Initiator Icon Helpers
     /// <summary>
-    /// Gets the MudBlazor icon for an activity initiator type: the one icon each kind of principal wears wherever it
-    /// appears (<see cref="Shared.InitiatorChip"/>, change history). System has its own rather than the Schedule's
-    /// clock, which reads as "scheduled" although System also covers seeding and housekeeping (#2066).
-    /// </summary>
-    public static string GetInitiatorIcon(ActivityInitiatorType initiatorType)
-    {
-        return initiatorType switch
-        {
-            ActivityInitiatorType.User => Icons.Material.Filled.Person,
-            ActivityInitiatorType.ApiKey => Icons.Material.Filled.Key,
-            ActivityInitiatorType.System => Icons.Material.Filled.Dns,
-            ActivityInitiatorType.Anonymous => Icons.Material.Filled.QuestionMark,
-            _ => Icons.Material.Filled.HelpOutline
-        };
-    }
-
-    /// <summary>
     /// Gets the in-app link to a security principal that initiated an activity, or null when the principal cannot be
     /// linked (no id, or a System / unattributed initiator). Used to make initiator names clickable in change history.
     /// A person is linked under the built-in User type without being looked up, so the link is dead if their Metaverse
@@ -994,22 +977,6 @@ public static class Helpers
         return string.IsNullOrEmpty(targetName)
             ? null
             : $"/admin/settings?search={Uri.EscapeDataString(targetName)}";
-    }
-
-    /// <summary>
-    /// Gets the MudBlazor icon for an initiator type string.
-    /// Accepts "User", "ApiKey", "Import", "System", or other values.
-    /// </summary>
-    public static string GetInitiatorIcon(string? initiatorType)
-    {
-        return initiatorType switch
-        {
-            "User" => Icons.Material.Filled.Person,
-            "ApiKey" => Icons.Material.Filled.Key,
-            "Import" => Icons.Material.Filled.Input,
-            "System" => Icons.Material.Filled.Dns,
-            _ => Icons.Material.Filled.HelpOutline
-        };
     }
 
     /// <summary>

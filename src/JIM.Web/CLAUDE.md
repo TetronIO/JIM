@@ -125,7 +125,7 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 - **A rule outranks the principal.** A synchronisation's change was made by its rule, whoever started the run, so a change carrying a Synchronisation Rule shows the rule.
 - **`ChangeInitiatorType` is the fallback** for a change recorded without its initiator: System still shows as System.
 - `KEY`, `SCH` and `JIM` are `ObjectChip` kinds (`ApiKey`, `Schedule`, `System`) and follow every object chip rule below; they exist for this component, so reach them through it rather than placing them by hand.
-- It replaced `ActivityInitiator`, an icon and a name, so an initiator no longer reads differently from the objects in the cells around it. The change history timeline's card header still draws its own initiator; migrate it rather than adding another.
+- It replaced `ActivityInitiator`, an icon and a name, and the change history timeline's hand-built initiator, so an initiator no longer reads differently from the objects around it. Where a view separates who from how (the timeline's dialog: Initiated By beside Mechanism), pass only the principal and leave the rule to the how.
 
 ## Synchronisation Rule identity strip
 
