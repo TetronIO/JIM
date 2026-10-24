@@ -92,6 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 An Activity's Target and Parent Activity are shown as chips: the Connected System, object, Run Profile, Synchronisation Rule, Schedule or API key it acted on, and the parent Activity by its type and target.
+- 🔄 In the light theme, attribute tables' Attribute column is now a neutral grey matching the header row, rather than a blue-grey.
 - 🔄 Who did something is shown as a chip for what it is, wherever the portal names it: a Synchronisation Rule with its Connected System, a Schedule, a person as their Metaverse Object, an API key, or JIM itself as System. On the Object Changes page, Activity lists, and Created by and Last updated by.
 - 🔄 On the Object Changes page, a deleted Metaverse Object is shown dimmed with a bin icon rather than marked "(deleted)", and a deletion lists the object's **Final values** rather than showing each value as cleared. REST and `Search-JIMMetaverseObjectChange` add `metaverseObjectDeletedAt` and `changeInitiatorType`. (#2460)
 - 🔄 The LDAP Connector discovers INTEGER attributes on OpenLDAP, 389 Directory Server and other non-Active Directory directories, such as `uidNumber` and `gidNumber`, as Long Number rather than Number, so values beyond 2,147,483,647 import. Map them to Long Number Metaverse Attributes. Active Directory and Samba AD are unchanged. (#2154)

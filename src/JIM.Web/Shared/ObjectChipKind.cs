@@ -59,6 +59,12 @@ public enum ObjectChipKind
     Schedule,
 
     /// <summary>
+    /// An Activity: a recorded operation, such as a parent Activity, shown with a three-letter <c>ACT</c> glyph, its
+    /// type as the prefix and its target as the name.
+    /// </summary>
+    Activity,
+
+    /// <summary>
     /// JIM itself, as who did something (seeding, housekeeping, a sign-in), shown with a three-letter <c>JIM</c> glyph.
     /// Never a link: there is nothing to open.
     /// </summary>
