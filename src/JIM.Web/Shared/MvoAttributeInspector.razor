@@ -188,7 +188,13 @@
     <div class="jim-inspector-section">
         <div class="jim-inspector-label-row">
             <span class="jim-inspector-label">History</span>
-            <MudLink OnClick="@(() => OnOpenInTimeline.InvokeAsync())">Open in Timeline</MudLink>
+            <span class="d-flex gap-3">
+                <MudLink OnClick="@(() => OnOpenInTimeline.InvokeAsync())">Open in Timeline</MudLink>
+                @if (CausalityExplorerHref != null)
+                {
+                    <MudLink Href="@CausalityExplorerHref" data-testid="jim-mvo-inspector-explore-causality">Explore causality</MudLink>
+                }
+            </span>
         </div>
         @if (Provenance.History.Count == 0)
         {
@@ -271,6 +277,13 @@
     /// <summary>Raised by "Open in Timeline": the host switches the page to the Changes tab.</summary>
     [Parameter]
     public EventCallback OnOpenInTimeline { get; set; }
+
+    /// <summary>
+    /// The Causality Explorer's address for the object, offered beside "Open in Timeline"; null when the reader may
+    /// not open it. It opens on the object: the explorer has no focus on a single attribute yet.
+    /// </summary>
+    [Parameter]
+    public string? CausalityExplorerHref { get; set; }
 
     private ProvenanceConnectedSystemObject? ContributingConnectedSystemObject => Provenance.ContributingConnectedSystemObject;
 

@@ -543,4 +543,50 @@ public class MvoDetailsTableTests : JimComponentTestContext
             Assert.That(cut.FindAll("tr.jim-inspect-row"), Has.Count.EqualTo(1));
         }
     }
+
+    /// <summary>
+    /// The Causality Explorer is opened from the Inspect view, and only when the host offers it: the host passes no
+    /// address to a reader who is not an Administrator, and then the view shows no way in.
+    /// </summary>
+    [Test]
+    public void DetailsTable_ExploreCausality_ShownOnlyWhenTheHostOffersTheExplorer()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+
+        var offered = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.CausalityExplorerHref, $"/causality/metaverse-objects/{mvo.Id}"));
+        var notOffered = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(offered.Find("[data-testid='jim-mvo-explore-causality']").GetAttribute("href"),
+                Is.EqualTo($"/causality/metaverse-objects/{mvo.Id}"));
+            Assert.That(notOffered.FindAll("[data-testid='jim-mvo-explore-causality']"), Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// The opened attribute's inspector carries the same way into the explorer as the toolbar.
+    /// </summary>
+    [Test]
+    public void DetailsTable_PassesTheExplorerAddressToTheInspector()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+        var href = $"/causality/metaverse-objects/{mvo.Id}";
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.SelectedAttributeId, 1)
+            .Add(c => c.SelectedAttributeProvenance, new MetaverseAttributeProvenance
+            {
+                MetaverseObjectId = mvo.Id,
+                AttributeId = 1,
+                AttributeName = "Job Title"
+            })
+            .Add(c => c.CausalityExplorerHref, href));
+
+        Assert.That(cut.FindComponent<MvoAttributeInspector>().Instance.CausalityExplorerHref, Is.EqualTo(href));
+    }
 }

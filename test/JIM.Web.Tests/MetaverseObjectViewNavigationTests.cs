@@ -49,6 +49,7 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
     private Mock<IConnectedSystemRepository> _connectedSystems = null!;
     private Mock<IActivityRepository> _activities = null!;
     private NavigationManager _navigation = null!;
+    private BunitAuthorizationContext _authorisation = null!;
 
     protected override void ConfigureAdditionalServices()
     {
@@ -111,15 +112,15 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
 
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object, sync.Object));
 
-        var authorisation = AddAuthorization();
-        authorisation.SetAuthorized("administrator");
-        authorisation.SetRoles("User", "Administrator");
+        _authorisation = AddAuthorization();
+        _authorisation.SetAuthorized("administrator");
     }
 
     [SetUp]
     public void SetUp()
     {
         _navigation = Services.GetRequiredService<NavigationManager>();
+        _authorisation.SetRoles("User", "Administrator");
     }
 
     private void SetupObject(Guid id, int connectorCount, string? createdBy)
@@ -191,9 +192,9 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
     /// <summary>
     /// Opens the page on one object and tab, as a deep link does: the tabs read <c>?t=</c> on their first render.
     /// </summary>
-    private IRenderedComponent<View> RenderObject(Guid id, string tab)
+    private IRenderedComponent<View> RenderObject(Guid id, string tab, string? view = null)
     {
-        _navigation.NavigateTo($"/t/{TypeUrlParam}/v/{id}?t={tab}");
+        _navigation.NavigateTo($"/t/{TypeUrlParam}/v/{id}?t={tab}" + (view == null ? "" : $"&view={view}"));
         return Render<View>(p => p
             .Add(c => c.TypeNameUrlParam, TypeUrlParam)
             .Add(c => c.IdParam, id));
@@ -219,18 +220,45 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
         page.FindComponents<MudTabPanel>().Single(p => p.Instance.Text == "Connections").Instance.BadgeData;
 
     /// <summary>
-    /// The page opens the Causality Explorer on itself (#2100) from whichever tab is showing.
+    /// The Causality Explorer is an Administrator's diagnostic, opened from the Inspect view (#2100): the page offers
+    /// it there, on this object, and nowhere else.
+    /// </summary>
+    [Test]
+    public void ExploreCausality_OfferedFromTheInspectViewOnThisObject()
+    {
+        var page = RenderObject(AlphaId, "details", "inspect");
+
+        page.WaitForAssertion(() => Assert.That(page.FindComponent<MvoDetailsTable>().Instance.CausalityExplorerHref,
+            Is.EqualTo($"/causality/metaverse-objects/{AlphaId}")));
+    }
+
+    /// <summary>
+    /// The tab bar carries only the views of the object; the explorer is not offered beside the tabs on any of them.
     /// </summary>
     [TestCase("details")]
     [TestCase("changes")]
-    public void ExploreCausality_OpensTheExplorerOnThisObject(string tab)
+    public void ExploreCausality_NotOfferedBesideTheTabs(string tab)
     {
         SetupChangeHistory(AlphaId, "Alpha change");
 
         var page = RenderObject(AlphaId, tab);
 
-        page.WaitForAssertion(() => Assert.That(page.Find("[data-testid='jim-mvo-explore-causality']").GetAttribute("href"),
-            Is.EqualTo($"/causality/metaverse-objects/{AlphaId}")));
+        page.WaitForAssertion(() => Assert.That(page.FindComponents<MudTabPanel>(), Is.Not.Empty));
+        Assert.That(page.FindAll("[data-testid='jim-mvo-explore-causality']"), Is.Empty);
+    }
+
+    /// <summary>
+    /// A reader who is not an Administrator cannot open the explorer, so the Inspect view does not offer it.
+    /// </summary>
+    [Test]
+    public void ExploreCausality_NotOfferedToAReaderWhoIsNotAnAdministrator()
+    {
+        _authorisation.SetRoles("User");
+
+        var page = RenderObject(AlphaId, "details", "inspect");
+
+        page.WaitForAssertion(() => Assert.That(page.FindComponents<MvoDetailsTable>(), Is.Not.Empty));
+        Assert.That(page.FindComponent<MvoDetailsTable>().Instance.CausalityExplorerHref, Is.Null);
     }
 
     [Test]
