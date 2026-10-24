@@ -261,7 +261,7 @@
 
                                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                                     <MudButton OnClick="CancelStepEditor">Cancel</MudButton>
-                                    <MudButton Variant="Variant.Outlined" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">Save Step</MudButton>
+                                    <MudButton Variant="Variant.Filled" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">Save Step</MudButton>
                                 </MudStack>
                             </MudStack>
                         </MudPaper>
@@ -290,7 +290,7 @@
                             @if (!_schedule.BuiltIn)
                             {
                                 <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudButton Variant="Variant.Outlined" DropShadow="false"
+                                    <MudButton Variant="Variant.Filled" DropShadow="false"
                                                StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddStepAsync">
                                         Add Step
                                     </MudButton>

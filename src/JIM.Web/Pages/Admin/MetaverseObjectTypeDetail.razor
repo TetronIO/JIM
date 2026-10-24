@@ -81,7 +81,7 @@
                         <MudText Typo="Typo.h5" Class="mb-2">Deletion Rules</MudText>
                         <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Configure when Metaverse Objects of this type should be automatically deleted.</MudText>
                     </div>
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AutoDelete"
+                    <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.AutoDelete"
                                Href="@Utilities.GetPendingDeletionsHref(_metaverseObjectType.PluralName)">
                         View Pending Deletions
                     </MudButton>
@@ -200,7 +200,7 @@
                     </MudButton>
                     @* Preview (#1114): the one change in JIM that can make existing Metaverse Objects eligible for *@
                     @* deletion the moment it is saved, so it is the one that most needs answering beforehand.      *@
-                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Outlined"
+                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDeletionRulesAsync"
                         Disabled="@(!CanSave() || _startingPreview)">
                         Preview Changes

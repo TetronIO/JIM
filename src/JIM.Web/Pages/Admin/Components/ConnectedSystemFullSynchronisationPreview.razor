@@ -119,7 +119,7 @@ else if (_previewActivityId is { } previewActivityId)
                 var only = runnable[0];
                 @* Outlined, not filled: the panel offers this action rather than being the page's one main focus, and
                    a run is consequential enough that it should not be the loudest thing on the page. *@
-                <MudButton Variant="Variant.Outlined" DropShadow="false"
+                <MudButton Variant="Variant.Filled" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.PlayArrow" Disabled="@_queueing"
                            OnClick="@(() => RunAsync(only))" data-testid="jim-full-sync-run">
                     Run Full Synchronisation
@@ -127,7 +127,7 @@ else if (_previewActivityId is { } previewActivityId)
             }
             else
             {
-                <MudMenu Label="Run Full Synchronisation" Variant="Variant.Outlined" DropShadow="false"
+                <MudMenu Label="Run Full Synchronisation" Variant="Variant.Filled" DropShadow="false"
                          StartIcon="@Icons.Material.Filled.PlayArrow" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                          Disabled="@_queueing" data-testid="jim-full-sync-run-menu">
                     @foreach (var profile in runnable)

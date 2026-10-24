@@ -72,7 +72,7 @@
             @* Opens the Causality Explorer on this object (#2100): what happened to it across its joined Connected System
                Objects' runs as well as its own, newest first, and why. Beside the tabs because the page has no action
                row of its own, and on every tab because it is about the object rather than any one view of it. *@
-            <MudButton Variant="Variant.Outlined" DropShadow="false" StartIcon="@Icons.Material.Filled.Hub"
+            <MudButton Variant="Variant.Filled" DropShadow="false" StartIcon="@Icons.Material.Filled.Hub"
                        Href="@($"/causality/metaverse-objects/{MetaverseObject.Id}")" Class="my-auto me-2 jim-nowrap flex-none"
                        data-testid="jim-mvo-explore-causality">Explore causality</MudButton>
         </Header>
@@ -119,7 +119,7 @@
                     @if (_object.ChangeHistoryRows.Count < _object.ChangeHistoryTotal)
                     {
                         <div class="d-flex justify-center mt-3">
-                            <MudButton Variant="Variant.Outlined"
+                            <MudButton Variant="Variant.Filled"
                                        Disabled="@_object.ChangeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
                                 @if (_object.ChangeHistoryLoading)
@@ -259,7 +259,7 @@
                                     }
                                 </MudText>
                             </MudStack>
-                            <MudButton Variant="Variant.Outlined" DropShadow="false"
+                            <MudButton Variant="Variant.Filled" DropShadow="false"
                                        Disabled="@_object.OutboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">
