@@ -92,7 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 🔄 The Causality Explorer is for Administrators only, like the REST API reads it draws on, and other users no longer see links to it. On a Metaverse Object, **Explore causality** moves from beside the tabs into the **Inspect** view: beside **Where this object gets its values**, and in each attribute's inspector beside **Open in Timeline**.
+- 🔄 The Causality Explorer is for Administrators only, like the REST API reads it draws on, and other users no longer see links to it. On a Metaverse Object, **Explore causality** moves from beside the tabs into the **Inspect** view: at the end of its source panel (**Where this User gets its values**, named for the object's type), and in each attribute's inspector beside **Open in Timeline**.
 - 🖥️ Ordinary buttons across the portal are filled in the theme's default colour rather than outlined, so they read clearly as buttons beside the page's one main action; outlined is kept for dangerous actions.
 - 🔄 The Attribute Flow dialog puts the settings beside a **Try it** pane, so a change and its result are seen together. The result follows as you type and as the settings change, with no **Run test** button. A Generated Value shows one result from the values tried through to the candidates, worked out from the base as a Synchronisation would type and process it. The attribute to assign the value to comes first, and rarely changed settings fold away to a line saying what they are set to. (#2471)
 - 🔄 An Activity's Target and Parent Activity are shown as chips: the Connected System, object, Run Profile, Synchronisation Rule, Schedule or API key it acted on, and the parent Activity by its type and target.
