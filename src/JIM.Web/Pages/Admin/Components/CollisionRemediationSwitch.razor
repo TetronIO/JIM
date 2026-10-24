@@ -9,8 +9,11 @@
    and says why. It edits the generation in place, so it saves with the other generation settings; changing it releases
    any held decisions for the flow on save, as changing how the value is generated does. *@
 
-<div class="mt-5" data-testid="collision-remediation">
-    <MudText Typo="Typo.subtitle2" Class="mb-1">Collision Remediation</MudText>
+<div class="@(ShowHeading ? "mt-5" : null)" data-testid="collision-remediation">
+    @if (ShowHeading)
+    {
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Collision Remediation</MudText>
+    }
     <MudSwitch T="bool" Value="@(Available && Generation.CollisionRemediation)" ValueChanged="OnChangedAsync"
                Color="Color.Primary" Disabled="@(Disabled || !Available)">
         <MudText Typo="Typo.body1">Let JIM correct a value a target rejects as already in use</MudText>
@@ -46,6 +49,10 @@
 
     [Parameter]
     public bool Disabled { get; set; }
+
+    /// <summary>Whether to show the heading; off where the switch sits in a section that already names it.</summary>
+    [Parameter]
+    public bool ShowHeading { get; set; } = true;
 
     /// <summary>Whether any system the value is exported to reports collisions; false while the participants load.</summary>
     private bool Available => Participants?.Any(p => p.ReportsCollisions) == true;

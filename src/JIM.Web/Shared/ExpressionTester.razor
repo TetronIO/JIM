@@ -11,21 +11,21 @@
    evaluated on its own. *@
 @if (TestsAttributeFlow)
 {
-    <AttributeFlowTestPanel Expression="@Expression" SyncRule="SyncRule!" Mapping="Mapping!" Source="Source!" SampleValuesChanged="SampleValuesChanged" />
+    <AttributeFlowTestPanel Expression="@Expression" SyncRule="SyncRule!" Mapping="Mapping!" Source="Source!" SampleValuesChanged="SampleValuesChanged"
+                            TriedBaseChanged="TriedBaseChanged" GeneratedResult="GeneratedResult"
+                            MissingInputBehaviourName="@MissingInputBehaviourName" OnChangeMissingInputBehaviour="OnChangeMissingInputBehaviour" />
 }
 else if (!string.IsNullOrWhiteSpace(Expression))
 {
-    <MudText Typo="Typo.subtitle2" Class="mt-5">Test this Expression</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-        Supply a sample value for each attribute the Expression reads and see what it produces, before saving it and
-        finding out from a Synchronisation. Leave an input empty to see what the Expression does when the object has
-        no value for it.
+        Supply a sample value for each attribute the Expression reads and see what it produces as you type. Leave an
+        input empty to see what the Expression does when the object has no value for it.
     </MudText>
 
     @if (_inputs.Count == 0)
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-            This Expression reads no attributes, so it produces the same value for every object. Run the test to see it.
+            This Expression reads no attributes, so it produces the same value for every object.
         </MudText>
     }
     else
@@ -43,9 +43,6 @@ else if (!string.IsNullOrWhiteSpace(Expression))
             }
         </MudGrid>
     }
-
-    <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-3"
-               OnClick="RunTest">Run test</MudButton>
 
     @if (_result != null)
     {
@@ -103,6 +100,26 @@ else if (!string.IsNullOrWhiteSpace(Expression))
     public EventCallback<IReadOnlyDictionary<string, string?>> SampleValuesChanged { get; set; }
 
     /// <summary>
+    /// For a Generated Value, raised with the base the values tried give generation, typed and value-processed as a
+    /// Synchronisation would; null while nothing has been tried. The Generated Value editor works its candidates out
+    /// from it.
+    /// </summary>
+    [Parameter]
+    public EventCallback<GeneratedBaseEvaluation?> TriedBaseChanged { get; set; }
+
+    /// <summary>For a Generated Value, what follows the base in the test: the candidates worked out from it.</summary>
+    [Parameter]
+    public RenderFragment? GeneratedResult { get; set; }
+
+    /// <summary>The Missing Input Behaviour as the form names it, shown with the "If an input has no value" table.</summary>
+    [Parameter]
+    public string? MissingInputBehaviourName { get; set; }
+
+    /// <summary>Raised from the "If an input has no value" table's Change link.</summary>
+    [Parameter]
+    public EventCallback OnChangeMissingInputBehaviour { get; set; }
+
+    /// <summary>
     /// The Synchronisation Rule the Attribute Flow belongs to, whose object types give each sample its attribute's type.
     /// With <see cref="Mapping"/> and <see cref="Source"/>, the test runs the Attribute Flow as a Synchronisation would
     /// (#2055); without them, the Expression is evaluated alone.
@@ -144,8 +161,7 @@ else if (!string.IsNullOrWhiteSpace(Expression))
 
         _resolvedFrom = Expression;
         _inputs = ExpressionInputResolver.Resolve(Expression);
-        _result = null;
-        _errorPosition = null;
+        RunTest();
     }
 
     private string? GetSampleValue(string accessor) => _sampleValues.GetValueOrDefault(accessor);
@@ -154,10 +170,8 @@ else if (!string.IsNullOrWhiteSpace(Expression))
     {
         _sampleValues[accessor] = value;
 
-        // The displayed output belongs to the values that produced it; keeping it beside changed inputs would
-        // read as the answer to a question that was not asked.
-        _result = null;
-        _errorPosition = null;
+        // The output always answers the values on screen.
+        RunTest();
 
         if (SampleValuesChanged.HasDelegate)
             await SampleValuesChanged.InvokeAsync(_sampleValues);
@@ -165,6 +179,8 @@ else if (!string.IsNullOrWhiteSpace(Expression))
 
     private void RunTest()
     {
+        _result = null;
+        _errorPosition = null;
         if (string.IsNullOrWhiteSpace(Expression))
             return;
 
