@@ -114,7 +114,7 @@
                     @if (_object.ChangeHistoryRows.Count < _object.ChangeHistoryTotal)
                     {
                         <div class="d-flex justify-center mt-3">
-                            <MudButton Variant="Variant.Outlined"
+                            <MudButton Variant="Variant.Filled"
                                        Disabled="@_object.ChangeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
                                 @if (_object.ChangeHistoryLoading)
@@ -254,7 +254,7 @@
                                     }
                                 </MudText>
                             </MudStack>
-                            <MudButton Variant="Variant.Outlined" DropShadow="false"
+                            <MudButton Variant="Variant.Filled" DropShadow="false"
                                        Disabled="@_object.OutboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">

@@ -92,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🖥️ Ordinary buttons across the portal are filled in the theme's default colour rather than outlined, so they read clearly as buttons beside the page's one main action; outlined is kept for dangerous actions.
 - 🔄 An Activity's Target and Parent Activity are shown as chips: the Connected System, object, Run Profile, Synchronisation Rule, Schedule or API key it acted on, and the parent Activity by its type and target.
 - 🔄 In the light theme, attribute tables' Attribute column is now a neutral grey matching the header row, rather than a blue-grey.
 - 🔄 Who did something is shown as a chip for what it is, wherever the portal names it: a Synchronisation Rule with its Connected System, a Schedule, a person as their Metaverse Object, an API key, or JIM itself as System. On the Object Changes page, change histories, Activity lists, and Created by and Last updated by.

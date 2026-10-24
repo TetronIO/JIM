@@ -60,12 +60,12 @@
     <div class="jim-causality-focus-acts">
         @if (OnCopyLink.HasDelegate)
         {
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Link" Class="jim-causality-copy-link"
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Link" Class="jim-causality-copy-link"
                        OnClick="OnCopyLink">Copy link</MudButton>
         }
         @if (WayOut() is { } wayOut)
         {
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.OpenInNew" Href="@wayOut.Href"
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.OpenInNew" Href="@wayOut.Href"
                        Class="jim-causality-way-out">@wayOut.Text</MudButton>
         }
     </div>

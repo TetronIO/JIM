@@ -48,9 +48,9 @@
     {
         @* ─── Template actions ─── *@
         <div class="d-flex flex-wrap gap-2 mt-5">
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.Edit" OnClick="RenameAsync">Rename</MudButton>
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.ContentCopy" OnClick="DuplicateAsync">Duplicate</MudButton>
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="AddObjectTypeAsync">Add Object Type</MudButton>
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Outlined.Edit" OnClick="RenameAsync">Rename</MudButton>
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Outlined.ContentCopy" OnClick="DuplicateAsync">Duplicate</MudButton>
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" OnClick="AddObjectTypeAsync">Add Object Type</MudButton>
             <MudSpacer />
             <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Outlined.Delete" OnClick="DeleteAsync">Delete</MudButton>
         </div>
@@ -90,7 +90,7 @@
             <ToolBarExtras>
                 @if (!_template.BuiltIn)
                 {
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAttributeAsync(objectType, null))">Add Attribute</MudButton>
+                    <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAttributeAsync(objectType, null))">Add Attribute</MudButton>
                 }
             </ToolBarExtras>
             <Columns>

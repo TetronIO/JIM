@@ -108,14 +108,14 @@
 
         @* Second row: what can be done with the object. None of them is the page's main action, so all are outlined in the neutral colour: primary marks a main action alone. *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap mt-3" Spacing="2">
-            <MudButton Variant="Variant.Outlined" DropShadow="false"
+            <MudButton Variant="Variant.Filled" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
                        Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
                 @(_previewLoading ? "Previewing…" : "Preview Sync")
             </MudButton>
 
             @* Opens the Causality Explorer on this object (#2100): what happened to it, newest first, and why. *@
-            <MudButton Variant="Variant.Outlined" DropShadow="false"
+            <MudButton Variant="Variant.Filled" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Hub" Href="@($"/causality/connected-system-objects/{ConnectedSystemObject.Id}")"
                        data-testid="jim-cso-explore-causality">Explore causality</MudButton>
 
@@ -125,7 +125,7 @@
             @* an unjoined object has no person to queue it against.                                          *@
             @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
-                <MudButton Variant="Variant.Outlined" DropShadow="false"
+                <MudButton Variant="Variant.Filled" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
                            data-testid="jim-cso-set-password">Set Password</MudButton>
             }
@@ -363,7 +363,7 @@
                 @if (_changeHistoryRows.Count < _changeHistoryTotal)
                 {
                     <div class="d-flex justify-center mt-3">
-                        <MudButton Variant="Variant.Outlined"
+                        <MudButton Variant="Variant.Filled"
                                    Disabled="@_changeHistoryLoading"
                                    OnClick="LoadMoreChangeHistoryAsync">
                             @if (_changeHistoryLoading)
