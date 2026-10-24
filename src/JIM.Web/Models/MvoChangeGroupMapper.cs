@@ -27,7 +27,7 @@ public static class MvoChangeGroupMapper
         {
             ChangeType = dto.ChangeType,
             ChangeTime = dto.ChangeTime,
-            ChangeInitiatorType = dto.InitiatedByType.ToString(),
+            InitiatedByType = dto.InitiatedByType,
             ChangeInitiatorName = dto.InitiatedByName,
             ChangeInitiatorId = dto.InitiatedById,
             ChangeMechanismType = MechanismType(dto),

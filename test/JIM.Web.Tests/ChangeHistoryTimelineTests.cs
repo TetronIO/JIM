@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Bunit;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
@@ -31,7 +32,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     {
         ChangeType = ObjectChangeType.Updated,
         ChangeTime = new System.DateTime(2026, 5, 1, 9, 30, 0, System.DateTimeKind.Utc),
-        ChangeInitiatorType = "User",
+        InitiatedByType = ActivityInitiatorType.User,
         ChangeInitiatorName = "Ada Lovelace",
         ChangeMechanismType = "User",
         AttributeChanges =
@@ -242,7 +243,6 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
         {
             ChangeType = ObjectChangeType.Updated,
             ChangeTime = new System.DateTime(2026, 5, 1, 9, 30, 0, System.DateTimeKind.Utc),
-            ChangeInitiatorType = "SynchronisationRule",
             ChangeMechanismType = "SynchronisationRule",
             AttributeChanges =
             [
@@ -306,5 +306,61 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
             Assert.That(window.Items.All(i => i.Origin == null), Is.True);
             Assert.That(window.Items.All(i => i.AttributeInspectHref == null), Is.True);
         }
+    }
+
+    // ─── Who made each change: the site's initiator chip (#2460 follow-up) ───
+
+    [Test]
+    public void ChangeHistoryTimeline_SynchronisationChange_CardNamesTheRuleWithItsConnectedSystem()
+    {
+        var changeGroup = BuildChangeGroup();
+        changeGroup.InitiatedByType = ActivityInitiatorType.ApiKey;
+        changeGroup.ChangeInitiatorName = "Infrastructure Key";
+        changeGroup.ChangeMechanismType = "SynchronisationRule";
+        changeGroup.SyncRuleId = 9;
+        changeGroup.SyncRuleName = "HR Import";
+        changeGroup.ConnectedSystemId = 4;
+        changeGroup.ConnectedSystemName = "HR";
+
+        var timeline = Render<ChangeHistoryTimeline>(p => p.Add(c => c.Changes, [changeGroup]));
+
+        var pill = timeline.FindComponent<SystemRuleChip>().Instance;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pill.SyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(pill.ConnectedSystemName, Is.EqualTo("HR"));
+        }
+    }
+
+    [Test]
+    public void ChangeHistoryTimeline_ChangeJimMadeItself_CardSaysSystem()
+    {
+        var changeGroup = BuildChangeGroup();
+        changeGroup.InitiatedByType = ActivityInitiatorType.System;
+        changeGroup.ChangeInitiatorName = "System";
+        changeGroup.ChangeMechanismType = "System";
+
+        var timeline = Render<ChangeHistoryTimeline>(p => p.Add(c => c.Changes, [changeGroup]));
+
+        Assert.That(timeline.FindAll("[data-testid=jim-initiator-system]"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ChangeHistoryTimeline_ChangeDetails_InitiatedByNamesThePrincipalNotTheRule()
+    {
+        // The dialog separates who (the principal that started the run) from how (the mechanism).
+        var changeGroup = BuildChangeGroup();
+        changeGroup.InitiatedByType = ActivityInitiatorType.ApiKey;
+        changeGroup.ChangeInitiatorId = System.Guid.NewGuid();
+        changeGroup.ChangeInitiatorName = "Infrastructure Key";
+        changeGroup.ChangeMechanismType = "SynchronisationRule";
+        changeGroup.SyncRuleName = "HR Import";
+
+        var provider = Render<MudDialogProvider>();
+        var timeline = Render<ChangeHistoryTimeline>(p => p.Add(c => c.Changes, [changeGroup]));
+        timeline.Find(".cursor-pointer").Click();
+
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.FindAll("[data-testid=jim-initiator-api-key]"), Has.Count.EqualTo(1)));
     }
 }

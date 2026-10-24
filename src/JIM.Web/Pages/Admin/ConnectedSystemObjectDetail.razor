@@ -696,7 +696,7 @@
             ChangeId = dto.Id,
             ChangeType = dto.ChangeType,
             ChangeTime = dto.ChangeTime,
-            ChangeInitiatorType = MapInitiatorType(dto.InitiatedByType),
+            InitiatedByType = dto.InitiatedByType,
             ChangeInitiatorName = dto.InitiatedByName,
             ChangeInitiatorId = dto.InitiatedById,
             ChangeMechanismType = "Import",
@@ -939,15 +939,6 @@
         };
     }
 
-    private static string MapInitiatorType(ActivityInitiatorType initiatorType)
-    {
-        return initiatorType switch
-        {
-            ActivityInitiatorType.User => "User",
-            ActivityInitiatorType.ApiKey => "ApiKey",
-            _ => "Unknown"
-        };
-    }
 
     /// <summary>
     /// Gets a user-friendly display identifier for the CSO.
