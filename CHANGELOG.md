@@ -93,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 A Synchronisation Rule's identity strip, and the Object Type pickers that create one, read in the direction data flows: an import rule shows the Connected System Object Type then the Metaverse Object Type, and an export rule the reverse.
+- 🖥️ Ordinary buttons across the portal are filled in the theme's default colour rather than outlined, so they read clearly as buttons beside the page's one main action; outlined is kept for dangerous actions.
 - 🔄 The Attribute Flow dialog puts the settings beside a **Try it** pane, so a change and its result are seen together. The result follows as you type and as the settings change, with no **Run test** button. A Generated Value shows one result from the values tried through to the candidates, worked out from the base as a Synchronisation would type and process it. The attribute to assign the value to comes first, and rarely changed settings fold away to a line saying what they are set to. (#2471)
 - 🔄 An Activity's Target and Parent Activity are shown as chips: the Connected System, object, Run Profile, Synchronisation Rule, Schedule or API key it acted on, and the parent Activity by its type and target.
 - 🔄 In the light theme, attribute tables' Attribute column is now a neutral grey matching the header row, rather than a blue-grey.
