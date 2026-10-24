@@ -552,12 +552,15 @@ public class MvoDetailsTableTests : JimComponentTestContext
     public void DetailsTable_ExploreCausality_ShownOnlyWhenTheHostOffersTheExplorer()
     {
         var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+        var provenance = BuildProvenance((1, "Job Title", HrOrigin));
 
         var offered = Render<MvoDetailsTable>(p => p
             .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.Provenance, provenance)
             .Add(c => c.CausalityExplorerHref, $"/causality/metaverse-objects/{mvo.Id}"));
         var notOffered = Render<MvoDetailsTable>(p => p
-            .Add(c => c.MetaverseObject, mvo));
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.Provenance, provenance));
 
         using (Assert.EnterMultipleScope())
         {

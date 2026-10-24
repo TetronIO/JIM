@@ -25,7 +25,20 @@
     else if (Provenance != null)
     {
         <MvoContributionBar Provenance="Provenance" ObjectTypeName="@ObjectTypeName"
-                             ActiveFilterKey="@ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged" />
+                             ActiveFilterKey="@ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged">
+            <Actions>
+                @* The Causality Explorer (#2100) opens from the Inspect view, beside the tabs no longer: it answers
+                   "why is this object the way it is?", which is the question this view asks. It sits in the
+                   contribution panel's heading, about the whole object, rather than the table's toolbar, which the
+                   open inspector already crowds. The host offers it to Administrators only. *@
+                @if (CausalityExplorerHref != null)
+                {
+                    <MudButton Variant="Variant.Filled" DropShadow="false" Size="Size.Small" StartIcon="@Icons.Material.Filled.Hub"
+                               Href="@CausalityExplorerHref" Class="jim-nowrap"
+                               data-testid="jim-mvo-explore-causality">Explore causality</MudButton>
+                }
+            </Actions>
+        </MvoContributionBar>
     }
 
     <div class="jim-inspect-layout">
@@ -48,15 +61,6 @@
                     <span class="jim-inspect-toolbar-label mr-2">Group by</span>
                     <SegmentedToggle TValue="string" AriaLabel="Group by" Value="@GroupBy" Options="@GroupByOptions"
                                      ValueChanged="ChangeGroupByAsync" Dense="true" />
-                    @* The Causality Explorer (#2100) opens from here, the diagnostic view, rather than beside the tabs:
-                       it answers "why is this object the way it is?", which is the question the Inspect view asks.
-                       The host offers it to Administrators only. *@
-                    @if (CausalityExplorerHref != null)
-                    {
-                        <MudButton Variant="Variant.Filled" DropShadow="false" Size="Size.Small" StartIcon="@Icons.Material.Filled.Hub"
-                                   Href="@CausalityExplorerHref" Class="ml-3 jim-nowrap flex-none"
-                                   data-testid="jim-mvo-explore-causality">Explore causality</MudButton>
-                    }
                 </ToolBarExtras>
                 <HeaderContent>
                     <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
