@@ -41,6 +41,20 @@ public class MetaverseObjectChange
     /// </summary>
     public Guid? ActivityId { get; set; }
 
+    /// <summary>
+    /// For a deletion, the Run Profile execution item that deleted the object: the disconnection that triggered an
+    /// immediate deletion, or the housekeeping item that carried out a scheduled one (#2460). It is what leads a
+    /// deleted object's causality timeline back to its deletion once the object and its joins are gone.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="ActivityRunProfileExecutionItemId"/>, which is unique per item and names the item a
+    /// synchronisation recorded this change against: the deleting item can carry a change record of its own (the
+    /// disconnection's attribute recall). An unconstrained snapshot scalar, like
+    /// <see cref="MetaverseObject.DeletionScheduledByRunProfileExecutionItemId"/>, not a foreign key: a page writes
+    /// its deletion records before its items, and the item can age out of history before the change does.
+    /// </remarks>
+    public Guid? DeletedByRunProfileExecutionItemId { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Initiator tracking - mirrors Activity's pattern for audit trail
     // -----------------------------------------------------------------------------------------------------------------

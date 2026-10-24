@@ -150,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 Every Metaverse Object change now links to the Activity it was made in, including deletions, scheduled deletions, the initial administrator's creation at sign-in and data generation; before, only changes a synchronisation recorded per object did. Also in `activityId` over REST and PowerShell. (#2460)
 - 🐛 The initial administrator's creation at first sign-in is recorded as made by System, rather than by nobody. (#2460)
+- 🐛 The Causality Explorer's timeline for a deleted Metaverse Object now includes the item that deleted it, such as the disconnection that triggered the deletion or the housekeeping run that carried it out. (#2460)
 - 🐛 History retention no longer stops removing Activities when a Metaverse Object change recorded in one outlives it. The cleanup failed on the same batch every run, so Activities stopped expiring. (#2460)
 - 🐛 When your identity provider changes its signing key without notice, the first API request and sign-in using the new key now succeed. They failed before, and could keep failing for up to 5 minutes. (#2442)
 - 🐛 **Max Export Parallelism** applies to every export again, not only to those waiting on references: JIM sends that many batches at once, or the Connector's recommendation when it is empty, keeping one connection per batch stream for the whole run, so large provisioning runs finish sooner. (#1820)

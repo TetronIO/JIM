@@ -1702,7 +1702,8 @@ public partial class MetaverseServer
                 DeletedMetaverseObjectId = mvoId,
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
                 DeletedObjectDisplayName = displayName,
-                ActivityId = activityId
+                ActivityId = activityId,
+                DeletedByRunProfileExecutionItemId = metaverseObject.DeletingRunProfileExecutionItemId
             };
 
             // Contributor provenance (#1519 follow-up): the sync processor path passes a snapshot taken

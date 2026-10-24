@@ -322,10 +322,12 @@ public partial class ConnectedSystemServer
 
                     case MvoDeletionFate.DeletedImmediately:
                         pendingImmediateDeletions.Add((mvo, mvo.AttributeValues.ToList()));
-                        executionItems.Add(BuildDeletionRuleExecutionItem(
+                        var deletingItem = BuildDeletionRuleExecutionItem(
                             mvo, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                             ConnectedSystemObjectObsoletionService.BuildMvoDeletionDetailMessage(decision.Fate, decision.Reason, null, null),
-                            policySnapshotJson));
+                            policySnapshotJson);
+                        MetaverseObjectDeletionRuleApplier.RecordDeletingItem(mvo, deletingItem);
+                        executionItems.Add(deletingItem);
                         break;
                 }
             }

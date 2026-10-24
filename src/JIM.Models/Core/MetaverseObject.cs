@@ -92,6 +92,13 @@ public class MetaverseObject
     public Guid? DeletionScheduledByRunProfileExecutionItemId { get; set; }
 
     /// <summary>
+    /// The Run Profile execution item deleting this object now, recorded between the decision and the deletion flush
+    /// so the Deleted change record can name it (#2460). In memory only: the object is gone once it is used.
+    /// </summary>
+    [NotMapped]
+    public Guid? DeletingRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
     /// How this MVO was created - determines deletion rule applicability.
     /// Projected MVOs are subject to automatic deletion rules.
     /// Internal MVOs (admin, service accounts) are protected from automatic deletion.

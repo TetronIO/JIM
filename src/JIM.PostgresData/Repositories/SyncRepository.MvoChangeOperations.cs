@@ -167,6 +167,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(c.ActivityId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
+            if (c.DeletedByRunProfileExecutionItemId.HasValue)
+                await writer.WriteAsync(c.DeletedByRunProfileExecutionItemId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

@@ -1201,6 +1201,10 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.MvoScheduledForDeletion != null)
                         MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, existingRpei);
 
+                    // This item deleted the object; its Deleted change record names it (#2460).
+                    if (changeResult.MvoDeletedImmediately != null)
+                        MetaverseObjectDeletionRuleApplier.RecordDeletingItem(changeResult.MvoDeletedImmediately, existingRpei);
+
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
                     // so the change record shows a handover to the surviving contributor, not just a blank.
@@ -1292,6 +1296,10 @@ public abstract class SyncTaskProcessorBase
                     // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
                     if (changeResult.MvoScheduledForDeletion != null)
                         MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, runProfileExecutionItem);
+
+                    // This item deleted the object; its Deleted change record names it (#2460).
+                    if (changeResult.MvoDeletedImmediately != null)
+                        MetaverseObjectDeletionRuleApplier.RecordDeletingItem(changeResult.MvoDeletedImmediately, runProfileExecutionItem);
 
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
@@ -7369,6 +7377,7 @@ public abstract class SyncTaskProcessorBase
                     // decision-time value the outcome node should state (#119).
                     mvoDeletionEligibleDate: mvo.DeletionEligibleDate,
                     mvoScheduledForDeletion: mvoDeletionFate == MvoDeletionFate.DeletionScheduled ? mvo : null,
+                    mvoDeletedImmediately: mvoDeletionFate == MvoDeletionFate.DeletedImmediately ? mvo : null,
                     preservedNoSourceAttributeCount: preservedNoSourceAttributeCount,
                     generatedValueOutcomes: generatedValueOutcomes);
         }

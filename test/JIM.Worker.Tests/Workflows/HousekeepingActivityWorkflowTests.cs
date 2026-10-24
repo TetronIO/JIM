@@ -225,7 +225,13 @@ public class HousekeepingActivityWorkflowTests
         // Assert
         var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
         var deletedChange = recordedChanges.Single(c => c.ChangeType == ObjectChangeType.Deleted);
-        Assert.That(deletedChange.ActivityId, Is.EqualTo(activity.Id));
+        var deletionItem = _persistedRpeis.Single(r => r.ActivityId == activity.Id && r.ObjectChangeType == ObjectChangeType.Deleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletedChange.ActivityId, Is.EqualTo(activity.Id));
+            Assert.That(deletedChange.DeletedByRunProfileExecutionItemId, Is.EqualTo(deletionItem.Id),
+                "the deletion record names the housekeeping item that deleted the object");
+        }
     }
 
     /// <summary>

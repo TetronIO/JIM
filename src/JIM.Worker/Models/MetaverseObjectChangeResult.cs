@@ -125,6 +125,13 @@ public readonly struct MetaverseObjectChangeResult
     public MetaverseObject? MvoScheduledForDeletion { get; init; }
 
     /// <summary>
+    /// The Metaverse Object this disconnection deleted at once, when it did. The caller records on it the item this
+    /// disconnection is reported on, which the object's Deleted change record names (#2460); the item does not exist
+    /// until the caller creates or finds it. Null otherwise.
+    /// </summary>
+    public MetaverseObject? MvoDeletedImmediately { get; init; }
+
+    /// <summary>
     /// Set when this join cancelled a previously scheduled grace-period deletion (#119, #1620): the detail
     /// message for the <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled"/>
     /// child outcome the caller attaches under the Joined root. Null for an ordinary join.
@@ -273,6 +280,7 @@ public readonly struct MetaverseObjectChangeResult
         string? mvoDeletionPolicySnapshotJson = null,
         DateTime? mvoDeletionEligibleDate = null,
         MetaverseObject? mvoScheduledForDeletion = null,
+        MetaverseObject? mvoDeletedImmediately = null,
         int preservedNoSourceAttributeCount = 0,
         List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? generatedValueOutcomes = null) => new()
     {
@@ -292,6 +300,7 @@ public readonly struct MetaverseObjectChangeResult
         MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson,
         MvoDeletionEligibleDate = mvoDeletionEligibleDate,
         MvoScheduledForDeletion = mvoScheduledForDeletion,
+        MvoDeletedImmediately = mvoDeletedImmediately,
         PreservedNoSourceAttributeCount = preservedNoSourceAttributeCount,
         GeneratedValueOutcomes = generatedValueOutcomes
     };
