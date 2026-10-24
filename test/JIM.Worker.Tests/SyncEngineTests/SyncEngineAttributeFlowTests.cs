@@ -114,7 +114,45 @@ public class SyncEngineAttributeFlowTests
         Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
         Assert.That(mvo.PendingAttributeValueAdditions.First().StringValue, Is.EqualTo("John Doe"));
         Assert.That(mvo.PendingAttributeValueAdditions.First().ContributedBySystemId, Is.EqualTo(5));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().ContributedByKind, Is.EqualTo(ValueContributorKind.SynchronisationRule),
+            "#2472: a value a Synchronisation Rule contributes records that kind of source");
         Assert.That(errors, Is.Empty);
+    }
+
+    /// <summary>
+    /// #2472: a Synchronisation Rule contributing the value a sign-in claim already set takes the value over, and the
+    /// value stops reading as the token's: its source kind becomes the rule's and the claim type is cleared.
+    /// </summary>
+    [Test]
+    public void FlowInboundAttributes_IdenticalValueASignInClaimSet_TakesOverKindAndClearsClaimType()
+    {
+        var mvoAttr = new MetaverseAttribute { Id = 100, Name = "displayName", Type = AttributeDataType.Text };
+        var csoAttr = new ConnectedSystemObjectTypeAttribute { Id = 200, Name = "cn", Type = AttributeDataType.Text };
+        var csoType = new ConnectedSystemObjectType { Id = 1, Attributes = [csoAttr] };
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var fromToken = new MetaverseObjectAttributeValue
+        {
+            MetaverseObject = mvo, Attribute = mvoAttr, AttributeId = 100, StringValue = "John Doe",
+            ContributedByKind = ValueContributorKind.SignInClaim, ContributedByClaimType = "name"
+        };
+        mvo.AttributeValues.Add(fromToken);
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = 5, MetaverseObject = mvo };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 200, StringValue = "John Doe" });
+
+        var mapping = new SyncRuleMapping { TargetMetaverseAttribute = mvoAttr, SyncRuleId = 7 };
+        mapping.Sources.Add(new SyncRuleMappingSource { ConnectedSystemAttributeId = 200, ConnectedSystemAttribute = csoAttr, Order = 1 });
+        var syncRule = new SyncRule { Id = 7, ConnectedSystemId = 5, AttributeFlowRules = [mapping] };
+
+        _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "the identical value is taken over, not replaced");
+            Assert.That(fromToken.ContributedBySyncRuleId, Is.EqualTo(7));
+            Assert.That(fromToken.ContributedByKind, Is.EqualTo(ValueContributorKind.SynchronisationRule));
+            Assert.That(fromToken.ContributedByClaimType, Is.Null);
+        }
     }
 
     [Test]

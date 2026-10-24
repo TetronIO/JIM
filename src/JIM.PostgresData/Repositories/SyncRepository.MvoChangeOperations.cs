@@ -280,6 +280,14 @@ public partial class SyncRepository
                 await writer.WriteAsync(v.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            if (v.ContributedByKind.HasValue)
+                await writer.WriteAsync((int)v.ContributedByKind.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (v.ContributedByClaimType is not null)
+                await writer.WriteAsync(v.ContributedByClaimType, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

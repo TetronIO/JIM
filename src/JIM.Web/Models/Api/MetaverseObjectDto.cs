@@ -238,6 +238,15 @@ public class MetaverseObjectAttributeValueDto
     public string? ContributedBySyncRuleName { get; set; }
 
     /// <summary>
+    /// What kind of source set the value: SynchronisationRule, SignInClaim, System or Person. Null when no source was
+    /// recorded.
+    /// </summary>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>The sign-in claim that supplied the value, such as <c>given_name</c>, when the source is a sign-in claim; otherwise null.</summary>
+    public string? ContributedByClaimType { get; set; }
+
+    /// <summary>
     /// When true, this row is an asserted null: a connected, in-scope contributor positively asserted
     /// "no value" for this attribute. All value fields are null and the row carries provenance only.
     /// Consumers must treat such a row as "no value present", not as a value; it exists so a deliberate
@@ -268,6 +277,8 @@ public class MetaverseObjectAttributeValueDto
             ContributedBySystemName = entity.ContributedBySystem?.Name,
             ContributedBySyncRuleId = entity.ContributedBySyncRuleId,
             ContributedBySyncRuleName = entity.ContributedBySyncRule?.Name,
+            ContributedByKind = entity.ContributedByKind,
+            ContributedByClaimType = entity.ContributedByClaimType,
             NullValue = entity.NullValue
         };
     }

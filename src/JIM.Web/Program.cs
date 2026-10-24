@@ -1017,10 +1017,10 @@ static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrinc
     var ssoIdentity = new SsoIdentity
     {
         UniqueId = uniqueId,
-        DisplayName = principal.FindFirstValue("name"),
-        FirstName = principal.FindFirstValue("given_name"),
-        LastName = principal.FindFirstValue("family_name"),
-        UserPrincipalName = principal.FindFirstValue("preferred_username")
+        DisplayName = principal.FindFirstValue(SsoIdentity.DisplayNameClaimType),
+        FirstName = principal.FindFirstValue(SsoIdentity.FirstNameClaimType),
+        LastName = principal.FindFirstValue(SsoIdentity.LastNameClaimType),
+        UserPrincipalName = principal.FindFirstValue(SsoIdentity.UserPrincipalNameClaimType)
     };
 
     var user = await jim.Auth.ResolveOrProvisionSsoIdentityAsync(ssoIdentity);

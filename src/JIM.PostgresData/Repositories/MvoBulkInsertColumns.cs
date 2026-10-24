@@ -77,6 +77,7 @@ internal static class MvoBulkInsertColumns
         "DateTimeValue", "IntValue", "LongValue", "DecimalValue", "ByteValue",
         "GuidValue", "BoolValue", "ReferenceValueId",
         "UnresolvedReferenceValueId", "ContributedBySystemId",
-        "ContributedBySyncRuleId", "NullValue"
+        "ContributedBySyncRuleId", "NullValue", "ContributedByKind",
+        "ContributedByClaimType"
     ];
 }

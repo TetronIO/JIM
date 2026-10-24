@@ -136,6 +136,33 @@ public class ValueOriginChipTests : JimComponentTestContext
     }
 
     [Test]
+    public void ValueOriginChip_SignInClaim_NamesTheSignInClaimAndTheClaimType()
+    {
+        var origin = new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = "given_name" };
+
+        var cut = Render<ValueOriginChip>(p => p.Add(c => c.Origin, origin));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain(ValueOriginGrouping.SignInClaimLabel));
+            Assert.That(cut.Find(".jim-value-origin-claim").TextContent, Is.EqualTo("given_name"));
+            Assert.That(cut.Markup, Does.Not.Contain("Source not recorded"));
+        }
+    }
+
+    [Test]
+    public void ValueOriginChip_System_NamesJimAsTheSource()
+    {
+        var cut = Render<ValueOriginChip>(p => p.Add(c => c.Origin, new ValueOrigin { Kind = ValueOriginKind.System }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain(ValueOriginGrouping.SystemLabel));
+            Assert.That(cut.Markup, Does.Not.Contain("Source not recorded"));
+        }
+    }
+
+    [Test]
     public void ValueOriginChip_NotRecorded_RendersLowLightedSourceNotRecorded()
     {
         var cut = Render<ValueOriginChip>(p => p.Add(c => c.Origin, ValueOrigin.NotRecorded));

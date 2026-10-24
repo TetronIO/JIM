@@ -523,6 +523,10 @@
     /// <summary>The source group an attribute belongs to (see <see cref="BuildSourceGroups"/>).</summary>
     private ValueOriginGrouping.Group SourceGroupFor(int attributeId) => _sourceGroupByAttributeId[attributeId];
 
+    /// <summary>The sign-in claim an attribute's value was read from, when it has the one origin and that is a claim.</summary>
+    private string? ClaimTypeFor(int attributeId) =>
+        OriginFor(attributeId) is { HasSeveralOrigins: false } summary ? summary.Origins[0].ClaimType : null;
+
     private RenderFragment RenderSourceCell(int attributeId) => __builder =>
     {
         if (ProvenanceLoading && Provenance == null)
@@ -533,7 +537,7 @@
         {
             @* A dot in the source's bar colour and its legend label: many rows name sources at once, so a column
                of pills would compete with the values. The rule reads beside it only while there is room. *@
-            <SourceDot Group="@SourceGroupFor(attributeId)" ShowRule="@(!ShowInspector)" />
+            <SourceDot Group="@SourceGroupFor(attributeId)" ShowRule="@(!ShowInspector)" ClaimType="@ClaimTypeFor(attributeId)" />
         }
     };
 }

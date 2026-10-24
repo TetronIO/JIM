@@ -20,6 +20,12 @@ public class AttributeHistoryEntry
 
     public string? SyncRuleName { get; set; }
 
+    /// <summary>What kind of source set the value at the time (#2472); null when none was recorded.</summary>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>The sign-in claim that supplied the value, when <see cref="ContributedByKind"/> is a sign-in claim.</summary>
+    public string? ClaimType { get; set; }
+
     /// <summary>
     /// True when the value was produced by a Generated Value Attribute Flow rather than read from the Connected
     /// System (see <see cref="ProvenanceLogic.IsGeneratedHistoryValue"/>).

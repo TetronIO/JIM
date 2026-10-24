@@ -75,6 +75,12 @@
                     <dt>Source</dt>
                     <dd><span class="jim-inspector-subtle">Source not recorded</span></dd>
                 }
+                @if (primaryOrigin.Kind is ValueOriginKind.SignInClaim or ValueOriginKind.System)
+                {
+                    @* Set outside synchronisation (#2472): read from a sign-in token (and which claim), or fixed by JIM. *@
+                    <dt>Source</dt>
+                    <dd><ValueOriginChip Origin="@primaryOrigin" /></dd>
+                }
                 @if (primaryOrigin.Kind == ValueOriginKind.SetByPerson)
                 {
                     <dt>Set by</dt>
@@ -236,6 +242,18 @@
                             @if (!string.IsNullOrEmpty(entry.SyncRuleName))
                             {
                                 <span>· @entry.SyncRuleName</span>
+                            }
+                            else if (entry.ContributedByKind == ValueContributorKind.SignInClaim)
+                            {
+                                <span>· @ValueOriginGrouping.SignInClaimLabel</span>
+                                @if (!string.IsNullOrEmpty(entry.ClaimType))
+                                {
+                                    <span class="jim-text-code jim-value-origin-claim">@entry.ClaimType</span>
+                                }
+                            }
+                            else if (entry.ContributedByKind == ValueContributorKind.System)
+                            {
+                                <span>· @ValueOriginGrouping.SystemLabel</span>
                             }
                             @if (generatedEvent == GeneratedValueHistoryEvent.Corrected)
                             {

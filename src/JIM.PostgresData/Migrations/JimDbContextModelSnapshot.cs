@@ -875,6 +875,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<byte[]>("ByteValue")
                         .HasColumnType("bytea");
 
+                    b.Property<string>("ContributedByClaimType")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ContributedByKind")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ContributedBySyncRuleId")
                         .HasColumnType("integer");
 
@@ -1060,6 +1066,12 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<int?>("ByteValueLength")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContributedByClaimType")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ContributedByKind")
                         .HasColumnType("integer");
 
                     b.Property<int?>("ContributedBySyncRuleId")

@@ -22,7 +22,13 @@ public enum ValueOriginKind
     GeneratedValue = 2,
 
     /// <summary>A person set the value directly (internal Metaverse Object management, #614). Not produced until #614 lands.</summary>
-    SetByPerson = 3
+    SetByPerson = 3,
+
+    /// <summary>A claim in a sign-in token supplied the value (#2472); <see cref="ValueOrigin.ClaimType"/> names the claim.</summary>
+    SignInClaim = 4,
+
+    /// <summary>JIM set the value itself, as a fixed value rather than one read from anywhere (#2472).</summary>
+    System = 5
 }
 
 /// <summary>

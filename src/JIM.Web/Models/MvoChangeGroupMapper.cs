@@ -61,7 +61,8 @@ public static class MvoChangeGroupMapper
                     // loaded, in which case the change still renders, just without the Source column's chip/link.
                     Origin = ProvenanceLogic.ResolveChangeValueOrigin(
                         vc.ContributedBySyncRuleId, vc.ContributedBySyncRuleName,
-                        vc.ContributedBySystemId, vc.ContributedBySystemName, vc.IsGeneratedValue),
+                        vc.ContributedBySystemId, vc.ContributedBySystemName, vc.IsGeneratedValue,
+                        vc.ContributedByKind, vc.ContributedByClaimType),
                     AttributeInspectHref = ac.AttributeId.HasValue && !string.IsNullOrEmpty(typePluralName)
                         ? JIM.Utilities.Utilities.GetMetaverseObjectInspectHref(metaverseObjectId, typePluralName, ac.AttributeId.Value)
                         : null

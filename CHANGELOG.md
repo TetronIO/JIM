@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Values JIM sets outside synchronisation now say where they came from, instead of **Source not recorded**: a value read from a sign-in token names the claim (such as `given_name`), and a value JIM fixes itself, such as the initial administrator's Type, reads **Set by JIM**. Shown in the Inspect view, the Changes tab, REST and PowerShell (`ContributedByKind`, `ClaimType`). Existing values keep "Source not recorded" until set again. (#2472)
 - ✨ Select a change on the Object Changes page to see it in full in a panel beside the list: every attribute it changed, with old and new values, who made it and its Activity. Selecting the object itself still opens it. (#2460)
 - ✨ Sign people in by a Guid Metaverse Attribute such as `Object GUID`: set `JIM_SSO_MV_ATTRIBUTE=Object GUID`, and AD FS administrators sign in as the objects Active Directory synchronisation created. The claim may be GUID text or AD FS's base64 `objectGUID`. (#2438)
 - ✨ Directory servers discovered over REST or `Get-JIMConnectedSystemDirectoryServer` now name the setting they fill, by id and name, so a script can discover a domain controller and set it as Preferred Domain Controller in one step. (#2456)
