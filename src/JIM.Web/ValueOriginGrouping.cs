@@ -147,16 +147,17 @@ public static class ValueOriginGrouping
 
     /// <summary>
     /// The theme colour token for a source group: its Connected System's colour, except that Generated Values
-    /// take the primary colour, values a person set the secondary one, values read from a sign-in token the dark one
-    /// and values JIM set the secondary text colour, so none of those shares a colour with a system. "Not recorded"
+    /// take the primary colour, values read from a sign-in token (and, once #614 produces them, values a person set) the
+    /// secondary one, and values JIM set the grey its own JIM chip glyph wears, so none of those shares a colour with a
+    /// system. "Not recorded"
     /// and "several sources" take the same neutral token, since neither names a real source. The contribution bar, its legend and every source dot read their colour from here.
     /// </summary>
     public static string ColourTokenFor(Group group) => group.Kind switch
     {
         ValueOriginKind.GeneratedValue => GeneratedValueColourToken,
         ValueOriginKind.SetByPerson => "--mud-palette-secondary",
-        ValueOriginKind.SignInClaim => "--mud-palette-dark",
-        ValueOriginKind.System => "--mud-palette-text-secondary",
+        ValueOriginKind.SignInClaim => "--mud-palette-secondary",
+        ValueOriginKind.System => "--jim-source-system",
         ValueOriginKind.SynchronisationRule when group.ConnectedSystemId is { } systemId => ColourTokenForConnectedSystem(systemId),
         _ => NeutralToken
     };
