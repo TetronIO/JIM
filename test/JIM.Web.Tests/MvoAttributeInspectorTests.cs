@@ -304,4 +304,25 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
 
         Assert.That(opened, Is.True);
     }
+
+    /// <summary>
+    /// "Explore causality" sits beside "Open in Timeline" when the host offers the explorer, and is absent otherwise.
+    /// </summary>
+    [Test]
+    public void Inspector_ExploreCausality_ShownOnlyWhenTheHostOffersTheExplorer()
+    {
+        var provenance = BuildProvenance();
+        var href = $"/causality/metaverse-objects/{provenance.MetaverseObjectId}";
+
+        var offered = Render<MvoAttributeInspector>(p => p
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.CausalityExplorerHref, href));
+        var notOffered = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(offered.Find("[data-testid='jim-mvo-inspector-explore-causality']").GetAttribute("href"), Is.EqualTo(href));
+            Assert.That(notOffered.FindAll("[data-testid='jim-mvo-inspector-explore-causality']"), Is.Empty);
+        }
+    }
 }

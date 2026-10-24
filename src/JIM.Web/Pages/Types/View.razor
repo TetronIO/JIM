@@ -69,12 +69,6 @@
                 <SegmentedToggle TValue="string" Options="@DetailViewModes" Value="@_detailViewMode"
                                  ValueChanged="OnDetailViewModeChangedAsync" AriaLabel="Details view" Class="my-auto me-2" />
             }
-            @* Opens the Causality Explorer on this object (#2100): what happened to it across its joined Connected System
-               Objects' runs as well as its own, newest first, and why. Beside the tabs because the page has no action
-               row of its own, and on every tab because it is about the object rather than any one view of it. *@
-            <MudButton Variant="Variant.Filled" DropShadow="false" StartIcon="@Icons.Material.Filled.Hub"
-                       Href="@($"/causality/metaverse-objects/{MetaverseObject.Id}")" Class="my-auto me-2 jim-nowrap flex-none"
-                       data-testid="jim-mvo-explore-causality">Explore causality</MudButton>
         </Header>
         <ChildContent>
         <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
@@ -87,7 +81,8 @@
                                  ContributionFilterKey="@_object.ContributionFilterKey" OnContributionFilterChanged="OnContributionFilterChangedAsync"
                                  SelectedAttributeId="_object.SelectedAttributeId" OnAttributeSelected="OnAttributeSelectedAsync"
                                  SelectedAttributeProvenance="_object.SelectedAttributeProvenance" AttributeInspectorLoading="_object.AttributeInspectorLoading"
-                                 OnCloseInspector="OnCloseInspectorAsync" OnOpenInTimeline="OpenAttributeInTimelineAsync" />
+                                 OnCloseInspector="OnCloseInspectorAsync" OnOpenInTimeline="OpenAttributeInTimelineAsync"
+                                 CausalityExplorerHref="@(_isAdministrator ? $"/causality/metaverse-objects/{MetaverseObject.Id}" : null)" />
             }
             else if (_detailViewMode == "tabs")
             {
@@ -345,6 +340,9 @@
     /// Whether the reader may see another person's password history. The tab's own markup is gated the same
     /// way; this is the same decision made in code so the reads behind it are not run for readers who cannot.
     /// </summary>
+    // Whether the reader is an Administrator, and so may open the Causality Explorer the Inspect view offers.
+    private bool _isAdministrator;
+
     private async Task<bool> IsAdministratorAsync()
     {
         var state = await AuthenticationStateTask;
@@ -661,6 +659,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        _isAdministrator = await IsAdministratorAsync();
+
         // If ?c= is present, force tabs view (overrides saved preference); ?view=inspect does the same for
         // Inspect, checked after so it wins when a link carries both (it never should, but a link is only ever
         // written by JIM's own code, per the Inspect discoverability links in #399).

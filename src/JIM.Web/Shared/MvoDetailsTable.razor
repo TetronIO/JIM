@@ -25,7 +25,20 @@
     else if (Provenance != null)
     {
         <MvoContributionBar Provenance="Provenance" ObjectTypeName="@ObjectTypeName"
-                             ActiveFilterKey="@ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged" />
+                             ActiveFilterKey="@ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged">
+            <Actions>
+                @* The Causality Explorer (#2100) opens from the Inspect view, beside the tabs no longer: it answers
+                   "why is this object the way it is?", which is the question this view asks. It sits in the
+                   contribution panel's heading, about the whole object, rather than the table's toolbar, which the
+                   open inspector already crowds. The host offers it to Administrators only. *@
+                @if (CausalityExplorerHref != null)
+                {
+                    <MudButton Variant="Variant.Filled" DropShadow="false" Size="Size.Small" StartIcon="@Icons.Material.Filled.Hub"
+                               Href="@CausalityExplorerHref" Class="jim-nowrap"
+                               data-testid="jim-mvo-explore-causality">Explore causality</MudButton>
+                }
+            </Actions>
+        </MvoContributionBar>
     }
 
     <div class="jim-inspect-layout">
@@ -160,7 +173,8 @@
                 }
                 else if (SelectedAttributeProvenance != null)
                 {
-                    <MvoAttributeInspector Provenance="SelectedAttributeProvenance" OnClose="OnCloseInspector" OnOpenInTimeline="OnOpenInTimeline" />
+                    <MvoAttributeInspector Provenance="SelectedAttributeProvenance" OnClose="OnCloseInspector" OnOpenInTimeline="OnOpenInTimeline"
+                                           CausalityExplorerHref="@CausalityExplorerHref" />
                 }
             </div>
         }
@@ -289,6 +303,13 @@
 
     [Parameter]
     public EventCallback OnOpenInTimeline { get; set; }
+
+    /// <summary>
+    /// The Causality Explorer's address for this object, offered from the toolbar and the attribute inspector; null
+    /// when the reader may not open it (they are not an Administrator), which leaves no way in.
+    /// </summary>
+    [Parameter]
+    public string? CausalityExplorerHref { get; set; }
 
     private bool ShowInspector => SelectedAttributeId.HasValue;
 

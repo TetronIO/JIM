@@ -2,7 +2,7 @@
 @page "/causality/items/{ItemId:guid}"
 @page "/causality/connected-system-objects/{ConnectedSystemObjectId:guid}"
 @page "/causality/metaverse-objects/{MetaverseObjectId:guid}"
-@attribute [Authorize(Roles = "User")]
+@attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities.DTOs
 @using JIM.Web.Causality
 @using JIM.Web.Shared.Causality

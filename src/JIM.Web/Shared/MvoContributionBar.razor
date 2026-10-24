@@ -14,6 +14,10 @@
     <div class="jim-contribution-heading">
         <span class="jim-contribution-title">Where this @ObjectTypeName gets its values</span>
         <span class="jim-contribution-count">@Provenance.Attributes.Count.ToString("N0") attributes@(groups.Count > 1 ? " · select a source to filter" : null)</span>
+        @if (Actions != null)
+        {
+            <span class="jim-contribution-actions">@Actions</span>
+        }
     </div>
 
     @if (groups.Count <= 1)
@@ -67,6 +71,10 @@
     /// </summary>
     [Parameter]
     public EventCallback<string?> OnFilterChanged { get; set; }
+
+    /// <summary>Actions about the whole object, set at the heading's far end.</summary>
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
 
     private async Task ToggleFilterAsync(string key)
     {
