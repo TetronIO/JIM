@@ -138,32 +138,9 @@
                 </MudItem>
             }
 
-            @* An import's read range: where it started reading from and the point the next import starts from. *@
-            @if (_activity.ImportWatermarkFrom != null || _activity.ImportWatermarkTo != null)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Read From:</MudText>
-                    @if (_activity.ImportWatermarkFrom != null)
-                    {
-                        <MudText Class="jim-text-code">@_activity.ImportWatermarkFrom</MudText>
-                    }
-                    else
-                    {
-                        <MudText>The start</MudText>
-                    }
-                </MudItem>
-                <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Read Up To:</MudText>
-                    @if (_activity.ImportWatermarkTo != null)
-                    {
-                        <MudText Class="jim-text-code">@_activity.ImportWatermarkTo</MudText>
-                    }
-                    else
-                    {
-                        <MudText><EmptyValue /></MudText>
-                    }
-                </MudItem>
-            }
+            @* An import's watermarks: what range a Delta Import read, or where the next Delta Import starts. *@
+            <ImportReadRangeField RunType="@_activity.ConnectedSystemRunType" WatermarkFrom="@_activity.ImportWatermarkFrom"
+                                  WatermarkTo="@_activity.ImportWatermarkTo" ReadRange="@_importReadRange" />
 
             @* ─── The preview behind this change (#134) ─── *@
             @switch (ActivityPreviewProvenance.For(_activity))
@@ -1211,6 +1188,7 @@
     private Activity? _informingPreviewActivity;
     private IReadOnlyList<PreviewVerdictLine> _informingPreviewLines = [];
     private ConfigurationChangeDetail? _configChangeDetail;
+    private ImportReadRange? _importReadRange;
     private bool _isAdministrator;
     private VirtualisedDataGrid<Activity>? _childActivitiesGrid;
     private int _childActivityCount;
@@ -1345,6 +1323,7 @@
         _parentActivity = null;
         _activityRunProfileExecutionStats = null;
         _configChangeDetail = null;
+        _importReadRange = null;
         _childActivityCount = 0;
         _selectedObjectTypes = new List<string>();
         _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
@@ -1391,6 +1370,8 @@
         // The main performance win comes from the optimised GROUP BY query in GetActivityRunProfileExecutionStatsAsync.
         if (_activity.ConnectedSystemId.HasValue)
             _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(_activity.ConnectedSystemId.Value);
+
+        _importReadRange = await jim.ConnectedSystems.GetImportReadRangeAsync(_activity);
 
         if (_activity.TargetType is ActivityTargetType.MetaverseObject or ActivityTargetType.ConnectedSystemRunProfile && _activity.MetaverseObjectId != null)
             _metaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.MetaverseObjectId.Value);
@@ -1889,8 +1870,12 @@
             if (updated == null)
                 return;
 
+            // The watermark the run reached is recorded only as it finishes, so describe it once it arrives.
+            var watermarksChanged = updated.ImportWatermarkFrom != _activity?.ImportWatermarkFrom || updated.ImportWatermarkTo != _activity?.ImportWatermarkTo;
             _activity = updated;
             _lastRefreshUtc = DateTime.UtcNow;
+            if (watermarksChanged)
+                _importReadRange = await jim.ConnectedSystems.GetImportReadRangeAsync(updated);
             UpdateEtaEstimate(updated);
 
             // Refresh child activities and stats alongside the activity itself

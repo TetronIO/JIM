@@ -33,8 +33,8 @@ public class AuthServer
 
     /// <summary>
     /// Resolves an authenticated SSO identity to its MetaverseObject, creating the initial
-    /// administrator just-in-time if this is their first contact, and supplementing any
-    /// missing profile attributes from the identity. Returns <c>null</c> when the identity
+    /// administrator just-in-time if this is their first contact, and keeping the profile
+    /// attributes the token owns in step with the identity (filling any that are missing). Returns <c>null</c> when the identity
     /// cannot be matched and is not the initial administrator (such users are provisioned
     /// via synchronisation, not from a token).
     /// </summary>
@@ -92,10 +92,9 @@ public class AuthServer
         if (isInitialAdmin && !await Application.Security.IsObjectInRoleAsync(user, Constants.BuiltInRoles.Administrator))
             await Application.Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
 
-        // Supplement any missing profile attributes from the identity. This is a no-op for a
-        // freshly created user (attributes were set during creation) and for an existing user
-        // whose attributes are already populated.
-        await SupplementUserAttributesAsync(user, identity);
+        // Keep the profile attributes the token owns in step with it, and fill any that are missing. This is a
+        // no-op for a freshly created user (attributes were set during creation) and for one already up to date.
+        await RefreshUserAttributesFromIdentityAsync(user, identity);
 
         return user;
     }
@@ -309,37 +308,47 @@ public class AuthServer
     }
 
     /// <summary>
-    /// Supplements an existing user's missing profile attributes from the identity, persisting
-    /// only the additions. Attributes already present are left untouched.
+    /// Keeps a user's profile attributes in step with the identity (#2383): fills an attribute the user has no value
+    /// for, and refreshes one whose value the token owns (a sign-in claim set it) when the token now says something
+    /// different. A value from any other source, such as a Synchronisation Rule, is left untouched, so the token never
+    /// fights synchronisation; so is a value with no recorded source, since nothing says the token owns it. A claim the
+    /// token no longer carries leaves its value in place. Persists only when something changed, recording the change
+    /// as System's.
     /// </summary>
-    private async Task SupplementUserAttributesAsync(MetaverseObject user, SsoIdentity identity)
+    private async Task RefreshUserAttributesFromIdentityAsync(MetaverseObject user, SsoIdentity identity)
     {
         var additions = new List<MetaverseObjectAttributeValue>();
+        var removals = new List<MetaverseObjectAttributeValue>();
 
-        await AddMissingAttributeAsync(user, additions, identity.DisplayName, Constants.BuiltInAttributes.DisplayName, SsoIdentity.DisplayNameClaimType);
-        await AddMissingAttributeAsync(user, additions, identity.FirstName, Constants.BuiltInAttributes.FirstName, SsoIdentity.FirstNameClaimType);
-        await AddMissingAttributeAsync(user, additions, identity.LastName, Constants.BuiltInAttributes.LastName, SsoIdentity.LastNameClaimType);
-        await AddMissingAttributeAsync(user, additions, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName, SsoIdentity.UserPrincipalNameClaimType);
+        await RefreshAttributeFromClaimAsync(user, additions, removals, identity.DisplayName, Constants.BuiltInAttributes.DisplayName, SsoIdentity.DisplayNameClaimType);
+        await RefreshAttributeFromClaimAsync(user, additions, removals, identity.FirstName, Constants.BuiltInAttributes.FirstName, SsoIdentity.FirstNameClaimType);
+        await RefreshAttributeFromClaimAsync(user, additions, removals, identity.LastName, Constants.BuiltInAttributes.LastName, SsoIdentity.LastNameClaimType);
+        await RefreshAttributeFromClaimAsync(user, additions, removals, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName, SsoIdentity.UserPrincipalNameClaimType);
 
         if (additions.Count > 0)
         {
             await Application.Metaverse.UpdateMetaverseObjectAsync(
                 user,
                 additions: additions,
+                removals: removals,
                 initiatedByType: ActivityInitiatorType.System,
                 initiatedByName: "System",
                 changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
-            Log.Debug("AuthServer: Supplemented {Count} attribute value(s) on user {UserId} from the SSO identity.", additions.Count, user.Id);
+            Log.Debug("AuthServer: Filled {Filled} and refreshed {Refreshed} attribute value(s) on user {UserId} from the SSO identity.",
+                additions.Count - removals.Count, removals.Count, user.Id);
         }
     }
 
     /// <summary>
-    /// Stages an attribute addition when the value is present and the user does not already
-    /// have a value for that attribute, recording the sign-in claim it was read from as its source.
+    /// Stages one profile attribute's change from the identity, recording the sign-in claim as its source: an addition
+    /// when the user has no value for the attribute, or, when the one value it holds came from a sign-in claim and
+    /// differs from the token's, that value updated in place, with a snapshot of what it held staged as the removal so
+    /// the change history reads as the old value replaced by the new. Anything else stages nothing.
     /// </summary>
-    private async Task AddMissingAttributeAsync(
+    private async Task RefreshAttributeFromClaimAsync(
         MetaverseObject user,
         List<MetaverseObjectAttributeValue> additions,
+        List<MetaverseObjectAttributeValue> removals,
         string? value,
         string metaverseAttributeName,
         string claimType)
@@ -347,21 +356,43 @@ public class AuthServer
         if (string.IsNullOrEmpty(value))
             return;
 
-        if (user.HasAttributeValue(metaverseAttributeName))
-            return;
-
-        var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(metaverseAttributeName);
-        if (attribute == null)
-            return;
-
-        var attributeValue = new MetaverseObjectAttributeValue
+        var existing = user.AttributeValues.Where(av => av.Attribute?.Name == metaverseAttributeName).ToList();
+        if (existing.Count == 0)
         {
-            Attribute = attribute,
-            StringValue = value,
-            ContributedByKind = ValueContributorKind.SignInClaim,
-            ContributedByClaimType = claimType
-        };
-        user.AttributeValues.Add(attributeValue);
-        additions.Add(attributeValue);
+            var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(metaverseAttributeName);
+            if (attribute == null)
+                return;
+
+            var attributeValue = new MetaverseObjectAttributeValue
+            {
+                Attribute = attribute,
+                StringValue = value,
+                ContributedByKind = ValueContributorKind.SignInClaim,
+                ContributedByClaimType = claimType
+            };
+            user.AttributeValues.Add(attributeValue);
+            additions.Add(attributeValue);
+            return;
+        }
+
+        // The profile attributes are single-valued; more than one value means something else manages the attribute.
+        if (existing.Count != 1)
+            return;
+
+        // Only a value the token owns is the token's to refresh. A recorded Connected System is the authority for a
+        // synchronised value, whatever kind sits beside it (#2472).
+        var current = existing[0];
+        if (current.ContributedByKind != ValueContributorKind.SignInClaim || current.ContributedBySystemId.HasValue)
+            return;
+
+        if (string.Equals(current.StringValue, value, StringComparison.Ordinal) &&
+            string.Equals(current.ContributedByClaimType, claimType, StringComparison.Ordinal))
+            return;
+
+        removals.Add(current.CopyFor(user));
+        current.StringValue = value;
+        current.ContributedByClaimType = claimType;
+        additions.Add(current);
+        Log.Verbose("AuthServer: Refreshed {Attribute} from identity.", metaverseAttributeName);
     }
 }

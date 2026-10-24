@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Administrators JIM does not synchronise, such as the initial administrator, keep their profile current from the identity provider: each sign-in refreshes Display Name, First Name, Last Name and User Principal Name from the token, while values a Synchronisation Rule supplies are never touched. (#2383)
 - ✨ Values JIM sets outside synchronisation now say where they came from, instead of **Source not recorded**: a value read from a sign-in token names the claim (such as `given_name`), and a value JIM fixes itself, such as the initial administrator's Type, reads **Set by JIM**. Shown in the Inspect view, the Changes tab, REST and PowerShell (`ContributedByKind`, `ClaimType`). Existing values keep "Source not recorded" until set again. (#2472)
 - ✨ Select a change on the Object Changes page to see it in full in a panel beside the list: every attribute it changed, with old and new values, who made it and its Activity. Selecting the object itself still opens it. (#2460)
 - ✨ Sign people in by a Guid Metaverse Attribute such as `Object GUID`: set `JIM_SSO_MV_ATTRIBUTE=Object GUID`, and AD FS administrators sign in as the objects Active Directory synchronisation created. The claim may be GUID text or AD FS's base64 `objectGUID`. (#2438)
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Create, edit, duplicate and delete Data Generation Templates in the portal: add Object Types and attributes, choose how each attribute's values are made, and duplicate a built-in template to customise it. Copying is also via REST and `Copy-JIMExampleDataTemplate`. (#1466)
 - ✨ Identity providers can push Users and Groups to JIM over SCIM 2.0 (Preview): the new JIM SCIM 2.0 Service Provider Connector gives a Connected System its own SCIM endpoint and keys, and imports what arrives on its Schedule. Also via REST and `*-JIMScimKey`. (#124)
 - ✨ See what an identity provider sent: an Activity per key every 15 minutes counts its creates, updates, deletes and refused requests, and a Connected System Object's change history lists the SCIM requests behind each imported change. (#124)
+- ✨ An import's Activity page says what range a Delta Import read, or where a Full Import left the next one to start, in the Connector's own terms ("After 8, up to 15 (change sequence)"), with its recorded state a click away. Also via REST and `Get-JIMActivity`.
 - ✨ Say whether a File Connector column holds several values, separated by the Multi-Value Delimiter, on the Schema tab, via REST or `Set-JIMConnectedSystemAttribute -Plurality`; a schema refresh keeps your choice. (#2186)
 - ✨ JIM signs people in through an identity provider whose HTTPS certificate comes from your own certificate authority, such as AD FS or Keycloak run on premises: trust it for sign-in with `Add-JIMCertificate -FromIdentityProvider`, REST, or the portal, and sign-in works straight away, with no image rebuild or restart. (#2363)
 - ✨ When JIM cannot trust its identity provider, opening JIM explains why on a **Sign-in is unavailable** page with the fix filled in, and signed-in administrators see a warning before new sign-ins fail, with **Review and trust**. `Get-JIMIdentityProviderTrust` reports the same. (#2363)
@@ -159,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 The Connector Space's Secondary External Id column now appears as soon as the list loads, rather than only once the list had been searched, sorted or filtered.
+- 🐛 On the Operations page's Queue, a running task's name can now be clicked through to its Activity at any point in the run. While progress was arriving quickly, as during the import phase of a large Full Import, the click often did nothing.
 - 🐛 In a Metaverse Object's Inspect view, clicking an attribute's value now opens its inspector, as clicking its name or source does; a linked value, such as an email address or a reference, still follows its link.
 - 🐛 Every Metaverse Object change now links to the Activity it was made in, including deletions, scheduled deletions, the initial administrator's creation at sign-in and data generation; before, only changes a synchronisation recorded per object did. Also in `activityId` over REST and PowerShell. (#2460)
 - 🐛 The initial administrator's creation at first sign-in is recorded as made by System, rather than by nobody. (#2460)

@@ -10,6 +10,7 @@ using JIM.Web.Models;
 using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
+using JIM.Connectors;
 using JIM.Data;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
@@ -690,6 +691,42 @@ public class ActivitiesControllerTests
         Assert.That(detail, Is.Not.Null);
         Assert.That(detail!.ExecutionStats, Is.Not.Null);
         Assert.That(detail.ExecutionStats!.TotalObjectChangeCount, Is.EqualTo(100));
+    }
+
+    [Test]
+    public async Task GetActivityAsync_ImportWithWatermarks_DescribesThemThroughItsConnectorAsync()
+    {
+        // Read parity with the portal, which says in words what range a Delta Import read rather than printing the
+        // Connector's persisted data.
+        var activityId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId)).ReturnsAsync(new Activity
+        {
+            Id = activityId,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            ConnectedSystemId = 7,
+            ConnectedSystemRunType = ConnectedSystemRunType.DeltaImport,
+            ImportWatermarkFrom = "{\"changeSequence\":8}",
+            ImportWatermarkTo = "{\"changeSequence\":10}"
+        });
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetConnectedSystemCoreAsync(7, It.IsAny<bool>())).ReturnsAsync(new ConnectedSystem
+        {
+            Id = 7,
+            Name = "SCIM clients",
+            ConnectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.ScimServiceProviderConnectorName }
+        });
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var result = await _controller.GetActivityAsync(activityId) as OkObjectResult;
+        var detail = result?.Value as ActivityDetailDto;
+
+        Assert.That(detail?.ImportReadRange, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail!.ImportReadRange!.From?.Kind, Is.EqualTo("change sequence"));
+            Assert.That(detail!.ImportReadRange!.From?.Points.Single().Number, Is.EqualTo(8));
+            Assert.That(detail!.ImportReadRange!.To?.Points.Single().Number, Is.EqualTo(10));
+        }
     }
 
     #endregion

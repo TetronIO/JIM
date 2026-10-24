@@ -43,6 +43,10 @@ The [interactive API reference](../../api/reference/) documents the full schema.
 
 A Delta Import from a directory first checks that it can read where the directory records its changes; [Delta Import change source checks](../connectors/jim-ldap-connector-delta-import.md#delta-import-change-source-checks) says how each outcome ends the run.
 
+### Import watermarks
+
+An import's detail page says, in its Connector's terms, what range a Delta Import read, or where a Full Import left the next Delta Import to start; [Import Watermarks](import-watermarks.md) lists how each Connector's watermark reads.
+
 ### Run Profile Safeguards (export limits)
 
 Every Export activity carries three withheld counters: `exportCreatesWithheld`, `exportUpdatesWithheld` and `exportDeletesWithheld`. Each is `0` when its Run Profile has no limit for that change type, or the pending count did not exceed it; otherwise it is every Pending Export of that type left untouched (still Pending), because a run that would exceed a limit attempts none of that change type at all. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.

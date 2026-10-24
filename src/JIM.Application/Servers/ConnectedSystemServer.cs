@@ -3857,6 +3857,32 @@ public partial class ConnectedSystemServer
             : null;
     }
 
+    /// <summary>
+    /// An import Activity's watermarks as its Connector describes them: where the import started reading changes after,
+    /// and the point it reached. The recorded values are the Connected System's persisted connector data, in whatever
+    /// form its Connector keeps it, so only that Connector can say what they mean.
+    /// <para>
+    /// Null when the Activity recorded no watermark, its Connected System has since been deleted, or its Connector
+    /// does not implement <see cref="IConnectorImportWatermarkDescription"/>; the raw values are all there is then.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<ImportReadRange?> GetImportReadRangeAsync(Activity activity)
+    {
+        if ((activity.ImportWatermarkFrom == null && activity.ImportWatermarkTo == null) || !activity.ConnectedSystemId.HasValue)
+            return null;
+
+        var connectedSystem = await GetConnectedSystemCoreAsync(activity.ConnectedSystemId.Value);
+        if (connectedSystem == null || CreateConnector(connectedSystem) is not IConnectorImportWatermarkDescription describer)
+            return null;
+
+        return new ImportReadRange
+        {
+            From = describer.DescribeImportWatermark(activity.ImportWatermarkFrom, Log.Logger),
+            To = describer.DescribeImportWatermark(activity.ImportWatermarkTo, Log.Logger)
+        };
+    }
+
     #endregion
 
     #region Connected System Directory Servers
