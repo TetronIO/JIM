@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.History;
@@ -112,6 +113,11 @@ public class MetaverseObjectChangeSearchItem
     public bool MetaverseObjectDeleted { get; set; }
 
     /// <summary>
+    /// When the Metaverse Object was deleted. Empty unless it has since been deleted.
+    /// </summary>
+    public DateTime? MetaverseObjectDeletedAt { get; set; }
+
+    /// <summary>
     /// The Metaverse Object's display name, or as it was when it was deleted. Empty when it has none.
     /// </summary>
     public string? MetaverseObjectDisplayName { get; set; }
@@ -137,13 +143,20 @@ public class MetaverseObjectChangeSearchItem
     public string? InitiatedByName { get; set; }
 
     /// <summary>
+    /// What within JIM made the change: a Synchronisation Rule, a User, Example Data or System, for example.
+    /// </summary>
+    public MetaverseObjectChangeInitiatorType ChangeInitiatorType { get; set; }
+
+    /// <summary>
     /// The Synchronisation Rule that made the change, as it was named at the time. Empty for a change not made by a
     /// synchronisation.
     /// </summary>
     public string? SyncRuleName { get; set; }
 
     /// <summary>
-    /// The Activity the change was made in. Empty for a change not made by a synchronisation.
+    /// The Activity the change was made in, such as a synchronisation, a scheduled deletion or a sign-in. Empty when
+    /// history retention has since removed the Activity, or for a change recorded before Activities were linked to
+    /// changes.
     /// </summary>
     public Guid? ActivityId { get; set; }
 
@@ -162,13 +175,15 @@ public class MetaverseObjectChangeSearchItem
         ChangeType = result.Change.ChangeType,
         MetaverseObjectId = result.MetaverseObjectId,
         MetaverseObjectDeleted = result.MetaverseObjectDeleted,
+        MetaverseObjectDeletedAt = result.MetaverseObjectDeletedAt,
         MetaverseObjectDisplayName = result.MetaverseObjectDisplayName,
         MetaverseObjectTypeId = result.MetaverseObjectTypeId,
         MetaverseObjectTypeName = result.MetaverseObjectTypeName,
         InitiatedByType = result.Change.InitiatedByType,
         InitiatedByName = result.Change.InitiatedByName,
+        ChangeInitiatorType = result.Change.ChangeInitiatorType,
         SyncRuleName = result.Change.SyncRuleName,
-        ActivityId = result.ActivityId,
+        ActivityId = result.Change.ActivityId,
         AttributeChanges = result.Change.AttributeChanges
             .Select(ac => new MetaverseObjectChangeSearchAttributeItem
             {

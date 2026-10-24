@@ -37,12 +37,14 @@ public partial class MetaverseServer
     /// <param name="attribute">The generated attribute being revised.</param>
     /// <param name="revision">The revision: the assignment as revised, the previous value, and the revision-pending record.</param>
     /// <param name="recordChange">Whether Metaverse Object change tracking is on, read once by the caller.</param>
+    /// <param name="activityId">The export run's Activity, which the change record links to.</param>
     public Task<GeneratedValueRevisionResult> ReviseGeneratedValueAsync(
         ISyncRepository repository,
         MetaverseObject metaverseObject,
         MetaverseAttribute attribute,
         GeneratedValueRevision revision,
-        bool recordChange)
+        bool recordChange,
+        Guid? activityId = null)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(metaverseObject);
@@ -82,7 +84,8 @@ public partial class MetaverseServer
                 ChangeTime = DateTime.UtcNow,
                 InitiatedByType = ActivityInitiatorType.System,
                 InitiatedByName = CollisionRemediationInitiatorName,
-                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.System
+                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.System,
+                ActivityId = activityId
             };
             change.AddAttributeValueChange(previous, ValueChangeType.Remove);
             change.AddAttributeValueChange(revised, ValueChangeType.Add);

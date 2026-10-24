@@ -295,7 +295,8 @@ public class SyncExportTaskProcessor
                         await PersistBatchRpeisAsync(batchItems, _connectedSystem.Id);
                     },
                     uniqueValueReservations: _uniqueValueReservations,
-                    containersCreated: RecordContainersCreated);
+                    containersCreated: RecordContainersCreated,
+                    activityId: _activity.Id);
             }
 
             // The Connector has nothing left to do, so whichever step it last declared stops being

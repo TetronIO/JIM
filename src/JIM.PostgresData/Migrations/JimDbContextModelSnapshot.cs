@@ -954,6 +954,9 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ActivityId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ActivityRunProfileExecutionItemId")
                         .HasColumnType("uuid");
 
@@ -994,6 +997,8 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ActivityId");
 
                     b.HasIndex("ActivityRunProfileExecutionItemId")
                         .IsUnique();
@@ -5588,6 +5593,11 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectChange", b =>
                 {
+                    b.HasOne("JIM.Models.Activities.Activity", null)
+                        .WithMany()
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("JIM.Models.Activities.ActivityRunProfileExecutionItem", "ActivityRunProfileExecutionItem")
                         .WithOne("MetaverseObjectChange")
                         .HasForeignKey("JIM.Models.Core.MetaverseObjectChange", "ActivityRunProfileExecutionItemId")

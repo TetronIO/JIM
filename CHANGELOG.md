@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Select a change on the Object Changes page to see it in full in a panel beside the list: every attribute it changed, with old and new values, who made it and its Activity. Selecting the object itself still opens it. (#2460)
 - ✨ Sign people in by a Guid Metaverse Attribute such as `Object GUID`: set `JIM_SSO_MV_ATTRIBUTE=Object GUID`, and AD FS administrators sign in as the objects Active Directory synchronisation created. The claim may be GUID text or AD FS's base64 `objectGUID`. (#2438)
 - ✨ Directory servers discovered over REST or `Get-JIMConnectedSystemDirectoryServer` now name the setting they fill, by id and name, so a script can discover a domain controller and set it as Preferred Domain Controller in one step. (#2456)
 - ✨ Find changes across every Metaverse Object by how their attributes changed, such as everyone disabled this month: the new Object Changes page filters by time, Metaverse Object Type, name and attribute value. Also via REST and `Search-JIMMetaverseObjectChange`. (#1901)
@@ -91,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 On the Object Changes page, a deleted Metaverse Object is shown dimmed with a bin icon rather than marked "(deleted)", and a deletion lists the object's **Final values** rather than showing each value as cleared. REST and `Search-JIMMetaverseObjectChange` add `metaverseObjectDeletedAt` and `changeInitiatorType`. (#2460)
 - 🔄 The LDAP Connector discovers INTEGER attributes on OpenLDAP, 389 Directory Server and other non-Active Directory directories, such as `uidNumber` and `gidNumber`, as Long Number rather than Number, so values beyond 2,147,483,647 import. Map them to Long Number Metaverse Attributes. Active Directory and Samba AD are unchanged. (#2154)
 - 🔄 JIM never gives up on a Pending Export: one the Connected System refuses, or whose value an import never confirms, is attempted again at every export run, with no waiting in between, and reported on every run until the cause is fixed. Lists show **Failing Since** and **Failing only**, the Connected System page counts **Failing Exports**, and REST and `Get-JIMPendingExport -Failing` filter them. (#2119)
 - 🔄 A Delta Import from Keycloak's SCIM API now reads every resource and says why on the Activity, whatever Change Detection is set to: Keycloak leaves a resource's last-modified date alone for most changes, so a filtered import missed them. (#2094)
@@ -146,6 +148,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Every Metaverse Object change now links to the Activity it was made in, including deletions, scheduled deletions, the initial administrator's creation at sign-in and data generation; before, only changes a synchronisation recorded per object did. Also in `activityId` over REST and PowerShell. (#2460)
+- 🐛 The initial administrator's creation at first sign-in is recorded as made by System, rather than by nobody. (#2460)
 - 🐛 History retention no longer stops removing Activities when a Metaverse Object change recorded in one outlives it. The cleanup failed on the same batch every run, so Activities stopped expiring. (#2460)
 - 🐛 When your identity provider changes its signing key without notice, the first API request and sign-in using the new key now succeed. They failed before, and could keep failing for up to 5 minutes. (#2442)
 - 🐛 **Max Export Parallelism** applies to every export again, not only to those waiting on references: JIM sends that many batches at once, or the Connector's recommendation when it is empty, keeping one connection per batch stream for the whole run, so large provisioning runs finish sooner. (#1820)

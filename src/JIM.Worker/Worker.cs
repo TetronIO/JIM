@@ -309,7 +309,8 @@ public class Worker : BackgroundService
                                                 batchSize,
                                                 dataGenTemplateServiceTask.InitiatedByType,
                                                 dataGenTemplateServiceTask.InitiatedById,
-                                                dataGenTemplateServiceTask.InitiatedByName);
+                                                dataGenTemplateServiceTask.InitiatedByName,
+                                                newWorkerTask.Activity.Id);
                                             newWorkerTask.Activity.TotalCreated = objectsCreated;
                                             // Clear the transient progress message ("Persisting to database... batch X/Y")
                                             // so the completed Activity does not retain a stale in-progress status line.
@@ -1061,7 +1062,8 @@ public class Worker : BackgroundService
                         mvo,
                         mvo.DeletionInitiatedByType,
                         mvo.DeletionInitiatedById,
-                        mvo.DeletionInitiatedByName);
+                        mvo.DeletionInitiatedByName,
+                        activityId: activity.Id);
                     deletedMvoIds.Add(mvo.Id);
 
                     var deletionItem = new ActivityRunProfileExecutionItem

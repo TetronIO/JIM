@@ -425,6 +425,10 @@ public class ExampleDataServer
     /// <param name="progressCallback">Optional callback for reporting progress. Parameters are (totalObjects, objectsProcessed, message).</param>
     /// <param name="progressUpdateInterval">How often to report progress. If null, progress is only reported after each object type completes.</param>
     /// <param name="batchSize">Batch size for database persistence. Smaller batches reduce memory pressure.</param>
+    /// <param name="initiatedByType">The type of principal that started the generation.</param>
+    /// <param name="initiatedById">The unique identifier of the principal that started the generation.</param>
+    /// <param name="initiatedByName">The display name of the principal that started the generation.</param>
+    /// <param name="activityId">The Activity the generation runs in, which each Created change record links to.</param>
     /// <returns>The number of objects created.</returns>
     public async Task<int> ExecuteTemplateAsync(
         int templateId,
@@ -434,7 +438,8 @@ public class ExampleDataServer
         int batchSize = 500,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
-        string? initiatedByName = null)
+        string? initiatedByName = null,
+        Guid? activityId = null)
     {
         // get the entire template
         // enumerate the object types
@@ -740,7 +745,8 @@ public class ExampleDataServer
                     initiatedById,
                     initiatedByName,
                     ObjectChangeType.Created,
-                    MetaverseObjectChangeInitiatorType.ExampleData);
+                    MetaverseObjectChangeInitiatorType.ExampleData,
+                    activityId);
 
                 changeHistoryIndex++;
                 if (changeHistoryReportStopwatch.Elapsed >= reportInterval)

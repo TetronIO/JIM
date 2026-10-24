@@ -55,11 +55,13 @@ A search can combine up to ten conditions.
 
 Each row is one change to one Metaverse Object, newest first:
 
-- **Metaverse Object**: the object, linked to its page. An object since deleted is marked **(deleted)** and named as it was when it was deleted; its full history is on the [Deleted Objects](deleted-objects.md) page.
+- **Metaverse Object**: the object, linked to its page. An object since deleted is shown dimmed, with a dashed outline and a bin icon, and is named as it was when it was deleted; hover over it to see when. It has no page to open; its full history is on the [Deleted Objects](deleted-objects.md) page.
 - **Change**: what kind of change it was, such as Attribute Flow, Created or Deleted.
-- **Attributes**: every attribute the change touched, with the attributes your conditions named first. A single-valued attribute shows its old value struck through and its new value; a multi-valued one shows values added and removed.
-- **Made by**: the Synchronisation Rule, or the user or API key, that made the change.
-- **Activity**: a link to the [Activity](activities.md) the change was made in, for changes made by a synchronisation.
+- **Attributes**: the attributes the change touched, with the attributes your conditions named first. A single-valued attribute shows its old value struck through and its new value; a multi-valued one shows values added and removed. A deletion is labelled **Final values** and shows the values the object held when it was deleted.
+- **Made by**: the Synchronisation Rule, or the user or API key, that made the change. A change JIM made itself, such as creating the initial administrator at first sign-in, shows **System**.
+- **Activity**: a link to the [Activity](activities.md) the change was made in: a synchronisation, a scheduled deletion, a sign-in or data generation. A change has no link once history retention has removed its Activity.
+
+Select a row to open the change in a panel beside the list: every attribute it changed, with old and new values in full, who made it and a link to its Activity. For an object that still exists, **Open Metaverse Object** goes to the object. Selecting another row shows that change instead; close the panel with its close button or Esc.
 
 The filters are kept in the page's address, so a search can be bookmarked or shared.
 

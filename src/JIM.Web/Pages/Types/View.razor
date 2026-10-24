@@ -1120,7 +1120,7 @@
             var (items, totalCount) = await jim.Metaverse.GetMvoChangeHistoryAsync(state.ObjectId, state.ChangeHistoryNextPage, ChangeHistoryPageSize);
             state.ChangeHistoryTotal = totalCount;
             var typePluralName = MetaverseObjectType?.PluralName;
-            state.ChangeHistoryRows.AddRange(items.Select(dto => MapDtoToChangeGroup(dto, state.ObjectId, typePluralName)));
+            state.ChangeHistoryRows.AddRange(items.Select(dto => MvoChangeGroupMapper.Map(dto, state.ObjectId, typePluralName)));
             state.ChangeHistoryNextPage++;
         }
         finally
@@ -1130,77 +1130,8 @@
         }
     }
 
-    private static ChangeHistoryTimeline.ChangeGroup MapDtoToChangeGroup(MvoChangeHistoryDto dto, Guid metaverseObjectId, string? typePluralName)
-    {
-        return new ChangeHistoryTimeline.ChangeGroup
-        {
-            ChangeType = dto.ChangeType,
-            ChangeTime = dto.ChangeTime,
-            ChangeInitiatorType = dto.InitiatedByType.ToString(),
-            ChangeInitiatorName = dto.InitiatedByName,
-            ChangeInitiatorId = dto.InitiatedById,
-            ChangeMechanismType = MapDtoToMechanismType(dto),
-            RunProfileName = dto.RunProfileName,
-            ConnectedSystemId = dto.ConnectedSystemId,
-            ConnectedSystemName = dto.ConnectedSystemName,
-            SyncRuleId = dto.SyncRuleId,
-            SyncRuleName = dto.SyncRuleName,
-            ActivityRunProfileExecutionItemId = dto.ActivityRunProfileExecutionItemId,
-            CsoId = dto.CsoId,
-            CsoExternalId = dto.CsoExternalId,
-            AttributeChanges = dto.AttributeChanges
-                .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-                {
-                    AttributeName = ac.AttributeName,
-                    ChangeType = vc.ValueChangeType,
-                    Value = vc.ReferenceValue == null ? vc.ToDisplayString() : null,
-                    ReferenceValue = vc.ReferenceValue != null
-                        ? new ChangeHistoryTimeline.ReferenceValueInfo
-                        {
-                            TypeName = vc.ReferenceValue.TypeName,
-                            DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
-                            SecondaryId = null,
-                            Href = Utilities.GetMetaverseObjectHref(vc.ReferenceValue.Id, vc.ReferenceValue.TypePluralName)
-                        }
-                        : null,
-                    IsMultiValued = ac.AttributePlurality == AttributePlurality.MultiValued,
-                    AttributeType = ac.AttributeType,
-                    // Origin and the Inspect link (#399): only when the DTO carries a Metaverse attribute id
-                    // (this page) and a resolvable type plural name. Neither is available before the type has
-                    // loaded, in which case the change still renders, just without the Source column's chip/link.
-                    Origin = ProvenanceLogic.ResolveChangeValueOrigin(
-                        vc.ContributedBySyncRuleId, vc.ContributedBySyncRuleName,
-                        vc.ContributedBySystemId, vc.ContributedBySystemName, vc.IsGeneratedValue),
-                    AttributeInspectHref = ac.AttributeId.HasValue && !string.IsNullOrEmpty(typePluralName)
-                        ? Utilities.GetMetaverseObjectInspectHref(metaverseObjectId, typePluralName, ac.AttributeId.Value)
-                        : null
-                }))
-                .ToList()
-        };
-    }
-
     private async Task CopyToClipboardAsync(string text)
     {
         await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
-    }
-
-    private static string MapDtoToMechanismType(MvoChangeHistoryDto dto)
-    {
-        if (dto.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.ExampleData
-            or MetaverseObjectChangeInitiatorType.User
-            or MetaverseObjectChangeInitiatorType.WorkflowInstance
-            or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation
-            or MetaverseObjectChangeInitiatorType.System)
-        {
-            return dto.ChangeInitiatorType.ToString();
-        }
-
-        return dto.ConnectedSystemRunType switch
-        {
-            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
-            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
-            ConnectedSystemRunType.Export => "Export",
-            _ => "SynchronisationRule"
-        };
     }
 }

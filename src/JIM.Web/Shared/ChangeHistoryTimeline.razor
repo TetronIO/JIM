@@ -463,80 +463,7 @@ else
                                                         <MudText Typo="Typo.button">Value</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
-                                                        @{
-                                                            // Captured here, and the reference values captured inside
-                                                            // their own guards below, rather than dereferenced through
-                                                            // the guards in markup: a chained dereference under a guard
-                                                            // is what CodeQL reads as a possible null.
-                                                            var change = context.Item;
-                                                        }
-                                                        @if (change.IsUpdate)
-                                                        {
-                                                            @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
-                                                            {
-                                                                @* SVA reference update: old → new, with the old value de-emphasised. *@
-                                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                    @if (change.OldReferenceValue != null)
-                                                                    {
-                                                                        var oldReference = change.OldReferenceValue;
-                                                                        <MudLink Href="@oldReference.Href" Class="mud-text-secondary">@oldReference.DisplayName</MudLink>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <MudText Class="mud-text-secondary">(none)</MudText>
-                                                                    }
-                                                                    <MudText Class="mud-text-secondary">→</MudText>
-                                                                    @if (change.NewReferenceValue != null)
-                                                                    {
-                                                                        var newReference = change.NewReferenceValue;
-                                                                        <MudLink Href="@newReference.Href">@newReference.DisplayName</MudLink>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <MudText Class="mud-text-secondary">(none)</MudText>
-                                                                    }
-                                                                </MudStack>
-                                                            }
-                                                            else
-                                                            {
-                                                                @* Scalar update: old value de-emphasised, new value plain. *@
-                                                                @* The values take the app's shared code face; the arrow between them does
-                                                                   not, being punctuation rather than part of either value. *@
-                                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                    <MudText Class="mud-text-secondary jim-text-code">@change.OldValue</MudText>
-                                                                    <MudText Class="mud-text-secondary">→</MudText>
-                                                                    <MudText Class="jim-text-code">@change.NewValue</MudText>
-                                                                </MudStack>
-                                                            }
-                                                        }
-                                                        else if (change.ReferenceValue != null)
-                                                        {
-                                                            var reference = change.ReferenceValue;
-                                                            @* MVA reference Add/Remove. *@
-                                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                <MudChip T="string" Color="Color.Default">@reference.TypeName</MudChip>
-                                                                <MudLink Href="@reference.Href">@reference.DisplayName</MudLink>
-                                                                @if (!string.IsNullOrEmpty(reference.SecondaryId))
-                                                                {
-                                                                    <MudText Class="mud-text-secondary">(@reference.SecondaryId)</MudText>
-                                                                }
-                                                            </MudStack>
-                                                        }
-                                                        else
-                                                        {
-                                                            @* Simple scalar Add/Remove: de-emphasised where the value went away. The code
-                                                               face goes on TextValueDisplay's Class, which applies it to a real value only,
-                                                               so the empty and whitespace affordances keep the ordinary face: neither is a
-                                                               value, and setting them in code type would read as one. *@
-                                                            @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
-                                                            {
-                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@change.DisplayValue" Class="jim-text-code" /></MudText>
-                                                            }
-                                                            else
-                                                            {
-                                                                <MudText><TextValueDisplay Value="@change.DisplayValue" Class="jim-text-code" /></MudText>
-                                                            }
-                                                        }
+                                                        <ChangeValueCell Change="@context.Item" />
                                                     </CellTemplate>
                                                 </TemplateColumn>
                                             </Columns>
@@ -905,7 +832,7 @@ else
     /// <summary>
     /// Converts raw AttributeChanges into display items, collapsing SVA Add+Remove pairs into Updates.
     /// </summary>
-    private List<AttributeChangeDisplay> GetDisplayChanges(ChangeGroup changeGroup)
+    public static List<AttributeChangeDisplay> GetDisplayChanges(ChangeGroup changeGroup)
     {
         var result = new List<AttributeChangeDisplay>();
 

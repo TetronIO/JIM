@@ -995,6 +995,28 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     padding-left: 10px;
 }
 
+/* An object that no longer exists (ObjectChip's Deleted): no fill, a dashed outline, a low-lighted name and glyph,
+   and a bin icon after the name. The outline takes the place of the fill so the chip keeps its size, and nothing
+   here responds to hover, because a deleted object's chip is never a link. */
+.jim-object-chip.deleted {
+    background: transparent;
+    outline: 1px dashed color-mix(in srgb, var(--mud-palette-text-primary) 28%, transparent);
+    outline-offset: -1px;
+    font-weight: 400;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-object-chip.deleted .jim-object-chip-glyph {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 38%, transparent);
+    color: var(--mud-palette-background);
+}
+
+.jim-object-chip-deleted-icon.mud-icon-root {
+    font-size: 1rem;
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+}
+
 /* Linked chips lift on hover by strengthening the background and glyph, matching JIM's MudChip convention
    (background/avatar colour change) rather than a border outline. jim-chip-link goes on the link wrapper
    rather than the chip because the link is the hover target. */
@@ -6785,4 +6807,62 @@ html[lang] .mud-chip.jim-unresolved-fix-count {
 .jim-unresolved-fix-more {
     grid-column: 1 / -1;
     padding: 8px 0 4px;
+}
+
+/* ─── Object Changes (ObjectChangeList.razor, ObjectChangeDetail.razor) ─── */
+
+/* The row whose change the side panel shows: the Inspect table's selected treatment, a light primary tint with a
+   primary rail on the leading edge. */
+html[lang] .mud-table tbody tr.jim-row-selected > td {
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 8%, transparent);
+}
+
+html[lang] .mud-table tbody tr.jim-row-selected > td:first-child {
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+}
+
+/* Labels a deletion's Attributes cell, so the object's last values do not read as values being cleared. */
+.jim-final-values-label {
+    flex: none;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 4px;
+    padding: 0 6px;
+    margin-right: 8px;
+}
+
+/* The side panel sits below the app bar, like the navigation drawer, and scrolls its own content. */
+.jim-object-change-drawer.mud-drawer {
+    top: var(--mud-appbar-height);
+    height: calc(100% - var(--mud-appbar-height));
+}
+
+.jim-object-change-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px 20px 24px;
+    height: 100%;
+    overflow-y: auto;
+    outline: none;
+}
+
+.jim-object-change-detail-fields {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 16px;
+    margin: 0;
+}
+
+.jim-object-change-detail-fields dt {
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-object-change-detail-fields dd {
+    margin: 0;
+    min-width: 0;
 }

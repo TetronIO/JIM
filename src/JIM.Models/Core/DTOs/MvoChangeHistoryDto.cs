@@ -64,6 +64,13 @@ public class MvoChangeHistoryDto
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
     /// <summary>
+    /// The Activity the change was made in, such as a synchronisation, a scheduled deletion or a sign-in. Null when
+    /// the Activity has since been removed by history retention, or for a change recorded before Activities were
+    /// linked to changes.
+    /// </summary>
+    public Guid? ActivityId { get; set; }
+
+    /// <summary>
     /// The unique identifier of the Connected System Object whose synchronisation made the change, when one did.
     /// </summary>
     public Guid? CsoId { get; set; }

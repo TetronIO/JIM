@@ -342,8 +342,7 @@ public partial class ConnectedSystemServer
                     pendingImmediateDeletions.Select(d => d.Mvo).ToList(), exportEvaluationCache);
                 result.PendingExportsStaged += deleteExports.Count;
 
-                await syncServer.DeleteMetaverseObjectsAsync(
-                    pendingImmediateDeletions, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName);
+                await syncServer.DeleteMetaverseObjectsAsync(pendingImmediateDeletions, activity);
                 result.MetaverseObjectsDeleted += pendingImmediateDeletions.Count;
 
                 var referenceRecallResult = await syncServer.StageReferenceRecallExportsAsync(

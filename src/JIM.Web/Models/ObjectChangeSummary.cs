@@ -10,14 +10,16 @@ namespace JIM.Web.Models;
 
 /// <summary>
 /// One attribute a Metaverse Object change touched, reduced to what an Object Changes row shows: the values removed
-/// and added, as text.
+/// and added, as text. For a deletion, <see cref="FinalValues"/> is set and <see cref="RemovedValues"/> holds the
+/// values the object had when it was deleted: the record keeps them as removals, but nothing was cleared.
 /// </summary>
 public sealed record ObjectChangeSummary(
     string AttributeName,
     bool SingleValued,
     bool Matched,
     IReadOnlyList<string> RemovedValues,
-    IReadOnlyList<string> AddedValues)
+    IReadOnlyList<string> AddedValues,
+    bool FinalValues = false)
 {
     /// <summary>
     /// Summarises each attribute a search result changed: the attributes the search's conditions named first, so the
@@ -30,7 +32,8 @@ public sealed record ObjectChangeSummary(
                 ac.AttributePlurality == AttributePlurality.SingleValued,
                 ac.AttributeId.HasValue && result.MatchedAttributeIds.Contains(ac.AttributeId.Value),
                 ValueTexts(ac, ValueChangeType.Remove),
-                ValueTexts(ac, ValueChangeType.Add)))
+                ValueTexts(ac, ValueChangeType.Add),
+                result.Change.ChangeType == ObjectChangeType.Deleted))
             .OrderByDescending(s => s.Matched)
             .ThenBy(s => s.AttributeName, StringComparer.OrdinalIgnoreCase)
             .ToList();
