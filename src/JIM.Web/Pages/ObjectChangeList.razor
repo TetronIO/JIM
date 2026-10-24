@@ -142,6 +142,9 @@
                     @* A deletion records the object's last values; label them as such, so they do not read as cleared. *@
                     <span class="jim-final-values-label">Final values</span>
                 }
+                @* The list sits in the row's shrinking slot: it is a one-line list of its own, and nested as a plain flex
+                   child it would hold its width and run into the next column instead of clipping. *@
+                <div class="jim-one-line-list-value">
                 <OverflowList TItem="ObjectChangeSummary" Items="@summaries" Title="@(context.Item.Change.ChangeType == ObjectChangeType.Deleted ? "Final values" : "Attribute changes")">
                     <ItemTemplate Context="summary">
                         <span class="jim-one-line">
@@ -182,18 +185,19 @@
                     <EmptyContent><EmptyValue /></EmptyContent>
                 </OverflowList>
                 </div>
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Made by" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
-                @if (ObjectChangeMadeBy.Describe(context.Item.Change) is { } madeBy)
-                {
-                    <OneLineText Text="@madeBy" />
-                }
-                else
-                {
-                    <EmptyValue />
-                }
+                @* Capped so a long Connected System and rule pair clips its names rather than squeezing the Attributes
+                   column, which the row exists to show. *@
+                <div class="jim-column-cap" style="--jim-column-cap: 18rem;">
+                <InitiatorChip InitiatedByType="@context.Item.Change.InitiatedByType" InitiatedById="@context.Item.Change.InitiatedById"
+                               InitiatedByName="@context.Item.Change.InitiatedByName" ChangeInitiatorType="@context.Item.Change.ChangeInitiatorType"
+                               SyncRuleId="@context.Item.Change.SyncRuleId" SyncRuleName="@context.Item.Change.SyncRuleName"
+                               ConnectedSystemId="@context.Item.Change.ConnectedSystemId" ConnectedSystemName="@context.Item.Change.ConnectedSystemName" />
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Activity" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">

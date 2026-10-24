@@ -35,6 +35,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
 | `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
 | `<ObjectChip Kind="@k" TypeName="@t" Name="@n" Href="@url" />` | Any reference to a Connected System Object, Metaverse Object, Connected System, Synchronisation Rule, Pending Export, Deletion Record or Run Profile: the site's one object chip | "Object chips" below |
+| `<InitiatorChip InitiatedByType="@t" InitiatedById="@id" InitiatedByName="@n" ... />` | Who did something (an Activity's initiator, a change's Made by, a Created by / Last updated by): the chip for what it is in JIM. `<AuditPrincipalLink />` wraps it where a person must be looked up | "Who did something" below |
 | `<SystemRuleChip ConnectedSystemName="@cs" SyncRuleName="@sr" ConnectedSystemHref="@a" SyncRuleHref="@b" />` | A Connected System and the Synchronisation Rule something came through, as one pill (`[CS] system [SR] rule`), each half linking on its own. Prefer it to a CS chip and an SR chip side by side | `Shared/SystemRuleChip.razor` |
 | `<SourceDot Group="@g" ShowRule="@b" />` | Naming a source quietly where many rows name sources at once: a dot in the contribution bar's colour for it and its legend label. Colours come from `ValueOriginGrouping.ColourTokenFor`, never chosen at the call site | `Shared/SourceDot.razor` |
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
@@ -96,7 +97,7 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@syncRule.Name" Href="@url" />
 ```
 
-- **A glyph names which of the seven kinds it is.** `ConnectedSystemObject` and `MetaverseObject` wear a three-letter pill (`CSO`/`MVO`), so neither is mistaken for the two-letter `Connected System` glyph (`CS`); `SynchronisationRule`/`PendingExport`/`DeletionRecord`/`RunProfile` wear two-letter circles (`SR`/`PE`/`DR`/`RP`). The glyph's own `title` spells out the full name and it is `aria-hidden`, since nothing else on the chip explains the abbreviation. `ShowGlyph="false"` drops it where something beside the chip already says what kind of object it names (a Lineage card sitting in a column whose head already carries the glyph).
+- **A glyph names which kind it is.** `ConnectedSystemObject` and `MetaverseObject` wear a three-letter pill (`CSO`/`MVO`), so neither is mistaken for the two-letter `Connected System` glyph (`CS`); `SynchronisationRule`/`PendingExport`/`DeletionRecord`/`RunProfile` wear two-letter circles (`SR`/`PE`/`DR`/`RP`). The three initiator kinds `<InitiatorChip />` uses, `ApiKey`/`Schedule`/`System`, wear three-letter pills (`KEY`/`SCH`/`JIM`) in their own colours (success, tertiary, and a neutral blend for System). The glyph's own `title` spells out the full name and it is `aria-hidden`, since nothing else on the chip explains the abbreviation. `ShowGlyph="false"` drops it where something beside the chip already says what kind of object it names (a Lineage card sitting in a column whose head already carries the glyph).
 - **The one naming rule: `Name` is the display name, or the external id where there is no name, never both.** Build it from `ObjectDescription.ChipName(displayName, externalId)` for a Connected System Object or Metaverse Object. The external id, where distinct from the name, belongs in the tooltip instead: `ObjectDescription.ForConnectedSystemObjectChipTooltip(typeName, displayName, externalId, connectedSystemName)` and `ForMetaverseObjectChipTooltip(typeName, displayName)` build it. When there is no display name and no external id (a provisioned object before its first export), pass no `Name`; the chip shows the type alone and the call site links the object beside it, as `ActivityRunProfileExecutionItemDetail.razor`'s Execution Summary panel does.
 - **`Href` makes it a link, and only a linked chip gets the hover treatment.** `jim-chip-link` goes on the link wrapper rather than the chip because the link is the hover target; the component owns that, so no call site places the class.
 - **A chip with no `Name` renders the type without a trailing colon.** The colon joins the type to the identifier, so a record with no external ID yet (nothing exported) would otherwise trail punctuation pointing at nothing.
@@ -106,6 +107,24 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 - **The chip's CSS is global (`.jim-object-chip*` in `site.css`), not scoped to the causality panel.** It used to be two competing stylesheets (a `.causality-panel`-scoped `.chip`/`.glyph` set, and per-call-site `jim-mv-chip-prefix`/`jim-cs-chip-prefix` accents); both are gone. Every token is derived from the active theme's MudBlazor palette (`--mud-palette-*`, `--jim-chip-text-*`), so the chip looks identical inside and outside the panel, in every theme.
 
 **Why this is a component.** The markup was duplicated by hand across `ActivityRunProfileExecutionItemDetail`, `PendingExportDetail` and the causality panel's own event cards, and that duplication is exactly what let defects live: the hover rule was written for the MV badge only, so every CS badge kept its resting colour when its chip filled, and the causality panel's own chip arrived at a better look than the rest of the portal and kept it to itself. See the rule's comment in `site.css` for the palette measurements behind the hover treatment.
+
+## Who did something
+
+**Who started an Activity, made a change, or created or last updated something is an `<InitiatorChip />`.** It renders the chip for what the initiator *is* in JIM, so the same thing reads the same wherever it appears:
+
+| Initiator | Chip |
+|-----------|------|
+| A Synchronisation Rule (pass `SyncRuleName`/`SyncRuleId`) | The `<SystemRuleChip />` pill when the Connected System is known, otherwise an `SR` `<ObjectChip />` |
+| A Schedule (pass `ScheduleName`) | `SCH`, linking to the Schedule Execution |
+| A person | `MVO`, linking to them: a person is a Metaverse Object |
+| An API key | `KEY`, linking to the key |
+| JIM itself (seeding, housekeeping, a sign-in) | `JIM`, named System, never a link |
+| An anonymous caller | Plain text: nothing in JIM, so no chip |
+
+- **A rule outranks the principal.** A synchronisation's change was made by its rule, whoever started the run, so a change carrying a Synchronisation Rule shows the rule.
+- **`ChangeInitiatorType` is the fallback** for a change recorded without its initiator: System still shows as System.
+- `KEY`, `SCH` and `JIM` are `ObjectChip` kinds (`ApiKey`, `Schedule`, `System`) and follow every object chip rule below; they exist for this component, so reach them through it rather than placing them by hand.
+- It replaced `ActivityInitiator`, an icon and a name, so an initiator no longer reads differently from the objects in the cells around it. The change history timeline's card header still draws its own initiator; migrate it rather than adding another.
 
 ## Synchronisation Rule identity strip
 

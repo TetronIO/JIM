@@ -884,7 +884,7 @@ public static class Helpers
     #region Initiator Icon Helpers
     /// <summary>
     /// Gets the MudBlazor icon for an activity initiator type: the one icon each kind of principal wears wherever it
-    /// appears (<see cref="Shared.ActivityInitiator"/>, change history). System has its own rather than the Schedule's
+    /// appears (<see cref="Shared.InitiatorChip"/>, change history). System has its own rather than the Schedule's
     /// clock, which reads as "scheduled" although System also covers seeding and housekeeping (#2066).
     /// </summary>
     public static string GetInitiatorIcon(ActivityInitiatorType initiatorType)

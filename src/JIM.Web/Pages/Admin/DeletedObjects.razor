@@ -266,10 +266,9 @@
                         @* Drawn as Initiated By is everywhere else (#2066); the row opens the deleted object, so a
                            click on the principal's link stays with the link. *@
                         <span @onclick:stopPropagation="true">
-                            <ActivityInitiator InitiatedByType="@context.Item.InitiatedByType"
+                            <InitiatorChip InitiatedByType="@context.Item.InitiatedByType"
                                                InitiatedById="@context.Item.InitiatedById"
-                                               InitiatedByName="@context.Item.InitiatedByName"
-                                               Dense="true" />
+                                               InitiatedByName="@context.Item.InitiatedByName" />
                         </span>
                     </CellTemplate>
                 </TemplateColumn>

@@ -29,14 +29,10 @@
         </dd>
         <dt>Made by</dt>
         <dd>
-            @if (ObjectChangeMadeBy.Describe(Result.Change) is { } madeBy)
-            {
-                @madeBy
-            }
-            else
-            {
-                <EmptyValue />
-            }
+            <InitiatorChip InitiatedByType="@Result.Change.InitiatedByType" InitiatedById="@Result.Change.InitiatedById"
+                           InitiatedByName="@Result.Change.InitiatedByName" ChangeInitiatorType="@Result.Change.ChangeInitiatorType"
+                           SyncRuleId="@Result.Change.SyncRuleId" SyncRuleName="@Result.Change.SyncRuleName"
+                           ConnectedSystemId="@Result.Change.ConnectedSystemId" ConnectedSystemName="@Result.Change.ConnectedSystemName" />
         </dd>
         <dt>Activity</dt>
         <dd>

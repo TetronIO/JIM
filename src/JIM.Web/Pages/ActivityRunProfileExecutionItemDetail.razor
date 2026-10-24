@@ -91,7 +91,7 @@
                     @if (_activity != null)
                     {
                         <MudText>
-                            <ActivityInitiator InitiatedByType="@_activity.InitiatedByType"
+                            <InitiatorChip InitiatedByType="@_activity.InitiatedByType"
                                                InitiatedById="@_activity.InitiatedById"
                                                InitiatedByName="@_activity.InitiatedByName"
                                                UserHref="@(_initiatorMetaverseObjectHeader != null ? Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader) : null)"

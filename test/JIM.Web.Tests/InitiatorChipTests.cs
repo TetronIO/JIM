@@ -4,6 +4,7 @@
 using System;
 using Bunit;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Web.Shared;
 using NUnit.Framework;
 
@@ -15,14 +16,14 @@ namespace JIM.Web.Tests;
 /// recorded as System under the name "Scheduler Service" and never named the Schedule.
 /// </summary>
 [TestFixture]
-public class ActivityInitiatorTests : JimComponentTestContext
+public class InitiatorChipTests : JimComponentTestContext
 {
     private static readonly Guid ExecutionId = Guid.NewGuid();
 
     [Test]
     public void Render_ProducedByASchedule_NamesTheScheduleAndLinksItsExecution()
     {
-        var cut = Render<ActivityInitiator>(p => p
+        var cut = Render<InitiatorChip>(p => p
             .Add(c => c.InitiatedByType, ActivityInitiatorType.System)
             .Add(c => c.InitiatedByName, "Scheduler Service")
             .Add(c => c.ScheduleName, "Nightly HR sync")
@@ -42,7 +43,7 @@ public class ActivityInitiatorTests : JimComponentTestContext
     public void Render_ScheduleNameWithoutItsExecution_NamesItWithoutALink()
     {
         // The execution can be pruned long before the Activity it produced.
-        var cut = Render<ActivityInitiator>(p => p
+        var cut = Render<InitiatorChip>(p => p
             .Add(c => c.InitiatedByType, ActivityInitiatorType.System)
             .Add(c => c.ScheduleName, "Nightly HR sync"));
 
@@ -56,7 +57,7 @@ public class ActivityInitiatorTests : JimComponentTestContext
     [Test]
     public void Render_SystemWithoutASchedule_IsSystem()
     {
-        var cut = Render<ActivityInitiator>(p => p.Add(c => c.InitiatedByType, ActivityInitiatorType.System));
+        var cut = Render<InitiatorChip>(p => p.Add(c => c.InitiatedByType, ActivityInitiatorType.System));
 
         using (Assert.EnterMultipleScope())
         {
@@ -69,7 +70,7 @@ public class ActivityInitiatorTests : JimComponentTestContext
     public void Render_ApiKey_LinksTheKey()
     {
         var keyId = Guid.NewGuid();
-        var cut = Render<ActivityInitiator>(p => p
+        var cut = Render<InitiatorChip>(p => p
             .Add(c => c.InitiatedByType, ActivityInitiatorType.ApiKey)
             .Add(c => c.InitiatedById, keyId)
             .Add(c => c.InitiatedByName, "Integration key"));
@@ -80,7 +81,7 @@ public class ActivityInitiatorTests : JimComponentTestContext
     [Test]
     public void Render_UserWithAnObjectLink_LinksThePerson()
     {
-        var cut = Render<ActivityInitiator>(p => p
+        var cut = Render<InitiatorChip>(p => p
             .Add(c => c.InitiatedByType, ActivityInitiatorType.User)
             .Add(c => c.InitiatedByName, "Jay")
             .Add(c => c.UserHref, "/t/people/v/abc"));
@@ -91,7 +92,7 @@ public class ActivityInitiatorTests : JimComponentTestContext
     [Test]
     public void Render_UserWithoutAnObjectLink_NamesThePerson()
     {
-        var cut = Render<ActivityInitiator>(p => p
+        var cut = Render<InitiatorChip>(p => p
             .Add(c => c.InitiatedByType, ActivityInitiatorType.User)
             .Add(c => c.InitiatedByName, "Jay"));
 
@@ -107,7 +108,7 @@ public class ActivityInitiatorTests : JimComponentTestContext
     {
         // A list row names the person by id without looking them up; the built-in User type is where a person lives.
         var personId = Guid.NewGuid();
-        var cut = Render<ActivityInitiator>(p => p
+        var cut = Render<InitiatorChip>(p => p
             .Add(c => c.InitiatedByType, ActivityInitiatorType.User)
             .Add(c => c.InitiatedById, personId)
             .Add(c => c.InitiatedByName, "Jay"));
@@ -120,7 +121,7 @@ public class ActivityInitiatorTests : JimComponentTestContext
     {
         // The caller looked the person up and found no Metaverse Object (deleted since, or a history row the #2066
         // repair could not attribute), so a link by id could only lead to a page that does not exist (#2151).
-        var cut = Render<ActivityInitiator>(p => p
+        var cut = Render<InitiatorChip>(p => p
             .Add(c => c.InitiatedByType, ActivityInitiatorType.User)
             .Add(c => c.InitiatedById, Guid.NewGuid())
             .Add(c => c.InitiatedByName, "Jay")
@@ -136,8 +137,92 @@ public class ActivityInitiatorTests : JimComponentTestContext
     [Test]
     public void Render_Anonymous_IsNeverALink()
     {
-        var cut = Render<ActivityInitiator>(p => p.Add(c => c.InitiatedByType, ActivityInitiatorType.Anonymous));
+        var cut = Render<InitiatorChip>(p => p.Add(c => c.InitiatedByType, ActivityInitiatorType.Anonymous));
 
         Assert.That(cut.FindAll("[data-testid=jim-initiator-anonymous] a"), Is.Empty);
+    }
+
+    // ─── The chip each kind of initiator wears (#2460 follow-up) ───
+
+    [TestCase(ActivityInitiatorType.System, ObjectChipKind.System)]
+    [TestCase(ActivityInitiatorType.ApiKey, ObjectChipKind.ApiKey)]
+    [TestCase(ActivityInitiatorType.User, ObjectChipKind.MetaverseObject)]
+    public void Render_Principal_WearsItsOwnChipKind(ActivityInitiatorType type, ObjectChipKind expected)
+    {
+        var cut = Render<InitiatorChip>(p => p
+            .Add(c => c.InitiatedByType, type)
+            .Add(c => c.InitiatedById, Guid.NewGuid())
+            .Add(c => c.InitiatedByName, "Someone"));
+
+        Assert.That(cut.FindComponent<ObjectChip>().Instance.Kind, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Render_Schedule_WearsTheScheduleChip()
+    {
+        var cut = Render<InitiatorChip>(p => p
+            .Add(c => c.InitiatedByType, ActivityInitiatorType.System)
+            .Add(c => c.ScheduleName, "Nightly HR sync"));
+
+        Assert.That(cut.FindComponent<ObjectChip>().Instance.Kind, Is.EqualTo(ObjectChipKind.Schedule));
+    }
+
+    [Test]
+    public void Render_System_IsNeverALink()
+    {
+        // System is not something in JIM with a page of its own.
+        var cut = Render<InitiatorChip>(p => p.Add(c => c.InitiatedByType, ActivityInitiatorType.System));
+
+        Assert.That(cut.FindAll("[data-testid=jim-initiator-system] a"), Is.Empty);
+    }
+
+    [Test]
+    public void Render_SynchronisationRuleWithItsConnectedSystem_IsTheSystemAndRulePill()
+    {
+        // A synchronisation's change was made by its rule, whoever started the run.
+        var cut = Render<InitiatorChip>(p => p
+            .Add(c => c.InitiatedByType, ActivityInitiatorType.ApiKey)
+            .Add(c => c.InitiatedByName, "Infrastructure Key")
+            .Add(c => c.SyncRuleId, 7)
+            .Add(c => c.SyncRuleName, "HR CSV Import Users")
+            .Add(c => c.ConnectedSystemId, 3)
+            .Add(c => c.ConnectedSystemName, "HR CSV"));
+
+        var pill = cut.FindComponent<SystemRuleChip>().Instance;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pill.SyncRuleName, Is.EqualTo("HR CSV Import Users"));
+            Assert.That(pill.ConnectedSystemName, Is.EqualTo("HR CSV"));
+            Assert.That(pill.SyncRuleHref, Is.EqualTo("/admin/sync-rules/7"));
+            Assert.That(pill.ConnectedSystemHref, Is.EqualTo("/admin/connected-systems/3"));
+            Assert.That(cut.FindAll("[data-testid=jim-initiator-api-key]"), Is.Empty, "the rule, not the run's initiator, made the change");
+        }
+    }
+
+    [Test]
+    public void Render_SynchronisationRuleWithoutItsConnectedSystem_IsTheRuleChip()
+    {
+        // A deletion records the rule's name but no execution item, so the Connected System is not known.
+        var cut = Render<InitiatorChip>(p => p
+            .Add(c => c.SyncRuleId, 7)
+            .Add(c => c.SyncRuleName, "HR CSV Import Users"));
+
+        var chip = cut.FindComponent<ObjectChip>().Instance;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.Kind, Is.EqualTo(ObjectChipKind.SynchronisationRule));
+            Assert.That(chip.Href, Is.EqualTo("/admin/sync-rules/7"));
+        }
+    }
+
+    [Test]
+    public void Render_NoInitiatorRecordedButSystemMadeIt_IsSystem()
+    {
+        // A change recorded without its initiator still says which mechanism made it.
+        var cut = Render<InitiatorChip>(p => p
+            .Add(c => c.InitiatedByType, ActivityInitiatorType.NotSet)
+            .Add(c => c.ChangeInitiatorType, MetaverseObjectChangeInitiatorType.System));
+
+        Assert.That(cut.FindAll("[data-testid=jim-initiator-system]"), Has.Count.EqualTo(1));
     }
 }

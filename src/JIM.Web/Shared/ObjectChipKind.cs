@@ -46,5 +46,21 @@ public enum ObjectChipKind
     /// <summary>
     /// A Run Profile, shown with a two-letter <c>RP</c> glyph.
     /// </summary>
-    RunProfile
+    RunProfile,
+
+    /// <summary>
+    /// An API key, as who did something, shown with a three-letter <c>KEY</c> glyph.
+    /// </summary>
+    ApiKey,
+
+    /// <summary>
+    /// A Schedule, as what started something, shown with a three-letter <c>SCH</c> glyph.
+    /// </summary>
+    Schedule,
+
+    /// <summary>
+    /// JIM itself, as who did something (seeding, housekeeping, a sign-in), shown with a three-letter <c>JIM</c> glyph.
+    /// Never a link: there is nothing to open.
+    /// </summary>
+    System
 }

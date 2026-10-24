@@ -113,7 +113,7 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText>
                 <MudText>
-                    <ActivityInitiator InitiatedByType="@_activity.InitiatedByType"
+                    <InitiatorChip InitiatedByType="@_activity.InitiatedByType"
                                        InitiatedById="@_activity.InitiatedById"
                                        InitiatedByName="@_activity.InitiatedByName"
                                        UserHref="@(_initiatorMetaverseObjectHeader != null ? Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader) : null)"
