@@ -5948,7 +5948,8 @@ public partial class ConnectedSystemServer
     /// (infinite-scroll) list views. Shares its query, filters and projection with
     /// <see cref="GetConnectedSystemObjectHeadersAsync"/>. Pass <paramref name="includeTotalCount"/> as false to
     /// skip counting the whole match set when the caller already knows the total; the returned total is then null
-    /// rather than zero.
+    /// rather than zero. Pass the caller's <paramref name="cancellationToken"/> so a window it no longer wants stops
+    /// in the database rather than running to completion for nobody.
     /// </summary>
     public async Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
         int connectedSystemId,
@@ -5961,7 +5962,8 @@ public partial class ConnectedSystemServer
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
         bool includeTotalCount = true,
-        bool? hasUnresolvedReferences = null)
+        bool? hasUnresolvedReferences = null,
+        CancellationToken cancellationToken = default)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeadersRange")
             .SetTag("connectedSystemId", connectedSystemId)
@@ -5973,7 +5975,7 @@ public partial class ConnectedSystemServer
             .SetTag("hasUnresolvedReferencesFilter", hasUnresolvedReferences != null);
         var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
             connectedSystemId, offset, count, searchQuery, sortBy, sortDescending, statusFilter,
-            objectTypeFilter, joinTypeFilter, includeTotalCount, hasUnresolvedReferences);
+            objectTypeFilter, joinTypeFilter, includeTotalCount, hasUnresolvedReferences, cancellationToken);
         ResolveConnectionStates(result.Results);
         return result;
     }

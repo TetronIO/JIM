@@ -1180,6 +1180,8 @@ public interface IConnectedSystemRepository
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
     /// <param name="hasUnresolvedReferences">Optional filter (#959): true for only the objects holding an unresolved
     /// reference value, false for only those holding none.</param>
+    /// <param name="cancellationToken">Cancels the count and the window read, for a caller that no longer wants
+    /// them (a virtualised grid whose reader has typed on or scrolled past the window).</param>
     public Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
         int connectedSystemId,
         int offset,
@@ -1191,7 +1193,8 @@ public interface IConnectedSystemRepository
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
         bool includeTotalCount = true,
-        bool? hasUnresolvedReferences = null);
+        bool? hasUnresolvedReferences = null,
+        CancellationToken cancellationToken = default);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>

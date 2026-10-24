@@ -27,7 +27,7 @@
     @* The id anchors the scroll-position interop: the virtualiser's scroll container is MudBlazor's own element
        inside the grid, so it is reached as a descendant of something this component names rather than by a global
        selector that another table on the page could match. *@
-    <div id="@ContainerId" class="@ContainerClass" style="@ContainerStyle">
+    <div id="@ContainerId" class="@ContainerClass" style="@ContainerStyle" aria-busy="@(IsLoadingIndicatorShown ? "true" : "false")">
     @* OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
        SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
        Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
@@ -62,19 +62,32 @@
         @* The total match count. With no pager this is the only place the list says how big it is, and while a
            search narrows it the text becomes "x of y" against the unfiltered baseline; it sits against the
            search box because that is the control the reader just changed it with. *@
-        <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
-                          SingularName="@SingularName" PluralName="@PluralName"
-                          Class="mr-3" />
+        @* While a slow load has no count to show yet (a new search, a changed filter, the first window), say what
+           the list is doing in the count's place; a blank slot reads as nothing happening. *@
+        @if (IsLoadingIndicatorShown && TotalItems == null)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Primary" Class="mr-3">@(string.IsNullOrWhiteSpace(SearchText) ? "Loading…" : "Searching…")</MudText>
+        }
+        else
+        {
+            <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
+                              SingularName="@SingularName" PluralName="@PluralName"
+                              Class="mr-3" />
+        }
         @if (ShowSearch)
         {
             @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
                filtered by a term the reader cannot see. *@
-            <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
+            <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0"
+                         Loading="@IsLoadingIndicatorShown" />
         }
             </text>;
     }
+    @* Loading draws MudDataGrid's own progress bar under the column headers. The grid never sets it itself on the
+       virtualised path, so it is driven from the delayed indicator: shown only once a window is slow to arrive. *@
     <MudDataGrid @ref="_dataGrid" T="T" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
                  FixedHeader="true" ItemSize="@RowHeight"
+                 Loading="@IsLoadingIndicatorShown" LoadingProgressColor="Color.Primary"
                  Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
                  RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClassFunc="@RowClassFunc"
                  RowClick="HandleRowClick" Class="@GridClass"
@@ -280,9 +293,25 @@ else if (ReservesHeight)
     /// active. Captured whenever a count returns and no search is narrowing the list.</summary>
     public int? UnfilteredTotalItems { get; private set; }
 
+    /// <summary>Whether the grid is showing its loading state: a window has been in flight past the threshold
+    /// <see cref="DelayedLoadingIndicator"/> sets, so a quick load shows nothing. Public so a test can assert it.</summary>
+    public bool IsLoadingIndicatorShown => _loading.IsVisible;
+
+    /// <summary>
+    /// Whether the rows on screen are dimmed as stale: a search, sort or refresh is replacing them and is slow to
+    /// arrive. A slow window fetched by scrolling dims nothing, since the rows already shown are still the right
+    /// ones; the virtualiser draws the rows it is waiting for as empty space. Public so a test can assert it.
+    /// </summary>
+    public bool ShowsStaleRows => _rowsStale && _loading.IsVisible;
+
     // ─── Internals ───
 
     private MudDataGrid<T>? _dataGrid;
+    private readonly DelayedLoadingIndicator _loading = new();
+
+    // Set when a reload is replacing the match set (search, sort, refresh, a reused instance's new view); cleared
+    // when a window of the new match set arrives. See ShowsStaleRows.
+    private bool _rowsStale;
     private bool _dense = true;
     private bool _preferencesLoaded;
     private string? _appliedStateKey;
@@ -313,7 +342,9 @@ else if (ReservesHeight)
         }
     }
 
-    private string ContainerClass => ReservingHeight ? "jim-virtualised-list jim-virtualised-list-reserving" : "jim-virtualised-list";
+    private string ContainerClass =>
+        (ReservingHeight ? "jim-virtualised-list jim-virtualised-list-reserving" : "jim-virtualised-list")
+        + (ShowsStaleRows ? " jim-virtualised-list-stale" : string.Empty);
 
     // Whether the host said how many rows to expect; see ExpectedItemCount.
     private bool ReservesHeight => ExpectedItemCount > 0;
@@ -360,7 +391,11 @@ else if (ReservesHeight)
     protected override void OnInitialized()
     {
         NavManager.LocationChanged += OnLocationChanged;
+        _loading.VisibilityChanged += OnLoadingVisibilityChanged;
     }
+
+    // The threshold elapses on a timer rather than in a render, so the change has to ask for one.
+    private void OnLoadingVisibilityChanged() => _ = InvokeAsync(StateHasChanged);
 
     protected override void OnParametersSet()
     {
@@ -450,6 +485,7 @@ else if (ReservesHeight)
         if (_reloadPending)
         {
             _reloadPending = false;
+            _rowsStale = true;
             if (_dataGrid != null)
                 await _dataGrid.ReloadServerData();
         }
@@ -466,15 +502,27 @@ else if (ReservesHeight)
             SortDescending,
             IncludeTotalCount: TotalItems == null);
 
-        var window = await LoadWindow(request, token);
+        var window = await _loading.TrackAsync(() => LoadWindow(request, token));
+
+        // A window of the current match set has arrived, so what is on screen is no longer the previous one's.
+        _rowsStale = false;
 
         // Null means the count was not requested because we already hold it, never that nothing matched; a genuine
         // zero comes back as zero and is kept.
+        var previousTotal = TotalItems;
+        var previousUnfilteredTotal = UnfilteredTotalItems;
         TotalItems = window.TotalItems ?? TotalItems;
 
         // With no search narrowing the list, the count just taken is the unfiltered baseline.
         if (string.IsNullOrWhiteSpace(SearchText))
             UnfilteredTotalItems = TotalItems;
+
+        // The toolbar's count is drawn by this component, and a window arriving re-renders only the virtualiser's rows.
+        // MudDataGrid re-renders once its own first load ends, which drew the count only for as long as that load was
+        // never cancelled: once the read honoured cancellation, the virtualiser's second request cancelled it, and the
+        // window carrying the total then arrived with nothing to draw it. So re-render whenever the total changes.
+        if (TotalItems != previousTotal || UnfilteredTotalItems != previousUnfilteredTotal)
+            StateHasChanged();
 
         return new GridData<T>
         {
@@ -500,6 +548,7 @@ else if (ReservesHeight)
         // Re-sorting puts different objects under the reader's scroll position, so the position it describes is
         // gone; send them back to the top and say so in the URL, rather than leaving a stale row index behind.
         await ResetScrollAsync();
+        _rowsStale = true;
 
         if (_dataGrid != null)
             await _dataGrid.ReloadServerData();
@@ -521,6 +570,7 @@ else if (ReservesHeight)
             UnfilteredTotalItems = null;
         }
 
+        _rowsStale = true;
         if (_dataGrid != null)
             await _dataGrid.ReloadServerData();
     }
@@ -579,6 +629,7 @@ else if (ReservesHeight)
         TotalItems = null;
         await ResetScrollAsync();
 
+        _rowsStale = true;
         if (_dataGrid != null)
             await _dataGrid.ReloadServerData();
     }
@@ -667,6 +718,7 @@ else if (ReservesHeight)
     public async ValueTask DisposeAsync()
     {
         NavManager.LocationChanged -= OnLocationChanged;
+        _loading.Dispose();
         await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
         await InvokeInteropAsync<object>("jimVirtualList.unfit", ScrollContainerSelector);
         _selfReference?.Dispose();
