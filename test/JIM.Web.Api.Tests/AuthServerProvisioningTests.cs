@@ -9,7 +9,9 @@ using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Security;
 using Moq;
 using NUnit.Framework;
@@ -155,6 +157,54 @@ public class AuthServerProvisioningTests
         Assert.That(created.AttributeValues.Single(av => av.Attribute!.Name == Constants.BuiltInAttributes.DisplayName).StringValue, Is.EqualTo("Jay Admin"));
         Assert.That(created.AttributeValues.Any(av => av.Attribute!.Name == Constants.BuiltInAttributes.Type), Is.True);
         _mockSecurity.Verify(r => r.AddObjectToRoleAsync(created.Id, Constants.BuiltInRoles.Administrator), Times.Once);
+    }
+
+    /// <summary>
+    /// The initial administrator's Created change record must say System made it, inside the Activity that recorded the
+    /// creation, so its history and the Object Changes page show who made it and link to how (#2460).
+    /// </summary>
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_InitialAdminFirstContact_RecordsTheCreationAsSystemInItsActivityAsync()
+    {
+        Environment.SetEnvironmentVariable(Constants.Config.SsoInitialAdmin, AdminSub);
+        _mockServiceSettings.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingMvoChangesEnabled))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingMvoChangesEnabled,
+                DisplayName = "MVO change tracking",
+                ValueType = ServiceSettingValueType.Boolean,
+                Value = "true"
+            });
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, _uniqueIdAttribute, AdminSub))
+            .ReturnsAsync((MetaverseObject?)null);
+
+        // A change record needs each attribute's data type, which the fixture's attributes otherwise leave unset.
+        _uniqueIdAttribute.Type = AttributeDataType.Text;
+        _mockMetaverse.Setup(r => r.GetMetaverseAttributeAsync(It.IsAny<string>(), It.IsAny<bool>()))
+            .ReturnsAsync((string name, bool _) => new MetaverseAttribute { Name = name, Type = AttributeDataType.Text });
+
+        // Persisting an Activity assigns it an Id, mirroring the database.
+        var activities = new List<Activity>();
+        _mockActivity.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => { a.Id = Guid.NewGuid(); activities.Add(a); })
+            .Returns(Task.CompletedTask);
+
+        MetaverseObject? created = null;
+        _mockMetaverse.Setup(r => r.CreateMetaverseObjectAsync(It.IsAny<MetaverseObject>()))
+            .Callback<MetaverseObject>(m => { m.Id = Guid.NewGuid(); created = m; })
+            .Returns(Task.CompletedTask);
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = AdminSub, DisplayName = "Jay Admin" });
+
+        var createActivity = activities.Single(a => a.TargetOperationType == ActivityTargetOperationType.Create);
+        var change = created!.Changes.Single(c => c.ChangeType == ObjectChangeType.Created);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+            Assert.That(change.InitiatedByName, Is.EqualTo("System"));
+            Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.System));
+            Assert.That(change.ActivityId, Is.EqualTo(createActivity.Id));
+        }
     }
 
     [Test]

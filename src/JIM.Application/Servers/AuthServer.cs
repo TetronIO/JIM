@@ -159,9 +159,13 @@ public class AuthServer
             await AddAttributeFromValueAsync(user, identity.LastName, Constants.BuiltInAttributes.LastName);
             await AddAttributeFromValueAsync(user, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName);
 
+            // System made the object, inside the Activity recording its creation, and the change record says both.
             await Application.Metaverse.CreateMetaverseObjectAsync(
                 user,
-                changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+                initiatedByType: activity.InitiatedByType,
+                initiatedByName: activity.InitiatedByName,
+                changeInitiatorType: MetaverseObjectChangeInitiatorType.System,
+                activityId: activity.Id);
 
             // update the parent activity with the user's details now that the MVO exists
             activity.TargetName = user.Name;
@@ -314,6 +318,8 @@ public class AuthServer
             await Application.Metaverse.UpdateMetaverseObjectAsync(
                 user,
                 additions: additions,
+                initiatedByType: ActivityInitiatorType.System,
+                initiatedByName: "System",
                 changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
             Log.Debug("AuthServer: Supplemented {Count} attribute value(s) on user {UserId} from the SSO identity.", additions.Count, user.Id);
         }

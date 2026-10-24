@@ -32,6 +32,15 @@ public class MetaverseObjectChange
     public Activities.ActivityRunProfileExecutionItem? ActivityRunProfileExecutionItem { get; set; }
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
+    /// <summary>
+    /// The Activity this change was made in: a synchronisation, housekeeping, a sign-in or any other recorded
+    /// operation. Unlike <see cref="ActivityRunProfileExecutionItemId"/>, which names the one item a synchronisation
+    /// recorded for this object, this is set for every change made inside an Activity, including deletions and
+    /// changes made outside synchronisation (#2460). Null once history retention removes the Activity, and for
+    /// changes recorded before Activity references were kept.
+    /// </summary>
+    public Guid? ActivityId { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Initiator tracking - mirrors Activity's pattern for audit trail
     // -----------------------------------------------------------------------------------------------------------------

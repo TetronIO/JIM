@@ -238,4 +238,70 @@ public class MvoChangeValuePersistenceDatabaseTests
         Assert.That(refChange.ReferenceValueId, Is.EqualTo(referencedMvo.Id),
             "An FK-only reference value must survive the direct insert path; reading only the navigation drops it.");
     }
+
+    /// <summary>
+    /// Real-PostgreSQL verification for #2460: the Activity a change was made in must survive both raw write paths,
+    /// the sync engine's bulk COPY and the direct insert deletions use. A column missing from either writes NULL.
+    /// </summary>
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_ActivityId_PersistsAsync()
+    {
+        var (mvo, activityId) = await SeedObjectAndActivityAsync();
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = mvo,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.AttributeFlow,
+            InitiatedByType = ActivityInitiatorType.System,
+            ActivityId = activityId
+        };
+
+        await using (var writeContext = NewContext())
+        {
+            var syncRepository = new SyncRepository(new PostgresDataRepository(writeContext));
+            await syncRepository.PersistPendingMvoChangesAsync([change], []);
+        }
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChanges.SingleAsync(c => c.Id == change.Id);
+        Assert.That(persisted.ActivityId, Is.EqualTo(activityId));
+    }
+
+    [Test]
+    public async Task CreateMetaverseObjectChangeDirectAsync_ActivityId_PersistsAsync()
+    {
+        var (_, activityId) = await SeedObjectAndActivityAsync();
+        var change = new MetaverseObjectChange
+        {
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Deleted,
+            InitiatedByType = ActivityInitiatorType.System,
+            DeletedObjectDisplayName = "Jo Bloggs",
+            ActivityId = activityId
+        };
+
+        await using (var writeContext = NewContext())
+            await new PostgresDataRepository(writeContext).Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChanges.SingleAsync(c => c.Id == change.Id);
+        Assert.That(persisted.ActivityId, Is.EqualTo(activityId));
+    }
+
+    private async Task<(MetaverseObject Mvo, Guid ActivityId)> SeedObjectAndActivityAsync()
+    {
+        await using var seedContext = NewContext();
+        var mvoType = new MetaverseObjectType { Name = $"TestType-{Guid.NewGuid():N}", PluralName = "TestTypes" };
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        seedContext.AddRange(mvo, activity);
+        await seedContext.SaveChangesAsync();
+        return (mvo, activity.Id);
+    }
 }

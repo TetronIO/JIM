@@ -2455,6 +2455,8 @@ public class FullSyncTests
             Assert.That(deletedChange, Is.Not.Null, $"Expected a Deleted change record for MVO {mvo.Id}.");
             Assert.That(deletedChange!.AttributeChanges, Is.Not.Empty,
                 "Expected the Deleted change record to carry the MVO's final attribute values.");
+            Assert.That(deletedChange.ActivityId, Is.EqualTo(activity.Id),
+                "Expected the Deleted change record to name the synchronisation that deleted the MVO (#2460).");
         }
     }
 

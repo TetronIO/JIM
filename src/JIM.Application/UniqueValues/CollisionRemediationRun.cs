@@ -45,14 +45,16 @@ internal sealed class CollisionRemediationRun
     private readonly JimApplication _application;
     private readonly ConnectedSystem _connectedSystem;
     private readonly bool _metaverseObjectChangeTrackingEnabled;
+    private readonly Guid? _activityId;
     private readonly SemaphoreSlim _contextGate = new(1, 1);
     private Context? _context;
 
-    public CollisionRemediationRun(JimApplication application, ConnectedSystem connectedSystem, UniqueValueReservationSet reservations, bool metaverseObjectChangeTrackingEnabled)
+    public CollisionRemediationRun(JimApplication application, ConnectedSystem connectedSystem, UniqueValueReservationSet reservations, bool metaverseObjectChangeTrackingEnabled, Guid? activityId = null)
     {
         _application = application;
         _connectedSystem = connectedSystem;
         _metaverseObjectChangeTrackingEnabled = metaverseObjectChangeTrackingEnabled;
+        _activityId = activityId;
         Options = new UniqueValueResolveOptions
         {
             Reservations = reservations,
@@ -244,7 +246,7 @@ internal sealed class CollisionRemediationRun
             }
         };
 
-        var result = await _application.Metaverse.ReviseGeneratedValueAsync(repository, metaverseObject, attribute, revision, _metaverseObjectChangeTrackingEnabled);
+        var result = await _application.Metaverse.ReviseGeneratedValueAsync(repository, metaverseObject, attribute, revision, _metaverseObjectChangeTrackingEnabled, _activityId);
         if (result != GeneratedValueRevisionResult.Applied)
             return LogOrdinary(export, result == GeneratedValueRevisionResult.ValueChanged
                 ? "the value changed on the Metaverse Object while the export was running"

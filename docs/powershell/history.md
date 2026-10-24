@@ -293,13 +293,15 @@ One object per change, newest first, with the attributes it changed and the valu
 | `ChangeType` | `string` | What kind of change it was. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
 | `MetaverseObjectId` | `guid` | The changed Metaverse Object's id. For an object since deleted, the id it had. Empty when the change record predates the object's id being preserved. |
 | `MetaverseObjectDeleted` | `bool` | Whether the Metaverse Object has since been deleted. |
+| `MetaverseObjectDeletedAt` | `datetime` | When the Metaverse Object was deleted. Empty unless it has since been deleted. |
 | `MetaverseObjectDisplayName` | `string` | The Metaverse Object's display name, or as it was when it was deleted. Empty when it has none. |
 | `MetaverseObjectTypeId` | `int` | The Metaverse Object Type's id. Empty when it cannot be known. |
 | `MetaverseObjectTypeName` | `string` | The Metaverse Object Type's name. Empty when it cannot be known. |
 | `InitiatedByType` | `string` | The kind of principal that made the change. One of `NotSet`, `User`, `ApiKey`, `System` or `Anonymous`. |
 | `InitiatedByName` | `string` | The name of the principal that made the change, as it was at the time. |
+| `ChangeInitiatorType` | `string` | What within JIM made the change: a Synchronisation Rule, a User, Example Data or System, for example. One of `NotSet`, `User`, `WorkflowInstance`, `GroupMembershipRuleEvaluation`, `SynchronisationRule`, `ExampleData` or `System`. |
 | `SyncRuleName` | `string` | The Synchronisation Rule that made the change, as it was named at the time. Empty for a change not made by a synchronisation. |
-| `ActivityId` | `guid` | The Activity the change was made in. Empty for a change not made by a synchronisation. |
+| `ActivityId` | `guid` | The Activity the change was made in, such as a synchronisation, a scheduled deletion or a sign-in. Empty when history retention has since removed the Activity, or for a change recorded before Activities were linked to changes. |
 | `AttributeChanges` | `object[]` | The attributes that changed, with the values added and removed. Each has `AttributeId`, `AttributeName`, `Matched`, `AddedValues` and `RemovedValues`. |
 <!-- END GENERATED: Search-JIMMetaverseObjectChange -->
 

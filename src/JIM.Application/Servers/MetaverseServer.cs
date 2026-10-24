@@ -1345,6 +1345,7 @@ public partial class MetaverseServer
     /// <param name="initiatedById">The ID of the principal initiating the update.</param>
     /// <param name="initiatedByName">The display name of the principal initiating the update.</param>
     /// <param name="changeInitiatorType">The mechanism that initiated the update (e.g. System, User).</param>
+    /// <param name="activityId">The Activity the update is made in, which the change record links to.</param>
     public async Task UpdateMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         List<MetaverseObjectAttributeValue>? additions = null,
@@ -1352,7 +1353,8 @@ public partial class MetaverseServer
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
         string? initiatedByName = null,
-        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null,
+        Guid? activityId = null)
     {
         // Record change history if additions/removals are provided
         if (additions != null || removals != null)
@@ -1365,7 +1367,8 @@ public partial class MetaverseServer
                 initiatedById,
                 initiatedByName,
                 ObjectChangeType.Updated,
-                changeInitiatorType);
+                changeInitiatorType,
+                activityId);
         }
 
         // Keep the denormalised CachedDisplayName in sync if any naming attribute was affected. It must
@@ -1454,7 +1457,8 @@ public partial class MetaverseServer
         Guid? initiatedById = null,
         string? initiatedByName = null,
         ObjectChangeType changeType = ObjectChangeType.Updated,
-        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null,
+        Guid? activityId = null)
     {
         // Check if MVO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
@@ -1479,7 +1483,8 @@ public partial class MetaverseServer
             InitiatedByType = initiatedByType,
             InitiatedById = initiatedById,
             InitiatedByName = initiatedByName,
-            ChangeInitiatorType = effectiveChangeInitiatorType
+            ChangeInitiatorType = effectiveChangeInitiatorType,
+            ActivityId = activityId
         };
 
         // Contributor provenance (#1519 follow-up): a value being added here may be a value whose
@@ -1579,12 +1584,14 @@ public partial class MetaverseServer
     /// <param name="initiatedById">The ID of the principal initiating the creation.</param>
     /// <param name="initiatedByName">The display name of the principal initiating the creation.</param>
     /// <param name="changeInitiatorType">The mechanism that initiated the creation (e.g. System, ExampleData).</param>
+    /// <param name="activityId">The Activity the creation is made in, which the change record links to.</param>
     public async Task CreateMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
         string? initiatedByName = null,
-        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null,
+        Guid? activityId = null)
     {
         // Record change history if enabled (before persist so EF saves in same transaction)
         if (metaverseObject.AttributeValues.Count > 0)
@@ -1597,7 +1604,8 @@ public partial class MetaverseServer
                 initiatedById,
                 initiatedByName,
                 ObjectChangeType.Created,
-                changeInitiatorType);
+                changeInitiatorType,
+                activityId);
         }
 
         // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
@@ -1637,12 +1645,15 @@ public partial class MetaverseServer
     /// <param name="finalAttributeValues">Pre-captured attribute values to record as the final state.
     /// Required when the sync processor has already recalled attributes from the MVO before deletion.
     /// When null, the method uses the MVO's current attribute values (loading from DB if needed).</param>
+    /// <param name="activityId">The Activity the deletion is made in, which the change record links to. It can differ
+    /// from the initiator: housekeeping records the principal that scheduled the deletion, in its own Activity.</param>
     public async Task DeleteMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
         string? initiatedByName = null,
-        List<MetaverseObjectAttributeValue>? finalAttributeValues = null)
+        List<MetaverseObjectAttributeValue>? finalAttributeValues = null,
+        Guid? activityId = null)
     {
         // Check if MVO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
@@ -1690,7 +1701,8 @@ public partial class MetaverseServer
                 // Preserve object identity for the deleted objects browser
                 DeletedMetaverseObjectId = mvoId,
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
-                DeletedObjectDisplayName = displayName
+                DeletedObjectDisplayName = displayName,
+                ActivityId = activityId
             };
 
             // Contributor provenance (#1519 follow-up): the sync processor path passes a snapshot taken

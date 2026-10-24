@@ -59,6 +59,7 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
             Assert.That(Text(mvo, ctx.Upn), Is.EqualTo("jbloggs@corp.local"), "level 2 reads the Email derived at level 1 in the same pass");
 
             Assert.That(changes, Has.Count.EqualTo(1), "one Metaverse change record for the object's whole pass (FR 8)");
+            Assert.That(changes.Single().ActivityId, Is.EqualTo(activity.Id), "the change records the synchronisation it was made in (#2460)");
             Assert.That(changes.Single().AttributeChanges.Select(a => a.AttributeName),
                 Is.SupersetOf(new[] { "Account Name", "Email", "User Principal Name" }),
                 "derived values are ordinary Attribute Flow changes in the same record");

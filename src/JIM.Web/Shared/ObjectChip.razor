@@ -17,7 +17,7 @@
 @* inline-flex box of its own, and putting that between the link and the chip would sit a new box across the *@
 @* hover treatment's descendant selectors. Wrapping the whole link leaves jim-chip-link's subtree intact.    *@
 <MudTooltip Text="@EffectiveTooltip" Arrow="true" Placement="Placement.Top">
-    @if (!string.IsNullOrEmpty(Href))
+    @if (!string.IsNullOrEmpty(Href) && !Deleted)
     {
         <MudLink Href="@Href" Underline="Underline.None" Class="jim-chip-link">
             @Chip
@@ -85,6 +85,13 @@
     public bool ShowGlyph { get; set; } = true;
 
     /// <summary>
+    /// Whether the object no longer exists: the chip is low-lighted with a dashed outline and a bin icon, and never a
+    /// link, since there is nothing left to open. Pass a tooltip saying when it went ("Deleted 7 hours ago").
+    /// </summary>
+    [Parameter]
+    public bool Deleted { get; set; }
+
+    /// <summary>
     /// The same "type: name" text the chip itself renders, when it has a name to show; the kind's full name
     /// otherwise (a type-alone chip, or no name and no type). Overridden by <see cref="Tooltip"/>.
     /// </summary>
@@ -142,7 +149,7 @@
         ? (HasName ? $"{TypeName}: " : TypeName!)
         : string.Empty;
 
-    private RenderFragment Chip => @<span class="jim-object-chip @(ShowGlyph ? null : "plain") @Class">
+    private RenderFragment Chip => @<span class="jim-object-chip @(ShowGlyph ? null : "plain") @(Deleted ? "deleted" : null) @Class">
         @if (ShowGlyph)
         {
             <span class="jim-object-chip-glyph @GlyphClass" aria-hidden="true" title="@GlyphFullName">@GlyphText</span>
@@ -154,6 +161,10 @@
         @if (HasName)
         {
             <span class="jim-object-chip-name">@Name</span>
+        }
+        @if (Deleted)
+        {
+            <MudIcon Icon="@Icons.Material.Outlined.Delete" Class="jim-object-chip-deleted-icon" aria-label="Deleted" />
         }
     </span>;
 }

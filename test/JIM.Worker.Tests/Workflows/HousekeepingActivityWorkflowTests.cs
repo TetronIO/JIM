@@ -81,7 +81,14 @@ public class HousekeepingActivityWorkflowTests
         _mockActivityRepository = new Mock<IActivityRepository>();
         _mockActivityRepository
             .Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
-            .Callback<Activity>(activity => _createdActivities.Add(activity))
+            .Callback<Activity>(activity =>
+            {
+                // Persisting assigns an Id, mirroring the database, so anything recorded against the Activity can be
+                // checked against it.
+                if (activity.Id == Guid.Empty)
+                    activity.Id = Guid.NewGuid();
+                _createdActivities.Add(activity);
+            })
             .Returns(Task.CompletedTask);
         _mockActivityRepository
             .Setup(r => r.CreateActivityRunProfileExecutionItemsAsync(It.IsAny<IReadOnlyCollection<ActivityRunProfileExecutionItem>>()))
@@ -192,6 +199,33 @@ public class HousekeepingActivityWorkflowTests
             "TotalPendingExports must reflect the staged recall Pending Export");
         Assert.That(activity.TotalDeleted, Is.EqualTo(1),
             "TotalDeleted must count MvoDeleted outcomes so list views show what the batch deleted");
+    }
+
+    /// <summary>
+    /// The Deleted change record housekeeping writes must name the housekeeping Activity, so a reader of the object's
+    /// history (or the Object Changes page) can open the batch that deleted it (#2460).
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvo_DeletedChangeRecordNamesTheHousekeepingActivityAsync()
+    {
+        // Arrange
+        var (memberMvo, _) = SeedEligibleMemberWithTargetCso("Lena Leaver");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([memberMvo]);
+        var recordedChanges = new List<MetaverseObjectChange>();
+        _mockMetaverseRepository
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
+            .Callback<MetaverseObjectChange>(recordedChanges.Add)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        // Assert
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletedChange = recordedChanges.Single(c => c.ChangeType == ObjectChangeType.Deleted);
+        Assert.That(deletedChange.ActivityId, Is.EqualTo(activity.Id));
     }
 
     /// <summary>

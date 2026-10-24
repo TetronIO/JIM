@@ -240,6 +240,7 @@ One object per change, newest first.
 | `SyncRuleId` | `int` | The unique identifier of the Synchronisation Rule that made the change, when one did. |
 | `SyncRuleName` | `string` | That Synchronisation Rule's name. |
 | `ActivityRunProfileExecutionItemId` | `guid` | The Activity execution item that recorded the change, when a Run Profile made it. |
+| `ActivityId` | `guid` | The Activity the change was made in, such as a synchronisation, a scheduled deletion or a sign-in. Empty when the Activity has since been removed by history retention, or for a change recorded before Activities were linked to changes. |
 | `CsoId` | `guid` | The unique identifier of the Connected System Object whose synchronisation made the change, when one did. |
 | `CsoExternalId` | `string` | That Connected System Object's external id, as it was then; kept after the object is deleted. |
 | `ConnectedSystemId` | `int` | The unique identifier of the Connected System the Run Profile belonged to, when one made the change. |

@@ -104,9 +104,7 @@ public class SyncServer : ISyncServer
 
     public async Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(
         MetaverseObject metaverseObject,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName,
+        Activity activity,
         List<MetaverseObjectAttributeValue>? finalAttributeValues)
     {
         var changeTrackingEnabled = await GetMvoChangeTrackingEnabledAsync();
@@ -122,12 +120,13 @@ public class SyncServer : ISyncServer
             {
                 ChangeType = ObjectChangeType.Deleted,
                 ChangeTime = DateTime.UtcNow,
-                InitiatedByType = initiatorType,
-                InitiatedById = initiatorId,
-                InitiatedByName = initiatorName,
-                ChangeInitiatorType = initiatorType == ActivityInitiatorType.User
+                InitiatedByType = activity.InitiatedByType,
+                InitiatedById = activity.InitiatedById,
+                InitiatedByName = activity.InitiatedByName,
+                ChangeInitiatorType = activity.InitiatedByType == ActivityInitiatorType.User
                     ? MetaverseObjectChangeInitiatorType.User
                     : MetaverseObjectChangeInitiatorType.NotSet,
+                ActivityId = activity.Id,
                 DeletedMetaverseObjectId = mvoId,
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
                 DeletedObjectDisplayName = displayName
@@ -162,14 +161,11 @@ public class SyncServer : ISyncServer
     /// </summary>
     /// <param name="deletions">The Metaverse Objects to delete, each with the attribute values to
     /// record on its Deleted change record (captured before attribute recall removed them).</param>
-    /// <param name="initiatorType">The type of principal that initiated the deletion.</param>
-    /// <param name="initiatorId">The unique identifier of the initiating principal, if any.</param>
-    /// <param name="initiatorName">The display name of the initiating principal, if any.</param>
+    /// <param name="activity">The Activity the deletions are made in: its initiator is recorded on each Deleted
+    /// change record, and the record links to it (#2460).</param>
     public async Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(
         List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletions,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName)
+        Activity activity)
     {
         if (deletions.Count == 0)
             return [];
@@ -199,12 +195,13 @@ public class SyncServer : ISyncServer
                     Id = Guid.NewGuid(),
                     ChangeType = ObjectChangeType.Deleted,
                     ChangeTime = DateTime.UtcNow,
-                    InitiatedByType = initiatorType,
-                    InitiatedById = initiatorId,
-                    InitiatedByName = initiatorName,
-                    ChangeInitiatorType = initiatorType == ActivityInitiatorType.User
+                    InitiatedByType = activity.InitiatedByType,
+                    InitiatedById = activity.InitiatedById,
+                    InitiatedByName = activity.InitiatedByName,
+                    ChangeInitiatorType = activity.InitiatedByType == ActivityInitiatorType.User
                         ? MetaverseObjectChangeInitiatorType.User
                         : MetaverseObjectChangeInitiatorType.NotSet,
+                    ActivityId = activity.Id,
                     DeletedMetaverseObjectId = metaverseObject.Id,
                     DeletedObjectTypeId = metaverseObject.Type?.Id,
                     DeletedObjectDisplayName = displayName
@@ -408,10 +405,12 @@ public class SyncServer : ISyncServer
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
         JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null,
-        Action<IReadOnlyList<string>>? containersCreated = null)
+        Action<IReadOnlyList<string>>? containersCreated = null,
+        Guid? activityId = null)
         => _exportExec.ExecuteExportsAsync(
             connectedSystem, connector, runMode, options, cancellationToken,
-            progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback, uniqueValueReservations, containersCreated);
+            progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback, uniqueValueReservations, containersCreated,
+            activityId);
 
     #endregion
 }

@@ -106,7 +106,7 @@ public class HistoryControllerChangeSearchTests
             MetaverseObjectDisplayName = "Carol",
             MetaverseObjectTypeId = 2,
             MetaverseObjectTypeName = "Person",
-            ActivityId = activityId,
+            MetaverseObjectDeletedAt = new DateTime(2026, 10, 2, 9, 0, 0, DateTimeKind.Utc),
             MatchedAttributeIds = [3],
             Change = new MvoChangeHistoryDto
             {
@@ -115,7 +115,9 @@ public class HistoryControllerChangeSearchTests
                 ChangeType = ObjectChangeType.AttributeFlow,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System,
                 InitiatedByName = "System",
+                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
                 SyncRuleName = "HR Inbound",
+                ActivityId = activityId,
                 AttributeChanges =
                 [
                     new MvoAttributeChangeDto
@@ -159,6 +161,8 @@ public class HistoryControllerChangeSearchTests
             Assert.That(item.MetaverseObjectDisplayName, Is.EqualTo("Carol"));
             Assert.That(item.MetaverseObjectTypeName, Is.EqualTo("Person"));
             Assert.That(item.ActivityId, Is.EqualTo(activityId));
+            Assert.That(item.MetaverseObjectDeletedAt, Is.EqualTo(new DateTime(2026, 10, 2, 9, 0, 0, DateTimeKind.Utc)));
+            Assert.That(item.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.SynchronisationRule));
             Assert.That(item.SyncRuleName, Is.EqualTo("HR Inbound"));
             Assert.That(status.Matched, Is.True);
             Assert.That(status.AddedValues, Is.EqualTo(new[] { "Disabled" }));

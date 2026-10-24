@@ -102,15 +102,14 @@ public interface ISyncServer
     #region MVO Deletion with Change Tracking
 
     /// <summary>
-    /// Deletes an MVO with initiator information for audit trail.
+    /// Deletes an MVO, recording the deletion against the Activity it is made in: its initiator for the audit trail,
+    /// and the Activity itself so the change record links to it (#2460).
     /// Handles change tracking (if enabled), then delegates the raw delete to ISyncRepository, which retires the
     /// object's generated values in the same transaction (#242, Phase 6) and reports them, for the caller's outcomes.
     /// </summary>
     Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(
         MetaverseObject metaverseObject,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName,
+        Activity activity,
         List<MetaverseObjectAttributeValue>? finalAttributeValues);
 
     /// <summary>
@@ -120,9 +119,7 @@ public interface ISyncServer
     /// </summary>
     Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(
         List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletions,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName);
+        Activity activity);
 
     #endregion
 
@@ -317,7 +314,8 @@ public interface ISyncServer
 
     /// <summary>
     /// Executes all Pending Exports with full options including progress reporting,
-    /// cancellation, and parallel batch support.
+    /// cancellation, and parallel batch support. <paramref name="activityId"/> is the export run's Activity, which a
+    /// Metaverse Object change Collision Remediation records links to (#2460).
     /// </summary>
     Task<ExportExecutionResult> ExecuteExportsAsync(
         ConnectedSystem connectedSystem,
@@ -330,7 +328,8 @@ public interface ISyncServer
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
         JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null,
-        Action<IReadOnlyList<string>>? containersCreated = null);
+        Action<IReadOnlyList<string>>? containersCreated = null,
+        Guid? activityId = null);
 
     #endregion
 }

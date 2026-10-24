@@ -26,6 +26,11 @@ public class MetaverseObjectChangeSearchResult
     /// </summary>
     public bool MetaverseObjectDeleted { get; set; }
 
+    /// <summary>
+    /// When the Metaverse Object was deleted, for an object since deleted; null otherwise.
+    /// </summary>
+    public DateTime? MetaverseObjectDeletedAt { get; set; }
+
     public string? MetaverseObjectDisplayName { get; set; }
 
     public int? MetaverseObjectTypeId { get; set; }
@@ -36,11 +41,6 @@ public class MetaverseObjectChangeSearchResult
     /// The Metaverse Object Type's plural name, which the object's portal address is built from.
     /// </summary>
     public string? MetaverseObjectTypePluralName { get; set; }
-
-    /// <summary>
-    /// The Activity the change was made in, when it was made by a synchronisation.
-    /// </summary>
-    public Guid? ActivityId { get; set; }
 
     /// <summary>
     /// The ids of the attributes the search's conditions named, so a reader can be shown those changes first.

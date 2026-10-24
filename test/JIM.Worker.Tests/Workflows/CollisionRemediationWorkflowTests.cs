@@ -127,13 +127,14 @@ public class CollisionRemediationWorkflowTests : WorkflowTestBase
         await SeedHrPersonAsync(ctx, "Joe", "Bloggs", "E1");
         await RunFullSyncAsync(ctx.Hr);
 
-        await RunExportAsync(ctx.Directory, RejectFirst("sAMAccountName"));
+        var exportActivity = await RunExportAsync(ctx.Directory, RejectFirst("sAMAccountName"));
 
         var value = Mvo().AttributeValues.Single(av => av.AttributeId == ctx.AccountName.Id);
         var change = SyncRepo.MetaverseObjectChanges.Values.Single(c => c.InitiatedByName == MetaverseServer.CollisionRemediationInitiatorName);
         var attributeChange = change.AttributeChanges.Single(ac => ac.AttributeName == "Account Name");
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(change.ActivityId, Is.EqualTo(exportActivity.Id), "the correction records the export it was made in (#2460)");
             Assert.That(value.ContributedBySyncRuleId, Is.EqualTo(ctx.HrImportRuleId), "the corrected value is still the generated mapping's");
             Assert.That(attributeChange.ValueChanges.Single(v => v.ValueChangeType == ValueChangeType.Remove).StringValue, Is.EqualTo("joe.bloggs"));
             Assert.That(attributeChange.ValueChanges.Single(v => v.ValueChangeType == ValueChangeType.Add).StringValue, Is.EqualTo("joe.bloggs1"));
