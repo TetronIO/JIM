@@ -93,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🖥️ Lists now show when a search, sort or filter is slow to answer: a progress bar, a spinner in the search box and a "Searching…" count, with the old rows faded until results arrive. Quick results appear as before, with no flicker.
 - 🔄 The Causality Explorer is for Administrators only, like the REST API reads it draws on, and other users no longer see links to it. On a Metaverse Object, **Explore causality** moves from beside the tabs into the **Inspect** view: at the end of its source panel (**Where this User gets its values**, named for the object's type), and in each attribute's inspector beside **Open in Timeline**.
 - 🔄 A Synchronisation Rule's identity strip, and the Object Type pickers that create one, read in the direction data flows: an import rule shows the Connected System Object Type then the Metaverse Object Type, and an export rule the reverse.
 - 🖥️ Ordinary buttons across the portal are filled in the theme's default colour rather than outlined, so they read clearly as buttons beside the page's one main action; outlined is kept for dangerous actions.
@@ -157,6 +158,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The Connector Space's Secondary External Id column now appears as soon as the list loads, rather than only once the list had been searched, sorted or filtered.
 - 🐛 In a Metaverse Object's Inspect view, clicking an attribute's value now opens its inspector, as clicking its name or source does; a linked value, such as an email address or a reference, still follows its link.
 - 🐛 Every Metaverse Object change now links to the Activity it was made in, including deletions, scheduled deletions, the initial administrator's creation at sign-in and data generation; before, only changes a synchronisation recorded per object did. Also in `activityId` over REST and PowerShell. (#2460)
 - 🐛 The initial administrator's creation at first sign-in is recorded as made by System, rather than by nobody. (#2460)
@@ -362,6 +364,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ Typing a new search in a large Connector Space now cancels the search still running, so the database works only on the latest term instead of finishing every earlier one.
 - ⚡ Configuration Change Previews that weigh up every affected object, such as deleting a Connected System or changing an Attribute Flow, now evaluate them once rather than twice, so the full answer arrives in about half the time. (#1530)
 - ⚡ JIM now checks an LDAP directory for a generated value already in use with one search covering every attribute the value is bound for there (plus one of the Global Catalog for forest-wide attributes), rather than one search per attribute. (#2023)
 

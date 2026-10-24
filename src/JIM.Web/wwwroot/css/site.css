@@ -5851,6 +5851,60 @@ html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-ch
     border-bottom: 1px solid var(--mud-palette-table-lines);
 }
 
+/* A slow search, sort or refresh: the rows on screen belong to the match set being replaced, so they fade and stop
+   taking clicks until the new one arrives. A slow window fetched by scrolling never sets this (ShowsStaleRows in
+   VirtualisedDataGrid.razor), because the rows already shown are still the right ones. */
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row {
+    transition: opacity 0.15s;
+}
+
+html[lang] .jim-virtualised-list-stale .mud-table-root .mud-table-body .mud-table-row {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+/* A search box whose list is slow to answer (SearchField's Loading): the magnifier gives way to a spinner in the
+   same place, so nothing in the field moves. Hidden rather than removed, so the adornment keeps its size. */
+.jim-search-field-loading .mud-input-adornment-start {
+    position: relative;
+}
+
+.jim-search-field-loading .mud-input-adornment-start .mud-icon-root {
+    visibility: hidden;
+}
+
+.jim-search-field-loading .mud-input-adornment-start::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    box-sizing: border-box;
+    border: 2px solid color-mix(in srgb, var(--mud-palette-primary) 25%, transparent);
+    border-top-color: var(--mud-palette-primary);
+    border-radius: 50%;
+    animation: jim-search-field-spin 0.8s linear infinite;
+}
+
+@keyframes jim-search-field-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jim-search-field-loading .mud-input-adornment-start::after {
+        animation: none;
+        border-right-color: var(--mud-palette-primary);
+    }
+
+    html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row {
+        transition: none;
+    }
+}
+
 /* Container Scope: Simple / Advanced mode switch and the text editor behind it (#1255) */
 .jim-scope-mode {
     display: flex;
