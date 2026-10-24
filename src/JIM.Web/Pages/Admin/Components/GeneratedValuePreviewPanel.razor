@@ -34,6 +34,12 @@
             }
         </div>
 
+        @if (_nothingGenerated != null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-generated-value-nothing-generated">@_nothingGenerated</MudText>
+        }
+        else
+        {
         @switch (generation.TokenKind)
         {
             case GeneratedValueTokenKind.OnlyIfTaken:
@@ -68,6 +74,7 @@
                     <MudText Typo="Typo.body1">@GeneratedValuePreviewHelpers.RandomSourceOfRandomness</MudText>
                 </div>
                 break;
+        }
         }
 
         @* Generated Value Forms (#2023, mock screen 3): the values checked with each candidate, worked out from it. *@
@@ -219,12 +226,20 @@
     [Parameter]
     public IReadOnlyList<GeneratedValueBuiltValueDescription>? BuiltValues { get; set; }
 
+    /// <summary>
+    /// The base the tester's values give generation, typed and value-processed as a Synchronisation would (#2471);
+    /// null while nothing has been tried, when the preview falls back to placeholder values.
+    /// </summary>
+    [Parameter]
+    public GeneratedBaseEvaluation? TriedBase { get; set; }
+
     private List<(string Candidate, List<GeneratedValueBuiltValuePreviewValue> Values)> _builtValueRows = [];
 
     private GeneratedValueCandidatePreview? _preview;
     private string? _placementText;
     private string? _sampleSourceCaption;
     private string? _evaluationError;
+    private string? _nothingGenerated;
 
     private GeneratedValueSequenceState? _sequenceState;
     private string? _existingObjectCountText;
@@ -306,10 +321,29 @@
             return;
 
         _evaluationError = null;
+        _nothingGenerated = null;
         string? sampleBaseValue = null;
 
         var expression = BaseSource.Expression;
-        if (!string.IsNullOrWhiteSpace(expression))
+        if (TriedBase is { Outcome: GeneratedBaseOutcome.Waits or GeneratedBaseOutcome.Error } withoutBase)
+        {
+            // The values tried give generation no base, so there is no candidate to show; one built from placeholders
+            // would claim a value that would never be generated.
+            _preview = null;
+            _builtValueRows = [];
+            _placementText = null;
+            _sampleSourceCaption = null;
+            _nothingGenerated = GeneratedValuePreviewHelpers.DescribeNothingGenerated(withoutBase.Outcome, TargetName);
+            return;
+        }
+
+        if (TriedBase != null)
+        {
+            // The base the tester tried: typed and value-processed as a Synchronisation would.
+            sampleBaseValue = TriedBase.BaseValue;
+            _sampleSourceCaption = TriedBase.Outcome == GeneratedBaseOutcome.Base ? GeneratedValuePreviewHelpers.TriedValuesCaption : null;
+        }
+        else if (!string.IsNullOrWhiteSpace(expression))
         {
             var inputs = ExpressionInputResolver.Resolve(expression);
             var context = GeneratedValuePreviewHelpers.BuildSampleContext(inputs, SampleValues);
@@ -412,6 +446,8 @@
         generation.Separator,
         TargetType,
         string.Join(',', SampleValues.Select(kv => $"{kv.Key}={kv.Value}")),
+        TriedBase?.Outcome,
+        TriedBase?.BaseValue,
         string.Join(',', (BuiltValues ?? []).Select(v => $"{v.SyncRuleMappingId}:{v.CheckedBeforeIssuing}:{v.Expression}")));
 
     private string BuildIoKey() => string.Join('|', Mapping.Id, SyncRuleId, TargetMetaverseAttributeId, ConnectedSystemId, MetaverseObjectTypeId, Direction);

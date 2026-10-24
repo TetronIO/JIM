@@ -47,7 +47,7 @@ else
 @if (_inputs.Count == 0)
 {
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-        This Expression reads no attributes, so it produces the same value for every object. Run the test to see it.
+        This Expression reads no attributes, so it produces the same value for every object.
     </MudText>
 }
 else
@@ -93,18 +93,19 @@ else
 
 <RunAsOfPicker Value="_asOf" ValueChanged="SetAsOf" Class="mt-3" />
 
-<MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-3" OnClick="RunTest">Run test</MudButton>
-
+@* The test runs as the Expression, the values and the Attribute Flow's settings change. A half-typed Expression is
+   the normal state while typing, and the editor already marks it, so it is noted here quietly rather than alarmed. *@
 @if (_parseError != null)
 {
-    <MudAlert Severity="Severity.Error" Class="mt-3">
-        @_parseError
-        @if (_errorPosition.HasValue)
-        {
-            var position = _errorPosition.Value;
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">Position @position</MudText>
-        }
-    </MudAlert>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+        No result until the Expression is complete: @_parseError@(_errorPosition is { } position ? $" (position {position})" : null)
+    </MudText>
+}
+else if (!Tried)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+        Enter a value for each input, or load them from an object, to see the result.
+    </MudText>
 }
 
 @if (_result is { InputErrors.Count: > 0 } inputProblem)
@@ -354,9 +355,22 @@ else
     public EventCallback<IReadOnlyDictionary<string, string?>> SampleValuesChanged { get; set; }
 
     /// <summary>
+    /// For a Generated Value, raised with the base the values tried give generation; null while nothing has been
+    /// tried. The Generated Value editor works its candidates out from it.
+    /// </summary>
+    [Parameter]
+    public EventCallback<GeneratedBaseEvaluation?> TriedBaseChanged { get; set; }
+
+    /// <summary>
     /// Whether the Attribute Flow generates its value: the test then stops at the base, as a Synchronisation does.
     /// </summary>
     private bool Generating => Mapping.Generation != null;
+
+    /// <summary>
+    /// Whether there is anything to show a result for: a value given for an input, or an Expression that reads none.
+    /// Before that, a result would only report every input missing, which answers nothing the administrator asked.
+    /// </summary>
+    private bool Tried => _valuesGiven || _inputs.Count == 0;
 
     private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
     [
@@ -370,6 +384,9 @@ else
     private string? _resolvedFrom;
     private string _targetName = string.Empty;
     private bool _fromObject;
+    private bool _valuesGiven;
+    private string? _testedKey;
+    private GeneratedBaseEvaluation? _reportedBase;
     private AttributeFlowTestResult? _result;
     private SyncRuleMappingSource? _testedSource;
     private DateTime _ranAtUtc;
@@ -393,18 +410,30 @@ else
         ? $"Find a {SyncRule.MetaverseObjectType?.Name ?? "Metaverse Object"}"
         : $"Find a {SyncRule.ConnectedSystemObjectType?.Name ?? "Connected System Object"} in {SyncRule.ConnectedSystem?.Name ?? "the Connected System"}";
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         _targetName = (Exporting ? Mapping.TargetConnectedSystemAttribute?.Name : Mapping.TargetMetaverseAttribute?.Name) ?? "the target";
 
         // Inputs follow the Expression as it is edited; values entered for an input that is still read are kept.
-        if (_resolvedFrom == Expression)
-            return;
+        if (_resolvedFrom != Expression)
+        {
+            _resolvedFrom = Expression;
+            _inputs = AttributeFlowTester.DescribeInputs(SyncRule, Expression);
+        }
 
-        _resolvedFrom = Expression;
-        _inputs = AttributeFlowTester.DescribeInputs(SyncRule, Expression);
-        ClearResult();
+        // The settings are edited in place on the same Mapping and Source, so a change shows only in their values.
+        if (TestedKey() != _testedKey)
+            await RunTestAsync();
     }
+
+    /// <summary>
+    /// Everything the result depends on besides the inputs: the Expression and the Attribute Flow's settings that the
+    /// pipeline reads.
+    /// </summary>
+    private string TestedKey() => string.Join('|', Expression, Source.MissingInputBehaviour,
+        Mapping.TargetMetaverseAttribute?.Id, Mapping.TargetMetaverseAttribute?.Type,
+        Mapping.TargetConnectedSystemAttribute?.Id, Mapping.TargetConnectedSystemAttribute?.Type,
+        Mapping.InboundValueProcessing, Mapping.CaseNormalisation, Mapping.NullIsValue, Generating);
 
     private void ClearResult()
     {
@@ -428,16 +457,17 @@ else
 
     private async Task InputsChangedAsync()
     {
-        ClearResult();
+        _valuesGiven = true;
+        await RunTestAsync();
         if (SampleValuesChanged.HasDelegate)
             await SampleValuesChanged.InvokeAsync(_inputs.ToDictionary(input => input.Accessor,
                 input => StateOf(input.Accessor) is { NoValue: false, Values: [var first, ..] } ? first : null, StringComparer.Ordinal));
     }
 
-    private void SetAsOf(DateTime? asOf)
+    private async Task SetAsOf(DateTime? asOf)
     {
         _asOf = asOf;
-        ClearResult();
+        await RunTestAsync();
     }
 
     private void SetFromObject(bool fromObject) => _fromObject = fromObject;
@@ -478,6 +508,23 @@ else
         _ => ExpressionText.TryFormat(value, out var text) ? text ?? string.Empty : value.ToString() ?? string.Empty
     };
 
+    private async Task RunTestAsync()
+    {
+        _testedKey = TestedKey();
+        RunTest();
+
+        // Only a change is reported: the editor re-renders this panel on the report, which must not report again.
+        var tried = _result?.GeneratedBase;
+        if (TriedBaseChanged.HasDelegate && !SameBase(tried, _reportedBase))
+        {
+            _reportedBase = tried;
+            await TriedBaseChanged.InvokeAsync(tried);
+        }
+    }
+
+    private static bool SameBase(GeneratedBaseEvaluation? left, GeneratedBaseEvaluation? right) =>
+        left?.Outcome == right?.Outcome && left?.BaseValue == right?.BaseValue && left?.ErrorReason == right?.ErrorReason;
+
     private void RunTest()
     {
         ClearResult();
@@ -491,6 +538,9 @@ else
             _errorPosition = validation.ErrorPosition;
             return;
         }
+
+        if (!Tried)
+            return;
 
         var inputs = _inputs
             .Select(input => new AttributeFlowTestInput(input.Source, input.AttributeName, StateOf(input.Accessor).TestValues))
