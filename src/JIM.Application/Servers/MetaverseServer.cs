@@ -1401,7 +1401,7 @@ public partial class MetaverseServer
     /// <para>
     /// A dependency cycle in the enabled derived flows is logged and marks nothing rather than failing the edit: the
     /// edit is already saved, every hosting synchronisation fails hard on the cycle until it is broken, and this path
-    /// serves sign-in (the SSO profile supplement), which must not lock an administrator out of fixing the cycle.
+    /// serves sign-in (the SSO profile refresh), which must not lock an administrator out of fixing the cycle.
     /// </para>
     /// </summary>
     private async Task MarkDerivedInputChangesAsync(MetaverseObject metaverseObject, List<MetaverseObjectAttributeValue> changedValues)

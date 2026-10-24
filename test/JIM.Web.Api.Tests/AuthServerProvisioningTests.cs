@@ -279,6 +279,118 @@ public class AuthServerProvisioningTests
         _mockSecurity.Verify(r => r.AddObjectToRoleAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
+    #region Refreshing token-owned profile values (#2383)
+
+    /// <summary>
+    /// An existing user whose Display Name holds the given value, recorded as coming from the given source.
+    /// </summary>
+    private MetaverseObject ExistingUserWithDisplayName(string subject, string displayName, ValueContributorKind? kind, string? claimType = null, int? contributedBySystemId = null)
+    {
+        var user = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType, Origin = MetaverseObjectOrigin.Internal };
+        user.AttributeValues.Add(new MetaverseObjectAttributeValue { MetaverseObject = user, Attribute = _uniqueIdAttribute, StringValue = subject });
+        user.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = user,
+            Attribute = new MetaverseAttribute { Name = Constants.BuiltInAttributes.DisplayName, Type = AttributeDataType.Text },
+            StringValue = displayName,
+            ContributedByKind = kind,
+            ContributedByClaimType = claimType,
+            ContributedBySystemId = contributedBySystemId
+        });
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, _uniqueIdAttribute, subject)).ReturnsAsync(user);
+        return user;
+    }
+
+    private static string? DisplayNameOf(MetaverseObject user) =>
+        user.AttributeValues.Single(av => av.Attribute!.Name == Constants.BuiltInAttributes.DisplayName).StringValue;
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_TokenOwnedValueChanged_RefreshesItFromTheTokenAsync()
+    {
+        var user = ExistingUserWithDisplayName("contractor-sub", "Jo Bloggs", ValueContributorKind.SignInClaim, "name");
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "contractor-sub", DisplayName = "Jo Smith" });
+
+        var value = user.AttributeValues.Single(av => av.Attribute!.Name == Constants.BuiltInAttributes.DisplayName);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(value.StringValue, Is.EqualTo("Jo Smith"));
+            Assert.That(value.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(value.ContributedByClaimType, Is.EqualTo("name"));
+            Assert.That(user.AttributeValues.Count(av => av.Attribute!.Name == Constants.BuiltInAttributes.DisplayName), Is.EqualTo(1), "replaced, not added beside");
+        }
+        _mockMetaverse.Verify(r => r.UpdateMetaverseObjectAsync(user), Times.Once);
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_TokenOwnedValueChanged_RecordsTheReplacementAsASystemChangeAsync()
+    {
+        _mockServiceSettings.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingMvoChangesEnabled))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingMvoChangesEnabled,
+                DisplayName = "MVO change tracking",
+                ValueType = ServiceSettingValueType.Boolean,
+                Value = "true"
+            });
+        var user = ExistingUserWithDisplayName("contractor-sub", "Jo Bloggs", ValueContributorKind.SignInClaim, "name");
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "contractor-sub", DisplayName = "Jo Smith" });
+
+        var change = user.Changes.Single();
+        var valueChanges = change.AttributeChanges.Single().ValueChanges;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.System));
+            Assert.That(valueChanges.Single(v => v.ValueChangeType == ValueChangeType.Remove).StringValue, Is.EqualTo("Jo Bloggs"));
+            var added = valueChanges.Single(v => v.ValueChangeType == ValueChangeType.Add);
+            Assert.That(added.StringValue, Is.EqualTo("Jo Smith"));
+            Assert.That(added.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(added.ContributedByClaimType, Is.EqualTo("name"));
+        }
+    }
+
+    /// <summary>
+    /// A value a Synchronisation Rule owns is synchronisation's: the token never fights it, and a value recorded with
+    /// no source at all is left alone too, since nothing says the token owns it.
+    /// </summary>
+    [TestCase(ValueContributorKind.SynchronisationRule, 3)]
+    [TestCase(ValueContributorKind.System, null)]
+    [TestCase(null, null)]
+    public async Task ResolveOrProvisionSsoIdentityAsync_ValueTheTokenDoesNotOwn_IsLeftAsItIsAsync(ValueContributorKind? kind, int? systemId)
+    {
+        var user = ExistingUserWithDisplayName("synced-sub", "Jo Bloggs", kind, contributedBySystemId: systemId);
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "synced-sub", DisplayName = "Jo Smith" });
+
+        Assert.That(DisplayNameOf(user), Is.EqualTo("Jo Bloggs"));
+        _mockMetaverse.Verify(r => r.UpdateMetaverseObjectAsync(It.IsAny<MetaverseObject>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_TokenOwnedValueUnchanged_WritesNothingAsync()
+    {
+        ExistingUserWithDisplayName("contractor-sub", "Jo Bloggs", ValueContributorKind.SignInClaim, "name");
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "contractor-sub", DisplayName = "Jo Bloggs" });
+
+        _mockMetaverse.Verify(r => r.UpdateMetaverseObjectAsync(It.IsAny<MetaverseObject>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_TokenNoLongerCarriesTheClaim_KeepsTheValueAsync()
+    {
+        var user = ExistingUserWithDisplayName("contractor-sub", "Jo Bloggs", ValueContributorKind.SignInClaim, "name");
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "contractor-sub" });
+
+        Assert.That(DisplayNameOf(user), Is.EqualTo("Jo Bloggs"));
+        _mockMetaverse.Verify(r => r.UpdateMetaverseObjectAsync(It.IsAny<MetaverseObject>()), Times.Never);
+    }
+
+    #endregion
+
     [Test]
     public async Task ResolveOrProvisionSsoIdentityAsync_ExistingInitialAdminMissingRole_EnsuresRoleWithoutRecreatingAsync()
     {
