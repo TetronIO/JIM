@@ -4002,7 +4002,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         // The interpolated fragments are compile-time constant column lists, never user data.
         var insertChangeSql =
             $@"INSERT INTO ""MetaverseObjectChanges"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChanges)})
-              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}}, {{14}})";
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}}, {{14}}, {{15}})";
         var insertAttributeSql =
             $@"INSERT INTO ""MetaverseObjectChangeAttributes"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributes)})
               VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
@@ -4027,7 +4027,8 @@ public partial class MetaverseRepository : IMetaverseRepository
             BulkSqlHelpers.NullableParam(change.DeletedObjectType?.Id ?? change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
             BulkSqlHelpers.NullableParam(change.DeletedMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid),
             BulkSqlHelpers.NullableParam(change.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text),
-            BulkSqlHelpers.NullableParam(change.ActivityId, NpgsqlTypes.NpgsqlDbType.Uuid));
+            BulkSqlHelpers.NullableParam(change.ActivityId, NpgsqlTypes.NpgsqlDbType.Uuid),
+            BulkSqlHelpers.NullableParam(change.DeletedByRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid));
 
         // Insert attribute changes and their values
         foreach (var attrChange in change.AttributeChanges)

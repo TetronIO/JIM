@@ -1056,6 +1056,11 @@ public class Worker : BackgroundService
                     var mvoWorkingSet = new ExportEvaluationWorkingSet();
                     var deletePendingExports = await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache, mvoWorkingSet);
 
+                    // The item recording this deletion is created after it, but its id is fixed now so the Deleted
+                    // change record can name it (#2460).
+                    var deletionItemId = Guid.NewGuid();
+                    mvo.DeletingRunProfileExecutionItemId = deletionItemId;
+
                     // Delete the MVO using the initiator info captured when it was marked for deletion
                     // This preserves the audit trail - the original initiator is recorded, not housekeeping
                     await jim.Metaverse.DeleteMetaverseObjectAsync(
@@ -1068,7 +1073,7 @@ public class Worker : BackgroundService
 
                     var deletionItem = new ActivityRunProfileExecutionItem
                     {
-                        Id = Guid.NewGuid(),
+                        Id = deletionItemId,
                         ObjectChangeType = ObjectChangeType.Deleted,
                         DisplayNameSnapshot = mvo.Name,
                         ObjectTypeSnapshot = mvo.Type?.Name,

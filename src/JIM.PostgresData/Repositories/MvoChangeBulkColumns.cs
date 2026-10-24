@@ -29,7 +29,7 @@ internal static class MvoChangeBulkColumns
         "InitiatedByType", "InitiatedById", "InitiatedByName",
         "SyncRuleId", "SyncRuleName",
         "DeletedObjectTypeId", "DeletedMetaverseObjectId", "DeletedObjectDisplayName",
-        "ActivityId"
+        "ActivityId", "DeletedByRunProfileExecutionItemId"
     ];
 
     /// <summary>

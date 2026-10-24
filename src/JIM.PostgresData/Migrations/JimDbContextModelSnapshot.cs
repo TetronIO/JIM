@@ -969,6 +969,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ChangeType")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("DeletedByRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("DeletedMetaverseObjectId")
                         .HasColumnType("uuid");
 

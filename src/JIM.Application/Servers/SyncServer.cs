@@ -127,6 +127,7 @@ public class SyncServer : ISyncServer
                     ? MetaverseObjectChangeInitiatorType.User
                     : MetaverseObjectChangeInitiatorType.NotSet,
                 ActivityId = activity.Id,
+                DeletedByRunProfileExecutionItemId = metaverseObject.DeletingRunProfileExecutionItemId,
                 DeletedMetaverseObjectId = mvoId,
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
                 DeletedObjectDisplayName = displayName
@@ -202,6 +203,7 @@ public class SyncServer : ISyncServer
                         ? MetaverseObjectChangeInitiatorType.User
                         : MetaverseObjectChangeInitiatorType.NotSet,
                     ActivityId = activity.Id,
+                    DeletedByRunProfileExecutionItemId = metaverseObject.DeletingRunProfileExecutionItemId,
                     DeletedMetaverseObjectId = metaverseObject.Id,
                     DeletedObjectTypeId = metaverseObject.Type?.Id,
                     DeletedObjectDisplayName = displayName

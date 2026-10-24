@@ -240,20 +240,23 @@ public class MvoChangeValuePersistenceDatabaseTests
     }
 
     /// <summary>
-    /// Real-PostgreSQL verification for #2460: the Activity a change was made in must survive both raw write paths,
+    /// Real-PostgreSQL verification for #2460: the Activity a change was made in, and the item that deleted the object,
+    /// must survive both raw write paths,
     /// the sync engine's bulk COPY and the direct insert deletions use. A column missing from either writes NULL.
     /// </summary>
     [Test]
     public async Task PersistPendingMvoChangesAsync_ActivityId_PersistsAsync()
     {
         var (mvo, activityId) = await SeedObjectAndActivityAsync();
+        var deletingItemId = Guid.NewGuid();
         var change = new MetaverseObjectChange
         {
             MetaverseObject = mvo,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.AttributeFlow,
             InitiatedByType = ActivityInitiatorType.System,
-            ActivityId = activityId
+            ActivityId = activityId,
+            DeletedByRunProfileExecutionItemId = deletingItemId
         };
 
         await using (var writeContext = NewContext())
@@ -264,20 +267,26 @@ public class MvoChangeValuePersistenceDatabaseTests
 
         await using var readContext = NewContext();
         var persisted = await readContext.MetaverseObjectChanges.SingleAsync(c => c.Id == change.Id);
-        Assert.That(persisted.ActivityId, Is.EqualTo(activityId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ActivityId, Is.EqualTo(activityId));
+            Assert.That(persisted.DeletedByRunProfileExecutionItemId, Is.EqualTo(deletingItemId));
+        }
     }
 
     [Test]
     public async Task CreateMetaverseObjectChangeDirectAsync_ActivityId_PersistsAsync()
     {
         var (_, activityId) = await SeedObjectAndActivityAsync();
+        var deletingItemId = Guid.NewGuid();
         var change = new MetaverseObjectChange
         {
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Deleted,
             InitiatedByType = ActivityInitiatorType.System,
             DeletedObjectDisplayName = "Jo Bloggs",
-            ActivityId = activityId
+            ActivityId = activityId,
+            DeletedByRunProfileExecutionItemId = deletingItemId
         };
 
         await using (var writeContext = NewContext())
@@ -285,7 +294,11 @@ public class MvoChangeValuePersistenceDatabaseTests
 
         await using var readContext = NewContext();
         var persisted = await readContext.MetaverseObjectChanges.SingleAsync(c => c.Id == change.Id);
-        Assert.That(persisted.ActivityId, Is.EqualTo(activityId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ActivityId, Is.EqualTo(activityId));
+            Assert.That(persisted.DeletedByRunProfileExecutionItemId, Is.EqualTo(deletingItemId));
+        }
     }
 
     private async Task<(MetaverseObject Mvo, Guid ActivityId)> SeedObjectAndActivityAsync()

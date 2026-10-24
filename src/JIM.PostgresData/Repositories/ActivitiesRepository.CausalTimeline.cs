@@ -58,9 +58,9 @@ public partial class ActivityRepository
 
     /// <summary>
     /// The items about a Metaverse Object, as the CTE <c>ids</c>: those its change records name, under its own id while
-    /// it exists and under the id its deletion re-keys them to after; those of the Connected System Objects joined to
-    /// it; those that record it directly (an export scope review); and the one that scheduled its deletion, which a
-    /// disconnection can leave with no change record of its own.
+    /// it exists and under the id its deletion re-keys them to after; the one that deleted it, which its deletion record
+    /// names (#2460); those of the Connected System Objects joined to it; those that record it directly (an export scope
+    /// review); and the one that scheduled its deletion, which a disconnection can leave with no change record of its own.
     /// </summary>
     private const string MetaverseObjectTimelineIdsSql = """
         WITH ids AS (
@@ -73,6 +73,12 @@ public partial class ActivityRepository
             SELECT c."ActivityRunProfileExecutionItemId"
             FROM "MetaverseObjectChanges" c
             WHERE c."DeletedMetaverseObjectId" = @subject_id AND c."ActivityRunProfileExecutionItemId" IS NOT NULL
+
+            UNION
+
+            SELECT c."DeletedByRunProfileExecutionItemId"
+            FROM "MetaverseObjectChanges" c
+            WHERE c."DeletedMetaverseObjectId" = @subject_id AND c."DeletedByRunProfileExecutionItemId" IS NOT NULL
 
             UNION
 
