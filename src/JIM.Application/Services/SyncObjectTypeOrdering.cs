@@ -26,6 +26,11 @@ namespace JIM.Application.Services;
 /// deterministic for a given configuration.
 /// </para>
 /// <para>
+/// Ordering by schema alone is too pessimistic for LDAP, whose <c>member</c> and <c>manager</c> declare nothing, so
+/// a caller can pass the types those attributes' stored values are observed to point at; a Full Synchronisation does,
+/// at the cost of one aggregate query.
+/// </para>
+/// <para>
 /// A reference path the rules do not show (an expression producing a reference, for instance) is not ordered for.
 /// That costs time, never correctness: the cross-page step still resolves whatever the page loop could not.
 /// </para>
@@ -37,41 +42,36 @@ public static class SyncObjectTypeOrdering
     /// </summary>
     /// <param name="objectTypes">Every Object Type to page through, with its attributes loaded.</param>
     /// <param name="syncRules">The run's Synchronisation Rules; only import rules for these types are considered.</param>
-    public static SyncObjectTypeOrder Compute(IEnumerable<ConnectedSystemObjectType> objectTypes, IEnumerable<SyncRule> syncRules)
+    /// <param name="observedTargetTypeIds">For attributes whose schema declares no target type: the types their stored
+    /// values actually point at, by attribute id (see <see cref="GetUndeclaredMappedReferenceAttributeIds"/>). An
+    /// attribute present here takes exactly these targets, none if its set is empty; one absent is assumed to point
+    /// at every type. Without it, LDAP's undeclared <c>member</c> and <c>manager</c> make people and groups reach
+    /// each other, and the two collapse into one group that pages in plain id order.</param>
+    public static SyncObjectTypeOrder Compute(
+        IEnumerable<ConnectedSystemObjectType> objectTypes,
+        IEnumerable<SyncRule> syncRules,
+        IReadOnlyDictionary<int, IReadOnlySet<int>>? observedTargetTypeIds = null)
     {
         var types = objectTypes.DistinctBy(t => t.Id).OrderBy(t => t.Id).ToList();
         var typeIds = types.Select(t => t.Id).ToList();
         var typeIdSet = typeIds.ToHashSet();
 
-        var attributesById = types
-            .SelectMany(t => t.Attributes)
-            .GroupBy(a => a.Id)
-            .ToDictionary(g => g.Key, g => g.First());
-
         var edges = typeIds.ToDictionary(id => id, _ => new SortedSet<int>());
-        foreach (var rule in syncRules.Where(r => r.Direction == SyncRuleDirection.Import && typeIdSet.Contains(r.ConnectedSystemObjectTypeId)))
+        foreach (var (referencingTypeId, attributeId, attribute) in MappedReferenceSources(types, syncRules))
         {
-            var referencingTypeId = rule.ConnectedSystemObjectTypeId;
-            var sources = rule.AttributeFlowRules
-                .Where(m => m.TargetMetaverseAttribute?.Type == AttributeDataType.Reference)
-                .SelectMany(m => m.Sources)
-                .Where(s => s.ConnectedSystemAttributeId.HasValue);
-
-            foreach (var source in sources)
+            var declaredTargetTypeId = attribute?.ReferencedObjectTypeId;
+            if (declaredTargetTypeId.HasValue)
             {
-                var attribute = source.ConnectedSystemAttribute
-                    ?? attributesById.GetValueOrDefault(source.ConnectedSystemAttributeId!.Value);
-                var declaredTargetTypeId = attribute?.ReferencedObjectTypeId;
-
-                if (declaredTargetTypeId.HasValue)
-                {
-                    if (typeIdSet.Contains(declaredTargetTypeId.Value))
-                        edges[referencingTypeId].Add(declaredTargetTypeId.Value);
-                }
-                else
-                {
-                    edges[referencingTypeId].UnionWith(typeIds);
-                }
+                if (typeIdSet.Contains(declaredTargetTypeId.Value))
+                    edges[referencingTypeId].Add(declaredTargetTypeId.Value);
+            }
+            else if (observedTargetTypeIds != null && observedTargetTypeIds.TryGetValue(attributeId, out var observed))
+            {
+                edges[referencingTypeId].UnionWith(observed.Where(typeIdSet.Contains));
+            }
+            else
+            {
+                edges[referencingTypeId].UnionWith(typeIds);
             }
         }
 
@@ -80,6 +80,43 @@ public static class SyncObjectTypeOrdering
         var groups = OrderComponents(components, edges);
 
         return new SyncObjectTypeOrder(groups, selfReferencingTypeIds);
+    }
+
+    /// <summary>
+    /// The mapped reference attributes whose schema declares no target type: the ones worth asking the data about
+    /// before <see cref="Compute"/>.
+    /// </summary>
+    public static IReadOnlySet<int> GetUndeclaredMappedReferenceAttributeIds(
+        IEnumerable<ConnectedSystemObjectType> objectTypes, IEnumerable<SyncRule> syncRules)
+    {
+        var types = objectTypes.DistinctBy(t => t.Id).ToList();
+        return MappedReferenceSources(types, syncRules)
+            .Where(source => source.Attribute?.ReferencedObjectTypeId == null)
+            .Select(source => source.AttributeId)
+            .ToHashSet();
+    }
+
+    /// <summary>
+    /// Every (referencing type, attribute) an import rule flows from a Connected System attribute to a Metaverse
+    /// reference attribute, the attribute resolved from the source or the type's schema (null if neither has it).
+    /// </summary>
+    private static IEnumerable<(int ReferencingTypeId, int AttributeId, ConnectedSystemObjectTypeAttribute? Attribute)> MappedReferenceSources(
+        List<ConnectedSystemObjectType> types, IEnumerable<SyncRule> syncRules)
+    {
+        var typeIdSet = types.Select(t => t.Id).ToHashSet();
+        var attributesById = types
+            .SelectMany(t => t.Attributes)
+            .GroupBy(a => a.Id)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        return syncRules
+            .Where(r => r.Direction == SyncRuleDirection.Import && typeIdSet.Contains(r.ConnectedSystemObjectTypeId))
+            .SelectMany(rule => rule.AttributeFlowRules
+                .Where(m => m.TargetMetaverseAttribute?.Type == AttributeDataType.Reference)
+                .SelectMany(m => m.Sources)
+                .Where(s => s.ConnectedSystemAttributeId.HasValue)
+                .Select(s => (rule.ConnectedSystemObjectTypeId, s.ConnectedSystemAttributeId!.Value,
+                    s.ConnectedSystemAttribute ?? attributesById.GetValueOrDefault(s.ConnectedSystemAttributeId!.Value))));
     }
 
     /// <summary>

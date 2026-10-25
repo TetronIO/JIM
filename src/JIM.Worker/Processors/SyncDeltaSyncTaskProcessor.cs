@@ -197,10 +197,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // estimate only, and ObjectsProcessed may exceed it. A mark set behind a cursor mid-run is picked up by the
         // next run.
         var deltaSyncStartedAt = DateTime.UtcNow;
-        var csoPager = CreateTypeOrderedPager(activeSyncRules, deltaSyncStartedAt,
+        var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, deltaSyncStartedAt,
             (afterId, objectTypeId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
                 _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
-            "Delta Synchronisation");
+            "Delta Synchronisation", observeUndeclaredReferenceTargets: false);
 
         for (var page = 1; ; page++)
         {

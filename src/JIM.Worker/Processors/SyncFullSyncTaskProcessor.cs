@@ -204,10 +204,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // while the run is in flight would otherwise push the original tail past a page budget fixed before they
         // arrived. A closing sweep then picks up objects created mid-run behind a type that had already been walked.
         // The count is the progress estimate only, and ObjectsProcessed may exceed it.
-        var csoPager = CreateTypeOrderedPager(activeSyncRules, fullSyncStartedAt,
+        var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, fullSyncStartedAt,
             (afterId, objectTypeId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectsAsync(
                 _connectedSystem.Id, 1, pageSize, totalCsosToProcess, csoLoadWatermark, afterId, objectTypeId, createdOnOrAfter),
-            "Full Synchronisation");
+            "Full Synchronisation", observeUndeclaredReferenceTargets: true);
 
         for (var i = 1; ; i++)
         {

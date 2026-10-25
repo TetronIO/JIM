@@ -67,7 +67,7 @@
 
     <div class="jim-run-metrics">
         <div class="jim-run-metric">
-            <MudText Typo="Typo.caption" Class="jim-run-metric-label">Processed</MudText>
+            <MudText Typo="Typo.caption" Class="jim-run-metric-label">@ProcessedLabel</MudText>
             <MudText Typo="Typo.body1" Class="jim-run-metric-value">@ProcessedText</MudText>
         </div>
 
@@ -142,6 +142,13 @@
     public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
 
     /// <summary>
+    /// What the counters count in the running step: objects, or the reference values a Synchronisation's
+    /// cross-page reference step works through.
+    /// </summary>
+    [Parameter]
+    public RunPhaseCountUnit CountUnit { get; set; }
+
+    /// <summary>
     /// The Activity's message: what the run is doing inside the step it has reached. Null when the
     /// run is not in flight.
     /// </summary>
@@ -206,6 +213,8 @@
     }
 
     private bool IsIndeterminate => ObjectsToProcess <= 0;
+
+    private string ProcessedLabel => CountUnit == RunPhaseCountUnit.ReferenceValues ? "Reference values processed" : "Processed";
 
     /// <summary>
     /// Truncated to the tenth rather than rounded, so the only thing that reads as 100% is a step

@@ -39,7 +39,8 @@ BeforeAll {
             [string]$Message = 'Imported 145 objects',
             $CurrentPhase = $null,
             $CurrentPhaseNumber = $null,
-            [int]$TotalPhases = 0
+            [int]$TotalPhases = 0,
+            $CountUnit = $null
         )
 
         [PSCustomObject]@{
@@ -51,6 +52,7 @@ BeforeAll {
             currentPhase       = $CurrentPhase
             currentPhaseNumber = $CurrentPhaseNumber
             totalPhases        = $TotalPhases
+            countUnit          = $CountUnit
         }
     }
 }
@@ -109,6 +111,27 @@ Describe 'Get-JIMActivityProgressDisplay' {
             $result.Status | Should -BeLike '*145 of 500 objects*'
             $result.Status | Should -BeLike '*Imported 145 objects*'
             $result.Status | Should -Not -BeLike '*Step *'
+        }
+    }
+
+    Context 'Count unit' {
+
+        It 'Counts reference values while the server says the step counts them' {
+            $snapshot = New-ProgressSnapshot -CountUnit 'ReferenceValues' -ObjectsProcessed 1200 -ObjectsToProcess 6500 -Message '' `
+                -CurrentPhase ([PSCustomObject]@{ name = 'Resolving cross-page references' }) -CurrentPhaseNumber 3 -TotalPhases 4
+            $snapshot | Add-Member -NotePropertyName objectsPerSecond -NotePropertyValue 250
+
+            $result = Invoke-ProgressDisplay -Progress $snapshot
+
+            $result.Status | Should -BeLike '*1200 of 6500 reference values*'
+            $result.Status | Should -Not -BeLike '*objects*'
+            $result.CurrentOperation | Should -Be '250.0 reference values/second'
+        }
+
+        It 'Counts objects when the server reports no unit' {
+            $result = Invoke-ProgressDisplay -Progress (New-ProgressSnapshot)
+
+            $result.Status | Should -BeLike '*145 of 500 objects*'
         }
     }
 

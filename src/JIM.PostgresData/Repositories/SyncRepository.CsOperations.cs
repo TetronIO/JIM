@@ -16,6 +16,43 @@ namespace JIM.PostgresData.Repositories;
 
 public partial class SyncRepository
 {
+    #region Connected System Object — Reference Targets
+
+    /// <inheritdoc />
+    public async Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
+    {
+        var result = attributeIds.Distinct().ToDictionary(id => id, _ => (IReadOnlySet<int>)new HashSet<int>());
+        if (result.Count == 0)
+            return result;
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        // One pass over the attributes' values (measured ~2 s for 7.25M reference values across 790,000 objects). The
+        // referenced row is reached by its primary key, so the referencing system needs no filter of its own: an
+        // attribute id belongs to exactly one Connected System's schema.
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT DISTINCT av."AttributeId", target."TypeId"
+            FROM "ConnectedSystemObjectAttributeValues" av
+            INNER JOIN "ConnectedSystemObjects" target ON target."Id" = av."ReferenceValueId"
+            WHERE av."AttributeId" = ANY(@attributeIds)
+            """, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("attributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+        {
+            Value = result.Keys.ToArray()
+        });
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            ((HashSet<int>)result[reader.GetInt32(0)]).Add(reader.GetInt32(1));
+
+        return result;
+    }
+
+    #endregion
+
     #region Connected System Object — Parallel Bulk Create
 
     /// <summary>

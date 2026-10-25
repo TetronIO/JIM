@@ -41,6 +41,13 @@ public class ActivityProgressDto
     public int ObjectsToProcess { get; set; }
 
     /// <summary>
+    /// What the counters (ObjectsProcessed, ObjectsToProcess, ObjectsPerSecond) count in the step running now:
+    /// Objects for almost every step, or ReferenceValues while a Synchronisation resolves cross-page references,
+    /// whose work grows with each object's reference values.
+    /// </summary>
+    public RunPhaseCountUnit CountUnit { get; set; }
+
+    /// <summary>
     /// Percentage complete for the current counting window (0 to 100), or null when progress is
     /// indeterminate.
     /// </summary>
@@ -141,6 +148,8 @@ public class ActivityProgressDto
             Message = progress.Message,
             ObjectsProcessed = progress.ObjectsProcessed,
             ObjectsToProcess = progress.ObjectsToProcess,
+            // The counters belong to the JIM step hosting any Connector step, so the unit is that step's.
+            CountUnit = RunProfilePhaseCatalogue.GetCountUnit(progress.RunType, currentTopLevel?.Key),
             PercentComplete = percentComplete,
             ElapsedSeconds = Math.Max(0d, (utcNow - startedAt).TotalSeconds),
             ObjectsPerSecond = eta.ObjectsPerSecond,

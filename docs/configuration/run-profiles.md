@@ -22,7 +22,7 @@ A Run Profile is one of:
 - **Delta Synchronisation**<br /> Evaluate only objects with pending changes since the last sync. Faster.
 - **Export**<br /> Flush Pending Exports out to the Connected System.
 
-A synchronisation works through the Connected System's Object Types in dependency order: a type comes after the types its reference Attribute Flows can point at, so people are synchronised before the groups whose members they are, and each group's membership is resolved as the group is processed. Where an attribute's schema does not say which type it points at (LDAP `member`, for example), JIM assumes it can point at any type, so a type with no reference Attribute Flows comes first. References between objects of the same type, such as a manager or a nested group, can still need the **Resolving cross-page references** step. The run's log records the order it used.
+A synchronisation works through the Connected System's Object Types in dependency order: a type comes after the types its reference Attribute Flows can point at, so people are synchronised before the groups whose members they are, and each group's membership is resolved as the group is processed. Where an attribute's schema does not say which type it points at (LDAP `member` and `manager`, for example), a Full Synchronisation looks at which types its stored values point at, so people still come before groups when both attributes are mapped; a Delta Synchronisation assumes such an attribute can point at any type. References between objects of the same type, such as a manager or a nested group, can still need the **Resolving cross-page references** step. The run's log records the order it used.
 
 ## Page size
 

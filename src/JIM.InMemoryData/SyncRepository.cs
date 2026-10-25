@@ -466,6 +466,19 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
 
+    public Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
+    {
+        var wanted = attributeIds.ToHashSet();
+        var result = wanted.ToDictionary(id => id, _ => (IReadOnlySet<int>)new HashSet<int>());
+        foreach (var av in _csos.Values.SelectMany(c => c.AttributeValues)
+                     .Where(av => wanted.Contains(av.AttributeId) && av.ReferenceValueId.HasValue))
+        {
+            if (_csos.TryGetValue(av.ReferenceValueId!.Value, out var target))
+                ((HashSet<int>)result[av.AttributeId]).Add(target.TypeId != 0 ? target.TypeId : target.Type?.Id ?? 0);
+        }
+        return Task.FromResult(result);
+    }
+
     /// <summary>
     /// The Connected System Objects <see cref="GetConnectedSystemObjectAsync"/> has been asked for, in call order.
     /// Lets a test prove which objects an evaluation actually put to the engine, rather than only what it reported

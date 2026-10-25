@@ -182,6 +182,72 @@ public class KeysetCsoTypePagingDatabaseTests
         Assert.That(swept, Is.EquivalentTo(lateIds));
     }
 
+    /// <summary>
+    /// The aggregate a Full Synchronisation runs before ordering (#2492): for each reference attribute asked about, the
+    /// Object Types its stored values point at. An attribute holding no values comes back with an empty set, which
+    /// is what lets the ordering drop it rather than assume it reaches every type.
+    /// </summary>
+    [Test]
+    public async Task GetReferencedObjectTypeIdsAsync_ReturnsTheTypesEachAttributesValuesPointAtAsync()
+    {
+        int personTypeId, groupTypeId, managerId, memberId, sponsorId;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "Yellowstone", ConnectorDefinition = connectorDefinition };
+            var person = NewType(system, "person");
+            var group = NewType(system, "group");
+            var manager = NewReference(person, "manager");
+            var member = NewReference(group, "member");
+            var sponsor = NewReference(group, "sponsor");
+            seed.AddRange(connectorDefinition, system, person, group);
+            await seed.SaveChangesAsync();
+
+            var alice = AddObjects(seed, system, person, 1).Single();
+            var bob = AddObjects(seed, system, person, 1).Single();
+            var admins = AddObjects(seed, system, group, 1).Single();
+            var staff = AddObjects(seed, system, group, 1).Single();
+            await seed.SaveChangesAsync();
+
+            ConnectedSystemObject Tracked(Guid id) => seed.ConnectedSystemObjects.Local.Single(c => c.Id == id);
+            seed.AddRange(
+                Reference(manager, Tracked(bob), alice),
+                Reference(member, Tracked(admins), alice),
+                Reference(member, Tracked(admins), staff));
+            await seed.SaveChangesAsync();
+
+            (personTypeId, groupTypeId, managerId, memberId, sponsorId) = (person.Id, group.Id, manager.Id, member.Id, sponsor.Id);
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var targets = await repository.Sync.GetReferencedObjectTypeIdsAsync([managerId, memberId, sponsorId]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(targets[managerId], Is.EquivalentTo(new[] { personTypeId }));
+            Assert.That(targets[memberId], Is.EquivalentTo(new[] { personTypeId, groupTypeId }));
+            Assert.That(targets[sponsorId], Is.Empty);
+        }
+    }
+
+    private static ConnectedSystemObjectTypeAttribute NewReference(ConnectedSystemObjectType type, string name)
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = name, ConnectedSystemObjectType = type, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued, Selected = true
+        };
+        type.Attributes.Add(attribute);
+        return attribute;
+    }
+
+    private static ConnectedSystemObjectAttributeValue Reference(ConnectedSystemObjectTypeAttribute attribute, ConnectedSystemObject from, Guid toId) => new()
+    {
+        Attribute = attribute, AttributeId = attribute.Id, ConnectedSystemObject = from, ReferenceValueId = toId
+    };
+
     private static async Task<List<Guid>> WalkAsync(Func<Guid, Task<JIM.Models.Utility.PagedResultSet<ConnectedSystemObject>>> loadPage)
     {
         var seen = new List<Guid>();

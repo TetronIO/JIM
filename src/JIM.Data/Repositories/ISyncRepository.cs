@@ -102,6 +102,15 @@ public interface ISyncRepository
     Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
+    /// For each of the given reference attributes, the Object Types its stored values point at (#2492). A Full
+    /// Synchronisation asks this about mapped reference attributes whose schema declares no target type (LDAP's
+    /// <c>member</c> and <c>manager</c>), so it can page referenced types first rather than assume each attribute
+    /// reaches every type. Every attribute asked about is in the result; one holding no resolved reference values maps
+    /// to an empty set. One aggregate over the attributes' values.
+    /// </summary>
+    Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds);
+
+    /// <summary>
     /// Gets a single CSO by ID with full attribute values.
     /// Used for cross-page reference resolution and lazy attribute loading.
     /// </summary>

@@ -7479,8 +7479,14 @@ public abstract class SyncTaskProcessorBase
     /// <param name="runStartedAt">When the run started; the sweep's creation floor is derived from it.</param>
     /// <param name="loadPage">The repository page load for this run kind.</param>
     /// <param name="runKind">The run kind, for the log line.</param>
-    protected TypeOrderedCsoPager CreateTypeOrderedPager(
-        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage, string runKind)
+    /// <param name="observeUndeclaredReferenceTargets">Whether to ask the database which types the mapped reference
+    /// attributes with no declared target actually point at (one aggregate over their values, about 2 seconds at
+    /// 7 million values), rather than assume each reaches every type. Worth it for a Full Synchronisation: without it
+    /// LDAP's <c>member</c> and <c>manager</c> collapse people and groups into one id-ordered group. A Delta
+    /// Synchronisation defers only references to objects new in the same delta, too few to pay for the query.</param>
+    protected async Task<TypeOrderedCsoPager> CreateTypeOrderedPagerAsync(
+        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage, string runKind,
+        bool observeUndeclaredReferenceTargets)
     {
         var objectTypes = _connectedSystem.ObjectTypes ?? [];
         if (objectTypes.Count == 0)
@@ -7491,7 +7497,20 @@ public abstract class SyncTaskProcessorBase
             return new TypeOrderedCsoPager(loadPage, [], DateTime.MinValue);
         }
 
-        var order = SyncObjectTypeOrdering.Compute(objectTypes, activeSyncRules);
+        Dictionary<int, IReadOnlySet<int>>? observedTargetTypeIds = null;
+        if (observeUndeclaredReferenceTargets)
+        {
+            var undeclaredAttributeIds = SyncObjectTypeOrdering.GetUndeclaredMappedReferenceAttributeIds(objectTypes, activeSyncRules);
+            if (undeclaredAttributeIds.Count > 0)
+            {
+                using var observeSpan = Diagnostics.Sync.StartSpan("ObserveReferenceTargetTypes")
+                    .SetTag("attributeCount", undeclaredAttributeIds.Count);
+                observedTargetTypeIds = await _syncRepo.GetReferencedObjectTypeIdsAsync(undeclaredAttributeIds.ToList());
+                observeSpan.SetSuccess();
+            }
+        }
+
+        var order = SyncObjectTypeOrdering.Compute(objectTypes, activeSyncRules, observedTargetTypeIds);
         var namesById = objectTypes.ToDictionary(t => t.Id, t => t.Name);
         string NameOf(int id) => LogSanitiser.Sanitise(namesById.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture))) ?? string.Empty;
 
