@@ -23,9 +23,5 @@ services:
     environment:
       - JIM_SSO_AUTHORITY=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs
       - JIM_SSO_PUBLIC_AUTHORITY=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs
-      # The issuers JIM accepts on API tokens. AD FS's discovery document (and its ID tokens) name the authority, but
-      # its access tokens name its federation service identifier (access_token_issuer), which is plain HTTP whatever
-      # its endpoints are, so both are listed.
-      - JIM_SSO_VALID_ISSUERS=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs,http://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs/services/trust
     extra_hosts:
       - "${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}:${JIM_AD_LAB_ADFS_PRIMARY_ADDRESS:-0.0.0.0}"

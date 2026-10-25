@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ JIM accepts an API token from the `access_token_issuer` the identity provider's discovery document publishes, as well as from its `issuer`, so AD FS, which issues access tokens under its federation service identifier, no longer needs `JIM_SSO_VALID_ISSUERS`. A token from any other issuer is still refused. (#2440)
 - ✨ Signing in keeps **Email** current from the identity provider, as it does the other profile values: the portal now asks every provider for the `email` scope. (#2439)
 - ✨ Administrators JIM does not synchronise, such as the initial administrator, keep their profile current from the identity provider: each sign-in refreshes Display Name, First Name, Last Name and User Principal Name from the token, while values a Synchronisation Rule supplies are never touched. (#2383)
 - ✨ Values JIM sets outside synchronisation now say where they came from, instead of **Source not recorded**: a value read from a sign-in token names the claim (such as `given_name`), and a value JIM fixes itself, such as the initial administrator's Type, reads **Set by JIM**. Shown in the Inspect view, the Changes tab, REST and PowerShell (`ContributedByKind`, `ClaimType`). Existing values keep "Source not recorded" until set again. (#2472)
@@ -150,6 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 🗑️ `Register-JIMIdentityProvider` no longer returns `ValidIssuers`: JIM now accepts AD FS's access token issuer without `JIM_SSO_VALID_ISSUERS`. (#2440)
 - 🗑️ The Causality Explorer no longer has a **Copy link** button; its address already carries the focus and trail, so the browser's own address bar gives the same link.
 - 🗑️ The Worker no longer loads every Connected System Object into memory before it takes work, so it starts sooner and holds less memory; the `JIM_CACHE_WARM_PARALLELISM` setting that tuned that load is gone. (#2246)
 - 🗑️ The File Connector no longer reads a repeated column header (`member,member`) as a multi-valued attribute: schema discovery, imports and exports refuse such a file, naming the column. Put the values in one column, separated by the Multi-Value Delimiter. (#2186)

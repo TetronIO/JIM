@@ -43,6 +43,8 @@ public static class JimJwtBearerOptions
         {
             ValidateIssuer = true,
             ValidIssuers = validIssuers,
+            // The issuers discovery names, access_token_issuer among them, are accepted too (#2440).
+            IssuerValidatorUsingConfiguration = DiscoveredIssuers.ValidateIssuer,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true
