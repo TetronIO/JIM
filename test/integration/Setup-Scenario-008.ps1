@@ -27,6 +27,10 @@
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 
+.PARAMETER IntraTypeReferences
+    Also flow each user's manager in and out (Scenario 031), so the Synchronisation has references within one
+    Object Type to resolve in its cross-page reference step.
+
 .EXAMPLE
     ./Setup-Scenario-008.ps1 -ApiKey "jim_abc123..."
 
@@ -52,7 +56,13 @@ param(
     [int]$MaxExportParallelism = 1,
 
     [Parameter(Mandatory=$false)]
-    [hashtable]$DirectoryConfig
+    [hashtable]$DirectoryConfig,
+
+    # Scenario 031 (Intra-type References, #2492) reuses this setup and adds references within one Object Type:
+    # each user's manager is another user, so the user rules flow manager to the Metaverse Manager attribute and
+    # back out to the target. Group nesting needs nothing extra; member already flows in both directions.
+    [Parameter(Mandatory=$false)]
+    [switch]$IntraTypeReferences
 )
 
 Set-StrictMode -Version Latest
@@ -639,6 +649,12 @@ $externalIdAttr = if ($isRfcDirectory) { "entryUUID" } else { "objectGUID" }
 Write-Host "  Set $externalIdAttr as External ID for all object types" -ForegroundColor Green
 
 # Attribute lists are defined at the top of the script based on directory type
+
+if ($IntraTypeReferences) {
+    $requiredUserAttributes += 'manager'
+    $userImportMappings += @{ LdapAttr = "manager"; MvAttr = "Manager" }
+    $userExportMappings += @{ MvAttr = "Manager"; LdapAttr = "manager" }
+}
 
 # Validate all required user attributes exist in the LDAP schema
 $sourceSchemaAttrNames = @($sourceUserType.attributes | ForEach-Object { $_.name })
