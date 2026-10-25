@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261025103107_ConnectedSystemObjectTypeKeysetIndex")]
+    [Migration("20261025173837_ConnectedSystemObjectTypeKeysetIndex")]
     partial class ConnectedSystemObjectTypeKeysetIndex
     {
         /// <inheritdoc />
@@ -2303,6 +2303,15 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime>("LastSeenAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("MemoryAvailableBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("MemoryTotalBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ProcessMemoryBytes")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("Service")
                         .HasColumnType("integer");
