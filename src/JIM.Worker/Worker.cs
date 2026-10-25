@@ -981,10 +981,10 @@ public class Worker : BackgroundService
             {
                 return;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Sanctioned broad catch: this loop guards the process, and a reading or a log write that fails once
-                // must not end the guarding. It tries again on the next interval.
+                // Deliberately broad (filtered form): this loop guards the process, and a reading or a log write that
+                // fails once must not end the guarding. It tries again on the next interval.
                 Log.Error(ex, "GuardMemoryAsync: The memory guard failed to act on a reading; it tries again in {Interval}.", MemoryGuardInterval);
             }
         }
@@ -1008,10 +1008,10 @@ public class Worker : BackgroundService
                 if (workerTask?.Activity is { Status: ActivityStatus.InProgress } activity)
                     await abortJim.Activities.FailActivityWithErrorAsync(activity, reason);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Sanctioned broad catch: whatever stops one Activity being recorded must not stop the next, nor the
-                // exit; an Activity left in progress is recovered at the next start.
+                // Deliberately broad (filtered form): whatever stops one Activity being recorded must not stop the
+                // next, nor the exit; an Activity left in progress is recovered at the next start.
                 Log.Error(ex, "AbortForMemoryAsync: Could not record the abort on the Activity of task {TaskId}.", task.TaskId);
             }
         }
