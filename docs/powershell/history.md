@@ -440,7 +440,7 @@ The attribute's value changes.
 | `ContributedBySystemName` | `string` |  |
 | `ContributedByKind` | `string` | What kind of source set the value: SynchronisationRule, SignInClaim, System or Person. Empty when no source was recorded for the change. One of `SynchronisationRule`, `SignInClaim`, `System` or `Person`. |
 | `ContributedByClaimType` | `string` | The sign-in claim that supplied the value, such as `given_name`, when the source is a sign-in claim; otherwise empty. |
-| `IsGeneratedValue` | `bool` | True when a Generated Value Attribute Flow produced this value: the contributing Synchronisation Rule is the generating one and the value is one the generation produced. Set by `MetaverseServer.GetMvoChangeHistoryAsync`, not by the repository. |
+| `IsGeneratedValue` | `bool` | True when a Generated Value Attribute Flow produced this value; false when a Synchronisation Rule mapping, a sign-in claim or another source did. |
 <!-- END GENERATED: Get-JIMMetaverseObjectChangeValue -->
 
 ### Examples
