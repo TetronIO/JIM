@@ -123,7 +123,16 @@ public class MvoAttributeChangeDto
     /// </summary>
     public int? AttributeId { get; set; }
 
+    /// <summary>
+    /// The attribute's first value changes, at most ten. When <c>valueChangeTotal</c> is larger, the rest are read a
+    /// page at a time from the change's attribute values endpoint.
+    /// </summary>
     public List<MvoValueChangeDto> ValueChanges { get; set; } = new();
+
+    /// <summary>
+    /// How many value changes the attribute has in all, including any not returned in <c>valueChanges</c>.
+    /// </summary>
+    public int ValueChangeTotal { get; set; }
 }
 
 /// <summary>

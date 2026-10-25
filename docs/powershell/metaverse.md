@@ -247,7 +247,7 @@ One object per change, newest first.
 | `ConnectedSystemName` | `string` | That Connected System's name. |
 | `RunProfileName` | `string` | The name of the Run Profile that made the change, when one did. |
 | `ConnectedSystemRunType` | `string` | The kind of Run Profile that made the change, when one did. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
-| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality`, `AttributeId` and `ValueChanges`. |
+| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality`, `AttributeId`, `ValueChanges` and `ValueChangeTotal`. |
 <!-- END GENERATED: Get-JIMMetaverseObjectChangeHistory -->
 
 Each value change under `AttributeChanges` names the Synchronisation Rule that contributed it, in `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, because one change can carry values from several rules; both are empty when no rule contributed the value. `ContributedBySystemId` and `ContributedBySystemName` name that rule's Connected System, and are empty once the rule has been deleted, though its name survives. `IsGeneratedValue` is `$true` when a Generated Value Attribute Flow produced the value. `ContributedByKind` says what kind of source set the value (`SynchronisationRule`, `SignInClaim`, `System` or `Person`), and `ContributedByClaimType` names the claim for a value read from a sign-in token; both are empty for a change that recorded no source.

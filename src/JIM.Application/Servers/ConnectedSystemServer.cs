@@ -9480,6 +9480,25 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// One window of the values recorded by the given Connected System Object changes (#2498). A change to a large
+    /// group carries one value change per member, so the change-history shape caps each attribute's values and this
+    /// reads the rest.
+    /// </summary>
+    public async Task<RangeResultSet<CsoChangeValueRow>> GetCsoChangeValueRowsAsync(ChangeValueRowQuery query)
+    {
+        return await Application.Repository.ConnectedSystems.GetCsoChangeValueRowsAsync(query);
+    }
+
+    /// <summary>
+    /// A summary of each given Connected System Object change's value rows (#2498), as <see cref="GetCsoChangeValueRowsAsync"/>
+    /// reads them: how many are Sets, Adds and Removes, and the one Synchronisation Rule they agree on.
+    /// </summary>
+    public async Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetCsoChangeValueSummariesAsync(changeIds);
+    }
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>
