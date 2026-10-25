@@ -1,6 +1,8 @@
 @using JIM.Web.Causality
 @using JIM.Web.Models
 @using System.Globalization
+@using JIM.Models.Enums
+@using JIM.Models.Utility
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -34,7 +36,7 @@
                 {
                     <button type="button" class="@(_operationFilter == operation ? "on" : null)"
                             aria-pressed="@(_operationFilter == operation ? "true" : "false")"
-                            @onclick="() => SetOperationFilterAsync(operation)">@operation · @count</button>
+                            @onclick="() => SetOperationFilterAsync(operation)">@operation · @count.ToString("N0", CultureInfo.InvariantCulture)</button>
                 }
             </div>
         }
@@ -126,6 +128,27 @@
     public bool ShowOperations { get; set; } = true;
 
     /// <summary>
+    /// Where the rows are read from when <see cref="Rows"/> does not hold them all (#2498): a change to a large group
+    /// carries one row per member. Null when <see cref="Rows"/> is the whole set.
+    /// </summary>
+    [Parameter]
+    public CausalityAttributeRowSource? Source { get; set; }
+
+    /// <summary>
+    /// What the rows read from <see cref="Source"/> amount to, for the operation chips: they count every row, not the
+    /// window the grid holds.
+    /// </summary>
+    [Parameter]
+    public ChangeValueSummary? Summary { get; set; }
+
+    /// <summary>
+    /// Reads one window of <see cref="Source"/>'s rows; the host supplies it, so the panel stays a rendering
+    /// component with no data access of its own (the same as <c>LoadConsequenceMembers</c>).
+    /// </summary>
+    [Parameter]
+    public Func<CausalityAttributeRowSource, ChangeValueRowQuery, Task<RangeResultSet<CausalityAttributeRow>>>? LoadAttributeRows { get; set; }
+
+    /// <summary>
     /// The sort key standing for "the order the rows were built in", which is the order that tells the story of
     /// the change; no header claims it, so the grid opens showing no sort arrow and reorders only when asked.
     /// </summary>
@@ -144,12 +167,44 @@
     private CausalityAttributeOperation? _operationFilter;
 
     /// <summary>
-    /// Slices one window from the rows this component was handed, applying the operation chip, the grid's search
-    /// (attribute name or value) and the grid's sort. Nothing is read from the database: the whole set is already
-    /// here, and it is one event's worth of attributes.
+    /// Loads one window of rows, applying the operation chip, the grid's search (attribute name or value) and the
+    /// grid's sort: from <see cref="Source"/> when the rows were too many to carry, else sliced from the rows this
+    /// component was handed.
     /// </summary>
-    private Task<VirtualisedWindow<CausalityAttributeRow>> LoadRowWindowAsync(
-        VirtualisedWindowRequest request, CancellationToken _)
+    private async Task<VirtualisedWindow<CausalityAttributeRow>> LoadRowWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken cancellationToken)
+    {
+        if (Source is not { } source)
+            return SliceRowWindow(request);
+
+        if (LoadAttributeRows is null)
+            throw new InvalidOperationException("An event whose attribute rows are read a window at a time needs LoadAttributeRows to read them.");
+
+        var result = await LoadAttributeRows(source, new ChangeValueRowQuery
+        {
+            ChangeIds = [source.ChangeId],
+            Operation = _operationFilter is { } operation ? CausalityAttributeRowMapper.ToChangeValueOperation(operation) : null,
+            SearchText = string.IsNullOrWhiteSpace(request.SearchText) ? null : request.SearchText.Trim(),
+            Sort = request.SortBy switch
+            {
+                "change" => ChangeValueRowSort.Operation,
+                "attribute" => ChangeValueRowSort.Attribute,
+                "value" => ChangeValueRowSort.Value,
+                _ => ChangeValueRowSort.SourceOrder
+            },
+            SortDescending = request.SortDescending,
+            Offset = request.StartIndex,
+            Count = request.Count,
+            IncludeTotalCount = request.IncludeTotalCount
+        });
+        return new VirtualisedWindow<CausalityAttributeRow>(result.Results, result.TotalResults);
+    }
+
+    /// <summary>
+    /// Slices one window from the rows this component was handed. Nothing is read from the database: the whole set is
+    /// already here.
+    /// </summary>
+    private VirtualisedWindow<CausalityAttributeRow> SliceRowWindow(VirtualisedWindowRequest request)
     {
         IEnumerable<CausalityAttributeRow> rows = Rows;
 
@@ -176,7 +231,7 @@
             _ => rows
         };
 
-        return Task.FromResult(sorted.ToWindow(request));
+        return sorted.ToWindow(request);
     }
 
     /// <summary>
@@ -186,9 +241,22 @@
     private List<(CausalityAttributeOperation Operation, int Count)> GetOperationCounts()
     {
         return new[] { CausalityAttributeOperation.Set, CausalityAttributeOperation.Add, CausalityAttributeOperation.Remove }
-            .Select(operation => (Operation: operation, Count: Rows.Count(r => r.Operation == operation)))
+            .Select(operation => (Operation: operation, Count: CountOf(operation)))
             .Where(entry => entry.Count > 0)
             .ToList();
+    }
+
+    private int CountOf(CausalityAttributeOperation operation)
+    {
+        if (Source == null || Summary is not { } summary)
+            return Rows.Count(r => r.Operation == operation);
+
+        return operation switch
+        {
+            CausalityAttributeOperation.Set => summary.SetCount,
+            CausalityAttributeOperation.Add => summary.AddCount,
+            _ => summary.RemoveCount
+        };
     }
 
     /// <summary>

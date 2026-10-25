@@ -25,6 +25,7 @@ public static class MvoChangeGroupMapper
     {
         return new ChangeHistoryTimeline.ChangeGroup
         {
+            ChangeId = dto.Id,
             ChangeType = dto.ChangeType,
             ChangeTime = dto.ChangeTime,
             InitiatedByType = dto.InitiatedByType,
@@ -40,36 +41,52 @@ public static class MvoChangeGroupMapper
             CsoId = dto.CsoId,
             CsoExternalId = dto.CsoExternalId,
             AttributeChanges = dto.AttributeChanges
-                .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-                {
-                    AttributeName = ac.AttributeName,
-                    ChangeType = vc.ValueChangeType,
-                    Value = vc.ReferenceValue == null ? vc.ToDisplayString() : null,
-                    ReferenceValue = vc.ReferenceValue != null
-                        ? new ChangeHistoryTimeline.ReferenceValueInfo
-                        {
-                            TypeName = vc.ReferenceValue.TypeName,
-                            DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
-                            SecondaryId = null,
-                            Href = JIM.Utilities.Utilities.GetMetaverseObjectHref(vc.ReferenceValue.Id, vc.ReferenceValue.TypePluralName)
-                        }
-                        : null,
-                    IsMultiValued = ac.AttributePlurality == AttributePlurality.MultiValued,
-                    AttributeType = ac.AttributeType,
-                    // Origin and the Inspect link (#399): only when the DTO carries a Metaverse attribute id
-                    // (this page) and a resolvable type plural name. Neither is available before the type has
-                    // loaded, in which case the change still renders, just without the Source column's chip/link.
-                    Origin = ProvenanceLogic.ResolveChangeValueOrigin(
-                        vc.ContributedBySyncRuleId, vc.ContributedBySyncRuleName,
-                        vc.ContributedBySystemId, vc.ContributedBySystemName, vc.IsGeneratedValue,
-                        vc.ContributedByKind, vc.ContributedByClaimType),
-                    AttributeInspectHref = ac.AttributeId.HasValue && !string.IsNullOrEmpty(typePluralName)
-                        ? JIM.Utilities.Utilities.GetMetaverseObjectInspectHref(metaverseObjectId, typePluralName, ac.AttributeId.Value)
-                        : null
-                }))
-                .ToList()
+                .SelectMany(ac => ac.ValueChanges.Select(vc => ToAttributeChange(
+                    ac.AttributeName, ac.AttributePlurality, ac.AttributeType, ac.AttributeId, vc, metaverseObjectId, typePluralName)))
+                .ToList(),
+            AttributeValueTotals = dto.AttributeChanges
+                .Where(ac => ac.ValueChangeTotal > ac.ValueChanges.Count)
+                .ToDictionary(ac => ac.AttributeName, ac => ac.ValueChangeTotal)
         };
     }
+
+    /// <summary>One value of an attribute change, as the timeline shows it.</summary>
+    /// <param name="attributeName">The attribute, as the change recorded its name.</param>
+    /// <param name="plurality">The attribute's plurality.</param>
+    /// <param name="attributeType">The attribute's data type.</param>
+    /// <param name="attributeId">The Metaverse Attribute's id, for the Inspect link; null when it has since been deleted.</param>
+    /// <param name="value">The value change.</param>
+    /// <param name="metaverseObjectId">The changed object's id, for the Inspect link.</param>
+    /// <param name="typePluralName">The object's type plural name, for the Inspect link; no link when null.</param>
+    public static ChangeHistoryTimeline.AttributeChange ToAttributeChange(
+        string attributeName, AttributePlurality plurality, AttributeDataType attributeType, int? attributeId,
+        MvoValueChangeDto value, Guid metaverseObjectId, string? typePluralName) => new()
+    {
+        AttributeName = attributeName,
+        ChangeType = value.ValueChangeType,
+        Value = value.ReferenceValue == null ? value.ToDisplayString() : null,
+        ReferenceValue = value.ReferenceValue != null
+            ? new ChangeHistoryTimeline.ReferenceValueInfo
+            {
+                TypeName = value.ReferenceValue.TypeName,
+                DisplayName = value.ReferenceValue.DisplayName ?? value.ReferenceValue.Id.ToString(),
+                SecondaryId = null,
+                Href = JIM.Utilities.Utilities.GetMetaverseObjectHref(value.ReferenceValue.Id, value.ReferenceValue.TypePluralName)
+            }
+            : null,
+        IsMultiValued = plurality == AttributePlurality.MultiValued,
+        AttributeType = attributeType,
+        // Origin and the Inspect link (#399): only when the DTO carries a Metaverse attribute id (this page) and a
+        // resolvable type plural name. Neither is available before the type has loaded, in which case the change
+        // still renders, just without the Source column's chip/link.
+        Origin = ProvenanceLogic.ResolveChangeValueOrigin(
+            value.ContributedBySyncRuleId, value.ContributedBySyncRuleName,
+            value.ContributedBySystemId, value.ContributedBySystemName, value.IsGeneratedValue,
+            value.ContributedByKind, value.ContributedByClaimType),
+        AttributeInspectHref = attributeId.HasValue && !string.IsNullOrEmpty(typePluralName)
+            ? JIM.Utilities.Utilities.GetMetaverseObjectInspectHref(metaverseObjectId, typePluralName, attributeId.Value)
+            : null
+    };
 
     private static string MechanismType(MvoChangeHistoryDto dto)
     {

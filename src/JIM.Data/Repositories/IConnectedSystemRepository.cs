@@ -918,15 +918,6 @@ public interface IConnectedSystemRepository
     public Task<IList<DataFlowHeader>> GetDataFlowHeadersAsync(DataFlowQuery query);
 
     /// <summary>
-    /// Gets the change history for a Connected System Object.
-    /// Includes all attribute changes and value changes for displaying in the UI.
-    /// </summary>
-    /// <param name="connectedSystemObjectId">The unique identifier of the CSO.</param>
-    /// <param name="limit">Maximum number of changes to return. Defaults to 100.</param>
-    /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
-    Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100);
-
-    /// <summary>
     /// Returns a page of change-history records for a Connected System Object, projected into a flat
     /// DTO so the full entity graph is not materialised. Ordered by <c>ChangeTime</c> descending.
     /// </summary>
@@ -960,6 +951,18 @@ public interface IConnectedSystemRepository
     /// one Synchronisation Rule they agree on. A change with no values is omitted.
     /// </summary>
     Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
+
+    /// <summary>
+    /// How many of each attribute's normalised value rows on one change are Sets, Adds and Removes (#2498).
+    /// </summary>
+    Task<List<ChangeValueAttributeSummary>> GetCsoChangeAttributeValueSummariesAsync(Guid changeId);
+
+    /// <summary>
+    /// Each given Connected System Object's name, as <c>ConnectedSystemObject.NameOrId</c> resolves it (the naming
+    /// tiers, then its external ids), read without materialising the object's values; an object that no longer exists,
+    /// or has no name, has no entry.
+    /// </summary>
+    Task<Dictionary<Guid, string>> GetConnectedSystemObjectNamesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
@@ -1009,7 +1012,7 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="changeId">The ID of the CSO change record.</param>
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
-    Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
+    Task<List<CsoChangeHistoryDto>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
 
     /// <summary>
     /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's

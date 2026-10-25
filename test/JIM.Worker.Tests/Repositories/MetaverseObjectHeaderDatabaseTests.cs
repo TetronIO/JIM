@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -81,6 +82,46 @@ public class MetaverseObjectHeaderDatabaseTests
         var header = await new PostgresDataRepository(ctx).Metaverse.GetMetaverseObjectHeaderAsync(Guid.NewGuid());
 
         Assert.That(header, Is.Null);
+    }
+
+    /// <summary>
+    /// A Connected System Object's detail names the Metaverse Object it is joined to (#2498) from its cached display
+    /// name: it used to load the joined object's every attribute value to do so, which for a group is every member.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectDetailAsync_JoinedToALargeGroup_NamesItWithoutReadingItsMembersAsync()
+    {
+        var groupId = await SeedGroupAsync(memberCount: 50);
+        int connectedSystemId;
+        var csoId = Guid.NewGuid();
+        await using (var ctx = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "Glitterband EMEA", ConnectorDefinition = connectorDefinition };
+            var type = new ConnectedSystemObjectType { Name = "group", ConnectedSystem = system, Selected = true };
+            ctx.AddRange(connectorDefinition, system, type);
+            await ctx.SaveChangesAsync();
+            connectedSystemId = system.Id;
+            ctx.Add(new ConnectedSystemObject
+            {
+                Id = csoId, ConnectedSystemId = system.Id, TypeId = type.Id, Created = DateTime.UtcNow,
+                MetaverseObjectId = groupId, JoinType = ConnectedSystemObjectJoinType.Joined
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var read = NewContext();
+        var detail = await new PostgresDataRepository(read).ConnectedSystems.GetConnectedSystemObjectDetailAsync(
+            connectedSystemId, csoId, CsoAttributeLoadStrategy.CappedMva);
+
+        var joined = detail!.ConnectedSystemObject.MetaverseObject;
+        Assert.That(joined, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joined!.AttributeValues, Is.Empty, "the joined object is named, not loaded");
+            Assert.That(joined!.NameOrId, Is.EqualTo("All Staff"));
+            Assert.That(joined!.Type.PluralName, Is.EqualTo("Groups"), "its type still builds the link to it");
+        }
     }
 
     private async Task<Guid> SeedGroupAsync(int memberCount)

@@ -363,4 +363,78 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
         provider.WaitForAssertion(() =>
             Assert.That(provider.FindAll("[data-testid=jim-initiator-api-key]"), Has.Count.EqualTo(1)));
     }
+
+    // ─── A change loaded with only its first values (#2498) ───
+
+    private static ChangeHistoryTimeline.ChangeGroup BuildCappedChangeGroup() => new()
+    {
+        ChangeId = System.Guid.NewGuid(),
+        ChangeType = ObjectChangeType.Updated,
+        ChangeTime = new System.DateTime(2026, 5, 1, 9, 30, 0, System.DateTimeKind.Utc),
+        InitiatedByType = ActivityInitiatorType.System,
+        ChangeMechanismType = "SynchronisationRule",
+        AttributeChanges = Enumerable.Range(0, 3).Select(i => new ChangeHistoryTimeline.AttributeChange
+        {
+            AttributeName = "Static Members",
+            ChangeType = ValueChangeType.Add,
+            Value = $"Member {i}",
+            IsMultiValued = true,
+            AttributeType = AttributeDataType.Text
+        }).ToList(),
+        AttributeValueTotals = new Dictionary<string, int> { ["Static Members"] = 600_007 }
+    };
+
+    [Test]
+    public void Render_ChangeLoadedWithOnlyItsFirstValues_CountsEveryValueInItsMoreIndicator()
+    {
+        var timeline = Render<ChangeHistoryTimeline>(p => p
+            .Add(c => c.Changes, new List<ChangeHistoryTimeline.ChangeGroup> { BuildCappedChangeGroup() }));
+
+        Assert.That(timeline.Find(".more-changes-indicator").TextContent, Does.Contain("+600,004 more"),
+            "three values are previewed, and the other 600,004 are counted though they were not loaded");
+    }
+
+    [Test]
+    public void Dialog_ChangeLoadedWithOnlyItsFirstValues_ReadsItsValuesThroughTheHostsReader()
+    {
+        var group = BuildCappedChangeGroup();
+        var reader = new RecordingReader();
+        var provider = Render<MudDialogProvider>();
+        var timeline = Render<ChangeHistoryTimeline>(p => p
+            .Add(c => c.Changes, new List<ChangeHistoryTimeline.ChangeGroup> { group })
+            .Add(c => c.ValueReader, reader));
+
+        timeline.Find(".cursor-pointer").Click();
+
+        provider.WaitForAssertion(() => Assert.That(reader.Queries, Is.Not.Empty));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reader.Queries[0].ChangeIds, Is.EqualTo(new[] { group.ChangeId!.Value }));
+            Assert.That(reader.SummariesRead, Is.True, "the dialog's summary counts every value, not the loaded ones");
+        }
+    }
+
+    private sealed class RecordingReader : IChangeHistoryValueReader
+    {
+        public List<JIM.Models.Utility.ChangeValueRowQuery> Queries { get; } = [];
+
+        public bool SummariesRead { get; private set; }
+
+        public Task<JIM.Models.Utility.RangeResultSet<ChangeHistoryTimeline.AttributeChangeDisplay>> ReadValuesAsync(
+            ChangeHistoryTimeline.ChangeGroup change, JIM.Models.Utility.ChangeValueRowQuery query)
+        {
+            Queries.Add(query);
+            return Task.FromResult(new JIM.Models.Utility.RangeResultSet<ChangeHistoryTimeline.AttributeChangeDisplay>
+            {
+                Results = [new ChangeHistoryTimeline.AttributeChangeDisplay { AttributeName = "Static Members", DisplayChangeType = "Add", DisplayValue = "Member 0", IsMultiValued = true }],
+                TotalResults = query.IncludeTotalCount ? 600_007 : null
+            });
+        }
+
+        public Task<List<JIM.Models.Utility.ChangeValueAttributeSummary>> ReadAttributeSummariesAsync(ChangeHistoryTimeline.ChangeGroup change)
+        {
+            SummariesRead = true;
+            return Task.FromResult(new List<JIM.Models.Utility.ChangeValueAttributeSummary> { new("Static Members", 0, 600_007, 0) });
+        }
+    }
 }

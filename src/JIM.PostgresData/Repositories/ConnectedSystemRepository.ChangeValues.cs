@@ -52,12 +52,48 @@ public partial class ConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<ChangeValueAttributeSummary>> GetCsoChangeAttributeValueSummariesAsync(Guid changeId)
+    {
+        using var span = ActivitySource.StartActivity("Cso.LoadChangeAttributeValueSummaries");
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        return await ChangeValueRowsSql.ReadAttributeSummariesAsync(connection, ChangeValueRowsSql.ConnectedSystemObject, changeId);
+    }
+
+    /// <inheritdoc />
     public async Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
         using var span = ActivitySource.StartActivity("Cso.LoadChangeValueSummaries");
         var connection = Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
         return await ChangeValueRowsSql.ReadSummariesAsync(connection, ChangeValueRowsSql.ConnectedSystemObject, changeIds);
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<Guid, string>> GetConnectedSystemObjectNamesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var names = new Dictionary<Guid, string>();
+        if (connectedSystemObjectIds.Count == 0)
+            return names;
+
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT o."Id", {ChangeValueRowsSql.ConnectedSystemObjectNameSql("o.\"Id\"")}
+            FROM "ConnectedSystemObjects" o
+            WHERE o."Id" = ANY(@ids)
+            """;
+        ChangeValueRowsSql.AddParameter(command, "ids", connectedSystemObjectIds.ToArray(), NpgsqlDbType.Array | NpgsqlDbType.Uuid);
+        ChangeValueRowsSql.AddNameParameters(command);
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (!reader.IsDBNull(1) && !string.IsNullOrWhiteSpace(reader.GetString(1)))
+                names[reader.GetGuid(0)] = reader.GetString(1);
+        }
+
+        return names;
     }
 
     private sealed record CsoChangeValueDetail(string AttributeName, AttributeDataType AttributeType, AttributePlurality AttributePlurality, CsoValueChangeDto Value);

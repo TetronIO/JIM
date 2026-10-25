@@ -3,6 +3,7 @@
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Enums
 @using JIM.Models.Transactional
+@using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Models
 
@@ -610,6 +611,13 @@ else
     [Parameter]
     public RenderFragment<ChangeGroup>? ChangeDetailExtra { get; set; }
 
+    /// <summary>
+    /// Reads the values of a change that was loaded with only the first of them (#2498); see
+    /// <see cref="ChangeGroup.HasAllValues"/>. The host supplies it for its side, as it supplies the changes.
+    /// </summary>
+    [Parameter]
+    public IChangeHistoryValueReader? ValueReader { get; set; }
+
     /// <summary>One event on the timeline: a change group or a retired generated value.</summary>
     private sealed record TimelineEntry(DateTime Time, ChangeGroup? Change, RetiredGeneratedValueHeader? Retirement);
 
@@ -644,6 +652,7 @@ else
     private string? _filterChangeType = null;
     private bool _detailsDialogVisible = false;
     private ChangeGroup? _selectedChange = null;
+    private List<ChangeValueAttributeSummary>? _selectedAttributeSummaries;
 
     // Modal filter state. The search itself belongs to the grid in the dialog (it renders the box), so only the
     // two page-owned selects are held here.
@@ -720,6 +729,20 @@ else
         /// </summary>
         public string? CsoExternalId { get; set; }
         public List<AttributeChange> AttributeChanges { get; set; } = new();
+
+        /// <summary>
+        /// How many value changes each attribute has in all, by attribute name, where the change history loaded only the
+        /// first of them (#2498): a change to a large group records one per member. An attribute with no entry was
+        /// loaded whole.
+        /// </summary>
+        public IReadOnlyDictionary<string, int> AttributeValueTotals { get; set; } = new Dictionary<string, int>();
+
+        /// <summary>How many of the change's value changes were not loaded with it.</summary>
+        public int UnloadedValueCount => AttributeValueTotals.Sum(total =>
+            Math.Max(0, total.Value - AttributeChanges.Count(change => change.AttributeName == total.Key)));
+
+        /// <summary>Whether <see cref="AttributeChanges"/> holds every value change the change recorded.</summary>
+        public bool HasAllValues => UnloadedValueCount == 0;
     }
 
     /// <summary>
@@ -833,6 +856,52 @@ else
         /// See <see cref="AttributeChange.AttributeInspectHref"/>.
         /// </summary>
         public string? AttributeInspectHref { get; set; }
+    }
+
+    /// <summary>
+    /// One display item from a row a window read returned (#2498): the read normalises in SQL as
+    /// <see cref="GetDisplayChanges"/> does in memory, so a row that carries the value it replaced is an Update, and
+    /// every other row reads as its plurality's terms say.
+    /// </summary>
+    /// <param name="operation">The row's operation.</param>
+    /// <param name="value">The row's value, mapped as the host maps a loaded value.</param>
+    /// <param name="previous">The value it replaced, for an Update; else null.</param>
+    public static AttributeChangeDisplay ToDisplay(ChangeValueOperation operation, AttributeChange value, AttributeChange? previous)
+    {
+        if (previous != null)
+        {
+            return new AttributeChangeDisplay
+            {
+                AttributeName = value.AttributeName,
+                AttributeType = value.AttributeType,
+                IsMultiValued = value.IsMultiValued,
+                DisplayChangeType = "Updated",
+                IsUpdate = true,
+                UnderlyingChangeType = ValueChangeType.Add,
+                OldValue = previous.ReferenceValue == null ? previous.Value : null,
+                NewValue = value.ReferenceValue == null ? value.Value : null,
+                OldReferenceValue = previous.ReferenceValue,
+                NewReferenceValue = value.ReferenceValue,
+                Origin = value.Origin,
+                AttributeInspectHref = value.AttributeInspectHref
+            };
+        }
+
+        var displayChangeType = value.IsMultiValued
+            ? (operation == ChangeValueOperation.Add ? "Add" : "Remove")
+            : (operation == ChangeValueOperation.Remove ? "Removed" : "Set");
+        return new AttributeChangeDisplay
+        {
+            AttributeName = value.AttributeName,
+            AttributeType = value.AttributeType,
+            IsMultiValued = value.IsMultiValued,
+            DisplayChangeType = displayChangeType,
+            UnderlyingChangeType = operation == ChangeValueOperation.Remove ? ValueChangeType.Remove : ValueChangeType.Add,
+            DisplayValue = value.Value,
+            ReferenceValue = value.ReferenceValue,
+            Origin = value.Origin,
+            AttributeInspectHref = value.AttributeInspectHref
+        };
     }
 
     /// <summary>
@@ -960,9 +1029,12 @@ else
         // Apply change type filter using display terms (Set, Updated, Removed, Add, Remove)
         if (!string.IsNullOrEmpty(_filterChangeType))
         {
+            // A change loaded with only its first values may hold more of a multi-valued attribute's Adds and Removes
+            // than were loaded (#2498), so it is kept for those rather than hidden on a guess.
             filtered = filtered.Where(cg =>
                 cg.ChangeType == ObjectChangeType.Deleted ||
-                GetDisplayChanges(cg).Any(dc => dc.DisplayChangeType == _filterChangeType));
+                GetDisplayChanges(cg).Any(dc => dc.DisplayChangeType == _filterChangeType) ||
+                (!cg.HasAllValues && _filterChangeType is "Add" or "Remove"));
         }
 
         return filtered.OrderByDescending(cg => cg.ChangeTime);
@@ -984,7 +1056,8 @@ else
     /// </summary>
     private int GetRemainingDisplayChangesCount(ChangeGroup changeGroup)
     {
-        return GetDisplayChanges(changeGroup).Count - MaxVisibleChanges;
+        // The values not loaded with the change count too (#2498): each is a multi-valued Add or Remove of its own.
+        return GetDisplayChanges(changeGroup).Count + changeGroup.UnloadedValueCount - MaxVisibleChanges;
     }
 
     /// <summary>
@@ -992,7 +1065,7 @@ else
     /// </summary>
     private bool ShouldShowMoreIndicatorForDisplay(ChangeGroup changeGroup)
     {
-        return GetDisplayChanges(changeGroup).Count > MaxVisibleChanges;
+        return GetDisplayChanges(changeGroup).Count + changeGroup.UnloadedValueCount > MaxVisibleChanges;
     }
 
     /// <summary>
@@ -1038,14 +1111,20 @@ else
         return change.ReferenceValue?.DisplayName ?? change.DisplayValue ?? string.Empty;
     }
 
-    private void OpenChangeDetails(ChangeGroup changeGroup)
+    private async Task OpenChangeDetails(ChangeGroup changeGroup)
     {
         _selectedChange = changeGroup;
+        _selectedAttributeSummaries = null;
         // Reset the modal filters when opening. The grid's own search resets with them, because the state key
         // below changes with the selected group and the grid re-reads its state whenever that happens.
         _modalFilterAttribute = null;
         _modalFilterChangeType = null;
         _detailsDialogVisible = true;
+
+        // A change loaded with only its first values is summarised from the database (#2498), so the summary counts
+        // every value rather than those that happened to load.
+        if (!changeGroup.HasAllValues && ValueReader != null)
+            _selectedAttributeSummaries = await ValueReader.ReadAttributeSummariesAsync(changeGroup);
     }
 
     /// <summary>
@@ -1060,9 +1139,35 @@ else
     /// page (they arrived with the change group), so the window is taken in memory rather than from a query; the
     /// total is only counted when the request asks for it.
     /// </summary>
-    private Task<VirtualisedWindow<AttributeChangeDisplay>> LoadAttributeChangeWindow(
-        VirtualisedWindowRequest request, CancellationToken _) =>
-        Task.FromResult(GetFilteredModalDisplayChanges(request.SearchText).ToWindow(request));
+    private async Task<VirtualisedWindow<AttributeChangeDisplay>> LoadAttributeChangeWindow(
+        VirtualisedWindowRequest request, CancellationToken _)
+    {
+        // A change loaded with only its first values is read from the database a window at a time (#2498); every
+        // other change is windowed from the values it arrived with.
+        if (_selectedChange is not { HasAllValues: false, ChangeId: { } changeId } change || ValueReader == null)
+            return GetFilteredModalDisplayChanges(request.SearchText).ToWindow(request);
+
+        var (operation, hasPreviousValue) = _modalFilterChangeType switch
+        {
+            "Set" => (ChangeValueOperation.Set, (bool?)false),
+            "Updated" => (ChangeValueOperation.Set, true),
+            "Add" => (ChangeValueOperation.Add, null),
+            "Removed" or "Remove" => (ChangeValueOperation.Remove, null),
+            _ => ((ChangeValueOperation?)null, (bool?)null)
+        };
+        var result = await ValueReader.ReadValuesAsync(change, new ChangeValueRowQuery
+        {
+            ChangeIds = [changeId],
+            AttributeName = _modalFilterAttribute,
+            Operation = operation,
+            HasPreviousValue = hasPreviousValue,
+            SearchText = string.IsNullOrWhiteSpace(request.SearchText) ? null : request.SearchText.Trim(),
+            Offset = request.StartIndex,
+            Count = request.Count,
+            IncludeTotalCount = request.IncludeTotalCount
+        });
+        return new VirtualisedWindow<AttributeChangeDisplay>(result.Results, result.TotalResults);
+    }
 
     private async Task OnModalFilterAttributeChangedAsync(string? attributeName)
     {
@@ -1111,6 +1216,24 @@ else
     /// </summary>
     private List<AttributeChangeSummary> GetAggregatedSummary(ChangeGroup changeGroup)
     {
+        // Counted by the database where the change was loaded with only its first values (#2498).
+        if (_selectedAttributeSummaries is { } summaries && ReferenceEquals(changeGroup, _selectedChange))
+        {
+            return summaries.Select(summary =>
+            {
+                var isMultiValued = changeGroup.AttributeChanges.FirstOrDefault(c => c.AttributeName == summary.AttributeName)?.IsMultiValued ?? false;
+                return isMultiValued
+                    ? new AttributeChangeSummary { AttributeName = summary.AttributeName, AddCount = summary.AddCount, RemoveCount = summary.RemoveCount }
+                    : new AttributeChangeSummary
+                    {
+                        AttributeName = summary.AttributeName,
+                        UpdateCount = summary.ReplacementCount > 0 ? 1 : 0,
+                        SetCount = summary.ReplacementCount == 0 && summary.SetCount > 0 ? 1 : 0,
+                        RemovedCount = summary.ReplacementCount == 0 && summary.SetCount == 0 && summary.RemoveCount > 0 ? 1 : 0
+                    };
+            }).ToList();
+        }
+
         return changeGroup.AttributeChanges
         .GroupBy(c => c.AttributeName)
         .Select(g =>

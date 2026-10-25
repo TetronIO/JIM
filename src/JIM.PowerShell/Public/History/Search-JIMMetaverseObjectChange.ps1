@@ -11,6 +11,9 @@ function Search-JIMMetaverseObjectChange {
         name, and by how named attributes changed, for example every Person whose Employee Status changed to Disabled
         this month. Changes to objects since deleted are included.
 
+        Each changed attribute carries its first ten value changes and, in valueChangeTotal, how many there are;
+        Get-JIMMetaverseObjectChangeValue gets the rest.
+
         Give one attribute condition with -Attribute, -Operator and -Value, or several with -Condition. With several,
         -MatchMode All (the default) requires every condition to be met by the same change, to one Metaverse Object in
         one Activity; -MatchMode Any requires one.

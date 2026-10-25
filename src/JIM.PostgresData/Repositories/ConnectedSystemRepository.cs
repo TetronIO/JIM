@@ -2209,11 +2209,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             entity = await Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
+                // The joined Metaverse Object is named from its cached display name (#2498): its attribute values, for
+                // a group every member, are never read just to name it.
                 .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.Type)
-                .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.Attribute)
                 .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
         }
 
@@ -7260,6 +7259,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
                 ? c.ActivityRunProfileExecutionItem.Activity.TargetName
                 : null,
+            ConnectedSystemRunType = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemRunType
+                : null,
             AttributeChanges = c.AttributeChanges
                 .OrderBy(ac => ac.AttributeName)
                 .Select(ac => new CsoAttributeChangeDto
@@ -7387,34 +7389,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(c => ids.Contains(c.Id))
             .Select(CsoChangeHistoryProjection)
             .ToListAsync();
-    }
-
-    public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
-    {
-        using var span = ActivitySource.StartActivity("Cso.LoadChangesEager");
-        span?.SetTag("csoId", connectedSystemObjectId);
-        span?.SetTag("limit", limit);
-        var results = await Repository.Database.ConnectedSystemObjectChanges
-            .AsSplitQuery()
-            .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId)
-            .OrderByDescending(c => c.ChangeTime)
-            .Take(limit)
-            .Include(c => c.ActivityRunProfileExecutionItem)
-            .ThenInclude(rpei => rpei!.Activity)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .ToListAsync();
-        span?.SetTag("returned", results.Count);
-        return results;
     }
 
     /// <inheritdoc />
@@ -7578,36 +7552,35 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
+    public async Task<List<CsoChangeHistoryDto>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
         // First, get the deletion change to find the ConnectedSystemId and External ID
         var targetChange = await Repository.Database.ConnectedSystemObjectChanges
             .FirstOrDefaultAsync(c => c.Id == changeId);
 
         if (targetChange == null)
-            return new List<ConnectedSystemObjectChange>();
+            return [];
 
         // Use the DeletedObjectExternalId string field (populated on deletion changes)
         var externalIdValue = targetChange.DeletedObjectExternalId;
         if (string.IsNullOrEmpty(externalIdValue))
-            return new List<ConnectedSystemObjectChange> { targetChange };
+            return await Repository.Database.ConnectedSystemObjectChanges
+                .AsNoTracking()
+                .Where(c => c.Id == changeId)
+                .Select(CsoChangeHistoryProjection)
+                .ToListAsync();
 
         // Get all changes for that CSO based on External ID string match
         // This includes: the deletion change (has DeletedObjectExternalId) and
         // earlier changes (have DeletedObjectExternalId populated since we now store it on all changes)
+        // Projected as change history projects a live object's changes, so each attribute brings its first values and
+        // its total rather than every value of a large group (#2498).
         return await Repository.Database.ConnectedSystemObjectChanges
-            .AsSplitQuery()
+            .AsNoTracking()
             .Where(c => c.ConnectedSystemId == targetChange.ConnectedSystemId &&
                         c.DeletedObjectExternalId == externalIdValue)
             .OrderByDescending(c => c.ChangeTime)
-            .Include(c => c.ActivityRunProfileExecutionItem)
-            .ThenInclude(rpei => rpei!.Activity)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
+            .Select(CsoChangeHistoryProjection)
             .ToListAsync();
     }
 

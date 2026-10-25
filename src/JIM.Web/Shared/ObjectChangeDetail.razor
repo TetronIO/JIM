@@ -62,6 +62,14 @@
                         <td><ChangeValueCell Change="@change" FinalValue="true" /></td>
                     </tr>
                 }
+                @foreach (var (attributeName, total) in _cappedAttributes)
+                {
+                    @* Too many values to list here (#2498): the attribute's own scrolling table reads them all. *@
+                    <tr data-testid="capped-attribute-row">
+                        <td class="mud-text-secondary">@attributeName</td>
+                        <td>@RenderCappedValues(attributeName, total)</td>
+                    </tr>
+                }
             </tbody>
         </MudSimpleTable>
     }
@@ -89,6 +97,14 @@
                         <td><ChangeValueCell Change="@change" /></td>
                     </tr>
                 }
+                @foreach (var (attributeName, total) in _cappedAttributes)
+                {
+                    @* Too many values to list here (#2498): the attribute's own scrolling table reads them all. *@
+                    <tr data-testid="capped-attribute-row">
+                        <td class="mud-text-secondary">@attributeName</td>
+                        <td colspan="2">@RenderCappedValues(attributeName, total)</td>
+                    </tr>
+                }
             </tbody>
         </MudSimpleTable>
     }
@@ -114,6 +130,28 @@
     [Parameter]
     public EventCallback OnClose { get; set; }
 
+    /// <summary>
+    /// Reads the values of an attribute the change was loaded with only the first of (#2498); supplied by the host. Without
+    /// one, such an attribute says how many values it has and lists none, rather than a part as though it were all.
+    /// </summary>
+    [Parameter]
+    public JIM.Web.Models.IChangeHistoryValueReader? ValueReader { get; set; }
+
+    private ChangeHistoryTimeline.ChangeGroup _group = new();
+    private List<(string AttributeName, int Total)> _cappedAttributes = [];
+
+    private RenderFragment RenderCappedValues(string attributeName, int total) => __builder =>
+    {
+        if (ValueReader is { } reader)
+        {
+            <ChangeValuesNestedTable Reader="reader" Change="_group" AttributeName="@attributeName" Total="total" />
+        }
+        else
+        {
+            <span class="mud-text-secondary">@total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) value changes</span>
+        }
+    };
+
     private ElementReference _root;
     private Guid? _renderedChangeId;
     private List<ChangeHistoryTimeline.AttributeChangeDisplay> _displayChanges = [];
@@ -134,8 +172,11 @@
         // The Inspect links only make sense for an object that still exists, so a deleted object's attributes go
         // unlinked.
         var typePluralName = Result.MetaverseObjectDeleted ? null : Result.MetaverseObjectTypePluralName;
-        var group = MvoChangeGroupMapper.Map(Result.Change, Result.MetaverseObjectId ?? Guid.Empty, typePluralName);
-        _displayChanges = ChangeHistoryTimeline.GetDisplayChanges(group);
+        _group = MvoChangeGroupMapper.Map(Result.Change, Result.MetaverseObjectId ?? Guid.Empty, typePluralName);
+        _cappedAttributes = _group.AttributeValueTotals.OrderBy(t => t.Key).Select(t => (t.Key, t.Value)).ToList();
+        _displayChanges = ChangeHistoryTimeline.GetDisplayChanges(_group)
+            .Where(change => !_group.AttributeValueTotals.ContainsKey(change.AttributeName))
+            .ToList();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

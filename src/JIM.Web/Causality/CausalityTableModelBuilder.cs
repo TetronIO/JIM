@@ -271,6 +271,20 @@ public static class CausalityTableModelBuilder
 
         var (eventVia, eventSyncRuleId) = ResolveVia(causalityEvent);
 
+        // A change to a large group carries one row per member (#2498): listing a sample would read as the whole set,
+        // so one row stands for them all and opens the event's drawer, which reads them a window at a time. Its rule is
+        // the one every value agrees on, as each listed row's would be.
+        if (!causalityEvent.HasAllAttributeRows)
+        {
+            var (summaryVia, summarySyncRuleId) = causalityEvent.AttributeRowSummary is { AgreedSyncRuleName: { } agreedName } agreed
+                ? (agreedName, agreed.AgreedSyncRuleId)
+                : (eventVia, eventSyncRuleId);
+            yield return new CausalityTableRow(objectKey, CausalityTableChangeKind.AttributeChange,
+                null, null, null, summaryVia, summarySyncRuleId, causalityEvent.Label, causalityEvent.Tone,
+                SummarisedRowCount: causalityEvent.AttributeRowCount, SummarisedEvent: causalityEvent);
+            yield break;
+        }
+
         foreach (var attributeRow in causalityEvent.AttributeRows)
         {
             var current = attributeRow.Operation == CausalityAttributeOperation.Remove
@@ -315,6 +329,10 @@ public static class CausalityTableModelBuilder
     /// </summary>
     private static (string? Via, int? SyncRuleId) RuleTheValueChangesAgreeOn(CausalityEvent causalityEvent)
     {
+        // Rows too many to carry were summarised with the rule they agree on (#2498).
+        if (!causalityEvent.HasAllAttributeRows)
+            return causalityEvent.AttributeRowSummary is { AgreedSyncRuleName: { } name } summary ? (name, summary.AgreedSyncRuleId) : (null, null);
+
         var rules = causalityEvent.AttributeRows
             .Where(r => r.SyncRuleId.HasValue && !string.IsNullOrWhiteSpace(r.SyncRuleName))
             .Select(r => (r.SyncRuleName, r.SyncRuleId))
@@ -428,7 +446,9 @@ public static class CausalityTableModelBuilder
     {
         var rows = role == CausalityTableObjectRole.Everything ? allRows : allRows.Where(r => r.ObjectKey == key).ToList();
         var tone = rows.Count > 0 ? rows.Select(r => r.Tone).OrderByDescending(SeverityRank).First() : CausalityTone.Secondary;
-        return new CausalityTableObject(key, role, displayName, subtitle, tone, rows.Count, href);
+        // A summary row counts as every attribute row it stands for (#2498).
+        var rowCount = rows.Sum(r => r.SummarisedRowCount > 0 ? r.SummarisedRowCount : 1);
+        return new CausalityTableObject(key, role, displayName, subtitle, tone, rowCount, href);
     }
 
     /// <summary>

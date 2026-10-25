@@ -32,6 +32,8 @@ Describe 'Pagination safety (-All bounding) via Invoke-JIMPagedFetch' -ForEach @
     @{ Cmdlet = 'Get-JIMPendingExport'; ForceSet = 'ListAll'; BaseParams = @{ ConnectedSystemId = 2 } }
     @{ Cmdlet = 'Get-JIMConfigurationChangeHistory'; ForceSet = 'All'; BaseParams = @{ Type = 'ConnectedSystem'; Id = '9' } }
     @{ Cmdlet = 'Get-JIMActivityChildren'; ForceSet = 'All'; BaseParams = @{ Id = [guid]::Empty } }
+    @{ Cmdlet = 'Get-JIMConnectedSystemObjectChangeValue'; ForceSet = 'All'; BaseParams = @{ ChangeId = [guid]::Empty; AttributeName = 'member' } }
+    @{ Cmdlet = 'Get-JIMMetaverseObjectChangeValue'; ForceSet = 'All'; BaseParams = @{ ChangeId = [guid]::Empty; AttributeName = 'Static Members' } }
 ) {
 
     It '<Cmdlet> exposes a Force switch in its -All parameter set' {

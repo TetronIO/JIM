@@ -124,6 +124,7 @@ public class HistoryControllerChangeSearchTests
                     {
                         AttributeId = 3,
                         AttributeName = "Employee Status",
+                        ValueChangeTotal = 2,
                         ValueChanges =
                         [
                             new MvoValueChangeDto { ValueChangeType = ValueChangeType.Add, StringValue = "Disabled" },
@@ -134,6 +135,7 @@ public class HistoryControllerChangeSearchTests
                     {
                         AttributeId = 4,
                         AttributeName = "Manager",
+                        ValueChangeTotal = 1,
                         ValueChanges =
                         [
                             new MvoValueChangeDto
@@ -169,6 +171,8 @@ public class HistoryControllerChangeSearchTests
             Assert.That(status.RemovedValues, Is.EqualTo(new[] { "Active" }));
             Assert.That(manager.Matched, Is.False);
             Assert.That(manager.AddedValues, Is.EqualTo(new[] { "Ana Ruiz" }));
+            Assert.That(status.ValueChangeTotal, Is.EqualTo(2), "how many value changes there are, beyond those listed");
+            Assert.That(manager.ValueChangeTotal, Is.EqualTo(1));
         }
     }
 

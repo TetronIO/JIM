@@ -109,6 +109,7 @@
                 else
                 {
                     <ChangeHistoryTimeline Changes="@_object.ChangeHistoryRows"
+                                           ValueReader="@(new MvoChangeHistoryValueReader(JimFactory, _object.ObjectId, MetaverseObjectType?.PluralName))"
                                            Retirements="@_object.Retirements"
                                            HistoryComplete="@(_object.ChangeHistoryRows.Count >= _object.ChangeHistoryTotal)" />
                     @if (_object.ChangeHistoryRows.Count < _object.ChangeHistoryTotal)

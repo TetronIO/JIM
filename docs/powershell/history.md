@@ -1,13 +1,13 @@
 ---
 title: History
-description: "The cmdlets that query Configuration Change History, deleted objects and changes to Metaverse Objects, and count and clean up change history."
+description: "The cmdlets that query Configuration Change History, deleted objects and object changes, page a large change's values, and clean up change history."
 type: reference
 audience: automation-author
 ---
 
 # History
 
-Cmdlets for querying Configuration Change History, querying deleted objects, searching changes to Metaverse Objects, and managing change history retention. These cmdlets provide access to the configuration audit trail, the audit trail for deleted objects and the history of every Metaverse Object, and let you control how long change history records are kept.
+Cmdlets for querying Configuration Change History, querying deleted objects, searching changes to Metaverse Objects, reading every value a large change recorded, and managing change history retention. These cmdlets provide access to the configuration audit trail, the audit trail for deleted objects and the history of every Metaverse Object, and let you control how long change history records are kept.
 
 ---
 
@@ -302,7 +302,7 @@ One object per change, newest first, with the attributes it changed and the valu
 | `ChangeInitiatorType` | `string` | What within JIM made the change: a Synchronisation Rule, a User, Example Data or System, for example. One of `NotSet`, `User`, `WorkflowInstance`, `GroupMembershipRuleEvaluation`, `SynchronisationRule`, `ExampleData` or `System`. |
 | `SyncRuleName` | `string` | The Synchronisation Rule that made the change, as it was named at the time. Empty for a change not made by a synchronisation. |
 | `ActivityId` | `guid` | The Activity the change was made in, such as a synchronisation, a scheduled deletion or a sign-in. Empty when history retention has since removed the Activity, or for a change recorded before Activities were linked to changes. |
-| `AttributeChanges` | `object[]` | The attributes that changed, with the values added and removed. Each has `AttributeId`, `AttributeName`, `Matched`, `AddedValues` and `RemovedValues`. |
+| `AttributeChanges` | `object[]` | The attributes that changed, with the values added and removed. Each has `AttributeId`, `AttributeName`, `Matched`, `AddedValues`, `RemovedValues` and `ValueChangeTotal`. |
 <!-- END GENERATED: Search-JIMMetaverseObjectChange -->
 
 ### Examples
@@ -325,6 +325,130 @@ Search-JIMMetaverseObjectChange -Attribute 'Department' -Operator ChangedFrom -V
 
 ```powershell title="Find every change to one person's manager"
 Search-JIMMetaverseObjectChange -DisplayName 'Ana Ruiz' -Attribute 'Manager' -All
+```
+
+---
+
+## Get-JIMConnectedSystemObjectChangeValue
+
+Gets every value change one Connected System Object change recorded for one attribute, a page at a time. Change history (`Get-JIMConnectedSystemObjectChangeHistory`) and an execution item's changes (`Get-JIMActivityExecutionItem`) return each changed attribute's first ten value changes and, in `valueChangeTotal`, how many there are. A change to a large group can record one value change per member, so read the rest with this cmdlet, naming the change by the `id` change history returns. A change to an object since deleted can still be read.
+
+<!-- BEGIN GENERATED: Get-JIMConnectedSystemObjectChangeValue -->
+### Syntax
+
+```powershell
+# Page (default)
+Get-JIMConnectedSystemObjectChangeValue -ChangeId <guid> -AttributeName <string> [-Search <string>] [-Page <int>] [-PageSize <int>]
+
+# All
+Get-JIMConnectedSystemObjectChangeValue -ChangeId <guid> -AttributeName <string> -All [-Search <string>] [-PageSize <int>] [-Force]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ChangeId` | `guid` | Yes |  | The ID of the change, as `Get-JIMConnectedSystemObjectChangeHistory` returns it. |
+| `AttributeName` | `string` | Yes |  | The name of the attribute whose value changes to get, matched case-insensitively. |
+| `Search` | `string` | No |  | Returns only the value changes whose value contains this text, including a referenced object's name. |
+| `Page` | `int` | No (Page) | `1` | The page to get. At least 1. |
+| `PageSize` | `int` | No | `50` | How many value changes a page holds. From 1 to 100. |
+| `All` | `switch` | Yes (All) |  | Fetches every page instead of one. Stops after 1000 pages with a warning; `-Force` fetches the rest. |
+| `Force` | `switch` | No (All) |  | With `-All`, fetches every page, past the 1000-page limit. |
+
+### Output
+
+The attribute's value changes.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ValueChangeType` | `string` | One of `NotSet`, `Add` or `Remove`. |
+| `StringValue` | `string` |  |
+| `DateTimeValue` | `datetime` |  |
+| `IntValue` | `int` |  |
+| `LongValue` | `long` |  |
+| `DecimalValue` | `double` |  |
+| `ByteValueLength` | `int` |  |
+| `GuidValue` | `guid` |  |
+| `BoolValue` | `bool` |  |
+| `ReferenceValue` | `object` | It has `Id`, `ConnectedSystemId`, `TypeName`, `DisplayName` and `SecondaryId`. |
+| `IsPendingExportStub` | `bool` | Whether the referenced object had not yet been exported when the change was recorded; `stringValue` then holds the identifier it was given (such as its distinguished name), the value a reader recognises. |
+| `SyncRuleId` | `int` | The export Synchronisation Rule whose mapping produced this value. Empty when the value was not produced by an export mapping (e.g. import-side changes carry no rule attribution), or the contributing rule has since been deleted. |
+| `SyncRuleName` | `string` | Snapshot of the contributing Synchronisation Rule's name, surviving deletion of the rule. |
+<!-- END GENERATED: Get-JIMConnectedSystemObjectChangeValue -->
+
+### Examples
+
+```powershell title="Read every member a group change added"
+$change = Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId 3 -Id "12345678-1234-1234-1234-123456789abc" | Select-Object -First 1
+Get-JIMConnectedSystemObjectChangeValue -ChangeId $change.id -AttributeName 'member' -All |
+    Where-Object { $_.valueChangeType -eq 'Add' }
+```
+
+```powershell title="Find one member in a large change"
+Get-JIMConnectedSystemObjectChangeValue -ChangeId "a1b2c3d4-0000-0000-0000-000000000000" -AttributeName 'member' -Search 'Ana Ruiz'
+```
+
+---
+
+## Get-JIMMetaverseObjectChangeValue
+
+Gets every value change one Metaverse Object change recorded for one attribute, a page at a time. Change history (`Get-JIMMetaverseObjectChangeHistory`), the change search (`Search-JIMMetaverseObjectChange`) and an execution item's changes (`Get-JIMActivityExecutionItem`) return each changed attribute's first ten value changes and, in `valueChangeTotal`, how many there are. A change to a large group can record one value change per member, so read the rest with this cmdlet, naming the change by the `id` change history returns. A change to an object since deleted can still be read.
+
+<!-- BEGIN GENERATED: Get-JIMMetaverseObjectChangeValue -->
+### Syntax
+
+```powershell
+# Page (default)
+Get-JIMMetaverseObjectChangeValue -ChangeId <guid> -AttributeName <string> [-Search <string>] [-Page <int>] [-PageSize <int>]
+
+# All
+Get-JIMMetaverseObjectChangeValue -ChangeId <guid> -AttributeName <string> -All [-Search <string>] [-PageSize <int>] [-Force]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ChangeId` | `guid` | Yes |  | The ID of the change, as `Get-JIMMetaverseObjectChangeHistory` returns it. |
+| `AttributeName` | `string` | Yes |  | The name of the attribute whose value changes to get, matched case-insensitively. |
+| `Search` | `string` | No |  | Returns only the value changes whose value contains this text, including a referenced object's name. |
+| `Page` | `int` | No (Page) | `1` | The page to get. At least 1. |
+| `PageSize` | `int` | No | `50` | How many value changes a page holds. From 1 to 100. |
+| `All` | `switch` | Yes (All) |  | Fetches every page instead of one. Stops after 1000 pages with a warning; `-Force` fetches the rest. |
+| `Force` | `switch` | No (All) |  | With `-All`, fetches every page, past the 1000-page limit. |
+
+### Output
+
+The attribute's value changes.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ValueChangeType` | `string` | One of `NotSet`, `Add` or `Remove`. |
+| `StringValue` | `string` |  |
+| `DateTimeValue` | `datetime` |  |
+| `IntValue` | `int` |  |
+| `LongValue` | `long` |  |
+| `DecimalValue` | `double` |  |
+| `ByteValueLength` | `int` |  |
+| `GuidValue` | `guid` |  |
+| `BoolValue` | `bool` |  |
+| `ReferenceValue` | `object` | It has `Id`, `DisplayName`, `TypeName` and `TypePluralName`. |
+| `ContributedBySyncRuleId` | `int` | The Synchronisation Rule that contributed this value, distinct from the parent SyncRuleId (the rule that caused the overall change): a single sync run can flow attributes from several rules onto one Metaverse Object. Empty when the value was not contributed by a Synchronisation Rule, or the contributing rule has since been deleted. |
+| `ContributedBySyncRuleName` | `string` | Snapshot of the contributing Synchronisation Rule's name, surviving deletion of the rule. |
+| `ContributedBySystemId` | `int` | The contributing Connected System, resolved from ContributedBySyncRuleId through the still-live Synchronisation Rule. Empty when the rule has since been deleted (the row's rule id is nulled at that point, so the system can no longer be resolved); ContributedBySyncRuleName's snapshot survives regardless. |
+| `ContributedBySystemName` | `string` |  |
+| `ContributedByKind` | `string` | What kind of source set the value: SynchronisationRule, SignInClaim, System or Person. Empty when no source was recorded for the change. One of `SynchronisationRule`, `SignInClaim`, `System` or `Person`. |
+| `ContributedByClaimType` | `string` | The sign-in claim that supplied the value, such as `given_name`, when the source is a sign-in claim; otherwise empty. |
+| `IsGeneratedValue` | `bool` | True when a Generated Value Attribute Flow produced this value; false when a Synchronisation Rule mapping, a sign-in claim or another source did. |
+<!-- END GENERATED: Get-JIMMetaverseObjectChangeValue -->
+
+### Examples
+
+```powershell title="Read every member a group change removed"
+$change = Get-JIMMetaverseObjectChangeHistory -Id "12345678-1234-1234-1234-123456789abc" | Select-Object -First 1
+Get-JIMMetaverseObjectChangeValue -ChangeId $change.id -AttributeName 'Static Members' -All |
+    Where-Object { $_.valueChangeType -eq 'Remove' }
 ```
 
 ---

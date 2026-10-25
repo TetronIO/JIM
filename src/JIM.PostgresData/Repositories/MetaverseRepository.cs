@@ -1514,42 +1514,6 @@ public partial class MetaverseRepository : IMetaverseRepository
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
-    public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
-    {
-        return await Repository.Database.MetaverseObjects.
-            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
-            Include(mo => mo.Type).
-            Include(mo => mo.AttributeValues).
-            ThenInclude(av => av.Attribute).
-            Include(mo => mo.AttributeValues).
-            ThenInclude(av => av.ReferenceValue).
-            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
-            ThenInclude(rvav => rvav.Attribute).
-            Include(mo => mo.AttributeValues).
-            ThenInclude(av => av.ReferenceValue).
-            ThenInclude(rv => rv!.Type).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.AttributeChanges).
-            ThenInclude(ac => ac.Attribute).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.AttributeChanges).
-            ThenInclude(ac => ac.ValueChanges).
-            ThenInclude(vc => vc.ReferenceValue).
-            ThenInclude(rv => rv!.Type).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.AttributeChanges).
-            ThenInclude(ac => ac.ValueChanges).
-            ThenInclude(vc => vc.ReferenceValue).
-            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
-            ThenInclude(rvav => rvav.Attribute).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.SyncRule).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.ActivityRunProfileExecutionItem).
-            ThenInclude(rpei => rpei!.Activity).
-            SingleOrDefaultAsync(mo => mo.Id == id);
-    }
-
     private const int CappedMvaLimit = 10;
 
     /// <inheritdoc />
@@ -1596,12 +1560,6 @@ public partial class MetaverseRepository : IMetaverseRepository
 
     public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
     {
-        if (loadStrategy == MvoAttributeLoadStrategy.All)
-        {
-            var mvo = await GetMetaverseObjectWithChangeHistoryAsync(id);
-            return mvo == null ? null : new MvoDetailResult { MetaverseObject = mvo };
-        }
-
         // CappedMva strategy: load the MVO shell only. Change history is intentionally NOT
         // eager-loaded here; the original Include chain dominated the page load (~1.5s on
         // chatty groups). Change rows are paged separately via GetMvoChangeHistoryAsync.
@@ -4354,7 +4312,7 @@ public partial class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
+    public async Task<List<MvoChangeHistoryDto>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
         // First, get the Delete change record
         var targetChange = await Repository.Database.MetaverseObjectChanges
@@ -4362,7 +4320,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             .FirstOrDefaultAsync(c => c.Id == changeId);
 
         if (targetChange == null)
-            return new List<MetaverseObjectChange>();
+            return [];
 
         // Resolve the original MVO ID from the deletion change record.
         // DeletedMetaverseObjectId is explicitly set via raw SQL on prior change records,
@@ -4385,32 +4343,26 @@ public partial class MetaverseRepository : IMetaverseRepository
         // /t/{plural}/v/{id} link and its type chip from it (#2146).
         if (mvoId.HasValue && mvoId.Value != Guid.Empty)
         {
-            return await Repository.Database.MetaverseObjectChanges
-                .AsSplitQuery()
+            // Projected as change history projects a live object's changes, so each attribute brings its first values
+            // and its total rather than every value of a large group (#2498).
+            var history = await Repository.Database.MetaverseObjectChanges
+                .AsNoTracking()
                 .Where(c => c.DeletedMetaverseObjectId == mvoId || c.Id == changeId)
                 .OrderByDescending(c => c.ChangeTime)
-                .Include(c => c.ActivityRunProfileExecutionItem)
-                .ThenInclude(rpei => rpei!.Activity)
-                .Include(c => c.AttributeChanges)
-                .ThenInclude(ac => ac.Attribute)
-                .Include(c => c.AttributeChanges)
-                .ThenInclude(ac => ac.ValueChanges)
-                .ThenInclude(vc => vc.ReferenceValue)
-                .ThenInclude(rv => rv!.Type)
+                .Select(MvoChangeHistoryProjection)
                 .ToListAsync();
+            await ResolveChangeValueContributingSystemsAsync(history);
+            return history;
         }
 
-        // Fallback: return only the Delete change with its attribute changes loaded
-        return await Repository.Database.MetaverseObjectChanges
-            .AsSplitQuery()
+        // Fallback: return only the Delete change
+        var deletionOnly = await Repository.Database.MetaverseObjectChanges
+            .AsNoTracking()
             .Where(c => c.Id == changeId)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
+            .Select(MvoChangeHistoryProjection)
             .ToListAsync();
+        await ResolveChangeValueContributingSystemsAsync(deletionOnly);
+        return deletionOnly;
     }
 
     public async Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(

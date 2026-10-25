@@ -1,6 +1,7 @@
 @page "/admin/deleted-objects"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Core
+@using JIM.Models.Core.DTOs
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Enums
@@ -318,7 +319,7 @@
         }
         else if (_selectedCsoHistory != null && _selectedCsoHistory.Any())
         {
-            <ChangeHistoryTimeline Changes="@GetCsoHistoryAsChangeGroups()" />
+            <ChangeHistoryTimeline Changes="@GetCsoHistoryAsChangeGroups()" ValueReader="@(new CsoChangeHistoryValueReader(JimFactory))" />
         }
         else
         {
@@ -349,7 +350,7 @@
         }
         else if (_selectedMvoHistory != null && _selectedMvoHistory.Any())
         {
-            <ChangeHistoryTimeline Changes="@GetMvoHistoryAsChangeGroups()" />
+            <ChangeHistoryTimeline Changes="@GetMvoHistoryAsChangeGroups()" ValueReader="@(new MvoChangeHistoryValueReader(JimFactory, Guid.Empty, null))" />
         }
         else
         {
@@ -426,13 +427,13 @@
     // CSO History dialog
     private bool _csoHistoryDialogVisible;
     private ConnectedSystemObjectChange? _selectedCsoChange;
-    private List<ConnectedSystemObjectChange>? _selectedCsoHistory;
+    private List<CsoChangeHistoryDto>? _selectedCsoHistory;
     private bool _csoHistoryLoading;
 
     // MVO History dialog
     private bool _mvoHistoryDialogVisible;
     private MetaverseObjectChange? _selectedMvoChange;
-    private List<MetaverseObjectChange>? _selectedMvoHistory;
+    private List<MvoChangeHistoryDto>? _selectedMvoHistory;
     private bool _mvoHistoryLoading;
 
     protected override async Task OnInitializedAsync()
@@ -662,36 +663,8 @@
 
         return _selectedCsoHistory
             .OrderByDescending(c => c.ChangeTime)
-            .Select(change => new ChangeHistoryTimeline.ChangeGroup
-            {
-                ChangeType = change.ChangeType,
-                ChangeTime = change.ChangeTime,
-                InitiatedByType = change.InitiatedByType,
-                ChangeInitiatorName = change.InitiatedByName,
-                ChangeInitiatorId = change.InitiatedById,
-                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
-                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
-                ConnectedSystemId = change.ConnectedSystemId,
-                ConnectedSystemName = csName,
-                ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
-                AttributeChanges = change.AttributeChanges
-                    .OrderBy(ac => ac.AttributeName)
-                    .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-                    {
-                        AttributeName = ac.AttributeName,
-                        ChangeType = vc.ValueChangeType,
-                        Value = vc.ReferenceValue == null ? vc.ToString() : null,
-                        ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
-                        {
-                            TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
-                            DisplayName = vc.ReferenceValue.NameOrId ?? vc.ReferenceValue.Id.ToString(),
-                            Href = JIM.Utilities.Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
-                        } : null,
-                        IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
-                        AttributeType = ac.AttributeType
-                    }))
-                    .ToList()
-            })
+            .Select(change => CsoChangeGroupMapper.Map(change, _selectedCsoChange?.ConnectedSystemId, csName,
+                MapRunTypeToMechanismType(change.ConnectedSystemRunType)))
             .ToList();
     }
 
@@ -700,45 +673,10 @@
         if (_selectedMvoHistory == null)
             return new List<ChangeHistoryTimeline.ChangeGroup>();
 
+        // A deleted object has no Inspect view, so its attributes go unlinked.
         return _selectedMvoHistory
             .OrderByDescending(c => c.ChangeTime)
-            .Select(change => new ChangeHistoryTimeline.ChangeGroup
-            {
-                ChangeType = change.ChangeType,
-                ChangeTime = change.ChangeTime,
-                InitiatedByType = change.InitiatedByType,
-                ChangeInitiatorName = change.InitiatedByName,
-                ChangeInitiatorId = change.InitiatedById,
-                ChangeMechanismType = MapMvoChangeToMechanismType(change),
-                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
-                ConnectedSystemId = change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemId,
-                ConnectedSystemName = change.ActivityRunProfileExecutionItem?.Activity?.TargetContext,
-                SyncRuleId = change.SyncRuleId,
-                SyncRuleName = change.SyncRuleName,
-                ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
-                // CSO context for Joined changes (from RPEI snapshot)
-                CsoId = change.ActivityRunProfileExecutionItem?.ConnectedSystemObjectId,
-                CsoExternalId = change.ActivityRunProfileExecutionItem?.ExternalIdSnapshot,
-                AttributeChanges = change.AttributeChanges
-                    .OrderBy(ac => ac.AttributeName)
-                    .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-                    {
-                        AttributeName = ac.AttributeName,
-                        ChangeType = vc.ValueChangeType,
-                        Value = vc.ReferenceValue == null ? vc.ToString() : null,
-                        // The repository loads every reference value's Type, which both the type chip and the
-                        // link to the referenced Metaverse Object are built from (#2146).
-                        ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
-                        {
-                            TypeName = vc.ReferenceValue.Type.Name,
-                            DisplayName = vc.ReferenceValue.NameOrId ?? vc.ReferenceValue.Id.ToString(),
-                            Href = JIM.Utilities.Utilities.GetMetaverseObjectHref(vc.ReferenceValue)
-                        } : null,
-                        IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
-                        AttributeType = ac.AttributeType
-                    }))
-                    .ToList()
-            })
+            .Select(change => MvoChangeGroupMapper.Map(change, Guid.Empty, typePluralName: null))
             .ToList();
     }
 
@@ -754,23 +692,4 @@
         };
     }
 
-    private static string MapMvoChangeToMechanismType(MetaverseObjectChange change)
-    {
-        if (change.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.ExampleData
-            or MetaverseObjectChangeInitiatorType.User
-            or MetaverseObjectChangeInitiatorType.WorkflowInstance
-            or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation
-            or MetaverseObjectChangeInitiatorType.System)
-        {
-            return change.ChangeInitiatorType.ToString();
-        }
-
-        return change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType switch
-        {
-            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
-            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
-            ConnectedSystemRunType.Export => "Export",
-            _ => "Import"
-        };
-    }
 }

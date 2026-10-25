@@ -9429,20 +9429,6 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Retrieves the change history for a Connected System Object.
-    /// </summary>
-    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
-    /// <param name="limit">Maximum number of changes to return. Defaults to 100.</param>
-    /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
-    public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
-    {
-        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetChanges")
-            .SetTag("csoId", connectedSystemObjectId)
-            .SetTag("limit", limit);
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId, limit);
-    }
-
-    /// <summary>
     /// Returns a page of change-history rows for a Connected System Object, projected into a flat DTO.
     /// Ordered by change time descending. <paramref name="pageSize"/> is clamped to [1, 100].
     /// </summary>
@@ -9499,6 +9485,24 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// How many of each attribute's value rows on one Connected System Object change are Sets, Adds and Removes (#2498), as
+    /// <see cref="GetCsoChangeValueRowsAsync"/> reads them.
+    /// </summary>
+    public async Task<List<ChangeValueAttributeSummary>> GetCsoChangeAttributeValueSummariesAsync(Guid changeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetCsoChangeAttributeValueSummariesAsync(changeId);
+    }
+
+    /// <summary>
+    /// Each given Connected System Object's name, by the naming policy, without reading its values; an object that no
+    /// longer exists, or has no name, has no entry.
+    /// </summary>
+    public async Task<Dictionary<Guid, string>> GetConnectedSystemObjectNamesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectNamesAsync(connectedSystemObjectIds);
+    }
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>
@@ -9546,7 +9550,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="changeId">The ID of the CSO change record.</param>
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
-    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
+    public async Task<List<CsoChangeHistoryDto>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(changeId);
     }
