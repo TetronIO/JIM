@@ -45,6 +45,18 @@ public class LogReaderService
         ["PANIC"] = "Fatal"
     };
 
+    /// <summary>
+    /// Entries whose PostgreSQL severity misrepresents them, matched on SQLSTATE and message, with the level to show
+    /// instead. Checked before <see cref="PostgresSeverityMap"/>. Messages assume the bundled database's English locale.
+    /// </summary>
+    private static readonly (string StateCode, string MessageContains, string Level)[] PostgresSeverityOverrides =
+    [
+        // A client-cancelled statement (57014) is logged at ERROR, but JIM cancels queries deliberately, e.g. when a
+        // page is left mid-load; where a cancellation matters (a cancelled run), JIM logs it itself with its reason,
+        // so this line only echoes it. Statement timeouts share the state code and are real errors, hence the message.
+        ("57014", "due to user request", "Debug")
+    ];
+
     private readonly string _logPath;
 
     /// <summary>
@@ -465,12 +477,11 @@ public class LogReaderService
                 ? m.GetString() ?? string.Empty
                 : string.Empty;
 
-            // PostgreSQL logs a client-cancelled statement (SQLSTATE 57014) at ERROR, but JIM cancels queries
-            // deliberately (e.g. a user navigating away mid-load), so it is expected behaviour. The same state
-            // code is also used for statement_timeout, which is a real problem, so match on the message too.
             var stateCode = root.TryGetProperty("state_code", out var sc) ? sc.GetString() : null;
-            if (stateCode == "57014" && message.Contains("due to user request", StringComparison.OrdinalIgnoreCase))
-                level = "Debug";
+            var severityOverride = PostgresSeverityOverrides.FirstOrDefault(o =>
+                o.StateCode == stateCode && message.Contains(o.MessageContains, StringComparison.OrdinalIgnoreCase));
+            if (severityOverride.Level != null)
+                level = severityOverride.Level;
 
             // Extract useful PostgreSQL metadata as properties
             var properties = new Dictionary<string, object>();
