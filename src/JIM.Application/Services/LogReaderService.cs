@@ -465,6 +465,13 @@ public class LogReaderService
                 ? m.GetString() ?? string.Empty
                 : string.Empty;
 
+            // PostgreSQL logs a client-cancelled statement (SQLSTATE 57014) at ERROR, but JIM cancels queries
+            // deliberately (e.g. a user navigating away mid-load), so it is expected behaviour. The same state
+            // code is also used for statement_timeout, which is a real problem, so match on the message too.
+            var stateCode = root.TryGetProperty("state_code", out var sc) ? sc.GetString() : null;
+            if (stateCode == "57014" && message.Contains("due to user request", StringComparison.OrdinalIgnoreCase))
+                level = "Debug";
+
             // Extract useful PostgreSQL metadata as properties
             var properties = new Dictionary<string, object>();
             var pgPropertyNames = new[] { "user", "dbname", "pid", "remote_host", "application_name", "statement", "backend_type", "query_id", "detail", "hint", "context", "state_code" };
