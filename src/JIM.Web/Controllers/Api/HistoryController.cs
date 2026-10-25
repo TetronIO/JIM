@@ -6,7 +6,10 @@ using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.History;
+using JIM.Models.Staging.DTOs;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
@@ -336,7 +339,86 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         }
     }
 
+    /// <summary>
+    /// List one attribute's value changes on a Connected System Object change
+    /// </summary>
+    /// <remarks>
+    /// A Connected System Object's change history, and an Activity item's changes, return each changed attribute's
+    /// first ten value changes and its total (<c>valueChangeTotal</c>). A change to a large group can carry one value
+    /// change per member: use this endpoint to page through all of them, in the order the change recorded them. The
+    /// change is found by its id, so a change to an object since deleted can still be read.
+    /// </remarks>
+    /// <param name="changeId">The change record's id, as change history returns it.</param>
+    /// <param name="attributeName">The attribute whose value changes to list, matched case-insensitively.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <param name="search">Optional case-insensitive search over the value, including a referenced object's name.</param>
+    /// <returns>A page of the attribute's value changes, with their total.</returns>
+    /// <response code="200">Returns the page of value changes; empty when the change or attribute has none.</response>
+    /// <response code="400">If the page is too deep.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("connected-system-object-changes/{changeId:guid}/attributes/{attributeName}/values", Name = "GetConnectedSystemObjectChangeValues")]
+    [ProducesResponseType(typeof(PaginatedResponse<CsoValueChangeDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectChangeValuesAsync(
+        Guid changeId,
+        string attributeName,
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] string? search = null)
+    {
+        var result = await _application.ConnectedSystems.GetCsoChangeValueRowsAsync(ChangeValueQuery(changeId, attributeName, pagination, search));
+        return Ok(PaginatedResponse<CsoValueChangeDto>.Create(
+            result.Results.Select(row => row.Value), result.TotalResults ?? 0, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// List one attribute's value changes on a Metaverse Object change
+    /// </summary>
+    /// <remarks>
+    /// A Metaverse Object's change history, the change search, and an Activity item's changes return each changed
+    /// attribute's first ten value changes and its total (<c>valueChangeTotal</c>). A change to a large group can carry
+    /// one value change per member: use this endpoint to page through all of them, in the order the change recorded
+    /// them. The change is found by its id, so a change to an object since deleted can still be read.
+    /// </remarks>
+    /// <param name="changeId">The change record's id, as change history returns it.</param>
+    /// <param name="attributeName">The attribute whose value changes to list, matched case-insensitively.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <param name="search">Optional case-insensitive search over the value, including a referenced object's name.</param>
+    /// <returns>A page of the attribute's value changes, with their total.</returns>
+    /// <response code="200">Returns the page of value changes; empty when the change or attribute has none.</response>
+    /// <response code="400">If the page is too deep.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("metaverse-object-changes/{changeId:guid}/attributes/{attributeName}/values", Name = "GetMetaverseObjectChangeValues")]
+    [ProducesResponseType(typeof(PaginatedResponse<MvoValueChangeDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMetaverseObjectChangeValuesAsync(
+        Guid changeId,
+        string attributeName,
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] string? search = null)
+    {
+        var result = await _application.Metaverse.GetMvoChangeValueRowsAsync(ChangeValueQuery(changeId, attributeName, pagination, search));
+        return Ok(PaginatedResponse<MvoValueChangeDto>.Create(
+            result.Results.Select(row => row.Value), result.TotalResults ?? 0, pagination.Page, pagination.PageSize));
+    }
+
     #region Private Helpers
+
+    /// <summary>
+    /// The window of one attribute's value changes a page asks for: each value change is its own row, as recorded,
+    /// rather than the portal's view in which a single-valued replacement reads as one Set row.
+    /// </summary>
+    private static ChangeValueRowQuery ChangeValueQuery(Guid changeId, string attributeName, PaginationRequest pagination, string? search) => new()
+    {
+        ChangeIds = [changeId],
+        AttributeName = attributeName,
+        Normalise = false,
+        SearchText = string.IsNullOrWhiteSpace(search) ? null : search,
+        Offset = (pagination.Page - 1) * pagination.PageSize,
+        Count = pagination.PageSize,
+        IncludeTotalCount = true
+    };
 
     private static string MapInitiatorType(ActivityInitiatorType initiatorType)
     {
