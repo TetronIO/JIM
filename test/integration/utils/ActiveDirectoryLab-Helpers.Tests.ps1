@@ -1089,6 +1089,11 @@ Describe 'ConvertFrom-LdapObjectGuidOutput' {
         $guid | Should -Be ([guid]'550e8400-e29b-41d4-a716-446655440000')
     }
 
+    It 'reads ldapsearch''s output as it comes, blank lines included' {
+        $guid = ConvertFrom-LdapObjectGuidOutput -Line @('dn: CN=jim-sso-admin,CN=Users,DC=panoply,DC=local', 'objectGUID:: AIQOVZvi1EGnFkRmVUQAAA==', '')
+        $guid | Should -Be ([guid]'550e8400-e29b-41d4-a716-446655440000')
+    }
+
     It 'refuses output with no objectGUID' {
         { ConvertFrom-LdapObjectGuidOutput -Line @('dn: CN=x,DC=panoply,DC=local') } | Should -Throw '*objectGUID*'
     }

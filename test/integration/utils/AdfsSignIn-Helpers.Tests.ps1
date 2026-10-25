@@ -19,7 +19,7 @@ BeforeAll {
 
 Describe 'ConvertFrom-AdfsSignInCheckOutput' {
     It 'reads the result line, past the module''s own output before it' {
-        $result = ConvertFrom-AdfsSignInCheckOutput -Line @('Connected to JIM', 'ADFS-SIGN-IN-RESULT {"check":"Portal","ok":true,"userInfo":{"authorised":true}}')
+        $result = ConvertFrom-AdfsSignInCheckOutput -Line @('Connected to JIM', '', 'ADFS-SIGN-IN-RESULT {"check":"Portal","ok":true,"userInfo":{"authorised":true}}')
         $result.check | Should -Be 'Portal'
         $result.ok | Should -BeTrue
         $result.userInfo.authorised | Should -BeTrue

@@ -839,6 +839,7 @@ function ConvertFrom-LdapObjectGuidOutput {
     param(
         [Parameter(Mandatory=$true)]
         [AllowEmptyCollection()]
+        [AllowEmptyString()]
         [string[]]$Line
     )
 
