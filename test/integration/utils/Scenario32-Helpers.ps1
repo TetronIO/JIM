@@ -3,14 +3,14 @@
 
 <#
 .SYNOPSIS
-    The data model of Scenario 031 (Intra-type References, #2492), shared by its populate script and its assertions.
+    The data model of Scenario 032 (Intra-type References, #2492), shared by its populate script and its assertions.
 
 .DESCRIPTION
     The populate script writes the directory from these functions and the scenario asserts the target against them,
     so the expected manager and nested membership of every object is computed once, in one place.
 #>
 
-function Get-Scenario31Scale {
+function Get-Scenario32Scale {
     <#
     .SYNOPSIS
         The users, groups and user members per group a template creates.
@@ -30,17 +30,17 @@ function Get-Scenario31Scale {
     }
 }
 
-function Get-Scenario31UserUid {
+function Get-Scenario32UserUid {
     param([Parameter(Mandatory)][int]$Index)
-    return "s31user$Index"
+    return "s32user$Index"
 }
 
-function Get-Scenario31GroupName {
+function Get-Scenario32GroupName {
     param([Parameter(Mandatory)][int]$Index)
-    return "S31-Group-$Index"
+    return "S32-Group-$Index"
 }
 
-function Get-Scenario31ManagerIndex {
+function Get-Scenario32ManagerIndex {
     <#
     .SYNOPSIS
         The index of user Index's manager: a tree five reports wide. User 0 has no manager; returns -1 for it.
@@ -50,7 +50,7 @@ function Get-Scenario31ManagerIndex {
     return [Math]::Floor(($Index - 1) / 5)
 }
 
-function Get-Scenario31NestedGroupIndexes {
+function Get-Scenario32NestedGroupIndexes {
     <#
     .SYNOPSIS
         The groups group Index contains: 2 * Index + 1 and 2 * Index + 2, where they exist (a binary tree).
@@ -62,7 +62,7 @@ function Get-Scenario31NestedGroupIndexes {
     return @((2 * $Index + 1), (2 * $Index + 2) | Where-Object { $_ -lt $GroupCount })
 }
 
-function Get-Scenario31GroupUserMemberIndexes {
+function Get-Scenario32GroupUserMemberIndexes {
     <#
     .SYNOPSIS
         The users group Index contains directly: a contiguous, wrapping run of MembersPerGroup users starting at

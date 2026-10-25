@@ -10,7 +10,7 @@ namespace JIM.PostgresData.Repositories;
 /// The Pending Export batch scope (#2492). The cross-page reference step re-evaluates exports for every object whose
 /// references it resolves, and each re-evaluation replaces the Pending Export the page loop staged: deleting it one at a
 /// time cost two round trips and two passes over the change tracker per object, about half the step (8 ms of each
-/// object's 22 ms on Scenario 031). Inside a batch those deletes are queued and executed in one statement.
+/// object's 22 ms on Scenario 032). Inside a batch those deletes are queued and executed in one statement.
 /// </summary>
 /// <remarks>
 /// <para>

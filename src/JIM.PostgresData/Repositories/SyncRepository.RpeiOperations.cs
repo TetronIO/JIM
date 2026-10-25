@@ -680,7 +680,7 @@ public partial class SyncRepository
 
         // An import pre-generates every new object's id before writing them in batches, so a reference can point at
         // an object a later batch has yet to write (a manager, a nested group): its id is known, its row is not. Its
-        // foreign key would fail the whole write with 23503 (#2492, found by Scenario 031), so only references to
+        // foreign key would fail the whole write with 23503 (#2492, found by Scenario 032), so only references to
         // rows that exist are written; the rest keep their DN in StringValue, and
         // FixupCrossBatchChangeRecordReferenceIdsAsync resolves them once every batch has been written. Must run
         // before the COPY below opens, since the connection cannot run another command while it is open.

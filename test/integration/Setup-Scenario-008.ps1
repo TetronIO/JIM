@@ -28,7 +28,7 @@
     Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 
 .PARAMETER IntraTypeReferences
-    Also flow each user's manager in and out (Scenario 031), so the Synchronisation has references within one
+    Also flow each user's manager in and out (Scenario 032), so the Synchronisation has references within one
     Object Type to resolve in its cross-page reference step.
 
 .EXAMPLE
@@ -58,7 +58,7 @@ param(
     [Parameter(Mandatory=$false)]
     [hashtable]$DirectoryConfig,
 
-    # Scenario 031 (Intra-type References, #2492) reuses this setup and adds references within one Object Type:
+    # Scenario 032 (Intra-type References, #2492) reuses this setup and adds references within one Object Type:
     # each user's manager is another user, so the user rules flow manager to the Metaverse Manager attribute and
     # back out to the target. Group nesting needs nothing extra; member already flows in both directions.
     [Parameter(Mandatory=$false)]

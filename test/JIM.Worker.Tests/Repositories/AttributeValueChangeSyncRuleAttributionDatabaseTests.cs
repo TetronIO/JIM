@@ -364,7 +364,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
     /// <summary>
     /// An import pre-generates every new object's id before writing them in batches, so a change record for an
     /// object in one batch can reference an object (a manager, a nested group) that a later batch writes. Writing the
-    /// foreign key to it then failed the whole import with 23503 (found by Scenario 031 at Medium, #2492). The value
+    /// foreign key to it then failed the whole import with 23503 (found by Scenario 032 at Medium, #2492). The value
     /// is written without the foreign key, and keeps the DN in StringValue for the post-import fix-up to resolve.
     /// </summary>
     [Test]

@@ -2035,7 +2035,7 @@ public abstract class SyncTaskProcessorBase
     /// The target Connected System Object each referenced Metaverse Object resolved to in this page's (or cross-page
     /// batch's) export change snapshots, or null where the database held none. Every report of one manager, and every
     /// group sharing a member, used to query the same object again (#2492: about 6 ms of each object's export
-    /// evaluation on Scenario 031). Cleared with the change tracker, because the objects it holds are tracked ones, and
+    /// evaluation on Scenario 032). Cleared with the change tracker, because the objects it holds are tracked ones, and
     /// once the page's provisioning objects are written, so a lookup that found none is asked again.
     /// </summary>
     private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), ConnectedSystemObject?> _snapshotReferenceCsos = [];

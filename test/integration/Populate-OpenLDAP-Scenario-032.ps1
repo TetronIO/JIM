@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    Populate OpenLDAP with test data for Scenario 031: Intra-type References
+    Populate OpenLDAP with test data for Scenario 032: Intra-type References
 
 .DESCRIPTION
     Creates users and groups in the Source suffix (Yellowstone) whose references point at objects of their own Object
@@ -27,7 +27,7 @@
     The Docker container name running OpenLDAP (default: openldap-primary).
 
 .EXAMPLE
-    ./Populate-OpenLDAP-Scenario-031.ps1 -Template Medium
+    ./Populate-OpenLDAP-Scenario-032.ps1 -Template Medium
 #>
 
 param(
@@ -43,15 +43,15 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
-. "$PSScriptRoot/utils/Scenario31-Helpers.ps1"
+. "$PSScriptRoot/utils/Scenario32-Helpers.ps1"
 
-$scale = Get-Scenario31Scale -Template $Template
+$scale = Get-Scenario32Scale -Template $Template
 $directoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 $ldapUri = "$($directoryConfig.LdapSearchScheme)://localhost:$($directoryConfig.LdapSearchPort)"
 $peopleOU = "ou=People,dc=yellowstone,dc=local"
 $groupsOU = "ou=Groups,dc=yellowstone,dc=local"
 
-Write-TestSection "Scenario 031: Populating OpenLDAP (Source) with $Template template"
+Write-TestSection "Scenario 032: Populating OpenLDAP (Source) with $Template template"
 Write-Host "Users:  $($scale.Users) (each but the first with a manager)" -ForegroundColor Gray
 Write-Host "Groups: $($scale.Groups) (nested two to a parent)" -ForegroundColor Gray
 
@@ -75,25 +75,25 @@ function Import-Ldif {
 Write-TestStep "Step 1" "Creating $($scale.Users) users"
 $builder = [System.Text.StringBuilder]::new()
 for ($i = 0; $i -lt $scale.Users; $i++) {
-    $uid = Get-Scenario31UserUid -Index $i
-    $displayName = "Scenario 31 User $i"
+    $uid = Get-Scenario32UserUid -Index $i
+    $displayName = "Scenario 32 User $i"
     [void]$builder.AppendLine("dn: uid=$uid,$peopleOU")
     # jimPerson carries jimEmployeeEndDate, which Setup-Scenario-008.ps1's user import rule is scoped on.
     [void]$builder.AppendLine("objectClass: jimPerson")
     [void]$builder.AppendLine("uid: $uid")
     [void]$builder.AppendLine("cn: $displayName")
     [void]$builder.AppendLine("sn: User$i")
-    [void]$builder.AppendLine("givenName: Scenario31")
+    [void]$builder.AppendLine("givenName: Scenario32")
     [void]$builder.AppendLine("displayName: $displayName")
     [void]$builder.AppendLine("mail: $uid@yellowstone.local")
     [void]$builder.AppendLine("title: Engineer")
     [void]$builder.AppendLine("departmentNumber: Engineering")
     [void]$builder.AppendLine("o: Panoply")
-    [void]$builder.AppendLine("employeeNumber: S31-$i")
+    [void]$builder.AppendLine("employeeNumber: S32-$i")
     [void]$builder.AppendLine("employeeType: Active")
     [void]$builder.AppendLine("jimEmployeeEndDate: 20991231235959Z")
     if ($i -gt 0) {
-        $managerUid = Get-Scenario31UserUid -Index (Get-Scenario31ManagerIndex -Index $i)
+        $managerUid = Get-Scenario32UserUid -Index (Get-Scenario32ManagerIndex -Index $i)
         [void]$builder.AppendLine("manager: uid=$managerUid,$peopleOU")
     }
     [void]$builder.AppendLine("userPassword: Test@123!")
@@ -106,23 +106,23 @@ Write-Host "  Created $($scale.Users) users" -ForegroundColor Green
 Write-TestStep "Step 2" "Creating $($scale.Groups) groups"
 [void]$builder.Clear()
 for ($g = $scale.Groups - 1; $g -ge 0; $g--) {
-    $name = Get-Scenario31GroupName -Index $g
+    $name = Get-Scenario32GroupName -Index $g
     [void]$builder.AppendLine("dn: cn=$name,$groupsOU")
     [void]$builder.AppendLine("objectClass: jimGroup")
     [void]$builder.AppendLine("cn: $name")
-    [void]$builder.AppendLine("description: Scenario 031 group $g")
+    [void]$builder.AppendLine("description: Scenario 032 group $g")
     [void]$builder.AppendLine("mail: $($name.ToLower())@yellowstone.local")
     [void]$builder.AppendLine("jimGroupType: Managed")
     [void]$builder.AppendLine("jimGroupStatus: Active")
-    foreach ($userIndex in Get-Scenario31GroupUserMemberIndexes -Index $g -UserCount $scale.Users -MembersPerGroup $scale.UsersPerGroup) {
-        [void]$builder.AppendLine("member: uid=$(Get-Scenario31UserUid -Index $userIndex),$peopleOU")
+    foreach ($userIndex in Get-Scenario32GroupUserMemberIndexes -Index $g -UserCount $scale.Users -MembersPerGroup $scale.UsersPerGroup) {
+        [void]$builder.AppendLine("member: uid=$(Get-Scenario32UserUid -Index $userIndex),$peopleOU")
     }
-    foreach ($childIndex in Get-Scenario31NestedGroupIndexes -Index $g -GroupCount $scale.Groups) {
-        [void]$builder.AppendLine("member: cn=$(Get-Scenario31GroupName -Index $childIndex),$groupsOU")
+    foreach ($childIndex in Get-Scenario32NestedGroupIndexes -Index $g -GroupCount $scale.Groups) {
+        [void]$builder.AppendLine("member: cn=$(Get-Scenario32GroupName -Index $childIndex),$groupsOU")
     }
     [void]$builder.AppendLine("")
 }
 Import-Ldif -Content $builder.ToString() -What "groups"
 Write-Host "  Created $($scale.Groups) groups" -ForegroundColor Green
 
-Write-TestSection "Scenario 031 OpenLDAP Population Complete"
+Write-TestSection "Scenario 032 OpenLDAP Population Complete"

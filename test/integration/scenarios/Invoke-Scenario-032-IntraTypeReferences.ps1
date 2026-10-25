@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    Test Scenario 031: Intra-type References
+    Test Scenario 032: Intra-type References
 
 .DESCRIPTION
     Validates the Full Synchronisation's cross-page reference step end to end (#2492). Users have managers and groups
@@ -15,7 +15,7 @@
     It is also the measurement scenario for that step: it reports the step's duration and reference-value count, so a
     change to the step can be timed against the same data.
 
-    OpenLDAP only. Self-populating (Populate-OpenLDAP-Scenario-031.ps1); configured by Setup-Scenario-008.ps1 with
+    OpenLDAP only. Self-populating (Populate-OpenLDAP-Scenario-032.ps1); configured by Setup-Scenario-008.ps1 with
     -IntraTypeReferences, which adds the manager mappings to Scenario 008's user and group rules.
 
 .PARAMETER Step
@@ -37,7 +37,7 @@
     The runner's directory configuration; must be OpenLDAP.
 
 .EXAMPLE
-    ./Invoke-Scenario-031-IntraTypeReferences.ps1 -Step All -Template Medium -ApiKey "jim_..."
+    ./Invoke-Scenario-032-IntraTypeReferences.ps1 -Step All -Template Medium -ApiKey "jim_..."
 #>
 
 param(
@@ -67,22 +67,22 @@ $ErrorActionPreference = "Stop"
 
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
-. "$PSScriptRoot/../utils/Scenario31-Helpers.ps1"
+. "$PSScriptRoot/../utils/Scenario32-Helpers.ps1"
 
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 }
 if ($DirectoryConfig.DirectoryType -ne "OpenLDAP") {
-    throw "Scenario 031 runs on OpenLDAP only (got $($DirectoryConfig.DirectoryType))"
+    throw "Scenario 032 runs on OpenLDAP only (got $($DirectoryConfig.DirectoryType))"
 }
 
 $sourceConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 $targetConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Target
-$scale = Get-Scenario31Scale -Template $Template
+$scale = Get-Scenario32Scale -Template $Template
 $targetPeopleOU = "ou=People,dc=glitterband,dc=local"
 $targetGroupsOU = "ou=Groups,dc=glitterband,dc=local"
 
-Write-TestSection "Scenario 031: Intra-type References"
+Write-TestSection "Scenario 032: Intra-type References"
 Write-Host "Step:     $Step" -ForegroundColor Gray
 Write-Host "Template: $Template ($($scale.Users) users, $($scale.Groups) groups)" -ForegroundColor Gray
 Write-Host ""
@@ -94,7 +94,7 @@ $testResults = @{
     Success  = $false
 }
 
-function Get-Scenario31DirectoryEntries {
+function Get-Scenario32DirectoryEntries {
     <#
     .SYNOPSIS
         Searches the target suffix and returns each entry as DN => @{ attribute => values }, unfolding LDIF lines.
@@ -160,10 +160,10 @@ try {
         throw "$($sourceConfig.ContainerName) container is not healthy (status: $status)"
     }
 
-    & "$PSScriptRoot/../Populate-OpenLDAP-Scenario-031.ps1" -Template $Template -Container $sourceConfig.ContainerName
+    & "$PSScriptRoot/../Populate-OpenLDAP-Scenario-032.ps1" -Template $Template -Container $sourceConfig.ContainerName
 
     & "$PSScriptRoot/../Setup-Scenario-008.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -DirectoryConfig $DirectoryConfig -IntraTypeReferences
-    Write-Host "JIM configured for Scenario 031" -ForegroundColor Green
+    Write-Host "JIM configured for Scenario 032" -ForegroundColor Green
 
     $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM.psd1"
     Import-Module $modulePath -Force -ErrorAction Stop
@@ -202,7 +202,7 @@ try {
         $crossPageStep = @($syncActivity.phases | Where-Object { $_.key -eq "sync.crosspagereferences" }) | Select-Object -First 1
         if ($null -eq $crossPageStep -or $crossPageStep.status -ne "Completed") {
             $stepStatus = if ($crossPageStep) { $crossPageStep.status } else { "not recorded" }
-            throw "The cross-page reference step did not run (status: $stepStatus); Scenario 031 no longer exercises it"
+            throw "The cross-page reference step did not run (status: $stepStatus); Scenario 032 no longer exercises it"
         }
         $stepSeconds = [double]($crossPageStep.durationSeconds ?? 0)
         Write-Host ("  Cross-page reference step: {0:N1} s for {1:N0} reference values" -f $stepSeconds, $syncActivity.objectsToProcess) -ForegroundColor Cyan
@@ -220,17 +220,17 @@ try {
         Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target" -Context "after Confirming Import"
 
         Write-Host "Validating managers in Target..." -ForegroundColor Gray
-        $users = Get-Scenario31DirectoryEntries -BaseDN $targetPeopleOU -Filter "(uid=s31user*)" -Attributes @("uid", "manager")
+        $users = Get-Scenario32DirectoryEntries -BaseDN $targetPeopleOU -Filter "(uid=s32user*)" -Attributes @("uid", "manager")
         $managerFailures = [System.Collections.Generic.List[string]]::new()
         for ($i = 0; $i -lt $scale.Users; $i++) {
-            $dn = "uid=$(Get-Scenario31UserUid -Index $i),$targetPeopleOU".ToLowerInvariant()
+            $dn = "uid=$(Get-Scenario32UserUid -Index $i),$targetPeopleOU".ToLowerInvariant()
             if (-not $users.ContainsKey($dn)) {
                 $managerFailures.Add("$dn was not provisioned")
                 continue
             }
-            $managerIndex = Get-Scenario31ManagerIndex -Index $i
+            $managerIndex = Get-Scenario32ManagerIndex -Index $i
             $actual = if ($users[$dn].ContainsKey("manager")) { @($users[$dn]["manager"]) } else { @() }
-            $expected = if ($managerIndex -lt 0) { @() } else { @("uid=$(Get-Scenario31UserUid -Index $managerIndex),$targetPeopleOU".ToLowerInvariant()) }
+            $expected = if ($managerIndex -lt 0) { @() } else { @("uid=$(Get-Scenario32UserUid -Index $managerIndex),$targetPeopleOU".ToLowerInvariant()) }
             if (($actual -join ";") -ne ($expected -join ";")) {
                 $managerFailures.Add("$dn has manager '$($actual -join ';')', expected '$($expected -join ';')'")
             }
@@ -242,18 +242,18 @@ try {
         Write-Host "  ✓ All $($scale.Users) users carry the expected manager" -ForegroundColor Green
 
         Write-Host "Validating nested group membership in Target..." -ForegroundColor Gray
-        $groups = Get-Scenario31DirectoryEntries -BaseDN $targetGroupsOU -Filter "(cn=S31-Group-*)" -Attributes @("cn", "member")
+        $groups = Get-Scenario32DirectoryEntries -BaseDN $targetGroupsOU -Filter "(cn=S32-Group-*)" -Attributes @("cn", "member")
         $membershipFailures = [System.Collections.Generic.List[string]]::new()
         for ($g = 0; $g -lt $scale.Groups; $g++) {
-            $dn = "cn=$(Get-Scenario31GroupName -Index $g),$targetGroupsOU".ToLowerInvariant()
+            $dn = "cn=$(Get-Scenario32GroupName -Index $g),$targetGroupsOU".ToLowerInvariant()
             if (-not $groups.ContainsKey($dn)) {
                 $membershipFailures.Add("$dn was not provisioned")
                 continue
             }
-            $expected = @(Get-Scenario31GroupUserMemberIndexes -Index $g -UserCount $scale.Users -MembersPerGroup $scale.UsersPerGroup |
-                ForEach-Object { "uid=$(Get-Scenario31UserUid -Index $_),$targetPeopleOU".ToLowerInvariant() })
-            $expected += @(Get-Scenario31NestedGroupIndexes -Index $g -GroupCount $scale.Groups |
-                ForEach-Object { "cn=$(Get-Scenario31GroupName -Index $_),$targetGroupsOU".ToLowerInvariant() })
+            $expected = @(Get-Scenario32GroupUserMemberIndexes -Index $g -UserCount $scale.Users -MembersPerGroup $scale.UsersPerGroup |
+                ForEach-Object { "uid=$(Get-Scenario32UserUid -Index $_),$targetPeopleOU".ToLowerInvariant() })
+            $expected += @(Get-Scenario32NestedGroupIndexes -Index $g -GroupCount $scale.Groups |
+                ForEach-Object { "cn=$(Get-Scenario32GroupName -Index $_),$targetGroupsOU".ToLowerInvariant() })
             $actual = if ($groups[$dn].ContainsKey("member")) { @($groups[$dn]["member"] | Where-Object { $_ -ne "cn=placeholder" }) } else { @() }
             $missing = @($expected | Where-Object { $_ -notin $actual })
             $unexpected = @($actual | Where-Object { $_ -notin $expected })
@@ -283,21 +283,21 @@ try {
 }
 catch {
     Write-Host ""
-    Write-Host "Scenario 031 failed: $_" -ForegroundColor Red
+    Write-Host "Scenario 032 failed: $_" -ForegroundColor Red
     Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
     $testResults.Error = "$_"
 }
 
-Write-TestSection "Scenario 031 Results"
+Write-TestSection "Scenario 032 Results"
 Write-Host "Steps passed: $($testResults.Steps -join ', ')" -ForegroundColor Cyan
 if ($testResults.ContainsKey('CrossPageStepSeconds')) {
     Write-Host ("Cross-page reference step: {0:N1} s, {1:N0} reference values" -f $testResults.CrossPageStepSeconds, $testResults.CrossPageReferenceValues) -ForegroundColor Cyan
 }
 
 if ($testResults.Success) {
-    Write-Host "OK All Scenario 031 tests passed!" -ForegroundColor Green
+    Write-Host "OK All Scenario 032 tests passed!" -ForegroundColor Green
     exit 0
 }
 
-Write-Host "FAIL Scenario 031 failed" -ForegroundColor Red
+Write-Host "FAIL Scenario 032 failed" -ForegroundColor Red
 exit 1
