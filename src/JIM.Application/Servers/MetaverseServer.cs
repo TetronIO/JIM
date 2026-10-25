@@ -1302,19 +1302,52 @@ public partial class MetaverseServer
     }
 
     /// <summary>
+    /// One window of the values recorded by the given Metaverse Object changes (#2498), with the contributing Connected
+    /// System resolved and Generated Values named as object change history names them. A change to a large group carries
+    /// one value change per member, so the change-history shape caps each attribute's values and this reads the rest.
+    /// </summary>
+    public async Task<RangeResultSet<MvoChangeValueRow>> GetMvoChangeValueRowsAsync(ChangeValueRowQuery query)
+    {
+        var result = await Application.Repository.Metaverse.GetMvoChangeValueRowsAsync(query);
+        foreach (var rows in result.Results.Where(r => r.MetaverseObjectId.HasValue).GroupBy(r => r.MetaverseObjectId!.Value))
+            await MarkGeneratedValuesAsync(rows.Key, rows
+                .Where(r => r.AttributeId.HasValue)
+                .SelectMany(r => (r.PreviousValue is { } previous ? new[] { r.Value, previous } : [r.Value]).Select(v => (r.AttributeId!.Value, v))));
+        return result;
+    }
+
+    /// <summary>
+    /// How many of each given Metaverse Object change's value rows are Sets, Adds and Removes (#2498), as
+    /// <see cref="GetMvoChangeValueRowsAsync"/> reads them.
+    /// </summary>
+    public async Task<List<ChangeValueOperationCount>> GetMvoChangeValueOperationCountsAsync(IReadOnlyCollection<Guid> changeIds)
+    {
+        return await Application.Repository.Metaverse.GetMvoChangeValueOperationCountsAsync(changeIds);
+    }
+
+    /// <summary>
     /// Names a Generated Value as one on the Changes tab exactly as the inspector's History does (#399).
     /// </summary>
-    private async Task MarkGeneratedValuesAsync(Guid metaverseObjectId, List<MvoChangeHistoryDto> changes)
+    private Task MarkGeneratedValuesAsync(Guid metaverseObjectId, List<MvoChangeHistoryDto> changes) =>
+        MarkGeneratedValuesAsync(metaverseObjectId, changes
+            .SelectMany(i => i.AttributeChanges)
+            .Where(ac => ac.AttributeId.HasValue)
+            .SelectMany(ac => ac.ValueChanges.Select(vc => (ac.AttributeId!.Value, vc))));
+
+    /// <summary>
+    /// Names each given value of <paramref name="metaverseObjectId"/>'s attributes a Generated Value or not; shared by
+    /// change history and the window reads over a change's values, so the two name them alike.
+    /// </summary>
+    private async Task MarkGeneratedValuesAsync(Guid metaverseObjectId, IEnumerable<(int AttributeId, MvoValueChangeDto Value)> values)
     {
         var generatedValues = await GetGeneratedValuesByAttributeAsync(metaverseObjectId);
         if (generatedValues.Count == 0)
             return;
 
-        foreach (var attributeChange in changes.SelectMany(i => i.AttributeChanges).Where(ac => ac.AttributeId.HasValue))
+        foreach (var (attributeId, valueChange) in values)
         {
-            var ownership = generatedValues.GetValueOrDefault(attributeChange.AttributeId!.Value);
-            foreach (var valueChange in attributeChange.ValueChanges)
-                valueChange.IsGeneratedValue = ProvenanceLogic.IsGeneratedValueRecord(valueChange.ContributedBySyncRuleId, valueChange.ToDisplayString(), ownership);
+            var ownership = generatedValues.GetValueOrDefault(attributeId);
+            valueChange.IsGeneratedValue = ProvenanceLogic.IsGeneratedValueRecord(valueChange.ContributedBySyncRuleId, valueChange.ToDisplayString(), ownership);
         }
     }
 

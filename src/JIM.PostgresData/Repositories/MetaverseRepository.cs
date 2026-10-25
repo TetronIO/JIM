@@ -1777,7 +1777,12 @@ public partial class MetaverseRepository : IMetaverseRepository
                     AttributeType = ac.AttributeType,
                     AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : AttributePlurality.SingleValued,
                     AttributeId = ac.Attribute != null ? ac.Attribute.Id : (int?)null,
+                    // Capped as the detail loads cap an object's values (#2498): a large group's change carries one
+                    // value change per member, and the rest are read a window at a time.
+                    ValueChangeTotal = ac.ValueChanges.Count(),
                     ValueChanges = ac.ValueChanges
+                        .OrderBy(vc => vc.Id)
+                        .Take(CappedMvaLimit)
                         .Select(vc => new MvoValueChangeDto
                         {
                             ValueChangeType = vc.ValueChangeType,
@@ -1867,11 +1872,16 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <see cref="Core.DTOs.ProvenanceLogic.ResolveChangeValueOrigin"/> reads as "rule deleted" rather than "no
     /// contributor". One lookup for the whole page, not one per value.
     /// </summary>
-    private async Task ResolveChangeValueContributingSystemsAsync(List<MvoChangeHistoryDto> items)
+    private Task ResolveChangeValueContributingSystemsAsync(List<MvoChangeHistoryDto> items) =>
+        ResolveChangeValueContributingSystemsAsync(items.SelectMany(i => i.AttributeChanges).SelectMany(ac => ac.ValueChanges));
+
+    /// <summary>
+    /// Resolves the contributing Connected System for each of the given value changes; see the overload above. Shared
+    /// with the window reads over a change's values (#2498), so a value names its source the same way in both.
+    /// </summary>
+    private async Task ResolveChangeValueContributingSystemsAsync(IEnumerable<MvoValueChangeDto> values)
     {
-        var valueChanges = items
-            .SelectMany(i => i.AttributeChanges)
-            .SelectMany(ac => ac.ValueChanges)
+        var valueChanges = values
             .Where(vc => vc.ContributedBySyncRuleId.HasValue)
             .ToList();
 
@@ -1951,33 +1961,24 @@ public partial class MetaverseRepository : IMetaverseRepository
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
-        // Materialise the full entity so Include chains are honoured (Include is ignored
-        // when projecting via .Select(), leaving navigation properties null).
-        var entity = await Repository.Database.MetaverseObjects
-            .AsSplitQuery()
-            .Include(mo => mo.Type)
-            .Include(mo => mo.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Include(mo => mo.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-                        .ThenInclude(rvav => rvav.Attribute)
-            .SingleOrDefaultAsync(mo => mo.Id == id);
-
-        if (entity == null)
-            return null;
-
-        return new MetaverseObjectHeader
-        {
-            Id = entity.Id,
-            Created = entity.Created,
-            Status = entity.Status,
-            ScopeReviewPending = entity.ScopeReviewPending,
-            TypeId = entity.Type.Id,
-            TypeName = entity.Type.Name,
-            TypePluralName = entity.Type.PluralName,
-            AttributeValues = entity.AttributeValues.ToList()
-        };
+        // A header projects the object's own row and its type, and nothing it holds (#2498). It is named from
+        // CachedDisplayName, which the same naming policy keeps as its attribute values would give: reading those values
+        // instead meant reading every member of a large group, and each member's Display Name, to name one object.
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(mo => mo.Id == id)
+            .Select(mo => new MetaverseObjectHeader
+            {
+                Id = mo.Id,
+                Created = mo.Created,
+                Status = mo.Status,
+                ScopeReviewPending = mo.ScopeReviewPending,
+                TypeId = mo.Type.Id,
+                TypeName = mo.Type.Name,
+                TypePluralName = mo.Type.PluralName,
+                CachedDisplayName = mo.CachedDisplayName
+            })
+            .SingleOrDefaultAsync();
     }
 
     /// <inheritdoc />
