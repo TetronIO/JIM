@@ -9,6 +9,7 @@ using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
 using JIM.PostgresData;
+using JIM.PostgresData.Repositories;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -180,6 +181,40 @@ public class ChangeValueRowsDatabaseTests
         var row = rows.Single();
         Assert.That(row.Value.ReferenceValue?.DisplayName, Is.EqualTo("Bob Jones"));
         Assert.That(row.Value.ReferenceValue?.TypeName, Is.EqualTo("group"));
+    }
+
+    /// <summary>
+    /// A search names every referenced object of the change, so each name lookup must be an exact index probe on the
+    /// object and the name attribute. Matched by attribute name through a join instead, every probe read all of the
+    /// referenced object's values (every member, for a group), and a search over a 600,000-member change timed out.
+    /// </summary>
+    [Test]
+    public async Task PrepareWindowCommand_SearchText_LooksUpEachReferencedObjectsNameByObjectAndAttributeAsync()
+    {
+        var change = await SeedCsoChangeAsync(memberReferenceNames: ["Alice Smith", "Bob Jones"]);
+
+        await using var ctx = NewContext();
+        var connection = ctx.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var explain = connection.CreateCommand();
+        ChangeValueRowsSql.PrepareWindowCommand(
+            explain, ChangeValueRowsSql.ConnectedSystemObject, Query(change.ChangeId, 0, 10) with { SearchText = "bob" }, 0, 10);
+        explain.CommandText = "EXPLAIN " + explain.CommandText;
+
+        var plan = new List<string>();
+        await using (var reader = await explain.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                plan.Add(reader.GetString(0));
+        }
+
+        var planText = string.Join("\n", plan);
+        var objectProbes = plan.Where(line => line.Contains("Index Cond:") && line.Contains("\"ConnectedSystemObjectId\" =")).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objectProbes, Is.Not.Empty, planText);
+            Assert.That(objectProbes, Has.All.Contains("\"AttributeId\""), planText);
+        }
     }
 
     [Test]

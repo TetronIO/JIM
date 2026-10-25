@@ -67,18 +67,36 @@ internal static class ChangeValueRowsSql
     /// change-history projection: the ranked name attributes (<c>@name_1</c> to <c>@name_3</c>, set by
     /// <see cref="AddNameParameters"/>), then the external id, then the secondary external id.
     /// </summary>
+    /// <remarks>
+    /// A search names every referenced object of a change, which for a large group is every member, so each tier is
+    /// one exact probe on the object and the attribute: the tier's attribute ids are resolved once, ahead of the
+    /// probes. Matching the attribute by name through a join instead made each probe read all of the object's values.
+    /// A null value is ordered last rather than filtered out, because a <c>StringValue IS NOT NULL</c> condition drew
+    /// the planner into intersecting every probe with the partial lower-case value index (#2498: a search over a
+    /// 600,000-member change went from a 30-second timeout to under two seconds).
+    /// </remarks>
     internal static string ConnectedSystemObjectNameSql(string id) => $"""
         COALESCE(
-            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav JOIN "ConnectedSystemAttributes" nat ON nat."Id" = nav."AttributeId"
-             WHERE nav."ConnectedSystemObjectId" = {id} AND lower(nat."Name") = @name_1 AND nav."StringValue" IS NOT NULL LIMIT 1),
-            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav JOIN "ConnectedSystemAttributes" nat ON nat."Id" = nav."AttributeId"
-             WHERE nav."ConnectedSystemObjectId" = {id} AND lower(nat."Name") = @name_2 AND nav."StringValue" IS NOT NULL LIMIT 1),
-            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav JOIN "ConnectedSystemAttributes" nat ON nat."Id" = nav."AttributeId"
-             WHERE nav."ConnectedSystemObjectId" = {id} AND lower(nat."Name") = @name_3 AND nav."StringValue" IS NOT NULL LIMIT 1),
-            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav JOIN "ConnectedSystemObjects" no ON no."Id" = nav."ConnectedSystemObjectId"
-             WHERE nav."ConnectedSystemObjectId" = {id} AND nav."AttributeId" = no."ExternalIdAttributeId" AND nav."StringValue" IS NOT NULL LIMIT 1),
-            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav JOIN "ConnectedSystemObjects" no ON no."Id" = nav."ConnectedSystemObjectId"
-             WHERE nav."ConnectedSystemObjectId" = {id} AND nav."AttributeId" = no."SecondaryExternalIdAttributeId" AND nav."StringValue" IS NOT NULL LIMIT 1))
+            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav
+             WHERE nav."ConnectedSystemObjectId" = {id}
+               AND nav."AttributeId" = ANY(ARRAY(SELECT nat."Id" FROM "ConnectedSystemAttributes" nat WHERE lower(nat."Name") = @name_1))
+             ORDER BY nav."StringValue" NULLS LAST LIMIT 1),
+            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav
+             WHERE nav."ConnectedSystemObjectId" = {id}
+               AND nav."AttributeId" = ANY(ARRAY(SELECT nat."Id" FROM "ConnectedSystemAttributes" nat WHERE lower(nat."Name") = @name_2))
+             ORDER BY nav."StringValue" NULLS LAST LIMIT 1),
+            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav
+             WHERE nav."ConnectedSystemObjectId" = {id}
+               AND nav."AttributeId" = ANY(ARRAY(SELECT nat."Id" FROM "ConnectedSystemAttributes" nat WHERE lower(nat."Name") = @name_3))
+             ORDER BY nav."StringValue" NULLS LAST LIMIT 1),
+            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav
+             WHERE nav."ConnectedSystemObjectId" = {id}
+               AND nav."AttributeId" = (SELECT no."ExternalIdAttributeId" FROM "ConnectedSystemObjects" no WHERE no."Id" = {id})
+             ORDER BY nav."StringValue" NULLS LAST LIMIT 1),
+            (SELECT nav."StringValue" FROM "ConnectedSystemObjectAttributeValues" nav
+             WHERE nav."ConnectedSystemObjectId" = {id}
+               AND nav."AttributeId" = (SELECT no."SecondaryExternalIdAttributeId" FROM "ConnectedSystemObjects" no WHERE no."Id" = {id})
+             ORDER BY nav."StringValue" NULLS LAST LIMIT 1))
         """;
 
     /// <summary>
