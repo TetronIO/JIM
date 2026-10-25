@@ -7,6 +7,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Globalization;
 using System.Text;
 namespace JIM.Connectors.LDAP;
 
@@ -46,14 +47,23 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     private static readonly string[] NoAttributes = ["1.1"];
 
     /// <summary>
-    /// What a Delta Import needs from a changelog entry: the number to advance the cursor by, the kind of change,
-    /// the DN it names, and what a delete or a rename needs beyond that. On a delete record, <c>changes</c> holds
-    /// the deleted entry as LDIF (389 Directory Server, once the Retro Changelog plug-in's <c>nsslapd-log-deleted</c>
-    /// is on), which is the only way to learn its Object Type and entryUUID now that it is gone; on a modrdn record,
-    /// <c>newRdn</c> and <c>newSuperior</c> say where the object now is, since <c>targetDN</c> is where it was. For
-    /// adds and modifies the target's current state is fetched, so the LDIF of the write is not used.
+    /// What a Delta Import needs from every changelog entry: the number to advance the cursor by, the kind of change,
+    /// the DN it names, and, on a modrdn record, <c>newRdn</c> and <c>newSuperior</c>, which say where the object now
+    /// is, since <c>targetDN</c> is where it was. Not <c>changes</c>: for adds and modifies the target's current state
+    /// is fetched, so the LDIF of the write is not used, and an add's LDIF is the whole entry, a large group's every
+    /// member.
     /// </summary>
-    private static readonly string[] ChangeAttributes = [ChangeNumberAttribute, "changeType", "targetDN", ChangesAttribute, NewRdnAttribute, NewSuperiorAttribute];
+    private static readonly string[] ChangeAttributes = [ChangeNumberAttribute, "changeType", "targetDN", NewRdnAttribute, NewSuperiorAttribute];
+
+    /// <summary>
+    /// What a delete record is read for by its own name: <c>changes</c>, which holds the deleted entry as LDIF (389
+    /// Directory Server, once the Retro Changelog plug-in's <c>nsslapd-log-deleted</c> is on), the only way to learn
+    /// its Object Type and entryUUID now that it is gone.
+    /// </summary>
+    private static readonly string[] DeletionAttributes = [ChangesAttribute];
+
+    /// <summary>The pagination token a page leaves when the changelog holds more: the change number to resume from.</summary>
+    private const string PaginationTokenName = "changelog";
 
     private const string ChangesAttribute = "changes";
     private const string ChangeTimeAttribute = "changeTime";
@@ -642,13 +652,15 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     public bool HasBaseline(LdapConnectorRootDse previous) => previous.LastChangeNumber.HasValue;
 
     /// <summary>
-    /// Reads every changelog entry numbered after the watermark and turns each into an import object: a deletion
-    /// directly, anything else by fetching the target's current state. An object the changelog names more than
-    /// once is fetched once, on its first record, since the fetch reads its current state either way; deletions are
-    /// never skipped for that reason. The changelog is read in one search, and
-    /// when the directory stops that at its size limit the search resumes from the highest change number seen plus
-    /// one; the change number is an exact cursor, so nothing is missed or read twice. A changelog that cannot be
-    /// read fails the run: a Delta Import that quietly imported nothing would leave JIM believing nothing changed.
+    /// Reads one page of the changelog entries numbered after the watermark and turns each into an import object: a
+    /// deletion from its own record, anything else by fetching the target's current state. An object the page names
+    /// more than once is fetched once, on its first record, since the fetch reads its current state either way;
+    /// deletions are never skipped for that reason. A page holds at most the Run Profile's page size, fewer if the
+    /// directory's own size limit is lower; when the read is cut short it leaves a pagination token holding the
+    /// highest change number seen plus one, and the import calls again from there. The change number is an exact
+    /// cursor, so nothing is missed or read twice, and a page's changes are released before the next is read. A
+    /// changelog that cannot be read fails the run: a Delta Import that quietly imported nothing would leave JIM
+    /// believing nothing changed.
     /// </summary>
     /// <exception cref="CannotPerformDeltaImportException">The changelog was not found, or the directory refused to read it, or it answered nothing within its size limit.</exception>
     public async Task ReadChangesAsync(LdapDeltaReadContext context, ConnectedSystemImportResult result, CancellationToken cancellationToken)
@@ -660,19 +672,25 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
         await context.Host.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {previousChangeNumber:N0}...");
         _logger.Debug("LdapChangelogDeltaSource: Querying {ChangelogDn} for changes since changeNumber {PreviousChange}", LogSanitiser.Sanitise(changelogDn), previousChangeNumber);
 
+        // A token is only ever one this source wrote; one it cannot read is a fault, not a reason to start over.
+        var cursor = context.PaginationTokens.SingleOrDefault(t => t.Name == PaginationTokenName) is { } resume
+            ? long.Parse(resume.StringValue!, CultureInfo.InvariantCulture)
+            : previousChangeNumber + 1;
+
         var readBefore = result.ImportObjects.Count;
         var progress = new ReadProgress();
-        var cursor = previousChangeNumber + 1;
 
-        while (!cancellationToken.IsCancellationRequested)
+        var (entries, limited) = SearchChangelog(changelogDn, cursor, context.PageSize, context.SearchTimeout);
+        _logger.Debug("LdapChangelogDeltaSource: Found {Count} changelog entries from change number {Cursor}", entries.Count, cursor);
+
+        var highestSeen = ProcessEntries(entries, context, result, progress, cancellationToken);
+
+        if (cancellationToken.IsCancellationRequested)
         {
-            var (entries, limited) = SearchChangelog(changelogDn, cursor, context.SearchTimeout);
-            _logger.Debug("LdapChangelogDeltaSource: Found {Count} changelog entries from change number {Cursor}", entries.Count, cursor);
-
-            var highestSeen = ProcessEntries(entries, context, result, progress, cancellationToken);
-            if (!limited)
-                break;
-
+            _logger.Debug("LdapChangelogDeltaSource: Cancellation requested. Stopping");
+        }
+        else if (limited)
+        {
             if (highestSeen == null)
             {
                 throw new CannotPerformDeltaImportException(
@@ -680,30 +698,28 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
                     "so the changes since the last import cannot be read. Raise the directory's size limit for the account JIM connects as, or run a Full Import, which also detects deletions by absence.");
             }
 
-            _logger.Information("LdapChangelogDeltaSource: The directory stopped at its size limit after {Count} changelog entries; continuing from change number {Next}",
+            _logger.Debug("LdapChangelogDeltaSource: Page cut after {Count} changelog entries; the next page continues from change number {Next}",
                 entries.Count, highestSeen.Value + 1);
-            cursor = highestSeen.Value + 1;
+            result.PaginationTokens.Add(new ConnectedSystemPaginationToken(PaginationTokenName, (highestSeen.Value + 1).ToString(CultureInfo.InvariantCulture)));
         }
-
-        if (cancellationToken.IsCancellationRequested)
-            _logger.Debug("LdapChangelogDeltaSource: Cancellation requested. Stopping");
 
         if (progress.SkippedOutOfScope > 0)
             _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries for objects outside the selected Container scope", progress.SkippedOutOfScope);
         if (progress.SkippedAlreadyFetched > 0)
-            _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries for objects already fetched in this read", progress.SkippedAlreadyFetched);
+            _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries for objects already fetched on this page", progress.SkippedAlreadyFetched);
 
         await context.Host.ReportObjectsReadAsync(result.ImportObjects.Count - readBefore);
     }
 
     /// <summary>
-    /// What one <see cref="ReadChangesAsync"/> call carries from page to page: the objects fetched so far, so a
-    /// second record for one of them is not fetched again, and the counts of what was skipped and why.
+    /// What one <see cref="ReadChangesAsync"/> call carries across its page: the objects fetched so far, so a second
+    /// record for one of them is not fetched again, and the counts of what was skipped and why. A later page's copy
+    /// of an object takes an earlier page's place in a Delta Import, so nothing needs carrying between calls.
     /// </summary>
     private sealed class ReadProgress
     {
         /// <summary>
-        /// The DNs already fetched in this read, compared as LDAP compares DNs (case-insensitively). A changelog
+        /// The DNs already fetched on this page, compared as LDAP compares DNs (case-insensitively). A changelog
         /// records every write, so an object changed several times between two imports appears several times;
         /// the fetch reads its current state, so the first record says everything the later ones would, and
         /// importing it again would have the import report a duplicate external id.
@@ -716,13 +732,17 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     }
 
     /// <summary>
-    /// One search of the changelog from a change number. Returns what the directory answered and whether it
-    /// stopped at its size limit before answering everything; throws when it cannot be read at all.
+    /// One search of the changelog from a change number, for at most a page of entries. Returns what the directory
+    /// answered and whether it stopped short, at the page size or its own size limit, before answering everything;
+    /// throws when it cannot be read at all.
     /// </summary>
-    private (IReadOnlyList<SearchResultEntry> Entries, bool Limited) SearchChangelog(string changelogDn, long fromChangeNumber, TimeSpan searchTimeout)
+    private (IReadOnlyList<SearchResultEntry> Entries, bool Limited) SearchChangelog(string changelogDn, long fromChangeNumber, int pageSize, TimeSpan searchTimeout)
     {
         // LDAP (RFC 4515) defines ">=" but not ">", which is why the cursor is the watermark plus one.
-        var request = new SearchRequest(changelogDn, $"({ChangeNumberAttribute}>={fromChangeNumber})", SearchScope.OneLevel, ChangeAttributes);
+        var request = new SearchRequest(changelogDn, $"({ChangeNumberAttribute}>={fromChangeNumber})", SearchScope.OneLevel, ChangeAttributes)
+        {
+            SizeLimit = pageSize
+        };
 
         try
         {
@@ -758,7 +778,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
 
     /// <summary>
     /// Turns changelog entries into import objects, and returns the highest change number among them (null when
-    /// none carried one), which is where a size-limited search resumes from.
+    /// none carried one), which is where the next page resumes from.
     /// </summary>
     private long? ProcessEntries(IReadOnlyList<SearchResultEntry> entries, LdapDeltaReadContext context, ConnectedSystemImportResult result, ReadProgress progress, CancellationToken cancellationToken)
     {
@@ -813,8 +833,8 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             }
             else if (!progress.FetchedDns.Add(subjectDn))
             {
-                // Already fetched on an earlier record in this read (this page or a previous one), and that fetch
-                // read the current state; a second copy would only be reported as a duplicate by the import.
+                // Already fetched on an earlier record on this page, and that fetch read the current state; a second
+                // copy would only be reported as a duplicate by the import.
                 progress.SkippedAlreadyFetched++;
             }
             else
@@ -870,7 +890,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// </summary>
     private ConnectedSystemImportObject? IdentifyDeletion(SearchResultEntry changeEntry, string targetDn, LdapDeltaReadContext context)
     {
-        var changes = ReadChanges(changeEntry);
+        var changes = ReadChanges(ReadDeletionRecord(changeEntry, context.SearchTimeout));
         var identity = string.IsNullOrWhiteSpace(changes) ? null : LdapDeletedEntryIdentity.Parse(changes.Split('\n'));
 
         if (identity == null || identity.IsEmpty)
@@ -884,6 +904,17 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
         }
 
         return identity.ToImportObject(targetDn, context.ObjectTypes, _logger);
+    }
+
+    /// <summary>
+    /// A delete record read by its own name for <c>changes</c>, which the change read leaves out. The record as the
+    /// change read returned it stands in when the directory answers nothing, and then carries no deleted entry.
+    /// </summary>
+    private SearchResultEntry ReadDeletionRecord(SearchResultEntry changeEntry, TimeSpan searchTimeout)
+    {
+        var request = new SearchRequest(changeEntry.DistinguishedName, "(objectClass=*)", SearchScope.Base, DeletionAttributes);
+        var response = (SearchResponse)_executor.SendRequest(request, searchTimeout);
+        return response?.Entries.Count > 0 ? response.Entries[0] : changeEntry;
     }
 
     /// <summary>

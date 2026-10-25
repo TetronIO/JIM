@@ -701,6 +701,150 @@ function Invoke-ActiveDirectoryLabDelegation {
     Invoke-LabControl -Script 'Grant-LabDelegation.ps1' -Arguments @('-Name', $VmName, '-ContainerDn', $ContainerDn) | Out-Null
 }
 
+function Get-ActiveDirectoryLabModuleDigest {
+    <#
+    .SYNOPSIS
+        The digest of the JIM PowerShell module in this checkout, which the host's copy must match before it registers
+        JIM on the AD FS server (Register-LabIdentityProvider.ps1, #2441).
+
+    .PARAMETER RepositoryRoot
+        The JIM checkout.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$RepositoryRoot
+    )
+
+    Import-Module (Join-Path $RepositoryRoot 'test' 'integration' 'ad-lab' 'guest' 'LabFederationServer.psm1') -Force
+    return (Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $RepositoryRoot 'src' 'JIM.PowerShell')))
+}
+
+function ConvertFrom-LabIdentityProviderRegistrationOutput {
+    <#
+    .SYNOPSIS
+        Reads what Register-LabIdentityProvider.ps1 printed: its last line, one JSON object. Returns ClientId,
+        ClientSecret, PublicClientId, ApiScope, ClaimType, MvAttribute and ModuleDigest.
+
+    .DESCRIPTION
+        Throws when the output is not that JSON, or a value JIM needs is missing. The message never repeats the output,
+        which holds the client secret.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [string]$Text
+    )
+
+    $line = @($Text -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1
+    $json = $null
+    try { $json = $line | ConvertFrom-Json -ErrorAction Stop } catch { $json = $null }
+    if ($null -eq $json -or $json -isnot [pscustomobject]) {
+        throw 'Register-LabIdentityProvider.ps1 printed something that is not the JSON registration it should end with.'
+    }
+    foreach ($name in 'clientId', 'clientSecret', 'publicClientId', 'apiScope', 'claimType', 'mvAttribute') {
+        if (-not $json.PSObject.Properties[$name] -or [string]::IsNullOrEmpty([string]$json.$name)) {
+            throw "Register-LabIdentityProvider.ps1 returned no $name."
+        }
+    }
+
+    return [pscustomobject]@{
+        ClientId       = [string]$json.clientId
+        ClientSecret   = [string]$json.clientSecret
+        PublicClientId = [string]$json.publicClientId
+        ApiScope       = [string]$json.apiScope
+        ClaimType      = [string]$json.claimType
+        MvAttribute    = [string]$json.mvAttribute
+        ModuleDigest   = [string]$json.moduleDigest
+    }
+}
+
+function Register-ActiveDirectoryLabIdentityProvider {
+    <#
+    .SYNOPSIS
+        Registers JIM on the lab's AD FS server, as customers do, and returns the registration (#2441).
+
+    .DESCRIPTION
+        Runs Register-LabIdentityProvider.ps1 on the hypervisor host, which runs JIM's Register-JIMIdentityProvider
+        against the AD FS server over PowerShell Direct, from a copy of the module it first checks is this commit's. Call
+        it after the AD FS server has been reverted and answers (Wait-ActiveDirectoryLabFederationReady).
+
+        In Actions the client secret is masked in the log before anything else happens, and handed to the
+        workflow's scrub step through GITHUB_ENV (as JIM_AD_LAB_SCRUB_<id>), which removes it from every result file
+        before upload. It is written nowhere else; the caller gives it to JIM through the process environment
+        (Set-ActiveDirectoryLabSsoEnvironment).
+
+    .PARAMETER FederationConfig
+        The AD FS server's configuration (Get-ActiveDirectoryLabFederationConfig).
+
+    .PARAMETER Url
+        JIM's address as the sign-in checks reach it (Get-ActiveDirectoryLabJimUrl).
+
+    .PARAMETER ModuleDigest
+        Get-ActiveDirectoryLabModuleDigest for this checkout.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'The ::add-mask:: command must reach the Actions log.')]
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$FederationConfig,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Url,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ModuleDigest
+    )
+
+    $output = Invoke-LabControl -Script 'Register-LabIdentityProvider.ps1' -Arguments @('-Name', $FederationConfig.VmName, '-Url', $Url, '-ModuleDigest', $ModuleDigest)
+    $registration = ConvertFrom-LabIdentityProviderRegistrationOutput -Text $output
+
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        Write-Host "::add-mask::$($registration.ClientSecret)"
+        if ($env:GITHUB_ENV) {
+            Add-Content -LiteralPath $env:GITHUB_ENV -Value "JIM_AD_LAB_SCRUB_$([guid]::NewGuid().ToString('N'))=$($registration.ClientSecret)" -Encoding utf8
+        }
+    }
+
+    return $registration
+}
+
+function Set-ActiveDirectoryLabSsoEnvironment {
+    <#
+    .SYNOPSIS
+        Puts a registration where docker-compose.ad-lab-adfs.yml reads it: the JIM_AD_LAB_ADFS_* variables of this
+        process, which compose interpolates into jim.web's JIM_SSO_* settings. Nothing is written to a file.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Sets this process''s environment only.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [object]$Registration
+    )
+
+    $env:JIM_AD_LAB_ADFS_CLIENT_ID = $Registration.ClientId
+    $env:JIM_AD_LAB_ADFS_CLIENT_SECRET = $Registration.ClientSecret
+    $env:JIM_AD_LAB_ADFS_API_SCOPE = $Registration.ApiScope
+    $env:JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID = $Registration.PublicClientId
+}
+
+function Get-ActiveDirectoryLabJimUrl {
+    <#
+    .SYNOPSIS
+        JIM's address as the AD FS sign-in checks reach it: jim.web's HTTPS port, published on this machine's loopback
+        by docker-compose.ad-lab-adfs.yml. Its certificate (Initialize-JimWebTlsCertificate) names localhost.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    return 'https://localhost:5243'
+}
+
 function Get-ActiveDirectoryLabGuestBuild {
     <#
     .SYNOPSIS

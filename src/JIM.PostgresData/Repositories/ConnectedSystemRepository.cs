@@ -4905,30 +4905,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
     {
-        var query = ExecutableExportsQuery(connectedSystemId);
-
-        // Run Profile Safeguards (#1618): a withheld change type is excluded at the database level,
-        // never read into the batch at all, so paging never has to skip past rows this run will not
-        // attempt.
-        if (excludedChangeTypes is { Count: > 0 })
-            query = query.Where(pe => !excludedChangeTypes.Contains(pe.ChangeType));
-
-        // Keyset pagination on (CreatedAt, Id): strictly after the last row of the previous
-        // batch. Unlike OFFSET paging, the cursor stays valid as executed rows drop out of
-        // the query mid-run, so the export loop can make a single forward sweep instead of
-        // rescanning from the start for every batch (issue #985). Backed by
-        // IX_PendingExports_ConnectedSystemId_CreatedAt_Id. Guid ordering only needs to be
-        // self-consistent between this predicate and the ORDER BY below; both use the
-        // store's uuid ordering.
-        if (afterCreatedAt.HasValue && afterId.HasValue)
-        {
-            var cursorCreatedAt = afterCreatedAt.Value;
-            var cursorId = afterId.Value;
-            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
-                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
-        }
-
-        return await query
+        return await ExecutableExportBatchQuery(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes)
             .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
@@ -4943,10 +4920,58 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// The batch of executable exports <see cref="GetExecutableExportBatchAsync"/> reads, without its
+    /// Include chain: eligibility, the Run Profile Safeguards exclusions, the keyset cursor, ordering
+    /// and page size. Separate so the plan PostgreSQL chooses for it can be tested (#2496); every split
+    /// query of the batch read embeds it as its subquery.
+    /// </summary>
+    internal IQueryable<PendingExport> ExecutableExportBatchQuery(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
+    {
+        var query = ExecutableExportsQuery(connectedSystemId);
+
+        // Run Profile Safeguards (#1618): a withheld change type is excluded at the database level,
+        // never read into the batch at all, so paging never has to skip past rows this run will not
+        // attempt.
+        if (excludedChangeTypes is { Count: > 0 })
+            query = query.Where(pe => !excludedChangeTypes.Contains(pe.ChangeType));
+
+        return AfterExportCursor(query, afterCreatedAt, afterId)
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
-            .Take(take)
-            .ToListAsync();
+            .Take(take);
+    }
+
+    /// <summary>
+    /// Keyset pagination on (CreatedAt, Id): the exports strictly after the last row of the previous
+    /// batch, or all of them when there is no cursor yet. Unlike OFFSET paging, the cursor stays valid
+    /// as executed rows drop out of the query mid-run, so the export loop can make a single forward
+    /// sweep instead of rescanning from the start for every batch (issue #985). Backed by
+    /// IX_PendingExports_ConnectedSystemId_CreatedAt_Id. Guid ordering only needs to be
+    /// self-consistent between this predicate and the callers' ORDER BY; both use the store's uuid
+    /// ordering.
+    /// </summary>
+    /// <remarks>
+    /// The leading <c>CreatedAt &gt;= cursor</c> is redundant logically and is what makes the cursor
+    /// cheap (#2496). PostgreSQL cannot bound an index scan with the OR alone, so without it each
+    /// batch either walked every row already exported or fetched and sorted every row still to
+    /// export: O(n) per batch, about 137 ms per 100-object batch at 790k Pending Exports, against
+    /// about 5 ms with the bound.
+    /// </remarks>
+    private static IQueryable<PendingExport> AfterExportCursor(IQueryable<PendingExport> query, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        if (!afterCreatedAt.HasValue || !afterId.HasValue)
+            return query;
+
+        var cursorCreatedAt = afterCreatedAt.Value;
+        var cursorId = afterId.Value;
+        return query.Where(pe => pe.CreatedAt >= cursorCreatedAt
+            && (pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0)));
     }
 
     /// <summary>
@@ -4963,15 +4988,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var query = ExecutableExportsQuery(connectedSystemId)
             .Where(pe => pe.HasUnresolvedReferences);
 
-        if (afterCreatedAt.HasValue && afterId.HasValue)
-        {
-            var cursorCreatedAt = afterCreatedAt.Value;
-            var cursorId = afterId.Value;
-            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
-                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
-        }
-
-        return await query
+        return await AfterExportCursor(query, afterCreatedAt, afterId)
             .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
@@ -5003,15 +5020,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var query = ExecutableExportsQuery(connectedSystemId)
             .Where(pe => !pe.HasUnresolvedReferences);
 
-        if (afterCreatedAt.HasValue && afterId.HasValue)
-        {
-            var cursorCreatedAt = afterCreatedAt.Value;
-            var cursorId = afterId.Value;
-            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
-                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
-        }
-
-        return await query.AnyAsync();
+        return await AfterExportCursor(query, afterCreatedAt, afterId).AnyAsync();
     }
 
     /// <summary>

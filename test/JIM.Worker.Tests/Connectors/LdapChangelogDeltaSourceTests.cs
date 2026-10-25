@@ -826,14 +826,40 @@ public class LdapChangelogDeltaSourceTests
     }
 
     [Test]
-    public async Task ReadChangesAsync_Always_RequestsTheChangeItsTargetAndWhatARenameOrDeleteNeedsAsync()
+    public async Task ReadChangesAsync_Always_RequestsTheChangeItsTargetAndWhatARenameNeedsButNotChangesAsync()
     {
         var host = new Mock<ILdapDeltaImportHost>();
 
         await Source().ReadChangesAsync(Context(host), new ConnectedSystemImportResult(), CancellationToken.None);
 
-        Assert.That(_sent.Single().Request.Attributes.Cast<string>(), Is.EquivalentTo(new[] { "changeNumber", "changeType", "targetDN", "changes", "newRdn", "newSuperior" }),
-            "a delete record's changes carry the deleted entry, and a rename's newRdn and newSuperior name where the object now is");
+        Assert.That(_sent.Single().Request.Attributes.Cast<string>(), Is.EquivalentTo(new[] { "changeNumber", "changeType", "targetDN", "newRdn", "newSuperior" }),
+            "a rename's newRdn and newSuperior name where the object now is; changes holds an add's whole entry, a large group's every member, and only a deletion needs it");
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_Always_AsksForNoMoreThanTheRunProfilesPageSizeAsync()
+    {
+        await Source().ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), new ConnectedSystemImportResult(), CancellationToken.None);
+
+        Assert.That(_sent.Single().Request.SizeLimit, Is.EqualTo(500));
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_Delete_ReadsChangesFromItsOwnRecordAndForNothingElseAsync()
+    {
+        ChangelogHolds(ChangeEntry("modify", PersonDn("a1"), 1201), DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid), 1202));
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(It.IsAny<string>(), It.IsAny<ObjectChangeType>())).Returns(new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated });
+
+        await Source().ReadChangesAsync(Context(host), new ConnectedSystemImportResult(), CancellationToken.None);
+
+        var recordReads = _sent.Where(s => s.Request.Scope == SearchScope.Base).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordReads.Select(s => s.Request.DistinguishedName), Is.EqualTo(new[] { "changeNumber=1202,cn=changelog" }), "the modify needs no changes");
+            Assert.That(recordReads.Single().Request.Attributes.Cast<string>(), Does.Contain("changes"));
+            Assert.That(recordReads.Single().Timeout, Is.EqualTo(Timeout));
+        }
     }
 
     [Test]
@@ -891,7 +917,7 @@ public class LdapChangelogDeltaSourceTests
     [Test]
     public async Task ReadChangesAsync_Delete_YieldsADeletedImportObjectWithObjectTypeExternalIdAndDnAsync()
     {
-        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid)));
+        ChangelogHolds(DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid)));
         var host = new Mock<ILdapDeltaImportHost>();
         var result = new ConnectedSystemImportResult();
 
@@ -911,7 +937,7 @@ public class LdapChangelogDeltaSourceTests
     [Test]
     public async Task ReadChangesAsync_DeleteWithCrLfChanges_IsStillIdentifiedAsync()
     {
-        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid).Replace("\n", "\r\n")));
+        ChangelogHolds(DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid).Replace("\n", "\r\n")));
         var result = new ConnectedSystemImportResult();
 
         await Source().ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), result, CancellationToken.None);
@@ -925,7 +951,7 @@ public class LdapChangelogDeltaSourceTests
         // 389 Directory Server declares changes with Octet String syntax, and System.DirectoryServices.Protocols hands a
         // search-result value back as bytes rather than a string when it is not valid UTF-8 throughout.
         var ldif = Encoding.UTF8.GetBytes(DeletedEntryLdif(Uuid)).Concat(new byte[] { 0xFF }).ToArray();
-        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntryWithBinaryChanges(InScopeDn, ldif));
+        ChangelogHolds(DeleteEntryWithBinaryChanges(InScopeDn, ldif));
         var result = new ConnectedSystemImportResult();
 
         await Source().ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), result, CancellationToken.None);
@@ -936,7 +962,7 @@ public class LdapChangelogDeltaSourceTests
     [Test]
     public async Task ReadChangesAsync_DeleteWithoutChanges_EmitsNothingAndNotesWhyAsync()
     {
-        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("delete", InScopeDn));
+        ChangelogHolds(ChangeEntry("delete", InScopeDn));
         var notes = new LdapDeltaSourceNotes();
         var log = new CapturingSink();
         var result = new ConnectedSystemImportResult();
@@ -955,7 +981,7 @@ public class LdapChangelogDeltaSourceTests
     [Test]
     public async Task ReadChangesAsync_DeleteWhoseChangesDescribeNoEntry_EmitsNothingAndNotesWhyAsync()
     {
-        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntry(InScopeDn, "changetype: delete\n"));
+        ChangelogHolds(DeleteEntry(InScopeDn, "changetype: delete\n"));
         var notes = new LdapDeltaSourceNotes();
         var result = new ConnectedSystemImportResult();
 
@@ -971,7 +997,7 @@ public class LdapChangelogDeltaSourceTests
     [Test]
     public async Task ReadChangesAsync_DeleteOfAnUnselectedObjectType_EmitsNothingWithoutANoteAsync()
     {
-        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntry(InScopeDn, $"objectClass: top\nobjectClass: organizationalUnit\nentryUUID: {Uuid}\n"));
+        ChangelogHolds(DeleteEntry(InScopeDn, $"objectClass: top\nobjectClass: organizationalUnit\nentryUUID: {Uuid}\n"));
         var notes = new LdapDeltaSourceNotes();
         var result = new ConnectedSystemImportResult();
 
@@ -1115,10 +1141,10 @@ public class LdapChangelogDeltaSourceTests
     [Test]
     public async Task ReadChangesAsync_Always_ReportsObjectsReadAsync()
     {
-        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(
-            ChangeEntry("add", InScopeDn),
-            DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid)),
-            ChangeEntry("modify", OutOfScopeDn));
+        ChangelogHolds(
+            ChangeEntry("add", InScopeDn, 1201),
+            DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid), 1202),
+            ChangeEntry("modify", OutOfScopeDn, 1203));
         var host = new Mock<ILdapDeltaImportHost>();
         host.Setup(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Added)).Returns(new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Added });
 
@@ -1167,8 +1193,11 @@ public class LdapChangelogDeltaSourceTests
     }
 
     [Test]
-    public async Task ReadChangesAsync_TwoModifiesOfOneDnAcrossTwoPages_FetchesAndImportsTheObjectOnceAsync()
+    public async Task ReadChangesAsync_TwoModifiesOfOneDnOnTwoPages_FetchesTheObjectOnEachPageAsync()
     {
+        // Each page is its own call and the source keeps nothing between calls. The import lets a later page's copy of
+        // an object take an earlier page's place in a Delta Import, so the second fetch, of the newer state, is what
+        // stands.
         _searchAnswer = request => request.Filter switch
         {
             "(changeNumber>=1201)" => throw SizeLimitExceeded(ChangeEntry("modify", InScopeDn, 1201)),
@@ -1177,15 +1206,16 @@ public class LdapChangelogDeltaSourceTests
         };
         var host = new Mock<ILdapDeltaImportHost>();
         host.Setup(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Updated)).Returns(() => new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated });
-        var result = new ConnectedSystemImportResult();
+        var firstPage = new ConnectedSystemImportResult();
+        var secondPage = new ConnectedSystemImportResult();
 
-        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+        await Source().ReadChangesAsync(Context(host), firstPage, CancellationToken.None);
+        await Source().ReadChangesAsync(Context(host, paginationTokens: firstPage.PaginationTokens), secondPage, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(_sent.Select(s => s.Request.Filter), Is.EqualTo(new[] { "(changeNumber>=1201)", "(changeNumber>=1202)" }), "both pages were read");
-            host.Verify(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Updated), Times.Once, "the DNs already fetched are remembered across the whole read, not per page");
-            Assert.That(result.ImportObjects, Has.Count.EqualTo(1));
+            Assert.That(firstPage.ImportObjects, Has.Count.EqualTo(1));
+            Assert.That(secondPage.ImportObjects, Has.Count.EqualTo(1));
         }
     }
 
@@ -1194,7 +1224,7 @@ public class LdapChangelogDeltaSourceTests
     {
         // A deletion is never skipped for a DN already seen: an object added then deleted in the same window must
         // still be deleted.
-        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("add", InScopeDn, 1201), DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid), 1202));
+        ChangelogHolds(ChangeEntry("add", InScopeDn, 1201), DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid), 1202));
         var host = new Mock<ILdapDeltaImportHost>();
         host.Setup(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Added)).Returns(new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Added });
         var result = new ConnectedSystemImportResult();
@@ -1250,9 +1280,10 @@ public class LdapChangelogDeltaSourceTests
     #region ReadChangesAsync: size limit and failures
 
     [Test]
-    public async Task ReadChangesAsync_SizeLimitExceeded_ContinuesFromTheHighestChangeNumberSeenPlusOneAsync()
+    public async Task ReadChangesAsync_PageCut_LeavesAPaginationTokenThatResumesFromTheHighestChangeNumberSeenPlusOneAsync()
     {
-        // Four distinct objects: a repeated DN is fetched once per read, which is the previous region's concern.
+        // The read stops at the page size (or the directory's own size limit, if lower) and the import calls again,
+        // so a page's changes are processed and released before the next page is read.
         _searchAnswer = request => request.Filter switch
         {
             "(changeNumber>=1201)" => throw SizeLimitExceeded(ChangeEntry("add", PersonDn("a1"), 1201), ChangeEntry("add", PersonDn("a3"), 1203), ChangeEntry("add", PersonDn("a2"), 1202)),
@@ -1261,16 +1292,22 @@ public class LdapChangelogDeltaSourceTests
         };
         var host = new Mock<ILdapDeltaImportHost>();
         host.Setup(h => h.GetObjectByDn(It.IsAny<string>(), ObjectChangeType.Added)).Returns(() => new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Added });
-        var result = new ConnectedSystemImportResult();
+        var firstPage = new ConnectedSystemImportResult();
+        var secondPage = new ConnectedSystemImportResult();
 
-        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+        await Source().ReadChangesAsync(Context(host), firstPage, CancellationToken.None);
+        await Source().ReadChangesAsync(Context(host, paginationTokens: firstPage.PaginationTokens), secondPage, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_sent.Select(s => s.Request.Filter), Is.EqualTo(new[] { "(changeNumber>=1201)", "(changeNumber>=1204)" }),
-                "the change number is an exact cursor, so the walk resumes from the highest seen plus one");
-            Assert.That(result.ImportObjects, Has.Count.EqualTo(4), "the partial answer is imported, not discarded");
-            host.Verify(h => h.ReportObjectsReadAsync(4), Times.Once);
+                "the change number is an exact cursor, so the next page resumes from the highest seen plus one");
+            Assert.That(firstPage.ImportObjects, Has.Count.EqualTo(3), "the cut page is imported, not discarded");
+            Assert.That(firstPage.PaginationTokens, Has.Count.EqualTo(1), "the import calls again while a token is left");
+            Assert.That(secondPage.ImportObjects, Has.Count.EqualTo(1));
+            Assert.That(secondPage.PaginationTokens, Is.Empty, "a page the directory answered in full is the last");
+            host.Verify(h => h.ReportObjectsReadAsync(3), Times.Once);
+            host.Verify(h => h.ReportObjectsReadAsync(1), Times.Once);
         }
     }
 
@@ -1354,6 +1391,31 @@ public class LdapChangelogDeltaSourceTests
         return new DirectoryOperationException(response, "The size limit was exceeded");
     }
 
+    /// <summary>
+    /// The changelog holding these records: the change read answers them without <c>changes</c>, as the directory
+    /// does when the read does not ask for it, and a read of one record by its own name answers it whole.
+    /// </summary>
+    private void ChangelogHolds(params SearchResultEntry[] records)
+    {
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(records.Select(WithoutChanges).ToArray());
+        var otherBaseReads = _baseReadAnswer;
+        _baseReadAnswer = request => records.FirstOrDefault(r => r.DistinguishedName == request.DistinguishedName) is { } record
+            ? LdapTestResponses.SearchResponseWithEntries(record)
+            : otherBaseReads(request);
+    }
+
+    private static SearchResultEntry WithoutChanges(SearchResultEntry record)
+    {
+        const BindingFlags nonPublicInstance = BindingFlags.NonPublic | BindingFlags.Instance;
+        var attributeCollection = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
+        var add = typeof(SearchResultAttributeCollection).GetMethod("Add", nonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!;
+        foreach (var name in record.Attributes.AttributeNames.Cast<string>().Where(n => n != "changes"))
+            add.Invoke(attributeCollection, [name, record.Attributes[name]]);
+
+        return (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), nonPublicInstance, binder: null,
+            args: [record.DistinguishedName, attributeCollection], culture: null)!;
+    }
+
     private static string PersonDn(string uid) => $"uid={uid},{ContainerDn}";
 
     private static SearchResultEntry ChangelogEntry(long changeNumber) =>
@@ -1433,14 +1495,15 @@ public class LdapChangelogDeltaSourceTests
         : logDeleted == null ? LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(PluginDn, ("objectClass", "top")))
         : LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(PluginDn, ("objectClass", "top"), (LogDeletedAttribute, logDeleted)));
 
-    private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, long previousChangeNumber = PreviousChangeNumber, LdapConnectorRootDse? currentRootDse = null, LdapDeltaSourceNotes? notes = null) => new()
+    private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, long previousChangeNumber = PreviousChangeNumber, LdapConnectorRootDse? currentRootDse = null, LdapDeltaSourceNotes? notes = null,
+        IReadOnlyList<ConnectedSystemPaginationToken>? paginationTokens = null) => new()
     {
         PreviousRootDse = new LdapConnectorRootDse { LastChangeNumber = previousChangeNumber },
         CurrentRootDse = currentRootDse ?? new LdapConnectorRootDse { LastChangeNumber = previousChangeNumber + 10 },
         TargetPartitions = [],
         ScopeDecidingContainers = [new ConnectedSystemContainer { ExternalId = ContainerDn, Name = "People", Selected = true }],
         ObjectTypes = [InetOrgPerson()],
-        PaginationTokens = [],
+        PaginationTokens = paginationTokens ?? [],
         PageSize = 500,
         SearchTimeout = Timeout,
         Notes = notes ?? new LdapDeltaSourceNotes(),
