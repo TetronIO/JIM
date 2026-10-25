@@ -21,10 +21,11 @@ An administrator who sized JIM for their steady state therefore finds that an un
 
 ## Goals
 
-- A Delta Import's peak Worker memory is set by the Connector's page size (and the values on that page), not by the number of changes in the run. Verified by running the same Delta Import with 1x and 5x the changes. The peak should stay within 25% of each other, while the time taken scales with the change count.
+- A Delta Import's peak Worker memory is set by the Connector's page size (and the values on that page), not by the number of updates in the run. Verified by running the same Delta Import with 1x and 5x the changes. The peak should stay within 25% of each other, while the time taken scales with the change count.
 - The Scale750k40kGroups and Scale100k5kGroups Delta Imports run with a lower measured peak than the post-#2503 baseline taken before implementation.
 - No change to what a successful Delta Import leaves in JIM: the same Connected System Objects, attribute values, references, Pending Export outcomes and deletions as today, for every existing Worker test and integration scenario.
-- A Delta Import that fails, is cancelled, or is stopped by the memory guard keeps the changes it has already saved. It keeps the watermark it started from, so the next Delta Import reads the remainder (and harmlessly re-reads what was saved).
+- A Delta Import that fails, is cancelled, or is stopped by the memory guard keeps the updates it has already saved. It keeps the watermark it started from, so the next Delta Import reads the remainder (and harmlessly re-reads what was saved).
+- Net change is unchanged: an object created and deleted within one Delta Import never appears in JIM or downstream, whatever the deletion limits decide and whether or not the run completes.
 
 ## Non-Goals
 
@@ -44,17 +45,18 @@ An administrator who sized JIM for their steady state therefore finds that an un
 
 ### Functional Requirements
 
-1. **Stage each page.** After the Worker processes a page of a Delta Import, it saves that page's creates and updates and records their execution items. It then reconciles their Pending Exports and releases the page's objects before reading the next page.
-2. **Deletion limits keep their meaning.** A Delta Import's Connector-reported deletes are still decided together once every page has been read (#2089). Over the limits, none is applied and the run keeps its starting watermark. Within them, all are applied. Creates and updates are unaffected either way, as today.
-3. **A later page's copy of an object still wins.** When an object staged by an earlier page arrives again, the later copy is applied to the object as that earlier page saved it. This holds for a further update, a delete, and a re-insert after a delete. A later copy identical to the one already staged in this run is recognised as unchanged without reloading the object.
-4. **References to objects on later pages resolve.** A reference to an object this run creates on a later page is resolved by the end of the run, with the same Object Type scoping and case rules as today (#1285, #2051). A reference still unresolved at the end is reported on its execution item exactly as today (#959), under the Connected System's Unresolved Reference Handling setting.
-5. **Every count stays truthful.** The Activity's created, updated, unchanged, deleted and withheld figures count objects, not copies. An object staged on two pages is counted once, under its final outcome.
-6. **A stopped run says what it kept.** When a Delta Import fails, is cancelled, or is stopped by the memory guard after staging at least one page, its Activity says how many changes were saved. It also says that the next Delta Import will read from the same starting point.
-7. **The watermark rule is unchanged.** The new watermark is recorded only after every page is staged (#1868). Re-reading a staged change must leave JIM exactly as it was, with no new change record or execution item.
+1. **Stage each page's updates.** After the Worker processes a page of a Delta Import, it saves that page's updates to objects JIM already holds and records their execution items. It then reconciles their Pending Exports and releases the page's objects before reading the next page.
+2. **Net change is kept: creates are held until the end of the run.** An object the run creates is saved only once every page has been read, as today. An object created and then deleted within one run therefore never appears in JIM, and so is never provisioned downstream. That holds even when the deletes are withheld by the limits, or the run stops part-way. A later page's copy of a held create replaces it in memory, as #2074 does today.
+3. **Deletion limits keep their meaning.** A Delta Import's Connector-reported deletes are still decided together once every page has been read (#2089). Over the limits, none is applied and the run keeps its starting watermark. Within them, all are applied. Creates and updates are unaffected either way, as today.
+4. **A later page's copy of an object still wins.** When an object whose update an earlier page saved arrives again, the later copy is applied to the object as that page saved it. This holds for a further update and for a delete. Each staged change keeps its own execution item, and the object is counted once. A later copy identical to the one already staged in this run is recognised as unchanged without reloading the object.
+5. **References resolve across pages.** A staged update's reference to an object this run creates is resolved by the end of the run, with the same Object Type scoping and case rules as today (#1285, #2051). A reference still unresolved at the end is reported on its execution item exactly as today (#959), under the Connected System's Unresolved Reference Handling setting.
+6. **Every count stays truthful.** The Activity's created, updated, unchanged, deleted and withheld figures count objects, not copies. An object staged on two pages is counted once, under its final outcome.
+7. **A stopped run says what it kept.** When a Delta Import fails, is cancelled, or is stopped by the memory guard after staging at least one page, its Activity says how many updates were saved. It also says that creates and deletes were not applied, and that the next Delta Import will read from the same starting point.
+8. **The watermark rule is unchanged.** The new watermark is recorded only after every page is staged (#1868). Re-reading a staged change must leave JIM exactly as it was, with no new change record or execution item.
 
 ### Non-Functional Requirements
 
-- **Memory:** the Worker's peak during a Delta Import is set by one page plus the run-wide lookups that already exist (the external ID lookup, about 200 bytes per Connected System Object). The run-wide state added by this change is limited to identifiers and hashes: no attribute values, no object graphs.
+- **Memory:** the Worker's peak during a Delta Import is set by one page, plus the run's creates, plus the run-wide lookups that already exist (the external ID lookup, about 200 bytes per Connected System Object). Creates are held whole to keep net change (requirement 2). Everything else this change keeps run-wide is identifiers and hashes: no attribute values, no object graphs. The residual growth with creates is accepted: a Delta Import that creates thousands of very large objects is a first-load pattern, covered by #2521.
 - **Throughput:** a Delta Import of a typical change window (one page or a few) is no slower than today. Large windows may pay a per-page save cost; the end-of-run reference sweep must be one set-based query, not one per value.
 - **Integrity:** no partially saved object. Each object's attribute values, change record and execution item are saved together, as today's batches already ensure.
 
@@ -82,13 +84,19 @@ An administrator who sized JIM for their steady state therefore finds that an un
 
 **Given**: a Delta Import of 20 pages, stopped by the memory guard during page 12
 **When**: the Activity is opened
-**Then**: it records the stop and that 11 pages of changes were saved. The next Delta Import reads from the original watermark, finds those 11 pages already staged, and stages the remaining 9.
+**Then**: it records the stop and that the updates on 11 pages were saved, while that run's creates and deletes were not applied. The next Delta Import reads from the original watermark, finds those updates already staged, and applies the rest.
 
 ### Scenario 5: A group referencing a user created later in the run
 
 **Given**: page 2 modifies a group to add a member whose user object is created on page 7
 **When**: the Delta Import completes
 **Then**: the membership resolves to the user's Connected System Object, as it does today, and no unresolved reference is reported
+
+### Scenario 6: Created and deleted in the same window
+
+**Given**: a user created on page 1 and deleted on page 3, in a run whose deletes exceed the Run Profile's limit
+**When**: the Delta Import completes
+**Then**: the user never appears in JIM, as today: the later delete replaced the held create in memory, so there is nothing to provision downstream and nothing for the limit to withhold
 
 ## Constraints
 
@@ -122,17 +130,20 @@ An administrator who sized JIM for their steady state therefore finds that an un
 - #2507 (merged): the memory guard's Stop becomes non-destructive once pages are staged.
 - The Scale750k40kGroups re-run on `main`, for the baseline measurement (Phase 0 of the plan).
 
-## Open Questions
+## Decisions
 
-1. **A later copy of an object already staged:** keep both execution items (the earlier page's change and the later one), or withdraw the earlier one as #2074 does today? Withdrawing a saved item means deleting its change record, which loses the intermediate state from the object's history. The plan recommends keeping both items while counting the object once; see the plan's Phase 3.
-2. **Create on one page, delete on a later one:** today the object is never created. Staged per page, it is created and then marked deleted, and removed by the next synchronisation. The plan recommends accepting this, as it is what two consecutive Delta Imports would do.
-3. **Value budget within a page:** add it in this work, or only if Phase 3's measurements show one page alone is too large? The plan recommends measuring first.
+Settled with Jay on 2026-10-25:
+
+1. **A later copy of an object whose update is already staged:** keep both execution items (each records a real change from saved state) and count the object once. Withdrawing the earlier item would mean deleting a saved change record, and the object's history would then skip a step.
+2. **Create on one page, delete on a later one:** must not create the object. Staging creates page by page was rejected because it loses net change. A withheld or unread delete would leave the object to be provisioned downstream, and even a completed run would record an object that never should have existed. Creates are therefore held until the end of the run (requirement 2).
+3. **Value budget within a page:** measure after the per-page staging phase, then decide.
 
 ## Acceptance Criteria
 
 - [ ] Phase 0 baseline recorded: post-#2503 peak Worker memory for the Scale100k5kGroups and Scale750k40kGroups Delta Imports
 - [ ] Peak Worker memory for a Delta Import is within 25% between 1x and 5x the change count (Worker test harness measurement plus one integration run)
-- [ ] Every existing Worker test passes unchanged, except tests that assert the open-question behaviours, which are updated deliberately and listed in the PR
+- [ ] Every existing Worker test passes unchanged, except tests that assert one execution item for an update superseded across pages (decision 1), which are updated deliberately and listed in the PR
+- [ ] Created-then-deleted within one run leaves nothing in JIM: when the run completes, when its deletes are withheld, and when it stops part-way
 - [ ] New tests cover each functional requirement, including `RequiresPostgres` tests for page staging and the reference sweep
 - [ ] Scenario 8 (Scale100k5kGroups) and Scale750k40kGroups pass with a lower peak than the baseline
 - [ ] A Delta Import stopped part-way keeps its staged pages, keeps its watermark, and its next run completes with no duplicate change records
