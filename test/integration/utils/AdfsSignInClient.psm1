@@ -169,12 +169,21 @@ function Invoke-SignInRequest {
         [hashtable]$Headers = @{}
     )
 
+    # With -MaximumRedirection 0 a redirect comes back as the response and also as a "maximum redirection count has
+    # been exceeded" error, whose exception is a bare InvalidOperationException; -ErrorAction Stop would make every
+    # redirect throw. So the error is captured instead: a response is used whatever its status, and a request that got
+    # none (no connection, a refused certificate) throws what went wrong.
     $parameters = @{
         Uri = $Uri; Method = $Method; WebSession = $Session; Headers = $Headers
-        MaximumRedirection = 0; SkipHttpErrorCheck = $true; ErrorAction = 'Stop'
+        MaximumRedirection = 0; SkipHttpErrorCheck = $true; ErrorAction = 'SilentlyContinue'; ErrorVariable = 'requestErrors'
     }
     if ($Body) { $parameters.Body = $Body; $parameters.ContentType = 'application/x-www-form-urlencoded' }
+    $requestErrors = $null
     $response = Invoke-WebRequest @parameters
+    if ($null -eq $response) {
+        $reason = if ($requestErrors) { @($requestErrors)[0].Exception.Message } else { 'no response' }
+        throw "$Method $($Uri.GetLeftPart([UriPartial]::Path)) failed: $reason"
+    }
 
     $location = $null
     if ($response.Headers.ContainsKey('Location')) {

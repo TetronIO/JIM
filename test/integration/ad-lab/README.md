@@ -137,6 +137,18 @@ writes `settings.example.json`, and with `-CreateSettings` creates `settings.jso
 (before copying anything) if `settings.json` already exists, and never touches that file otherwise. Run it again after any
 change to the lab code, and after pulling a new release: the scripts on the host are a copy, not the checkout.
 
+**Keep them current.** The AD FS registration refuses a copy of the JIM PowerShell module that is not the commit under
+test, so a merge to `src/JIM.PowerShell` fails the AD FS scenarios (Scenario 030 in `jim-ad-lab` among them) until the
+host is redeployed. Register the scheduled task that does it hourly, once, from an elevated PowerShell 7 session:
+
+```powershell
+C:\jim-ad-lab\Register-LabScriptsUpdateTask.ps1
+```
+
+It runs `Update-LabScripts.ps1` as SYSTEM every hour (`\JIM\Update AD lab scripts`): it brings its own clone of main,
+`C:\jim-ad-lab-source`, to `origin/main` (reset hard and cleaned, so it must never be a working checkout) and runs
+`Install-LabScripts.ps1` from it, logging to `C:\jim-ad-lab\logs\update-lab-scripts.log`. The repository is public, so
+it needs no credentials. A run dispatched within the hour of a module change can still find the copy behind, and says so.
 **2. Fill in `settings.json`.** Every value in the example is a placeholder. `Invoke-LabRebuild.ps1` reads this file, and
 the first build below is easiest when it is driven from the same values:
 

@@ -85,6 +85,8 @@ try {
 }
 catch {
     $result.error = $_.Exception.Message
+    # Where it failed, so a lab failure names the line rather than only an exception's words.
+    $result.at = @("$($_.ScriptStackTrace)" -split "`r?`n" | Where-Object { $_ } | Select-Object -First 4)
     $log = Join-Path $BinDirectory 'browser.log'
     if ($Check -eq 'ConnectJim' -and (Test-Path -LiteralPath $log)) {
         $result.browserLog = @(Get-Content -LiteralPath $log -Tail 5)
