@@ -32,20 +32,17 @@ Describe 'ConvertFrom-AdfsSignInCheckOutput' {
 
 Describe 'Invoke-AdfsSignInCheck' {
     BeforeEach {
+        # Pester's Mock, scoped to this test, of the helpers' one docker call: a global docker function would leak into
+        # every other test file in the run (it broke ComposeFiles.Tests.ps1's discovery, which runs docker compose).
         $script:Calls = [System.Collections.Generic.List[object]]::new()
-        function global:docker {
+        Mock Invoke-AdfsSignInDocker {
             $script:Calls.Add([pscustomobject]@{
-                    Arguments = @($args)
+                    Arguments = @($Arguments)
                     UserName  = $env:JIM_SIGN_IN_USERNAME
                     Password  = $env:JIM_SIGN_IN_PASSWORD
                 })
-            $global:LASTEXITCODE = 0
             'ADFS-SIGN-IN-RESULT {"check":"Portal","ok":true}'
         }
-    }
-
-    AfterEach {
-        Remove-Item -Path function:global:docker -ErrorAction SilentlyContinue
     }
 
     It 'passes the name and password through the exec''s environment, never its command line, and clears them after' {

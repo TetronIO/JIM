@@ -22,6 +22,13 @@ $script:AdfsSignInToolbox = 'jim-ldap-toolbox'
 $script:AdfsSignInClientDirectory = '/tmp/jim-sign-in'
 $script:AdfsSignInBinDirectory = '/tmp/jim-sign-in-bin'
 
+function Invoke-AdfsSignInDocker {
+    # The one place these helpers run docker, so the tests replace it without needing docker installed. Returns
+    # every line it printed, as text; $LASTEXITCODE is docker's.
+    param([string[]]$Arguments)
+    return @(& docker @Arguments 2>&1 | ForEach-Object { "$_" })
+}
+
 function ConvertFrom-AdfsSignInCheckOutput {
     <#
     .SYNOPSIS
@@ -74,7 +81,7 @@ function Initialize-AdfsSignInToolbox {
 
     function Invoke-Docker {
         param([string[]]$Arguments)
-        $output = @(& docker @Arguments 2>&1 | ForEach-Object { "$_" })
+        $output = Invoke-AdfsSignInDocker -Arguments $Arguments
         if ($LASTEXITCODE -ne 0) { throw "docker $($Arguments[0]) failed: $($output -join ' ')" }
         return $output
     }
@@ -122,9 +129,9 @@ function Invoke-AdfsSignInCheck {
     try {
         $env:JIM_SIGN_IN_USERNAME = $UserName
         $env:JIM_SIGN_IN_PASSWORD = $Password
-        $output = @(& docker exec -e JIM_SIGN_IN_USERNAME -e JIM_SIGN_IN_PASSWORD $script:AdfsSignInToolbox pwsh -NoProfile -NonInteractive `
-                -File "$client/Invoke-AdfsSignInCheck.ps1" -Check $Check -JimUrl $JimUrl -ClientDirectory $client -BinDirectory $script:AdfsSignInBinDirectory 2>&1 |
-            ForEach-Object { "$_" })
+        $output = Invoke-AdfsSignInDocker -Arguments @('exec', '-e', 'JIM_SIGN_IN_USERNAME', '-e', 'JIM_SIGN_IN_PASSWORD', $script:AdfsSignInToolbox,
+            'pwsh', '-NoProfile', '-NonInteractive', '-File', "$client/Invoke-AdfsSignInCheck.ps1", '-Check', $Check, '-JimUrl', $JimUrl,
+            '-ClientDirectory', $client, '-BinDirectory', $script:AdfsSignInBinDirectory)
     }
     finally {
         Remove-Item -Path Env:JIM_SIGN_IN_USERNAME, Env:JIM_SIGN_IN_PASSWORD -ErrorAction SilentlyContinue
