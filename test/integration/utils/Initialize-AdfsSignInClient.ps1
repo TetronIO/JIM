@@ -46,7 +46,8 @@ $store = [System.Security.Cryptography.X509Certificates.X509Store]::new('Root', 
 $store.Open('ReadWrite')
 try {
     foreach ($path in $CertificatePath) {
-        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPemFile($path)
+        # The constructor reads a certificate-only PEM; CreateFromPemFile expects the private key in the file too.
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($path)
         if ($store.Certificates.Find('FindByThumbprint', $certificate.Thumbprint, $false).Count -eq 0) {
             $store.Add($certificate)
             Write-Host "  Trusted $($certificate.Subject) ($($certificate.Thumbprint))"
