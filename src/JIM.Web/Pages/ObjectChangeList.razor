@@ -1,6 +1,7 @@
 @page "/activity/object-changes"
 @attribute [Authorize(Roles = "User")]
 @using JIM.Models.Core
+@using JIM.Models.Enums
 @using JIM.Models.History
 @using JIM.Utilities
 @using JIM.Web.Models
@@ -79,12 +80,22 @@
             </MudStack>
         }
         <div>
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" DropShadow="false"
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" DropShadow="false"
                        Disabled="@(_state.Conditions.Count >= JIM.Application.Servers.MetaverseServer.MaxChangeSearchConditions)"
                        OnClick="AddCondition">Add Condition</MudButton>
         </div>
     </MudStack>
 </MudPaper>
+
+@* ─── Change detail ─── *@
+@* A temporary drawer without an overlay: the list stays usable beside it, and another row swaps what it shows. *@
+<MudDrawer Open="@(_selected != null)" OpenChanged="@(open => { if (!open) CloseDetail(); })" Anchor="Anchor.End"
+           Variant="DrawerVariant.Temporary" Overlay="false" Width="560px" Elevation="4" Class="jim-object-change-drawer">
+    @if (_selected is { } selected)
+    {
+        <ObjectChangeDetail Result="@selected" OnClose="CloseDetail" />
+    }
+</MudDrawer>
 
 @if (_searchError != null)
 {
@@ -98,6 +109,7 @@
                      DefaultSortDescending="true"
                      LoadWindow="LoadWindowAsync"
                      RowClicked="HandleRowClicked"
+                     RowClassFunc="RowClass"
                      SingularName="Change"
                      PluralName="Changes"
                      SearchPlaceholder="Search Metaverse Object name">
@@ -111,14 +123,9 @@
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Metaverse Object" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
-                <div class="jim-one-line-list">
-                    <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@context.Item.MetaverseObjectTypeName"
-                                Name="@context.Item.MetaverseObjectDisplayName" Href="@ObjectHref(context.Item)" Class="ma-0" />
-                    @if (context.Item.MetaverseObjectDeleted)
-                    {
-                        <span class="mud-text-secondary ml-2">(deleted)</span>
-                    }
-                </div>
+                <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@context.Item.MetaverseObjectTypeName"
+                            Name="@context.Item.MetaverseObjectDisplayName" Href="@ObjectHref(context.Item)"
+                            Deleted="@context.Item.MetaverseObjectDeleted" Tooltip="@DeletedTooltip(context.Item)" Class="ma-0" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Change" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
@@ -128,11 +135,25 @@
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Attributes" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <CellTemplate>
-                <OverflowList TItem="ObjectChangeSummary" Items="@ObjectChangeSummary.Summarise(context.Item)" Title="Attribute changes">
+                @{ var summaries = ObjectChangeSummary.Summarise(context.Item); }
+                <div class="jim-one-line-list">
+                @if (summaries.Count > 0 && summaries[0].FinalValues)
+                {
+                    @* A deletion records the object's last values; label them as such, so they do not read as cleared. *@
+                    <span class="jim-final-values-label">Final values</span>
+                }
+                @* The list sits in the row's shrinking slot: it is a one-line list of its own, and nested as a plain flex
+                   child it would hold its width and run into the next column instead of clipping. *@
+                <div class="jim-one-line-list-value">
+                <OverflowList TItem="ObjectChangeSummary" Items="@summaries" Title="@(context.Item.Change.ChangeType == ObjectChangeType.Deleted ? "Final values" : "Attribute changes")">
                     <ItemTemplate Context="summary">
                         <span class="jim-one-line">
                             <span class="@(summary.Matched ? "" : "mud-text-secondary") mr-1">@summary.AttributeName:</span>
-                            @if (summary.SingleValued)
+                            @if (summary.FinalValues)
+                            {
+                                <span>@string.Join(", ", summary.RemovedValues)</span>
+                            }
+                            else if (summary.SingleValued)
                             {
                                 @if (summary.RemovedValues.Count > 0)
                                 {
@@ -163,23 +184,25 @@
                     </ItemTemplate>
                     <EmptyContent><EmptyValue /></EmptyContent>
                 </OverflowList>
+                </div>
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Made by" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
-                @if (MadeBy(context.Item) is { } madeBy)
-                {
-                    <OneLineText Text="@madeBy" />
-                }
-                else
-                {
-                    <EmptyValue />
-                }
+                @* Capped so a long Connected System and rule pair clips its names rather than squeezing the Attributes
+                   column, which the row exists to show. *@
+                <div class="jim-column-cap" style="--jim-column-cap: 18rem;">
+                <InitiatorChip InitiatedByType="@context.Item.Change.InitiatedByType" InitiatedById="@context.Item.Change.InitiatedById"
+                               InitiatedByName="@context.Item.Change.InitiatedByName" ChangeInitiatorType="@context.Item.Change.ChangeInitiatorType"
+                               SyncRuleId="@context.Item.Change.SyncRuleId" SyncRuleName="@context.Item.Change.SyncRuleName"
+                               ConnectedSystemId="@context.Item.Change.ConnectedSystemId" ConnectedSystemName="@context.Item.Change.ConnectedSystemName" />
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Activity" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
-                @if (context.Item.ActivityId is { } activityId)
+                @if (context.Item.Change.ActivityId is { } activityId)
                 {
                     <MudLink Href="@($"/activity/{activityId}")" @onclick:stopPropagation="true">View Activity</MudLink>
                 }
@@ -234,6 +257,7 @@
     private List<MetaverseObjectType> _objectTypes = [];
     private List<MetaverseAttribute> _attributes = [];
     private string? _searchError;
+    private MetaverseObjectChangeSearchResult? _selected;
 
     private DateRange? DateRange => _state.From.HasValue || _state.To.HasValue ? new DateRange(_state.From, _state.To) : null;
 
@@ -278,12 +302,11 @@
             ? JIM.Utilities.Utilities.GetMetaverseObjectHref(id, result.MetaverseObjectTypePluralName)
             : null;
 
-    private static string? MadeBy(MetaverseObjectChangeSearchResult result) =>
-        result.Change.SyncRuleName
-        ?? result.Change.InitiatedByName
-        ?? (result.Change.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.NotSet
-            ? null
-            : result.Change.InitiatedByType.ToString().SplitOnCapitalLetters());
+    private static string? DeletedTooltip(MetaverseObjectChangeSearchResult result) =>
+        result.MetaverseObjectDeletedAt is { } deletedAt ? $"Deleted {deletedAt.ToRelativeTime()}" : null;
+
+    private string? RowClass(MetaverseObjectChangeSearchResult result, int _) =>
+        _selected?.Change.Id == result.Change.Id ? "jim-row-selected" : null;
 
     private string ValueHint(ObjectChangeConditionRow condition)
     {
@@ -299,11 +322,18 @@
         };
     }
 
+    /// <summary>
+    /// A row opens its change in the side panel: the row says what changed in summary, so clicking it shows the change
+    /// in full. The object itself is one click away on the chip.
+    /// </summary>
     private void HandleRowClicked(MetaverseObjectChangeSearchResult result)
     {
-        var href = ObjectHref(result);
-        if (href != null)
-            NavManager.NavigateTo(href);
+        _selected = result;
+    }
+
+    private void CloseDetail()
+    {
+        _selected = null;
     }
 
     private void AddCondition()

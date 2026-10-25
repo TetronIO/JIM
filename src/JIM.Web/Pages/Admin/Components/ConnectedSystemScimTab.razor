@@ -30,7 +30,7 @@
     <div class="d-flex align-center gap-3 mt-3">
         <MudTextField T="string" Value="@BaseUrl" Label="Base URL" ReadOnly="true" Variant="Variant.Outlined"
                       Margin="Margin.Dense" Class="jim-text-code" />
-        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ContentCopy" DropShadow="false"
+        <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.ContentCopy" DropShadow="false"
                    OnClick="@(() => CopyAsync(BaseUrl, "Base URL"))">Copy</MudButton>
     </div>
 </MudPaper>

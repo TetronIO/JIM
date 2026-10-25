@@ -371,6 +371,24 @@ public class JimDbContext : DbContext
             .HasForeignKey<ConnectedSystemObjectChange>(c => c.ActivityRunProfileExecutionItemId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // The Metaverse Object side of the same rule (#2460). Change history and Activities are trimmed on their own
+        // clocks, so a change record can outlive the Activity it was made in. Left to convention (NO ACTION) the
+        // database refused to delete any such Activity, failing the same oldest retention batch on every run.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasOne(c => c.ActivityRunProfileExecutionItem)
+            .WithOne(r => r.MetaverseObjectChange)
+            .HasForeignKey<MetaverseObjectChange>(c => c.ActivityRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // The Activity a change was made in (#2460), by the same rule: history outlives the Activity. No navigation, so
+        // nothing loads or serialises an Activity graph through a change record; the foreign key's index keeps an
+        // Activity delete from scanning the whole change table to clear it.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasOne<Activity>()
+            .WithMany()
+            .HasForeignKey(c => c.ActivityId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         modelBuilder.Entity<ConnectedSystemObjectChange>()
             .HasMany(cso => cso.AttributeChanges)
             .WithOne(ac => ac.ConnectedSystemChange)

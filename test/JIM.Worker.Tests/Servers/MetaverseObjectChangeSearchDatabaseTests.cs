@@ -44,6 +44,7 @@ public class MetaverseObjectChangeSearchDatabaseTests
         public Guid AliceId;
         public Guid CarolId;
         public Guid ActivityId;
+        public DateTime CarolDeletedAt;
 
         // Change ids, named for what each records.
         public Guid AliceDisabledAndLeaver;
@@ -149,6 +150,7 @@ public class MetaverseObjectChangeSearchDatabaseTests
 
         var c2 = Change(bob);
         c2.ActivityRunProfileExecutionItem = rpei;
+        c2.ActivityId = activity.Id;
         Text(c2, status, ValueChangeType.Add, "Disabled");
         Text(c2, status, ValueChangeType.Remove, "Active");
 
@@ -173,6 +175,8 @@ public class MetaverseObjectChangeSearchDatabaseTests
         c7.DeletedMetaverseObjectId = carolId;
         c7.DeletedObjectTypeId = person.Id;
         c7.DeletedObjectDisplayName = "Carol";
+        // A deletion is made inside an Activity but recorded against no execution item of its own (#2460).
+        c7.ActivityId = activity.Id;
         Text(c7, status, ValueChangeType.Remove, "Disabled");
 
         var c8 = Change(alice);
@@ -202,6 +206,7 @@ public class MetaverseObjectChangeSearchDatabaseTests
         seed.BobManagerAndNumber = c5.Id;
         seed.CarolDisabled = c6.Id;
         seed.CarolDeleted = c7.Id;
+        seed.CarolDeletedAt = c7.ChangeTime;
         seed.AliceStarted = c8.Id;
         return seed;
     }
@@ -455,10 +460,26 @@ public class MetaverseObjectChangeSearchDatabaseTests
             Assert.That(bob.MetaverseObjectDeleted, Is.False);
             Assert.That(bob.MetaverseObjectDisplayName, Is.EqualTo("Bob"));
             Assert.That(bob.MetaverseObjectTypeId, Is.EqualTo(_seed.PersonTypeId));
-            Assert.That(bob.ActivityId, Is.EqualTo(_seed.ActivityId));
-            Assert.That(alice.ActivityId, Is.Null);
+            Assert.That(carol.MetaverseObjectDeletedAt, Is.EqualTo(_seed.CarolDeletedAt).Within(TimeSpan.FromMilliseconds(1)),
+                "an earlier change to a deleted object says when the object was deleted");
+            Assert.That(bob.MetaverseObjectDeletedAt, Is.Null);
+            Assert.That(bob.Change.ActivityId, Is.EqualTo(_seed.ActivityId));
+            Assert.That(alice.Change.ActivityId, Is.Null);
             Assert.That(alice.MatchedAttributeIds, Is.EqualTo(new[] { _seed.StatusId }));
             Assert.That(alice.Change.AttributeChanges.Select(ac => ac.AttributeName), Is.EquivalentTo(new[] { "Department", "Employee Status" }));
+        }
+    }
+
+    [Test]
+    public async Task Search_DeletionMadeInAnActivity_LinksTheActivityWithoutAnExecutionItemAsync()
+    {
+        var result = await NewJim().Metaverse.SearchMetaverseObjectChangesRangeAsync(new MetaverseObjectChangeSearchCriteria(), offset: 0, count: 100);
+
+        var deletion = result.Results.Single(r => r.Change.Id == _seed.CarolDeleted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletion.Change.ActivityRunProfileExecutionItemId, Is.Null);
+            Assert.That(deletion.Change.ActivityId, Is.EqualTo(_seed.ActivityId));
         }
     }
 

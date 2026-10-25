@@ -53,6 +53,26 @@ public class MetaverseObjectDtoTests
     }
 
     [Test]
+    public void FromEntity_SignInClaimValue_MapsContributorKindAndClaimType()
+    {
+        var entity = new MetaverseObjectAttributeValue
+        {
+            AttributeId = 4,
+            StringValue = "Jo",
+            ContributedByKind = ValueContributorKind.SignInClaim,
+            ContributedByClaimType = "given_name"
+        };
+
+        var dto = MetaverseObjectAttributeValueDto.FromEntity(entity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(dto.ContributedByClaimType, Is.EqualTo("given_name"));
+        }
+    }
+
+    [Test]
     public void FromEntity_WithoutProvenance_MapsNullProvenanceFields()
     {
         var entity = new MetaverseObjectAttributeValue

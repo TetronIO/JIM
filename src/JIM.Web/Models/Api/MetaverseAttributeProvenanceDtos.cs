@@ -255,6 +255,15 @@ public class AttributeHistoryEntryDto
 
     public string? SyncRuleName { get; set; }
 
+    /// <summary>
+    /// What kind of source set the value at the time: SynchronisationRule, SignInClaim, System or Person. Null when no
+    /// source was recorded.
+    /// </summary>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>The sign-in claim that supplied the value, when the source is a sign-in claim; otherwise null.</summary>
+    public string? ClaimType { get; set; }
+
     /// <summary>True when a Generated Value Attribute Flow produced the value, rather than reading it from the Connected System.</summary>
     public bool IsGeneratedValue { get; set; }
 
@@ -269,6 +278,8 @@ public class AttributeHistoryEntryDto
             PreviousValue = model.PreviousValue,
             SyncRuleId = model.SyncRuleId,
             SyncRuleName = model.SyncRuleName,
+            ContributedByKind = model.ContributedByKind,
+            ClaimType = model.ClaimType,
             IsGeneratedValue = model.IsGeneratedValue,
             Change = ProvenanceChangeDto.FromModel(model.Change)
         };

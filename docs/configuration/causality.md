@@ -77,15 +77,15 @@ The summary band adds an **After this run** strip of what followed, separate fro
 
 ## The Causality Explorer
 
-The Lineage answers for one execution item. The Causality Explorer answers for an object, and lets you follow a story from object to run to object without losing your place. Open it from wherever the question starts:
+The Lineage answers for one execution item. The Causality Explorer answers for an object, and lets you follow a story from object to run to object without losing your place. It is for Administrators only, like the REST API reads behind it; other users see none of the ways in. Open it from wherever the question starts:
 
-- **Explore causality** on a Connected System Object or a Metaverse Object opens that object's causal timeline.
+- **Explore causality** on a Connected System Object opens that object's causal timeline. On a Metaverse Object it sits in the **Inspect** view: at the end of the panel headed **Where this User gets its values** (named for the object's type) for the whole object, and beside **Open in Timeline** in an attribute's inspector.
 - **Open in explorer** in an execution item's causality panel opens the item's Lineage in the explorer.
 - **Queued by** on a Pending Export lists the synchronisation runs that queued the change, each with **Explore** beside it.
 
 An object's timeline lists every execution item about it, newest first: when the run happened, what kind of run it was, what it did, and **Because**, the item's nearest cause in one line ("Tina Adams was deleted, so they were removed from Project Diamond's Static Members, and 2 more causes"). Where nothing earlier was recorded, the line says so, and it says differently where the cause has aged out of history, so a story cut short never reads as complete. Long timelines load 50 items at a time with **Show 50 more**. Choosing a row opens that item's Lineage, and any object or item named in a Lineage opens in turn, so the explorer re-centres on whatever you choose.
 
-Each re-centring adds a step to the **Trail** above the page. Choosing an earlier step goes back to it, as does the browser's back button, and **Copy link** gives an address that opens the same focus with the same trail, to send to a colleague. Where a walk stops at its depth bound on a single item, **Continue from** carries on from that item rather than leaving you to find it.
+Each re-centring adds a step to the **Trail** above the page. Choosing an earlier step goes back to it, as does the browser's back button. The page's address carries the focus and its trail, so a link to it opens the same view. Where a walk stops at its depth bound on a single item, **Continue from** carries on from that item rather than leaving you to find it.
 
 The trail and re-centring belong to the portal. The REST API and PowerShell read the same timelines and the same runs, and a script follows a story by passing each row's execution item to the causes and consequences reads instead (see [PowerShell: Execution Items](../powershell/execution-items.md)).
 

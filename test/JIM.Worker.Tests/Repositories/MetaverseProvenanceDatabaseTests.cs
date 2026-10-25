@@ -412,6 +412,44 @@ public class MetaverseProvenanceDatabaseTests
         Assert.That(result!.Attributes.Single().Origins.Single().Kind, Is.EqualTo(ValueOriginKind.NotRecorded));
     }
 
+    /// <summary>
+    /// #2472: values set outside synchronisation resolve to the source recorded for them, and two values of one
+    /// attribute from different claims stay separate origins rather than collapsing into one group.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseObjectProvenanceAsync_SignInClaimAndSystemValues_ResolveTheirRecordedSourcesAsync()
+    {
+        var (_, _, _, mvType, mvAttribute, _, _) = await SeedSchemaAsync();
+
+        Guid mvoId;
+        await using (var ctx = NewContext())
+            mvoId = await SeedMetaverseObjectAsync(ctx, mvType);
+
+        await using (var ctx = NewContext())
+        {
+            ctx.Attach(mvAttribute);
+            var mvo = AttachMvoStub(ctx, mvoId);
+            ctx.MetaverseObjectAttributeValues.AddRange(
+                new MetaverseObjectAttributeValue { MetaverseObject = mvo, Attribute = mvAttribute, AttributeId = mvAttribute.Id, StringValue = "From token", ContributedByKind = ValueContributorKind.SignInClaim, ContributedByClaimType = "department" },
+                new MetaverseObjectAttributeValue { MetaverseObject = mvo, Attribute = mvAttribute, AttributeId = mvAttribute.Id, StringValue = "From JIM", ContributedByKind = ValueContributorKind.System });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var readCtx = NewContext();
+        var repository = new PostgresDataRepository(readCtx);
+        var summary = await repository.Metaverse.GetMetaverseObjectProvenanceAsync(mvoId);
+        var (currentValues, _) = await repository.Metaverse.GetMetaverseAttributeCurrentValuesAsync(mvoId, mvAttribute.Id, cap: 50);
+
+        var origins = summary!.Attributes.Single().Origins;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origins.Select(o => o.Kind), Is.EquivalentTo(new[] { ValueOriginKind.SignInClaim, ValueOriginKind.System }));
+            Assert.That(origins.Single(o => o.Kind == ValueOriginKind.SignInClaim).ClaimType, Is.EqualTo("department"));
+            Assert.That(currentValues.Single(v => v.DisplayValue == "From token").Origin.ClaimType, Is.EqualTo("department"));
+            Assert.That(currentValues.Single(v => v.DisplayValue == "From JIM").Origin.Kind, Is.EqualTo(ValueOriginKind.System));
+        }
+    }
+
     #endregion
 
     #region GetMetaverseAttributeCurrentValuesAsync
@@ -611,6 +649,51 @@ public class MetaverseProvenanceDatabaseTests
             Assert.That(entries[0].SyncRuleName, Is.EqualTo("HR Import"));
             Assert.That(entries[1].Kind, Is.EqualTo(AttributeHistoryChangeKind.Added));
             Assert.That(entries[1].Value, Is.EqualTo("First"));
+        }
+    }
+
+    /// <summary>#2472: the attribute history and the Changes tab both carry the source recorded on each change.</summary>
+    [Test]
+    public async Task HistoryAndChangeHistory_SignInClaimChange_CarryKindAndClaimTypeAsync()
+    {
+        var (_, _, _, mvType, mvAttribute, _, _) = await SeedSchemaAsync();
+        Guid mvoId;
+        await using (var ctx = NewContext())
+            mvoId = await SeedMetaverseObjectAsync(ctx, mvType);
+
+        await using (var ctx = NewContext())
+        {
+            ctx.Attach(mvAttribute);
+            var change = new MetaverseObjectChange
+            {
+                MetaverseObject = AttachMvoStub(ctx, mvoId),
+                ChangeTime = DateTime.UtcNow,
+                ChangeType = ObjectChangeType.Created,
+                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.System
+            };
+            var attributeChange = new MetaverseObjectChangeAttribute { Attribute = mvAttribute, AttributeName = mvAttribute.Name, AttributeType = mvAttribute.Type, MetaverseObjectChange = change };
+            change.AttributeChanges.Add(attributeChange);
+            attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, "Sales")
+            {
+                ContributedByKind = ValueContributorKind.SignInClaim,
+                ContributedByClaimType = "department"
+            });
+            ctx.Add(change);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var readCtx = NewContext();
+        var repository = new PostgresDataRepository(readCtx);
+        var rawEntries = await repository.Metaverse.GetAttributeHistoryRawEntriesAsync(mvoId, mvAttribute.Id, rawCap: 150);
+        var (changes, _) = await repository.Metaverse.GetMvoChangeHistoryAsync(mvoId, 1, 10);
+        var valueChange = changes.Single().AttributeChanges.Single().ValueChanges.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rawEntries.Single().ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(rawEntries.Single().ClaimType, Is.EqualTo("department"));
+            Assert.That(valueChange.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(valueChange.ContributedByClaimType, Is.EqualTo("department"));
         }
     }
 

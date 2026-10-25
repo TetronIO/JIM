@@ -249,8 +249,7 @@ rather than appearing and disappearing with the processing state *@
                                             <AuditPrincipalLink PrincipalType="context.Item.InitiatedByType" PrincipalId="context.Item.InitiatedById"
                                                                 PrincipalName="@context.Item.InitiatedByName"
                                                                 ScheduleName="@context.Item.ScheduleExecutionName"
-                                                                ScheduleExecutionId="@context.Item.ScheduleExecutionId"
-                                                                Dense="true" />
+                                                                ScheduleExecutionId="@context.Item.ScheduleExecutionId" />
                                         </CellTemplate>
                                     </TemplateColumn>
                                     <TemplateColumn T="WorkerTaskHeader" Title="Actions" Sortable="false" HeaderStyle="text-align: right;"
@@ -431,11 +430,10 @@ request)
                     _workerTaskHeaders.Add(newWorkerTaskHeader);
                     stateHasChanged = true;
                 }
-                else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
+                else if (workerTaskHeader.UpdateFrom(newWorkerTaskHeader))
                 {
-                    var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
-                    _workerTaskHeaders.Remove(workerTaskHeader);
-                    _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
+                    // Updated in place rather than replaced: the grid keys its rows by item, and a replaced header
+                    // rebuilds its row, taking the task's link out from under a click in progress.
                     stateHasChanged = true;
                 }
             }
@@ -451,17 +449,20 @@ sth.Id)).ToList();
 
             if (stateHasChanged)
             {
+                var layoutBefore = QueueLayout(_queueGroups);
                 _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
                 _queueGroups = WorkerTaskQueueGroup.Build(_workerTaskHeaders);
                 await RefreshScheduleProgressAsync(refreshJim);
+                var layoutChanged = QueueLayout(_queueGroups) != layoutBefore;
 
-                // Repaint first, so a Schedule that has just joined the queue has a grid to be reloaded; then tell
-                // the grids to re-read, because the rows a virtualiser holds are cached and a repaint alone leaves
-                // a running step frozen at the figures it had.
+                // A repaint alone is enough when only figures moved: the rows the grids hold are the very headers
+                // just updated. Only a change to which rows a grid holds, or their order, needs the grids to re-read,
+                // and that repaints first so a Schedule that has just joined the queue has a grid to be reloaded.
                 await InvokeAsync(async () =>
                 {
                     StateHasChanged();
-                    await RefreshQueueGridsAsync();
+                    if (layoutChanged)
+                        await RefreshQueueGridsAsync();
                 });
             }
         }
@@ -843,12 +844,9 @@ user.Id, user.NameOrId);
         return RunPhaseSummary.From(phases)!;
     }
 
-    private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)
-    {
-        return existing.Status != updated.Status ||
-               existing.ActivityId != updated.ActivityId ||
-               existing.ObjectsProcessed != updated.ObjectsProcessed ||
-               existing.ObjectsToProcess != updated.ObjectsToProcess ||
-               existing.ProgressMessage != updated.ProgressMessage;
-    }
+    /// <summary>
+    /// Which rows each group's grid holds, in order. Equal before and after a refresh means only figures moved.
+    /// </summary>
+    private static string QueueLayout(IEnumerable<WorkerTaskQueueGroup> groups) =>
+        string.Join("|", groups.Select(g => $"{g.Key}:{string.Join(",", g.Tasks.Select(t => t.Id))}"));
 }

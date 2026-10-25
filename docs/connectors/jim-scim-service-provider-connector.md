@@ -19,9 +19,39 @@ The JIM SCIM 2.0 Service Provider Connector lets an identity provider push Users
 
 Every request an identity provider sends is answered straight away, from a store JIM keeps for that Connected System: a create, change or delete is checked against the Connected System's SCIM schemas, kept, and acknowledged in the same request. Nothing the identity provider sends touches the Connector Space or the Metaverse directly.
 
+--8<-- "assets/diagrams/scim-service-provider.svg"
+
+<p class="jim-diagram-caption">JIM answers and saves each request automatically as it arrives; the Delta Import and Delta Synchronisation run only on the Connected System's Schedule, and the Synchronisation Rules decide what reaches the Metaverse.<span class="jimdg-caption-motion"> Moving dots trace a change on its way to the Metaverse.</span></p>
+
 The Connector imports from that store through ordinary Full Import and Delta Import Run Profiles, and synchronisation then joins or projects what it imported, exactly as it does for a directory or a database. A change therefore reaches the Metaverse at the next scheduled Delta Import and Delta Synchronisation of the Connected System, not the moment the identity provider sends it; how often you schedule them decides the delay (see [Schedule the import](#schedule-the-import)).
 
 Because the store holds everything the identity provider sent, the Connector Space can be rebuilt from it at any time without the identity provider sending anything again.
+
+## Scenarios
+
+### Reach systems an identity provider cannot
+
+Many identity providers provision only over SCIM, and only to systems they can reach. Point one at JIM and JIM becomes its single SCIM target: what it sends is synchronised into the Metaverse and provisioned onward by JIM's other Connectors, to an on-premises directory with the [JIM LDAP Connector](jim-ldap-connector.md), to an application's database with the [JIM SQL Connector](jim-sql-connector.md), or to any system JIM can write to. The identity provider stays the source of truth; JIM decides what each system downstream receives.
+
+### Bring several identity providers together
+
+Give each identity provider a Connected System of its own, and JIM becomes the hub between them: after a merger or acquisition, across divisions that run their own identity providers, or for a partner that provisions its people into yours.
+
+--8<-- "assets/diagrams/scim-hub.svg"
+
+<p class="jim-diagram-caption">Each identity provider pushes to a Connected System of its own. Synchronisation Rules decide what goes further, and JIM's other Connectors provision the result onward. The organisations and rules shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace changes into the Metaverse and out again.</span></p>
+
+Nothing an identity provider sends reaches the Metaverse except through Synchronisation Rules, so you decide how the sources combine:
+
+- [Object Matching Rules](../configuration/object-matching-rules.md) join one person's accounts from several identity providers into a single Metaverse Object, rather than one per source.
+- [Attribute Priority](../concepts/attribute-priority.md) decides whose value wins when two identity providers disagree, and lets a lower-priority source fill only the gaps.
+- [Scoping Criteria](../configuration/scoping-criteria.md) decide which of a source's Users and Groups enter at all, so a partner's contractors can come in while the rest of its people stay out.
+
+Each identity provider holds its own key, so one can be revoked without touching the others, and each Connected System has its own Schedule.
+
+### Connect one JIM to another
+
+A JIM using the [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) can push to another JIM's SCIM endpoint like any other identity provider: between organisations that each run JIM, or across a network boundary that only one of them can cross. The sending JIM also reads back what it sent, and cannot overwrite a change the receiving side made in the meantime ([From another JIM](jim-scim-service-provider-connector-identity-providers.md#from-another-jim)).
 
 ## Features
 

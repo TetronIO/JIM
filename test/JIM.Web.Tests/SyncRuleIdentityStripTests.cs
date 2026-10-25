@@ -29,7 +29,7 @@ public class SyncRuleIdentityStripTests : JimComponentTestContext
         {
             Assert.That(flow.ClassList, Does.Contain("jim-identity-flow-outbound"));
             Assert.That(flow.TextContent.Trim(), Is.EqualTo("Outbound"));
-            // The arrowhead is the last thing in the flow, so it sits against the Connected System chip.
+            // The arrowhead is the last thing in the flow, so it points right, at the Connected System chip.
             Assert.That(flow.LastElementChild!.ClassList, Does.Contain("jim-identity-flow-head"));
         }
     }
@@ -44,30 +44,30 @@ public class SyncRuleIdentityStripTests : JimComponentTestContext
         {
             Assert.That(flow.ClassList, Does.Contain("jim-identity-flow-inbound"));
             Assert.That(flow.TextContent.Trim(), Is.EqualTo("Inbound"));
-            // Reversed: the arrowhead leads, against the Metaverse chip.
-            Assert.That(flow.FirstElementChild!.ClassList, Does.Contain("jim-identity-flow-head"));
+            // The source is on the left whichever way the rule runs, so the arrowhead is last here too, pointing right
+            // at the Metaverse chip.
+            Assert.That(flow.LastElementChild!.ClassList, Does.Contain("jim-identity-flow-head"));
         }
     }
 
-    [Test]
-    public void SyncRuleIdentityStrip_EitherDirection_KeepsTheMetaverseTypeOnTheLeft()
+    [TestCase(SyncRuleDirection.Import, ObjectChipKind.ConnectedSystemObject, "inetOrgPerson", ObjectChipKind.MetaverseObject, "User")]
+    [TestCase(SyncRuleDirection.Export, ObjectChipKind.MetaverseObject, "User", ObjectChipKind.ConnectedSystemObject, "inetOrgPerson")]
+    public void SyncRuleIdentityStrip_EitherDirection_PutsTheSourceOnTheLeft(SyncRuleDirection direction,
+        ObjectChipKind leftKind, string leftType, ObjectChipKind rightKind, string rightType)
     {
-        // The create form fixes the Metaverse type on the left and the Connected System type on the right, and
-        // only its arrow changes with the direction; the strip must agree with it, or the same rule reads two
-        // ways on two tabs.
-        foreach (var direction in new[] { SyncRuleDirection.Export, SyncRuleDirection.Import })
-        {
-            var cut = RenderStrip(direction);
+        // The strip reads left to right in the direction the data flows: an import from the Connected System into the
+        // Metaverse, an export from the Metaverse to the Connected System. The create form orders its pickers the same
+        // way, so a rule reads one way while it is created and once it is saved.
+        var cut = RenderStrip(direction);
 
-            var chips = cut.FindComponents<ObjectChip>();
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(chips, Has.Count.EqualTo(2), $"{direction}: expected a chip per side");
-                Assert.That(chips[0].Instance.Kind, Is.EqualTo(ObjectChipKind.MetaverseObject), $"{direction}: left chip");
-                Assert.That(chips[0].Instance.TypeName, Is.EqualTo("User"));
-                Assert.That(chips[1].Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystemObject), $"{direction}: right chip");
-                Assert.That(chips[1].Instance.TypeName, Is.EqualTo("inetOrgPerson"));
-            }
+        var chips = cut.FindComponents<ObjectChip>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chips, Has.Count.EqualTo(2), "expected a chip per side");
+            Assert.That(chips[0].Instance.Kind, Is.EqualTo(leftKind), "left chip");
+            Assert.That(chips[0].Instance.TypeName, Is.EqualTo(leftType));
+            Assert.That(chips[1].Instance.Kind, Is.EqualTo(rightKind), "right chip");
+            Assert.That(chips[1].Instance.TypeName, Is.EqualTo(rightType));
         }
     }
 

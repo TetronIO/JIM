@@ -4,7 +4,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* Where a Metaverse Object attribute value came from, in full (#399): a Connected System through a         *@
-@* Synchronisation Rule (read, or a Generated Value), a person, or "not recorded", with links. Used where an origin is shown   *@
+@* Synchronisation Rule (read, or a Generated Value), a sign-in claim, JIM, a person, or "not recorded", with links. Used where an origin is shown   *@
 @* once per change or export (the Changes tab, Pending Export detail) so it reads identically in both. Where *@
 @* many rows name sources at once (the Inspect table), SourceDot names them quietly instead.                 *@
 @* One line, no wrapping: see .jim-value-origin-chip in site.css. *@
@@ -43,6 +43,20 @@ else if (Origin.Kind == ValueOriginKind.GeneratedValue)
 else if (Origin.Kind == ValueOriginKind.SetByPerson)
 {
     <span>Set by @Origin.PersonName</span>
+}
+else if (Origin.Kind == ValueOriginKind.SignInClaim)
+{
+    @* The token, then the claim the value was read from, as a Connected System is followed by its rule. *@
+    <span>@ValueOriginGrouping.SignInClaimLabel</span>
+    @if (!string.IsNullOrEmpty(Origin.ClaimType))
+    {
+        <span class="mud-text-secondary">·</span>
+        <span class="jim-text-code jim-value-origin-claim">@Origin.ClaimType</span>
+    }
+}
+else if (Origin.Kind == ValueOriginKind.System)
+{
+    <span>@ValueOriginGrouping.SystemLabel</span>
 }
 else
 {

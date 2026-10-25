@@ -91,7 +91,7 @@
                     @if (_activity != null)
                     {
                         <MudText>
-                            <ActivityInitiator InitiatedByType="@_activity.InitiatedByType"
+                            <InitiatorChip InitiatedByType="@_activity.InitiatedByType"
                                                InitiatedById="@_activity.InitiatedById"
                                                InitiatedByName="@_activity.InitiatedByName"
                                                UserHref="@(_initiatorMetaverseObjectHeader != null ? Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader) : null)"
@@ -282,7 +282,7 @@
                                 Chain="causality.Chain"
                                 DeletionPolicySnapshot="causality.DeletionPolicySnapshot"
                                 IsSynchronisationRun="causality.IsSynchronisationRun"
-                                ExplorerHref="@($"/causality/items/{causality.Item.Id}")"
+                                ExplorerHref="@(_isAdministrator ? $"/causality/items/{causality.Item.Id}" : null)"
                                 Consequences="_consequences"
                                 ConsequencesLoading="_consequencesLoading"
                                 OnCheckConsequencesAgain="CheckConsequencesAgainAsync"
@@ -556,8 +556,16 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// </summary>
     private const string PendingExportSourceOrderSort = "order";
 
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = null!;
+
+    // Whether the reader is an Administrator, and so may follow "Open in explorer" to the Causality Explorer.
+    private bool _isAdministrator;
+
     protected override async Task OnParametersSetAsync()
     {
+        _isAdministrator = (await AuthenticationStateTask).User.IsInRole("Administrator");
+
         if (_consequencesReadFor != Id)
         {
             _consequences = null;

@@ -309,7 +309,8 @@ public class Worker : BackgroundService
                                                 batchSize,
                                                 dataGenTemplateServiceTask.InitiatedByType,
                                                 dataGenTemplateServiceTask.InitiatedById,
-                                                dataGenTemplateServiceTask.InitiatedByName);
+                                                dataGenTemplateServiceTask.InitiatedByName,
+                                                newWorkerTask.Activity.Id);
                                             newWorkerTask.Activity.TotalCreated = objectsCreated;
                                             // Clear the transient progress message ("Persisting to database... batch X/Y")
                                             // so the completed Activity does not retain a stale in-progress status line.
@@ -1055,18 +1056,24 @@ public class Worker : BackgroundService
                     var mvoWorkingSet = new ExportEvaluationWorkingSet();
                     var deletePendingExports = await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache, mvoWorkingSet);
 
+                    // The item recording this deletion is created after it, but its id is fixed now so the Deleted
+                    // change record can name it (#2460).
+                    var deletionItemId = Guid.NewGuid();
+                    mvo.DeletingRunProfileExecutionItemId = deletionItemId;
+
                     // Delete the MVO using the initiator info captured when it was marked for deletion
                     // This preserves the audit trail - the original initiator is recorded, not housekeeping
                     await jim.Metaverse.DeleteMetaverseObjectAsync(
                         mvo,
                         mvo.DeletionInitiatedByType,
                         mvo.DeletionInitiatedById,
-                        mvo.DeletionInitiatedByName);
+                        mvo.DeletionInitiatedByName,
+                        activityId: activity.Id);
                     deletedMvoIds.Add(mvo.Id);
 
                     var deletionItem = new ActivityRunProfileExecutionItem
                     {
-                        Id = Guid.NewGuid(),
+                        Id = deletionItemId,
                         ObjectChangeType = ObjectChangeType.Deleted,
                         DisplayNameSnapshot = mvo.Name,
                         ObjectTypeSnapshot = mvo.Type?.Name,

@@ -266,10 +266,9 @@
                         @* Drawn as Initiated By is everywhere else (#2066); the row opens the deleted object, so a
                            click on the principal's link stays with the link. *@
                         <span @onclick:stopPropagation="true">
-                            <ActivityInitiator InitiatedByType="@context.Item.InitiatedByType"
+                            <InitiatorChip InitiatedByType="@context.Item.InitiatedByType"
                                                InitiatedById="@context.Item.InitiatedById"
-                                               InitiatedByName="@context.Item.InitiatedByName"
-                                               Dense="true" />
+                                               InitiatedByName="@context.Item.InitiatedByName" />
                         </span>
                     </CellTemplate>
                 </TemplateColumn>
@@ -667,7 +666,7 @@
             {
                 ChangeType = change.ChangeType,
                 ChangeTime = change.ChangeTime,
-                ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
+                InitiatedByType = change.InitiatedByType,
                 ChangeInitiatorName = change.InitiatedByName,
                 ChangeInitiatorId = change.InitiatedById,
                 ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
@@ -707,7 +706,7 @@
             {
                 ChangeType = change.ChangeType,
                 ChangeTime = change.ChangeTime,
-                ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
+                InitiatedByType = change.InitiatedByType,
                 ChangeInitiatorName = change.InitiatedByName,
                 ChangeInitiatorId = change.InitiatedById,
                 ChangeMechanismType = MapMvoChangeToMechanismType(change),
@@ -743,15 +742,6 @@
             .ToList();
     }
 
-    private static string MapInitiatorType(JIM.Models.Activities.ActivityInitiatorType initiatorType)
-    {
-        return initiatorType switch
-        {
-            JIM.Models.Activities.ActivityInitiatorType.User => "User",
-            JIM.Models.Activities.ActivityInitiatorType.ApiKey => "ApiKey",
-            _ => "Unknown"
-        };
-    }
 
     private static string MapRunTypeToMechanismType(ConnectedSystemRunType? runType)
     {

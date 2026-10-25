@@ -527,12 +527,11 @@
                 <VirtualisedSortHeader Title="Initiated By" Name="initiatedby" />
             </HeaderTemplate>
             <CellTemplate>
-                <ActivityInitiator InitiatedByType="@context.Item.InitiatedByType"
+                <InitiatorChip InitiatedByType="@context.Item.InitiatedByType"
                                    InitiatedById="@context.Item.InitiatedById"
                                    InitiatedByName="@context.Item.InitiatedByName"
                                    ScheduleName="@context.Item.ScheduledByScheduleName"
-                                   ScheduleExecutionId="@context.Item.ScheduleExecutionId"
-                                   Dense="true" />
+                                   ScheduleExecutionId="@context.Item.ScheduleExecutionId" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Status" Sortable="false">

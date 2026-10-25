@@ -202,11 +202,11 @@ public partial class MetaverseRepository
         }
     }
 
-    private sealed record ChangeSearchIdentity(Guid? MetaverseObjectId, bool Deleted, string? DisplayName, int? TypeId, string? TypeName, string? TypePluralName, Guid? ActivityId);
+    private sealed record ChangeSearchIdentity(Guid? MetaverseObjectId, bool Deleted, DateTime? DeletedAt, string? DisplayName, int? TypeId, string? TypeName, string? TypePluralName);
 
     /// <summary>
-    /// Names the object and Activity behind each change in the window: the live object where it still exists, else
-    /// the identity its deletion record preserved.
+    /// Names the object behind each change in the window: the live object where it still exists, else the identity
+    /// its deletion record preserved, with when it was deleted.
     /// </summary>
     private async Task<Dictionary<Guid, ChangeSearchIdentity>> LoadChangeSearchIdentitiesAsync(List<Guid> changeIds)
     {
@@ -221,8 +221,7 @@ public partial class MetaverseRepository
                 LiveTypeId = c.MetaverseObject != null ? c.MetaverseObject.Type.Id : (int?)null,
                 LiveTypeName = c.MetaverseObject != null ? c.MetaverseObject.Type.Name : null,
                 LiveTypePluralName = c.MetaverseObject != null ? c.MetaverseObject.Type.PluralName : null,
-                c.DeletedMetaverseObjectId,
-                ActivityId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ActivityId : (Guid?)null
+                c.DeletedMetaverseObjectId
             })
             .ToListAsync();
 
@@ -257,13 +256,13 @@ public partial class MetaverseRepository
         return rows.ToDictionary(r => r.Id, r =>
         {
             if (r.LiveId.HasValue)
-                return new ChangeSearchIdentity(r.LiveId, false, r.LiveName, r.LiveTypeId, r.LiveTypeName, r.LiveTypePluralName, r.ActivityId);
+                return new ChangeSearchIdentity(r.LiveId, false, null, r.LiveName, r.LiveTypeId, r.LiveTypeName, r.LiveTypePluralName);
 
             var deletion = r.DeletedMetaverseObjectId.HasValue && deletionByObject.TryGetValue(r.DeletedMetaverseObjectId.Value, out var found)
                 ? found
                 : null;
-            return new ChangeSearchIdentity(r.DeletedMetaverseObjectId, true, deletion?.DeletedObjectDisplayName,
-                deletion?.DeletedObjectTypeId, deletion?.TypeName, deletion?.TypePluralName, r.ActivityId);
+            return new ChangeSearchIdentity(r.DeletedMetaverseObjectId, true, deletion?.ChangeTime, deletion?.DeletedObjectDisplayName,
+                deletion?.DeletedObjectTypeId, deletion?.TypeName, deletion?.TypePluralName);
         });
     }
 
@@ -277,11 +276,11 @@ public partial class MetaverseRepository
             Change = change,
             MetaverseObjectId = identity.MetaverseObjectId,
             MetaverseObjectDeleted = identity.Deleted,
+            MetaverseObjectDeletedAt = identity.DeletedAt,
             MetaverseObjectDisplayName = identity.DisplayName,
             MetaverseObjectTypeId = identity.TypeId,
             MetaverseObjectTypeName = identity.TypeName,
             MetaverseObjectTypePluralName = identity.TypePluralName,
-            ActivityId = identity.ActivityId,
             MatchedAttributeIds = change.AttributeChanges
                 .Where(ac => ac.AttributeId.HasValue && matchedAttributeIds.Contains(ac.AttributeId.Value))
                 .Select(ac => ac.AttributeId!.Value)

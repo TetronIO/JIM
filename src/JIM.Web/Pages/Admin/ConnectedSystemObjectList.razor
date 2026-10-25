@@ -139,7 +139,7 @@
         <ToolBarExtras>
             @* The menu's own button, not an ActivatorContent one: MudMenu wraps a custom activator in a focusable
                role="button" div, which would give keyboard users two tab stops for one control. *@
-            <MudMenu Label="Columns" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Outlined"
+            <MudMenu Label="Columns" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Filled"
                      Size="Size.Small" DropShadow="false" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
                 <ChildContent>
                     <div class="jim-column-menu">
@@ -566,7 +566,8 @@ else
             objectTypeFilter,
             joinTypeFilter,
             includeTotalCount: request.IncludeTotalCount,
-            hasUnresolvedReferences: FilteredToUnresolvedReferences ? true : null);
+            hasUnresolvedReferences: FilteredToUnresolvedReferences ? true : null,
+            cancellationToken: token);
 
         // Update column headers based on the window in hand; the grid re-renders its header templates when the
         // window arrives, so the new values paint without an explicit StateHasChanged.

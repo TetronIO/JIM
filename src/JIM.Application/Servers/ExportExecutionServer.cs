@@ -104,6 +104,9 @@ public class ExportExecutionServer
     /// When provided, ProcessedExportItems on the result will be empty — items are consumed per-batch via this callback.</param>
     /// <param name="uniqueValueReservations">The worker's process-wide reservation set, which values Collision
     /// Remediation draws are claimed in (Unique Value Generation, #242, release 4); a run-local set when null.</param>
+    /// <param name="containersCreated">Optional callback naming the containers the export created.</param>
+    /// <param name="activityId">The export run's Activity, which a Metaverse Object change Collision Remediation
+    /// records links to (#2460).</param>
     /// <returns>Export execution result with preview information</returns>
     public async Task<ExportExecutionResult> ExecuteExportsAsync(
         ConnectedSystem connectedSystem,
@@ -116,7 +119,8 @@ public class ExportExecutionServer
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        Action<IReadOnlyList<string>>? containersCreated = null)
+        Action<IReadOnlyList<string>>? containersCreated = null,
+        Guid? activityId = null)
     {
         options ??= new ExportExecutionOptions();
         cancellationToken.ThrowIfCancellationRequested();
@@ -202,7 +206,7 @@ public class ExportExecutionServer
         {
             var classifies = connectedSystem.ConnectorDefinition?.SupportsUniquenessRejectionClassification == true;
             var recordMetaverseChanges = classifies && await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
-            _collisionRemediation = new CollisionRemediationRun(Application, connectedSystem, uniqueValueReservations ?? new UniqueValueReservationSet(), recordMetaverseChanges);
+            _collisionRemediation = new CollisionRemediationRun(Application, connectedSystem, uniqueValueReservations ?? new UniqueValueReservationSet(), recordMetaverseChanges, activityId);
         }
 
         _containersCreated = containersCreated;

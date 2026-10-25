@@ -506,4 +506,57 @@ public class IdentifierParserTests
     }
 
     #endregion
+
+    #region TryFromStringOrMicrosoftBase64 (SSO identifier claims, #2438)
+
+    [TestCase("550e8400-e29b-41d4-a716-446655440000")]
+    [TestCase("{550E8400-E29B-41D4-A716-446655440000}")]
+    [TestCase("550e8400e29b41d4a716446655440000")]
+    [TestCase("urn:uuid:550e8400-e29b-41d4-a716-446655440000")]
+    public void TryFromStringOrMicrosoftBase64_GuidText_ParsesIt(string value)
+    {
+        var parsed = IdentifierParser.TryFromStringOrMicrosoftBase64(value, out var result);
+
+        Assert.That(parsed, Is.True);
+        Assert.That(result, Is.EqualTo(new Guid("550e8400-e29b-41d4-a716-446655440000")));
+    }
+
+    [Test]
+    public void TryFromStringOrMicrosoftBase64_Base64ObjectGuid_ReadsTheBytesInMicrosoftByteOrder()
+    {
+        // How AD FS issues objectGUID: the attribute's 16 bytes, base64-encoded. Active Directory stores them in Microsoft
+        // byte order, the first three components little-endian.
+        var parsed = IdentifierParser.TryFromStringOrMicrosoftBase64("AIQOVZvi1EGnFkRmVUQAAA==", out var result);
+
+        Assert.That(parsed, Is.True);
+        Assert.That(result, Is.EqualTo(new Guid("550e8400-e29b-41d4-a716-446655440000")));
+    }
+
+    [Test]
+    public void TryFromStringOrMicrosoftBase64_Base64InRfc4122ByteOrder_GivesADifferentGuid()
+    {
+        // The same GUID's bytes in RFC 4122 order: reading them as Microsoft order must not give the same GUID, or the
+        // byte order would not matter and the test above would prove nothing.
+        var parsed = IdentifierParser.TryFromStringOrMicrosoftBase64("VQ6EAOKbQdSnFkRmVUQAAA==", out var result);
+
+        Assert.That(parsed, Is.True);
+        Assert.That(result, Is.Not.EqualTo(new Guid("550e8400-e29b-41d4-a716-446655440000")));
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("jbloggs")]
+    [TestCase("jbloggs@panoply.local")]
+    [TestCase("AIQOVZvi1EGnFkRmVUQA")] // base64 of 15 bytes
+    [TestCase("AIQOVZvi1EGnFkRmVUQAAAAA")] // base64 of 17 bytes
+    public void TryFromStringOrMicrosoftBase64_NeitherAGuidNorSixteenBytes_ReturnsFalse(string? value)
+    {
+        var parsed = IdentifierParser.TryFromStringOrMicrosoftBase64(value, out var result);
+
+        Assert.That(parsed, Is.False);
+        Assert.That(result, Is.EqualTo(Guid.Empty));
+    }
+
+    #endregion
 }

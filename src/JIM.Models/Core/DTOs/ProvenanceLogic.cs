@@ -23,20 +23,23 @@ public static class ProvenanceLogic
     /// No contributing system recorded means <see cref="ValueOriginKind.NotRecorded"/>; a system recorded but no
     /// contributing rule means the rule has since been deleted (<see cref="ValueOrigin.SyncRuleDeleted"/>), since
     /// <see cref="MetaverseObjectAttributeValue.ContributedBySystemId"/> is retained across rule deletion while
-    /// <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> is nulled.
+    /// <see cref="MetaverseObjectAttributeValue.ContributedBySyncRuleId"/> is nulled. With no Connected System recorded,
+    /// the recorded source kind (#2472) names a value set outside synchronisation: a sign-in claim or JIM itself. The
+    /// Connected System is read first, so a synchronised value always resolves as one whatever kind sits beside it.
     /// </summary>
     public static ValueOrigin ResolveOrigin(
         int? contributedBySystemId,
         int? contributedBySyncRuleId,
         bool assertsNoValue,
         string? connectedSystemName,
-        string? syncRuleName)
+        string? syncRuleName,
+        ValueContributorKind? contributedByKind = null,
+        string? contributedByClaimType = null)
     {
         if (!contributedBySystemId.HasValue)
         {
-            return assertsNoValue
-                ? ValueOrigin.NotRecorded with { AssertsNoValue = true }
-                : ValueOrigin.NotRecorded;
+            var origin = ResolveNonSynchronisedOrigin(contributedByKind, contributedByClaimType) ?? ValueOrigin.NotRecorded;
+            return assertsNoValue ? origin with { AssertsNoValue = true } : origin;
         }
 
         return new ValueOrigin
@@ -59,17 +62,20 @@ public static class ProvenanceLogic
     /// always resolves the system to null even though <paramref name="contributedBySyncRuleName"/>'s snapshot
     /// survives. Returns null when nothing was ever recorded for this value, so the caller can render nothing
     /// (rather than "Source not recorded") for change rows that pre-date provenance. <paramref name="isGeneratedValue"/>
-    /// (from <see cref="IsGeneratedValueRecord"/>) makes it a <see cref="ValueOriginKind.GeneratedValue"/>.
+    /// (from <see cref="IsGeneratedValueRecord"/>) makes it a <see cref="ValueOriginKind.GeneratedValue"/>. A change with
+    /// no rule recorded but a sign-in claim or JIM recorded as its source kind (#2472) resolves to that origin.
     /// </summary>
     public static ValueOrigin? ResolveChangeValueOrigin(
         int? contributedBySyncRuleId,
         string? contributedBySyncRuleName,
         int? contributedBySystemId,
         string? contributedBySystemName,
-        bool isGeneratedValue = false)
+        bool isGeneratedValue = false,
+        ValueContributorKind? contributedByKind = null,
+        string? contributedByClaimType = null)
     {
         if (!contributedBySyncRuleId.HasValue && string.IsNullOrEmpty(contributedBySyncRuleName))
-            return null;
+            return ResolveNonSynchronisedOrigin(contributedByKind, contributedByClaimType);
 
         return new ValueOrigin
         {
@@ -81,6 +87,19 @@ public static class ProvenanceLogic
             SyncRuleDeleted = !contributedBySyncRuleId.HasValue
         };
     }
+
+    /// <summary>
+    /// The origin of a value recorded as set outside synchronisation (#2472), or null when its kind names no such
+    /// source: nothing recorded, or <see cref="ValueContributorKind.SynchronisationRule"/> with the contributing
+    /// Connected System since gone, which has nothing left to name.
+    /// </summary>
+    private static ValueOrigin? ResolveNonSynchronisedOrigin(ValueContributorKind? kind, string? claimType) => kind switch
+    {
+        ValueContributorKind.SignInClaim => new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = claimType },
+        ValueContributorKind.System => new ValueOrigin { Kind = ValueOriginKind.System },
+        ValueContributorKind.Person => new ValueOrigin { Kind = ValueOriginKind.SetByPerson },
+        _ => null
+    };
 
     /// <summary>
     /// The origin a value really has once Generated Values are known: a value its Synchronisation Rule contributed
@@ -194,6 +213,8 @@ public static class ProvenanceLogic
                     PreviousValue = removed.DisplayValue,
                     SyncRuleId = added.SyncRuleId,
                     SyncRuleName = added.SyncRuleName,
+                    ContributedByKind = added.ContributedByKind,
+                    ClaimType = added.ClaimType,
                     Change = added.Change
                 });
                 continue;
@@ -209,6 +230,8 @@ public static class ProvenanceLogic
                     Value = row.DisplayValue,
                     SyncRuleId = row.SyncRuleId,
                     SyncRuleName = row.SyncRuleName,
+                    ContributedByKind = row.ContributedByKind,
+                    ClaimType = row.ClaimType,
                     Change = row.Change
                 });
             }

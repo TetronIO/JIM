@@ -288,6 +288,12 @@ public class JimApplication : IDisposable
         var uniqueIdentifierMetaverseAttribute = await Repository.Metaverse.GetMetaverseAttributeAsync(uniqueIdentifierMetaverseAttributeName) ??
                                                  throw new Exception("Unsupported SSO unique identifier Metaverse Attribute Name. Please specify one that exists.");
 
+        // Refuse to start with an identifier sign-in could never match, naming the setting to change (#2438).
+        var identifierProblem = AuthServer.DescribeSsoIdentifierProblem(uniqueIdentifierMetaverseAttribute,
+            Environment.GetEnvironmentVariable(Constants.Config.SsoInitialAdmin));
+        if (identifierProblem != null)
+            throw new InvalidOperationException(identifierProblem);
+
         var serviceSettings = await ServiceSettings.GetServiceSettingsAsync() ??
                               throw new Exception("ServiceSettings do not exist. Application is not properly initialised. Are you sure the application is ready?");
 

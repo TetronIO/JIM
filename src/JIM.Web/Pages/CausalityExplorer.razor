@@ -2,15 +2,12 @@
 @page "/causality/items/{ItemId:guid}"
 @page "/causality/connected-system-objects/{ConnectedSystemObjectId:guid}"
 @page "/causality/metaverse-objects/{MetaverseObjectId:guid}"
-@attribute [Authorize(Roles = "User")]
+@attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities.DTOs
 @using JIM.Web.Causality
 @using JIM.Web.Shared.Causality
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
-@inject IJSRuntime JsRuntime
-@inject ISnackbar Snackbar
-@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -48,7 +45,7 @@ else
 {
     <div class="causality-explorer mt-2">
         <CausalityTrailBar Trail="_trail" Current="focus" Labels="_labels" />
-        <CausalityFocusHeader Focus="focus" Labels="_labels" OnCopyLink="CopyLinkAsync" />
+        <CausalityFocusHeader Focus="focus" Labels="_labels" />
 
         @if (_loading)
         {
@@ -294,33 +291,5 @@ else
         {
             _loadingMore = false;
         }
-    }
-
-    /// <summary>
-    /// Copies this focus's address, trail included. Over plain HTTP the browser refuses the clipboard, and a copy can
-    /// fail for other reasons too; either way the address is offered in a dialog, selected, to copy by hand.
-    /// </summary>
-    private async Task CopyLinkAsync()
-    {
-        var address = NavManager.Uri;
-        bool copied;
-        try
-        {
-            copied = await JsRuntime.InvokeAsync<bool>("jimInterop.copyToClipboard", address);
-        }
-        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException)
-        {
-            copied = false;
-        }
-
-        if (copied)
-        {
-            Snackbar.Add("Link copied to the clipboard.", Severity.Success);
-            return;
-        }
-
-        var parameters = new DialogParameters<CopyTextDialog> { { d => d.Text, address } };
-        await DialogService.ShowAsync<CopyTextDialog>("Copy link", parameters,
-            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
     }
 }

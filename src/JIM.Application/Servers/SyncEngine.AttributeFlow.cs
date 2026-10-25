@@ -335,6 +335,11 @@ public partial class SyncEngine
 
             surviving.ContributedBySyncRuleId = contributingSyncRuleId;
             surviving.ContributedBySystemId = contributingSystemId;
+
+            // The value is the rule's now, whoever set it before (a sign-in claim, JIM itself), so it must stop
+            // reading as theirs (#2472).
+            surviving.ContributedByKind = ValueContributorKind.SynchronisationRule;
+            surviving.ContributedByClaimType = null;
         }
     }
 
@@ -486,7 +491,8 @@ public partial class SyncEngine
                     AttributeId = attributeId,
                     NullValue = true,
                     ContributedBySystemId = contributingSystemId,
-                    ContributedBySyncRuleId = contributingSyncRuleId
+                    ContributedBySyncRuleId = contributingSyncRuleId,
+                    ContributedByKind = ValueContributorKind.SynchronisationRule
                 });
             }
 
@@ -792,7 +798,8 @@ public partial class SyncEngine
             Attribute = targetAttribute,
             AttributeId = targetAttribute.Id,
             ContributedBySystemId = contributingSystemId,
-            ContributedBySyncRuleId = contributingSyncRuleId
+            ContributedBySyncRuleId = contributingSyncRuleId,
+            ContributedByKind = ValueContributorKind.SynchronisationRule
         };
 
         switch (value)
@@ -991,7 +998,8 @@ public partial class SyncEngine
                 Attribute = targetAttribute,
                 AttributeId = attributeId,
                 ContributedBySystemId = pending.ContributedBySystemId,
-                ContributedBySyncRuleId = pending.ContributedBySyncRuleId
+                ContributedBySyncRuleId = pending.ContributedBySyncRuleId,
+                ContributedByKind = ValueContributorKind.SynchronisationRule
             };
 
             switch (targetAttribute.Type)
@@ -1108,7 +1116,8 @@ public partial class SyncEngine
                 AttributeId = targetAttributeId,
                 StringValue = value,
                 ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
+                ContributedBySyncRuleId = contributingSyncRuleId,
+                ContributedByKind = ValueContributorKind.SynchronisationRule
             });
         }
 
@@ -1250,7 +1259,8 @@ public partial class SyncEngine
             Attribute = targetAttribute,
             AttributeId = targetAttribute.Id,
             ContributedBySystemId = contributingSystemId,
-            ContributedBySyncRuleId = contributingSyncRuleId
+            ContributedBySyncRuleId = contributingSyncRuleId,
+            ContributedByKind = ValueContributorKind.SynchronisationRule
         };
         assign(value, source);
         return value;
@@ -1489,7 +1499,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 ContributedBySystemId = contributingSystemId,
-                ContributedBySyncRuleId = contributingSyncRuleId
+                ContributedBySyncRuleId = contributingSyncRuleId,
+                ContributedByKind = ValueContributorKind.SynchronisationRule
             };
 
             // When the referenced MVO is available as a tracked navigation (same-page reference),

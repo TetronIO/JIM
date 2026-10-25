@@ -875,6 +875,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<byte[]>("ByteValue")
                         .HasColumnType("bytea");
 
+                    b.Property<string>("ContributedByClaimType")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ContributedByKind")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ContributedBySyncRuleId")
                         .HasColumnType("integer");
 
@@ -954,6 +960,9 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ActivityId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ActivityRunProfileExecutionItemId")
                         .HasColumnType("uuid");
 
@@ -965,6 +974,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("ChangeType")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("DeletedByRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("DeletedMetaverseObjectId")
                         .HasColumnType("uuid");
@@ -994,6 +1006,8 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ActivityId");
 
                     b.HasIndex("ActivityRunProfileExecutionItemId")
                         .IsUnique();
@@ -1052,6 +1066,12 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<int?>("ByteValueLength")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContributedByClaimType")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ContributedByKind")
                         .HasColumnType("integer");
 
                     b.Property<int?>("ContributedBySyncRuleId")
@@ -5588,9 +5608,15 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectChange", b =>
                 {
+                    b.HasOne("JIM.Models.Activities.Activity", null)
+                        .WithMany()
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("JIM.Models.Activities.ActivityRunProfileExecutionItem", "ActivityRunProfileExecutionItem")
                         .WithOne("MetaverseObjectChange")
-                        .HasForeignKey("JIM.Models.Core.MetaverseObjectChange", "ActivityRunProfileExecutionItemId");
+                        .HasForeignKey("JIM.Models.Core.MetaverseObjectChange", "ActivityRunProfileExecutionItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "DeletedObjectType")
                         .WithMany()

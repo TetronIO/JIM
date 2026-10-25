@@ -48,6 +48,12 @@ Using a different provider? The concepts on this page (a [confidential client](#
 
 Whichever provider you use, JIM is configured through a small set of `JIM_SSO_*` environment variables; the per-provider guides show the exact values to set. For the full list and defaults, see the [Configuration Reference](configuration.md).
 
+### How JIM recognises people
+
+JIM matches each person who signs in to a Metaverse Object: it reads one claim from their token (`JIM_SSO_CLAIM_TYPE`, usually `sub`) and finds the User whose Metaverse Attribute `JIM_SSO_MV_ATTRIBUTE` holds the same value. That attribute can hold text, such as `Subject Identifier`, or a GUID, such as `Object GUID`. Matching on `Object GUID` signs people in as the objects synchronisation from Active Directory created; see [Matching on a GUID](configuration.md#matching-on-a-guid).
+
+Each sign-in also keeps the person's profile in step with their token: **Display Name**, **First Name**, **Last Name**, **User Principal Name** and **Email** come from the `name`, `given_name`, `family_name`, `preferred_username` and `email` claims. JIM fills any of these the person has no value for, and refreshes a value it took from a sign-in claim when the claim changes, so a rename in the identity provider reaches JIM at the next sign-in. A value a Synchronisation Rule supplies is synchronisation's and is never changed by a sign-in, and a claim the token stops carrying leaves its value in place. Each change is recorded in the person's change history, made by JIM; the Inspect view shows which claim each value came from (see [Where a value comes from](../configuration/metaverse-objects.md#where-a-value-comes-from)).
+
 ---
 
 ## Confidential vs Public Clients

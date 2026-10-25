@@ -35,7 +35,7 @@ namespace JIM.Connectors.SCIM.ServiceProvider;
 /// </para>
 /// Implementation plan: engineering/plans/doing/SCIM_SERVER_DESIGN.md.
 /// </remarks>
-public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorScimResourceStoreAware
+public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorScimResourceStoreAware, IConnectorImportWatermarkDescription
 {
     /// <summary>
     /// How long a tombstone is kept after an import has read it, so a deletion is still there to read for a while after a
@@ -113,6 +113,19 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
     public void SetScimResourceStore(IScimResourceStore? store)
     {
         _store = store;
+    }
+    #endregion
+
+    #region IConnectorImportWatermarkDescription members
+    /// <summary>
+    /// The watermark is the store change sequence the last import read up to.
+    /// </summary>
+    public ImportWatermarkDescription? DescribeImportWatermark(string? persistedConnectorData, ILogger logger)
+    {
+        var state = ScimServiceProviderImportState.Read(persistedConnectorData, logger);
+        return state == null
+            ? null
+            : new ImportWatermarkDescription { Kind = "change sequence", Points = [new ImportWatermarkPoint { Number = state.ChangeSequence }] };
     }
     #endregion
 

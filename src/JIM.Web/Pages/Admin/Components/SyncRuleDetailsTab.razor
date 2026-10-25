@@ -64,33 +64,16 @@
             @if (SyncRule.ConnectedSystem != null && SyncRule.Direction != SyncRuleDirection.NotSet &&
                     MetaverseObjectTypes != null && SyncRule.ConnectedSystem is { ObjectTypes: not null })
             {
+                @* The pickers read left to right in the direction the data flows, source first, as the identity strip
+                   does once the rule is saved; the arrow always points at the destination. *@
                 <MudGrid>
-                    <MudItem xs="5">
-                        <MudSelect T="MetaverseObjectType" Label="Metaverse Object Type"
-                                   @bind-Value="@SyncRule.MetaverseObjectType" @bind-Value:after="NotifyChangedAsync" Required="true" Class="mt-5"
-                                   Variant="Variant.Outlined">
-                            @foreach (var mvObjectType in MetaverseObjectTypes)
-                            {
-                                <MudSelectItem Value="@mvObjectType">@mvObjectType.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
+                    @(SyncRule.Direction == SyncRuleDirection.Export ? MetaverseObjectTypePicker : ConnectedSystemObjectTypePicker)
                     <MudItem xs="2" Class="d-flex align-center justify-center mt-5">
                         <MudTooltip Text="@(SyncRule.Direction == SyncRuleDirection.Export ? "Exports to the Connected System" : "Imports to the Metaverse")" Arrow="true" Placement="Placement.Top">
-                            <MudIcon Size="Size.Large" Class="mud-text-secondary"
-                                     Icon="@(SyncRule.Direction == SyncRuleDirection.Export ? Icons.Material.Filled.KeyboardDoubleArrowRight : Icons.Material.Filled.KeyboardDoubleArrowLeft)" />
+                            <MudIcon Size="Size.Large" Class="mud-text-secondary" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight" />
                         </MudTooltip>
                     </MudItem>
-                    <MudItem xs="5">
-                        <MudSelect T="ConnectedSystemObjectType" Label="Connected System Object Type"
-                                   @bind-Value="@SyncRule.ConnectedSystemObjectType" @bind-Value:after="NotifyChangedAsync" Required="true" Class="mt-5"
-                                   Variant="Variant.Outlined">
-                            @foreach (var csObjectType in SyncRule.ConnectedSystem.ObjectTypes.Where(ot => ot.Selected))
-                            {
-                                <MudSelectItem Value="@csObjectType">@csObjectType.Name</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudItem>
+                    @(SyncRule.Direction == SyncRuleDirection.Export ? ConnectedSystemObjectTypePicker : MetaverseObjectTypePicker)
                 </MudGrid>
             }
         }
@@ -218,4 +201,30 @@
         SyncRule.ProjectToMetaverse = false;
         await OnChanged.InvokeAsync();
     }
+
+    // The Object Type pickers, ordered by the form in the direction the data flows. Both render only inside the form's
+    // check that the Connected System, its Object Types and the Metaverse Object Types are loaded.
+    private RenderFragment MetaverseObjectTypePicker =>
+        @<MudItem xs="5">
+            <MudSelect T="MetaverseObjectType" Label="Metaverse Object Type"
+                       @bind-Value="@SyncRule.MetaverseObjectType" @bind-Value:after="NotifyChangedAsync" Required="true" Class="mt-5"
+                       Variant="Variant.Outlined">
+                @foreach (var mvObjectType in MetaverseObjectTypes!)
+                {
+                    <MudSelectItem Value="@mvObjectType">@mvObjectType.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>;
+
+    private RenderFragment ConnectedSystemObjectTypePicker =>
+        @<MudItem xs="5">
+            <MudSelect T="ConnectedSystemObjectType" Label="Connected System Object Type"
+                       @bind-Value="@SyncRule.ConnectedSystemObjectType" @bind-Value:after="NotifyChangedAsync" Required="true" Class="mt-5"
+                       Variant="Variant.Outlined">
+                @foreach (var csObjectType in SyncRule.ConnectedSystem!.ObjectTypes!.Where(ot => ot.Selected))
+                {
+                    <MudSelectItem Value="@csObjectType">@csObjectType.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>;
 }

@@ -69,12 +69,6 @@
                 <SegmentedToggle TValue="string" Options="@DetailViewModes" Value="@_detailViewMode"
                                  ValueChanged="OnDetailViewModeChangedAsync" AriaLabel="Details view" Class="my-auto me-2" />
             }
-            @* Opens the Causality Explorer on this object (#2100): what happened to it across its joined Connected System
-               Objects' runs as well as its own, newest first, and why. Beside the tabs because the page has no action
-               row of its own, and on every tab because it is about the object rather than any one view of it. *@
-            <MudButton Variant="Variant.Outlined" DropShadow="false" StartIcon="@Icons.Material.Filled.Hub"
-                       Href="@($"/causality/metaverse-objects/{MetaverseObject.Id}")" Class="my-auto me-2 jim-nowrap flex-none"
-                       data-testid="jim-mvo-explore-causality">Explore causality</MudButton>
         </Header>
         <ChildContent>
         <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
@@ -87,7 +81,8 @@
                                  ContributionFilterKey="@_object.ContributionFilterKey" OnContributionFilterChanged="OnContributionFilterChangedAsync"
                                  SelectedAttributeId="_object.SelectedAttributeId" OnAttributeSelected="OnAttributeSelectedAsync"
                                  SelectedAttributeProvenance="_object.SelectedAttributeProvenance" AttributeInspectorLoading="_object.AttributeInspectorLoading"
-                                 OnCloseInspector="OnCloseInspectorAsync" OnOpenInTimeline="OpenAttributeInTimelineAsync" />
+                                 OnCloseInspector="OnCloseInspectorAsync" OnOpenInTimeline="OpenAttributeInTimelineAsync"
+                                 CausalityExplorerHref="@(_isAdministrator ? $"/causality/metaverse-objects/{MetaverseObject.Id}" : null)" />
             }
             else if (_detailViewMode == "tabs")
             {
@@ -119,7 +114,7 @@
                     @if (_object.ChangeHistoryRows.Count < _object.ChangeHistoryTotal)
                     {
                         <div class="d-flex justify-center mt-3">
-                            <MudButton Variant="Variant.Outlined"
+                            <MudButton Variant="Variant.Filled"
                                        Disabled="@_object.ChangeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
                                 @if (_object.ChangeHistoryLoading)
@@ -259,7 +254,7 @@
                                     }
                                 </MudText>
                             </MudStack>
-                            <MudButton Variant="Variant.Outlined" DropShadow="false"
+                            <MudButton Variant="Variant.Filled" DropShadow="false"
                                        Disabled="@_object.OutboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">
@@ -345,6 +340,9 @@
     /// Whether the reader may see another person's password history. The tab's own markup is gated the same
     /// way; this is the same decision made in code so the reads behind it are not run for readers who cannot.
     /// </summary>
+    // Whether the reader is an Administrator, and so may open the Causality Explorer the Inspect view offers.
+    private bool _isAdministrator;
+
     private async Task<bool> IsAdministratorAsync()
     {
         var state = await AuthenticationStateTask;
@@ -661,6 +659,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        _isAdministrator = await IsAdministratorAsync();
+
         // If ?c= is present, force tabs view (overrides saved preference); ?view=inspect does the same for
         // Inspect, checked after so it wins when a link carries both (it never should, but a link is only ever
         // written by JIM's own code, per the Inspect discoverability links in #399).
@@ -1120,7 +1120,7 @@
             var (items, totalCount) = await jim.Metaverse.GetMvoChangeHistoryAsync(state.ObjectId, state.ChangeHistoryNextPage, ChangeHistoryPageSize);
             state.ChangeHistoryTotal = totalCount;
             var typePluralName = MetaverseObjectType?.PluralName;
-            state.ChangeHistoryRows.AddRange(items.Select(dto => MapDtoToChangeGroup(dto, state.ObjectId, typePluralName)));
+            state.ChangeHistoryRows.AddRange(items.Select(dto => MvoChangeGroupMapper.Map(dto, state.ObjectId, typePluralName)));
             state.ChangeHistoryNextPage++;
         }
         finally
@@ -1130,77 +1130,8 @@
         }
     }
 
-    private static ChangeHistoryTimeline.ChangeGroup MapDtoToChangeGroup(MvoChangeHistoryDto dto, Guid metaverseObjectId, string? typePluralName)
-    {
-        return new ChangeHistoryTimeline.ChangeGroup
-        {
-            ChangeType = dto.ChangeType,
-            ChangeTime = dto.ChangeTime,
-            ChangeInitiatorType = dto.InitiatedByType.ToString(),
-            ChangeInitiatorName = dto.InitiatedByName,
-            ChangeInitiatorId = dto.InitiatedById,
-            ChangeMechanismType = MapDtoToMechanismType(dto),
-            RunProfileName = dto.RunProfileName,
-            ConnectedSystemId = dto.ConnectedSystemId,
-            ConnectedSystemName = dto.ConnectedSystemName,
-            SyncRuleId = dto.SyncRuleId,
-            SyncRuleName = dto.SyncRuleName,
-            ActivityRunProfileExecutionItemId = dto.ActivityRunProfileExecutionItemId,
-            CsoId = dto.CsoId,
-            CsoExternalId = dto.CsoExternalId,
-            AttributeChanges = dto.AttributeChanges
-                .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-                {
-                    AttributeName = ac.AttributeName,
-                    ChangeType = vc.ValueChangeType,
-                    Value = vc.ReferenceValue == null ? vc.ToDisplayString() : null,
-                    ReferenceValue = vc.ReferenceValue != null
-                        ? new ChangeHistoryTimeline.ReferenceValueInfo
-                        {
-                            TypeName = vc.ReferenceValue.TypeName,
-                            DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
-                            SecondaryId = null,
-                            Href = Utilities.GetMetaverseObjectHref(vc.ReferenceValue.Id, vc.ReferenceValue.TypePluralName)
-                        }
-                        : null,
-                    IsMultiValued = ac.AttributePlurality == AttributePlurality.MultiValued,
-                    AttributeType = ac.AttributeType,
-                    // Origin and the Inspect link (#399): only when the DTO carries a Metaverse attribute id
-                    // (this page) and a resolvable type plural name. Neither is available before the type has
-                    // loaded, in which case the change still renders, just without the Source column's chip/link.
-                    Origin = ProvenanceLogic.ResolveChangeValueOrigin(
-                        vc.ContributedBySyncRuleId, vc.ContributedBySyncRuleName,
-                        vc.ContributedBySystemId, vc.ContributedBySystemName, vc.IsGeneratedValue),
-                    AttributeInspectHref = ac.AttributeId.HasValue && !string.IsNullOrEmpty(typePluralName)
-                        ? Utilities.GetMetaverseObjectInspectHref(metaverseObjectId, typePluralName, ac.AttributeId.Value)
-                        : null
-                }))
-                .ToList()
-        };
-    }
-
     private async Task CopyToClipboardAsync(string text)
     {
         await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
-    }
-
-    private static string MapDtoToMechanismType(MvoChangeHistoryDto dto)
-    {
-        if (dto.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.ExampleData
-            or MetaverseObjectChangeInitiatorType.User
-            or MetaverseObjectChangeInitiatorType.WorkflowInstance
-            or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation
-            or MetaverseObjectChangeInitiatorType.System)
-        {
-            return dto.ChangeInitiatorType.ToString();
-        }
-
-        return dto.ConnectedSystemRunType switch
-        {
-            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
-            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
-            ConnectedSystemRunType.Export => "Export",
-            _ => "SynchronisationRule"
-        };
     }
 }

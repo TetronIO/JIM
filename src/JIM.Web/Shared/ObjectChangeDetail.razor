@@ -1,0 +1,167 @@
+@using JIM.Models.Enums
+@using JIM.Models.History
+@using JIM.Utilities
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One Metaverse Object change in full, for the Object Changes page's side panel: the object, when and by what, the *@
+@* Activity it was made in, and every attribute it changed. A deletion lists the object's final values instead. *@
+<div class="jim-object-change-detail" tabindex="-1" @ref="_root" @onkeydown="OnKeyDownAsync">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h6">@Result.Change.ChangeType.ToString().SplitOnCapitalLetters()</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Close" data-testid="close-detail" OnClick="OnClose" />
+    </MudStack>
+
+    <div>
+        <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@Result.MetaverseObjectTypeName"
+                    Name="@Result.MetaverseObjectDisplayName" Href="@ObjectHref" Deleted="@Result.MetaverseObjectDeleted"
+                    Tooltip="@DeletedTooltip" Class="ma-0" />
+    </div>
+
+    <dl class="jim-object-change-detail-fields">
+        <dt>Changed</dt>
+        <dd>
+            <MudTooltip Text="@Result.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                @Result.Change.ChangeTime.ToRelativeTime()
+            </MudTooltip>
+        </dd>
+        <dt>Made by</dt>
+        <dd>
+            <InitiatorChip InitiatedByType="@Result.Change.InitiatedByType" InitiatedById="@Result.Change.InitiatedById"
+                           InitiatedByName="@Result.Change.InitiatedByName" ChangeInitiatorType="@Result.Change.ChangeInitiatorType"
+                           SyncRuleId="@Result.Change.SyncRuleId" SyncRuleName="@Result.Change.SyncRuleName"
+                           ConnectedSystemId="@Result.Change.ConnectedSystemId" ConnectedSystemName="@Result.Change.ConnectedSystemName" />
+        </dd>
+        <dt>Activity</dt>
+        <dd>
+            @if (Result.Change.ActivityId is { } activityId)
+            {
+                <MudLink Href="@($"/activity/{activityId}")" data-testid="activity-link">View Activity</MudLink>
+            }
+            else
+            {
+                <EmptyValue />
+            }
+        </dd>
+    </dl>
+
+    @if (IsDeletion)
+    {
+        <MudText Typo="Typo.subtitle2" data-testid="final-values">Final values</MudText>
+        <MudSimpleTable Dense="true" Outlined="true" Class="jim-object-change-detail-table">
+            <thead>
+                <tr><th>Attribute</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var change in _displayChanges)
+                {
+                    <tr data-testid="attribute-row">
+                        <td class="mud-text-secondary">@change.AttributeName</td>
+                        <td><ChangeValueCell Change="@change" FinalValue="true" /></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Outlined="true" Class="jim-object-change-detail-table">
+            <thead>
+                <tr><th>Attribute</th><th>Change</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var change in _displayChanges)
+                {
+                    <tr data-testid="attribute-row">
+                        <td>
+                            @if (!string.IsNullOrEmpty(change.AttributeInspectHref))
+                            {
+                                <MudLink Href="@change.AttributeInspectHref">@change.AttributeName</MudLink>
+                            }
+                            else
+                            {
+                                <span class="mud-text-secondary">@change.AttributeName</span>
+                            }
+                        </td>
+                        <td class="mud-text-secondary">@change.DisplayChangeType</td>
+                        <td><ChangeValueCell Change="@change" /></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+
+    @if (ObjectHref is { } objectHref)
+    {
+        <div>
+            <MudButton Variant="Variant.Filled" Href="@objectHref" data-testid="open-object">Open Metaverse Object</MudButton>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The change to show, as the Object Changes search returned it.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public MetaverseObjectChangeSearchResult Result { get; set; } = null!;
+
+    /// <summary>
+    /// Raised when the reader closes the panel, by its close button or Escape.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private ElementReference _root;
+    private Guid? _renderedChangeId;
+    private List<ChangeHistoryTimeline.AttributeChangeDisplay> _displayChanges = [];
+
+    private bool IsDeletion => Result.Change.ChangeType == ObjectChangeType.Deleted;
+
+    private string? ObjectHref =>
+        !Result.MetaverseObjectDeleted && Result.MetaverseObjectId is { } id && !string.IsNullOrWhiteSpace(Result.MetaverseObjectTypePluralName)
+            ? JIM.Utilities.Utilities.GetMetaverseObjectHref(id, Result.MetaverseObjectTypePluralName)
+            : null;
+
+    private string? DeletedTooltip => Result.MetaverseObjectDeletedAt is { } deletedAt
+        ? $"Deleted {deletedAt.ToRelativeTime()}"
+        : null;
+
+    protected override void OnParametersSet()
+    {
+        // The Inspect links only make sense for an object that still exists, so a deleted object's attributes go
+        // unlinked.
+        var typePluralName = Result.MetaverseObjectDeleted ? null : Result.MetaverseObjectTypePluralName;
+        var group = MvoChangeGroupMapper.Map(Result.Change, Result.MetaverseObjectId ?? Guid.Empty, typePluralName);
+        _displayChanges = ChangeHistoryTimeline.GetDisplayChanges(group);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Focus moves to the panel as each change opens, so Escape closes it straight away.
+        if (_renderedChangeId == Result.Change.Id)
+            return;
+
+        _renderedChangeId = Result.Change.Id;
+        try
+        {
+            await _root.FocusAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            // Pre-rendering: there is no browser to focus yet.
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException)
+        {
+            // The circuit has gone; there is nothing to focus.
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+            await OnClose.InvokeAsync();
+    }
+}

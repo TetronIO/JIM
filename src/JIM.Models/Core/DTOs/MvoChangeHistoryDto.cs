@@ -64,6 +64,13 @@ public class MvoChangeHistoryDto
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
     /// <summary>
+    /// The Activity the change was made in, such as a synchronisation, a scheduled deletion or a sign-in. Null when
+    /// the Activity has since been removed by history retention, or for a change recorded before Activities were
+    /// linked to changes.
+    /// </summary>
+    public Guid? ActivityId { get; set; }
+
+    /// <summary>
     /// The unique identifier of the Connected System Object whose synchronisation made the change, when one did.
     /// </summary>
     public Guid? CsoId { get; set; }
@@ -167,6 +174,16 @@ public class MvoValueChangeDto
     public int? ContributedBySystemId { get; set; }
 
     public string? ContributedBySystemName { get; set; }
+
+    /// <summary>
+    /// What kind of source set the value: SynchronisationRule, SignInClaim, System or Person. Null when no source was
+    /// recorded for the change.
+    /// </summary>
+    /// <remarks>#2472.</remarks>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>The sign-in claim that supplied the value, such as <c>given_name</c>, when the source is a sign-in claim; otherwise null.</summary>
+    public string? ContributedByClaimType { get; set; }
 
     /// <summary>
     /// True when a Generated Value Attribute Flow produced this value (#399): the contributing Synchronisation Rule

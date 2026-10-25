@@ -227,12 +227,30 @@ public class DeletePathForeignKeyCoverageTests
         RemovedTables: [],
         SeveredForeignKeys: new Dictionary<string, string>());
 
+    /// <summary>
+    /// <c>ChangeHistoryRepository.DeleteExpired*ActivitiesAsync</c>: history retention removes Activities through EF
+    /// Core, leaving their Run Profile Execution Items and everything beneath them to the database's cascades.
+    /// <para>
+    /// Change history has its own retention period and is trimmed by its own clock, so a change record can outlive
+    /// the Activity it was made in: a run that straddles the cutoff, or a change batch cap reached before the Activity
+    /// batch. Every history row that names an Activity or one of its items must therefore let go of it rather than
+    /// refuse; a refusal fails the same oldest batch on every retention run, and retention never advances again.
+    /// </para>
+    /// </summary>
+    private static readonly DeleteSurface ActivityRetention = new(
+        Name: "history retention deleting Activities (ChangeHistoryRepository.DeleteExpired*ActivitiesAsync)",
+        DeleteRoots: ["Activities"],
+        TruncatedTables: [],
+        RemovedTables: [],
+        SeveredForeignKeys: new Dictionary<string, string>());
+
     private static IEnumerable<TestCaseData> Surfaces()
     {
         yield return new TestCaseData(FactoryReset).SetName("{m}(factory reset)");
         yield return new TestCaseData(ConnectedSystemDeletion).SetName("{m}(Connected System deletion)");
         yield return new TestCaseData(MetaverseObjectDeletion).SetName("{m}(Metaverse Object deletion)");
         yield return new TestCaseData(SyncRuleDeletion).SetName("{m}(Synchronisation Rule deletion)");
+        yield return new TestCaseData(ActivityRetention).SetName("{m}(Activity retention)");
     }
 
     private string _connectionString = null!;

@@ -666,18 +666,31 @@ public class ActivityDetailDto
     public ScimRequestCountsDto? ScimRequests { get; set; }
 
     /// <summary>
-    /// Imports only: the point the import started reading from, as its Connector records it (for example
-    /// <c>{"changeSequence":8}</c>). Empty for an import with nothing to start from, such as a Connected System's
-    /// first, and for every other Activity.
+    /// Imports only: what the Connector had stored for the Connected System when the import began, exactly as it keeps
+    /// it (for example <c>{"changeSequence":8}</c>). It holds the watermark the import read changes after, and can hold
+    /// more: the LDAP Connector's also records what it detected about the directory. Empty for an import with nothing
+    /// to start from, such as a Connected System's first, and for every other Activity. <c>ImportReadRange</c> says
+    /// what it means.
     /// </summary>
     public string? ImportWatermarkFrom { get; set; }
 
     /// <summary>
-    /// Imports only: the point the import read up to, which the next import starts from. Empty when the import
-    /// recorded none (it failed or was cancelled first, or its Connector keeps no such point) and for every other
-    /// Activity.
+    /// Imports only: what the Connector stored for the Connected System once the import had staged everything it read,
+    /// exactly as it keeps it. It holds the watermark the next import reads changes after. Empty when the import
+    /// recorded none (it failed or was cancelled first, or its Connector keeps no watermark) and for every other
+    /// Activity. <c>ImportReadRange</c> says what it means.
     /// </summary>
     public string? ImportWatermarkTo { get; set; }
+
+    /// <summary>
+    /// Imports only: the two watermarks as the import's Connector reads them. Each gives a <c>Kind</c> (what the
+    /// watermark counts in, such as <c>access log</c> or <c>change sequence</c>) and its <c>Points</c>: one per Object
+    /// Type or source, named by its <c>Scope</c>, for a Connector that keeps several (the SQL Connector does), otherwise
+    /// one with no <c>Scope</c>. Each point has a <c>Number</c>, a UTC <c>Time</c> or a <c>Text</c> value. Empty when
+    /// the Activity recorded no watermark, its Connected System has since been deleted, or its Connector does not
+    /// describe its watermarks.
+    /// </summary>
+    public ImportReadRange? ImportReadRange { get; set; }
 
     /// <summary>
     /// Creates a detail DTO from an Activity entity.
@@ -685,7 +698,8 @@ public class ActivityDetailDto
     public static ActivityDetailDto FromEntity(
         Activity activity,
         ActivityRunProfileExecutionStats? stats = null,
-        IReadOnlyList<ActivityPhase>? phases = null)
+        IReadOnlyList<ActivityPhase>? phases = null,
+        ImportReadRange? importReadRange = null)
     {
         return new ActivityDetailDto
         {
@@ -747,7 +761,8 @@ public class ActivityDetailDto
             ScimRequests = ScimRequestCountsDto.FromActivity(activity),
 
             ImportWatermarkFrom = activity.ImportWatermarkFrom,
-            ImportWatermarkTo = activity.ImportWatermarkTo
+            ImportWatermarkTo = activity.ImportWatermarkTo,
+            ImportReadRange = importReadRange
         };
     }
 }

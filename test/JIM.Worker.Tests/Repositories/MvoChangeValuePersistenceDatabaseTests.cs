@@ -109,6 +109,63 @@ public class MvoChangeValuePersistenceDatabaseTests
     }
 
     /// <summary>
+    /// Real-PostgreSQL verification for #2472: the kind of source that set a value, and the sign-in claim type beside
+    /// it, must survive both raw change-history write paths (the sync engine's bulk COPY and the direct insert).
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task ChangeHistoryWritePaths_ContributorKindAndClaimType_PersistAsync(bool bulkPath)
+    {
+        await using var seedContext = NewContext();
+        var mvoType = new MetaverseObjectType { Name = $"TestType-{Guid.NewGuid():N}", PluralName = "TestTypes" };
+        var givenNameAttr = new MetaverseAttribute { Name = $"givenName-{Guid.NewGuid():N}", Type = AttributeDataType.Text };
+        var typeAttr = new MetaverseAttribute { Name = $"type-{Guid.NewGuid():N}", Type = AttributeDataType.Text };
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
+        seedContext.MetaverseAttributes.AddRange(givenNameAttr, typeAttr);
+        seedContext.MetaverseObjects.Add(mvo);
+        await seedContext.SaveChangesAsync();
+
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = bulkPath ? mvo : null,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = bulkPath ? ObjectChangeType.Created : ObjectChangeType.Deleted,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = givenNameAttr, AttributeId = givenNameAttr.Id, StringValue = "Jo", ContributedByKind = ValueContributorKind.SignInClaim, ContributedByClaimType = "given_name" },
+            ValueChangeType.Add);
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = typeAttr, AttributeId = typeAttr.Id, StringValue = "PersonEntity", ContributedByKind = ValueContributorKind.System },
+            ValueChangeType.Add);
+
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            if (bulkPath)
+                await new SyncRepository(repository).PersistPendingMvoChangesAsync(new List<MetaverseObjectChange> { change }, new List<MetaverseObjectChange>());
+            else
+                await repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+        }
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChangeAttributeValues
+            .Include(vc => vc.MetaverseObjectChangeAttribute)
+            .Where(vc => vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.Id == change.Id)
+            .ToListAsync();
+
+        var givenName = persisted.Single(vc => vc.MetaverseObjectChangeAttribute.AttributeName == givenNameAttr.Name);
+        var type = persisted.Single(vc => vc.MetaverseObjectChangeAttribute.AttributeName == typeAttr.Name);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(givenName.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(givenName.ContributedByClaimType, Is.EqualTo("given_name"));
+            Assert.That(type.ContributedByKind, Is.EqualTo(ValueContributorKind.System));
+            Assert.That(type.ContributedByClaimType, Is.Null);
+        }
+    }
+
+    /// <summary>
     /// Real-PostgreSQL verification for #399: the projecting Synchronisation Rule's scalar id and name
     /// snapshot, set on <see cref="MetaverseObjectChange.SyncRuleId"/>/<see cref="MetaverseObjectChange.SyncRuleName"/>
     /// (never the <see cref="MetaverseObjectChange.SyncRule"/> navigation), must survive the bulk COPY path
@@ -237,5 +294,84 @@ public class MvoChangeValuePersistenceDatabaseTests
             "The Decimal value must survive the direct insert path; a missing INSERT column writes NULL.");
         Assert.That(refChange.ReferenceValueId, Is.EqualTo(referencedMvo.Id),
             "An FK-only reference value must survive the direct insert path; reading only the navigation drops it.");
+    }
+
+    /// <summary>
+    /// Real-PostgreSQL verification for #2460: the Activity a change was made in, and the item that deleted the object,
+    /// must survive both raw write paths,
+    /// the sync engine's bulk COPY and the direct insert deletions use. A column missing from either writes NULL.
+    /// </summary>
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_ActivityId_PersistsAsync()
+    {
+        var (mvo, activityId) = await SeedObjectAndActivityAsync();
+        var deletingItemId = Guid.NewGuid();
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = mvo,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.AttributeFlow,
+            InitiatedByType = ActivityInitiatorType.System,
+            ActivityId = activityId,
+            DeletedByRunProfileExecutionItemId = deletingItemId
+        };
+
+        await using (var writeContext = NewContext())
+        {
+            var syncRepository = new SyncRepository(new PostgresDataRepository(writeContext));
+            await syncRepository.PersistPendingMvoChangesAsync([change], []);
+        }
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChanges.SingleAsync(c => c.Id == change.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ActivityId, Is.EqualTo(activityId));
+            Assert.That(persisted.DeletedByRunProfileExecutionItemId, Is.EqualTo(deletingItemId));
+        }
+    }
+
+    [Test]
+    public async Task CreateMetaverseObjectChangeDirectAsync_ActivityId_PersistsAsync()
+    {
+        var (_, activityId) = await SeedObjectAndActivityAsync();
+        var deletingItemId = Guid.NewGuid();
+        var change = new MetaverseObjectChange
+        {
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Deleted,
+            InitiatedByType = ActivityInitiatorType.System,
+            DeletedObjectDisplayName = "Jo Bloggs",
+            ActivityId = activityId,
+            DeletedByRunProfileExecutionItemId = deletingItemId
+        };
+
+        await using (var writeContext = NewContext())
+            await new PostgresDataRepository(writeContext).Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChanges.SingleAsync(c => c.Id == change.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ActivityId, Is.EqualTo(activityId));
+            Assert.That(persisted.DeletedByRunProfileExecutionItemId, Is.EqualTo(deletingItemId));
+        }
+    }
+
+    private async Task<(MetaverseObject Mvo, Guid ActivityId)> SeedObjectAndActivityAsync()
+    {
+        await using var seedContext = NewContext();
+        var mvoType = new MetaverseObjectType { Name = $"TestType-{Guid.NewGuid():N}", PluralName = "TestTypes" };
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        seedContext.AddRange(mvo, activity);
+        await seedContext.SaveChangesAsync();
+        return (mvo, activity.Id);
     }
 }

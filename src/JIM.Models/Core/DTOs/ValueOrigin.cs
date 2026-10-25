@@ -5,7 +5,7 @@ namespace JIM.Models.Core.DTOs;
 
 /// <summary>
 /// The origin of a Metaverse Object attribute value (#399): a Connected System through a Synchronisation Rule,
-/// JIM itself, a person, or not recorded. A record so that equal origins compare equal, which is what grouping by
+/// a sign-in claim, JIM itself, a person, or not recorded. A record so that equal origins compare equal, which is what grouping by
 /// source relies on.
 /// </summary>
 public record ValueOrigin
@@ -30,6 +30,9 @@ public record ValueOrigin
 
     /// <summary>True when a Generated Value was revised after a collision (#242 Collision Remediation).</summary>
     public bool Corrected { get; init; }
+
+    /// <summary>The sign-in claim that supplied the value, such as <c>given_name</c>, for a <see cref="ValueOriginKind.SignInClaim"/> origin.</summary>
+    public string? ClaimType { get; init; }
 
     /// <summary>The person who set the value (#614). Null until #614 lands.</summary>
     public Guid? PersonId { get; init; }

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -184,6 +185,22 @@ public class MetaverseControllerProvenanceTests
         {
             Assert.That(source.IsGeneratedValue, Is.True);
             Assert.That(history.IsGeneratedValue, Is.True);
+        }
+    }
+
+    /// <summary>#2472: a value set outside synchronisation names its source kind and, for a token value, the claim.</summary>
+    [Test]
+    public void ValueOriginDto_And_AttributeHistoryEntryDto_CarryTheSignInClaim()
+    {
+        var origin = ValueOriginDto.FromModel(new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = "given_name" });
+        var history = AttributeHistoryEntryDto.FromModel(new AttributeHistoryEntry { ContributedByKind = ValueContributorKind.SignInClaim, ClaimType = "given_name" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SignInClaim));
+            Assert.That(origin.ClaimType, Is.EqualTo("given_name"));
+            Assert.That(history.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(history.ClaimType, Is.EqualTo("given_name"));
         }
     }
 

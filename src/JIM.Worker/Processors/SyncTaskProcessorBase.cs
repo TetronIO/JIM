@@ -1201,6 +1201,10 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.MvoScheduledForDeletion != null)
                         MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, existingRpei);
 
+                    // This item deleted the object; its Deleted change record names it (#2460).
+                    if (changeResult.MvoDeletedImmediately != null)
+                        MetaverseObjectDeletionRuleApplier.RecordDeletingItem(changeResult.MvoDeletedImmediately, existingRpei);
+
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
                     // so the change record shows a handover to the surviving contributor, not just a blank.
@@ -1292,6 +1296,10 @@ public abstract class SyncTaskProcessorBase
                     // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
                     if (changeResult.MvoScheduledForDeletion != null)
                         MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, runProfileExecutionItem);
+
+                    // This item deleted the object; its Deleted change record names it (#2460).
+                    if (changeResult.MvoDeletedImmediately != null)
+                        MetaverseObjectDeletionRuleApplier.RecordDeletingItem(changeResult.MvoDeletedImmediately, runProfileExecutionItem);
 
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
@@ -5616,11 +5624,7 @@ public abstract class SyncTaskProcessorBase
                 using (Diagnostics.Sync.StartSpan("MvoDeletionDeleteBulk")
                     .SetTag("mvoCount", deletionsToProcess.Count))
                 {
-                    retirements.AddRange(await _syncServer.DeleteMetaverseObjectsAsync(
-                        deletionsToProcess,
-                        _activity.InitiatedByType,
-                        _activity.InitiatedById,
-                        _activity.InitiatedByName));
+                    retirements.AddRange(await _syncServer.DeleteMetaverseObjectsAsync(deletionsToProcess, _activity));
                 }
 
                 deletedMvoIds.AddRange(deletionsToProcess.Select(d => d.Mvo.Id));
@@ -6318,12 +6322,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Delete the MVO, passing initiator info and the snapshotted final attribute values
                 // (captured before attribute recall removed them from the MVO)
-                retirements.AddRange(await _syncServer.DeleteMetaverseObjectAsync(
-                    mvo,
-                    _activity.InitiatedByType,
-                    _activity.InitiatedById,
-                    _activity.InitiatedByName,
-                    finalAttributeValues));
+                retirements.AddRange(await _syncServer.DeleteMetaverseObjectAsync(mvo, _activity, finalAttributeValues));
                 deletedMvoIds.Add(mvo.Id);
                 Log.Information(
                     "ProcessMvoDeletionsIndividuallyAsync: Deleted MVO {MvoId}",
@@ -6398,6 +6397,7 @@ public abstract class SyncTaskProcessorBase
                 InitiatedByName = _activity.InitiatedByName,
                 // Link to RPEI for additional context (optional - RPEI may be cleaned up)
                 ActivityRunProfileExecutionItem = rpei,
+                ActivityId = _activity.Id,
                 // The projecting Synchronisation Rule (#399), scalar id/name only: never the SyncRule
                 // navigation, so this tracking context does not attach a rule graph. Null for every
                 // change type other than Projected.
@@ -7377,6 +7377,7 @@ public abstract class SyncTaskProcessorBase
                     // decision-time value the outcome node should state (#119).
                     mvoDeletionEligibleDate: mvo.DeletionEligibleDate,
                     mvoScheduledForDeletion: mvoDeletionFate == MvoDeletionFate.DeletionScheduled ? mvo : null,
+                    mvoDeletedImmediately: mvoDeletionFate == MvoDeletionFate.DeletedImmediately ? mvo : null,
                     preservedNoSourceAttributeCount: preservedNoSourceAttributeCount,
                     generatedValueOutcomes: generatedValueOutcomes);
         }

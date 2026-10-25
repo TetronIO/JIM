@@ -615,7 +615,9 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         var queue = cut.FindComponents<MudButton>().Single(b => b.Find("*").GetAttribute("data-testid") == HistoryQueueMarker);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(queue.Instance.Variant, Is.Not.EqualTo(Variant.Filled).And.Not.EqualTo(Variant.Text));
+            // A lesser action: a button, not a link, and in the default colour rather than the main action's primary.
+            Assert.That(queue.Instance.Variant, Is.Not.EqualTo(Variant.Text));
+            Assert.That(queue.Instance.Color, Is.EqualTo(Color.Default));
             Assert.That(queue.Find("*").TextContent.Trim(), Is.EqualTo("Password queue"));
         }
     }

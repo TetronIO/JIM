@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Utilities;
@@ -1020,11 +1020,11 @@ static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrinc
     var ssoIdentity = new SsoIdentity
     {
         UniqueId = uniqueId,
-        DisplayName = principal.FindFirstValue("name"),
-        FirstName = principal.FindFirstValue("given_name"),
-        LastName = principal.FindFirstValue("family_name"),
-        UserPrincipalName = principal.FindFirstValue("preferred_username"),
-        Email = principal.FindFirstValue("email")
+        DisplayName = principal.FindFirstValue(SsoIdentity.DisplayNameClaimType),
+        FirstName = principal.FindFirstValue(SsoIdentity.FirstNameClaimType),
+        LastName = principal.FindFirstValue(SsoIdentity.LastNameClaimType),
+        UserPrincipalName = principal.FindFirstValue(SsoIdentity.UserPrincipalNameClaimType),
+        Email = principal.FindFirstValue(SsoIdentity.EmailClaimType)
     };
 
     var user = await jim.Auth.ResolveOrProvisionSsoIdentityAsync(ssoIdentity);

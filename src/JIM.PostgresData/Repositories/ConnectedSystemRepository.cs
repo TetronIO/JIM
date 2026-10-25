@@ -1108,14 +1108,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// than repeating ILike comparisons against attribute names for every row.
     /// </para>
     /// </summary>
-    private async Task<List<List<int>>> GetNameAttributeIdTiersAsync(int connectedSystemId)
+    private async Task<List<List<int>>> GetNameAttributeIdTiersAsync(int connectedSystemId, CancellationToken cancellationToken = default)
     {
         var candidateNames = ObjectNaming.ConnectedSystemNameAttributes.Select(n => n.ToLower()).ToList();
         var candidates = await Repository.Database.ConnectedSystemAttributes
             .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
                         candidateNames.Contains(a.Name.ToLower()))
             .Select(a => new { a.Id, a.Name })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return ObjectNaming.ConnectedSystemNameAttributes
             .Select(candidate => candidates
@@ -1214,7 +1214,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
         bool includeTotalCount = true,
-        bool? hasUnresolvedReferences = null)
+        bool? hasUnresolvedReferences = null,
+        CancellationToken cancellationToken = default)
     {
         if (count < 1)
             throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
@@ -1227,7 +1228,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var (results, grossCount) = await QueryConnectedSystemObjectHeadersByRangeAsync(
             connectedSystemId, offset, count, searchQuery, sortBy, sortDescending,
-            statusFilter, objectTypeFilter, joinTypeFilter, hasUnresolvedReferences, includeTotalCount);
+            statusFilter, objectTypeFilter, joinTypeFilter, hasUnresolvedReferences, includeTotalCount, cancellationToken);
 
         return new RangeResultSet<ConnectedSystemObjectHeader>
         {
@@ -1253,7 +1254,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IEnumerable<int>? objectTypeFilter,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter,
         bool? hasUnresolvedReferences,
-        bool includeTotalCount)
+        bool includeTotalCount,
+        CancellationToken cancellationToken = default)
     {
         // Pre-resolve the name-candidate attribute IDs for this Connected System, one list per tier of
         // ObjectNaming.ConnectedSystemNameAttributes, to avoid repeated ILike string comparisons in the
@@ -1262,7 +1264,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         List<List<int>> nameAttributeIdTiers;
         using (ActivitySource.StartActivity("Cso.Headers.LoadNameAttrIds"))
         {
-            nameAttributeIdTiers = await GetNameAttributeIdTiersAsync(connectedSystemId);
+            nameAttributeIdTiers = await GetNameAttributeIdTiersAsync(connectedSystemId, cancellationToken);
         }
 
         // The sort and projection clauses below coalesce the tiers explicitly, so they must be extended
@@ -1412,7 +1414,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (includeTotalCount)
         {
             using var countSpan = ActivitySource.StartActivity("Cso.Headers.Count");
-            totalCount = await query.CountAsync();
+            totalCount = await query.CountAsync(cancellationToken);
             countSpan?.SetTag("totalCount", totalCount);
         }
 
@@ -1516,7 +1518,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         List<ConnectedSystemObjectHeader> results;
         using (var pageSpan = ActivitySource.StartActivity("Cso.Headers.LoadPage"))
         {
-            results = await selectedObjects.ToListAsync();
+            results = await selectedObjects.ToListAsync(cancellationToken);
             pageSpan?.SetTag("returned", results.Count);
         }
 

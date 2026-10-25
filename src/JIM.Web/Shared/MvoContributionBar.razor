@@ -14,6 +14,10 @@
     <div class="jim-contribution-heading">
         <span class="jim-contribution-title">Where this @ObjectTypeName gets its values</span>
         <span class="jim-contribution-count">@Provenance.Attributes.Count.ToString("N0") attributes@(groups.Count > 1 ? " · select a source to filter" : null)</span>
+        @if (Actions != null)
+        {
+            <span class="jim-contribution-actions">@Actions</span>
+        }
     </div>
 
     @if (groups.Count <= 1)
@@ -68,6 +72,10 @@
     [Parameter]
     public EventCallback<string?> OnFilterChanged { get; set; }
 
+    /// <summary>Actions about the whole object, set at the heading's far end.</summary>
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+
     private async Task ToggleFilterAsync(string key)
     {
         await OnFilterChanged.InvokeAsync(ActiveFilterKey == key ? null : key);
@@ -82,7 +90,7 @@
     private static string FullSourceLabel(ValueOriginGrouping.Group group) => group.Kind switch
     {
         null => "Several sources",
-        ValueOriginKind.SetByPerson => group.Label,
+        ValueOriginKind.SetByPerson or ValueOriginKind.SignInClaim or ValueOriginKind.System => group.Label,
         ValueOriginKind.SynchronisationRule => group.SyncRuleDeleted
             ? $"{group.ConnectedSystemName} · rule deleted"
             : group.SyncRuleName != null

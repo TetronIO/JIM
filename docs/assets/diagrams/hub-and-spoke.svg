@@ -14,9 +14,9 @@
   <defs>
     <mask id="jimdg-hs-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="640">
       <rect x="0" y="0" width="1160" height="640" fill="#ffffff"/>
-      <rect x="374.8" y="209" width="50.4" height="18" rx="3" fill="#000000"/>
-      <rect x="703.6" y="209" width="112.9" height="18" rx="3" fill="#000000"/>
-      <rect x="524.3" y="391" width="112" height="18" rx="3" fill="#000000"/>
+      <rect x="372.8" y="208" width="54.3" height="19" rx="3" fill="#000000"/>
+      <rect x="699" y="208" width="122.2" height="19" rx="3" fill="#000000"/>
+      <rect x="520" y="390" width="120.8" height="19" rx="3" fill="#000000"/>
     </mask>
   </defs>
   <g id="jimdg-hs-hub">
@@ -68,8 +68,8 @@
     <text class="jimdg-system-name" x="130" y="146">HR System</text>
     <text class="jimdg-system-sub" x="130" y="167">CSV</text>
     <rect class="jimdg-system" x="20" y="288" width="220" height="64" rx="8"/>
-    <text class="jimdg-system-name" x="130" y="316">Legacy Directory</text>
-    <text class="jimdg-system-sub" x="130" y="337">LDAP</text>
+    <text class="jimdg-system-name" x="130" y="316">Identity Provider</text>
+    <text class="jimdg-system-sub" x="130" y="337">SCIM 2.0 · pushes to JIM</text>
     <rect class="jimdg-system" x="20" y="458" width="220" height="64" rx="8"/>
     <text class="jimdg-system-name" x="130" y="486">Enterprise Databases</text>
     <text class="jimdg-system-sub" x="130" y="507">SQL</text>

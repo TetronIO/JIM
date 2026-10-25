@@ -98,7 +98,7 @@ public class GeneratedValuePreviewHelpersTests
     }
 
     [TestCase(false, false, "")]
-    [TestCase(true, true, "using placeholder sample values; enter your own above, in \"Test this Expression\", to see this reflect them")]
+    [TestCase(true, true, "an example, with each input standing in as its own name; enter values to see yours")]
     [TestCase(true, false, "using the sample values entered above")]
     public void DescribeSampleSource_ReturnsExpected(bool hasInputs, bool usedNeutralSample, string expected)
     {

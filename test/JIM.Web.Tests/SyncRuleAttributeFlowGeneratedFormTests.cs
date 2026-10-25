@@ -208,6 +208,29 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
 #pragma warning restore MUD0012
 
     [Test]
+    public async Task TryingAValue_KeepsItAndWorksTheCandidatesOutFromItAsync()
+    {
+        // The tester renders into the dialog's Try it pane (#2471); a value tried there must survive the re-render the
+        // form does on every change, and the result must follow it.
+        var (provider, tab, _) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+        var baseExpression = provider.FindComponents<ExpressionEditor>().Single(f => f.Instance.Label == "Base expression");
+        await provider.InvokeAsync(() => baseExpression.Instance.ValueChanged.InvokeAsync("Lower(cs[\"firstName\"])"));
+        tab.Render();
+
+        var field = provider.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "cs[\"firstName\"]");
+        await provider.InvokeAsync(() => field.Instance.ValueChanged.InvokeAsync("James"));
+        tab.Render();
+
+        provider.WaitForState(() => provider.Markup.Contains("james1"), TimeSpan.FromSeconds(3));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindComponents<TestInputValueEditor>().Single().Instance.State.Values, Is.EqualTo(new[] { "James" }),
+                "the value tried is kept");
+            Assert.That(provider.Markup, Does.Contain("james1"), "the candidates are worked out from the base tried");
+        }
+    }
+
+    [Test]
     public async Task TypingABaseExpression_ShowsSeparatorAndMissingInputBehaviour()
     {
         var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
@@ -220,7 +243,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         {
             Assert.That(provider.FindComponents<MudSelect<string>>().Any(s => s.Instance.Label == "Separator"), Is.True,
                 "a separator is only offered alongside a base expression on a Text target");
-            Assert.That(provider.FindComponents<MudRadioGroup<MissingInputBehaviour>>().Any(), Is.True,
+            Assert.That(provider.FindComponents<SettingsSection>().Any(section => section.Instance.Title == "If an input has no value"), Is.True,
                 "Missing Input Behaviour is only offered once a base expression is present");
         }
 
@@ -236,7 +259,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindComponents<MudSelect<string>>().Any(s => s.Instance.Label == "Separator"), Is.False);
-            Assert.That(provider.FindComponents<MudRadioGroup<MissingInputBehaviour>>().Any(), Is.False);
+            Assert.That(provider.FindComponents<SettingsSection>().Any(section => section.Instance.Title == "If an input has no value"), Is.False);
         }
     }
 

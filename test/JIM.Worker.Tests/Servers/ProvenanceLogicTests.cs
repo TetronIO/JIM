@@ -79,9 +79,83 @@ public class ProvenanceLogicTests
         Assert.That(origin.AssertsNoValue, Is.True);
     }
 
+    [Test]
+    public void ResolveOrigin_SignInClaimRecorded_ReturnsSignInClaimOriginWithClaimType()
+    {
+        var origin = ProvenanceLogic.ResolveOrigin(null, null, assertsNoValue: false, connectedSystemName: null, syncRuleName: null,
+            contributedByKind: ValueContributorKind.SignInClaim, contributedByClaimType: "given_name");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SignInClaim));
+            Assert.That(origin.ClaimType, Is.EqualTo("given_name"));
+            Assert.That(origin.ConnectedSystemId, Is.Null);
+        }
+    }
+
+    [Test]
+    public void ResolveOrigin_SystemRecorded_ReturnsSystemOrigin()
+    {
+        var origin = ProvenanceLogic.ResolveOrigin(null, null, assertsNoValue: false, connectedSystemName: null, syncRuleName: null,
+            contributedByKind: ValueContributorKind.System);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.System));
+            Assert.That(origin.ClaimType, Is.Null);
+        }
+    }
+
+    [Test]
+    public void ResolveOrigin_ContributingSystemRecordedBesideAStaleSignInKind_TheSystemWins()
+    {
+        // The Connected System is the authority for a synchronised value: a kind left behind by a writer that did
+        // not clear it must never make the value read as the token's.
+        var origin = ProvenanceLogic.ResolveOrigin(3, 7, assertsNoValue: false, connectedSystemName: "HR", syncRuleName: "HR Import",
+            contributedByKind: ValueContributorKind.SignInClaim, contributedByClaimType: "name");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
+            Assert.That(origin.ClaimType, Is.Null);
+        }
+    }
+
+    [Test]
+    public void ResolveOrigin_SynchronisationRuleKindButSystemSinceDeleted_ReturnsNotRecorded()
+    {
+        // Deleting a Connected System clears ContributedBySystemId; with nothing left to name, the value has no
+        // recorded source, exactly as before kinds were recorded.
+        var origin = ProvenanceLogic.ResolveOrigin(null, null, assertsNoValue: false, connectedSystemName: null, syncRuleName: null,
+            contributedByKind: ValueContributorKind.SynchronisationRule);
+
+        Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.NotRecorded));
+    }
+
     #endregion
 
     #region ResolveChangeValueOrigin
+
+    [Test]
+    public void ResolveChangeValueOrigin_SignInClaimRecorded_ReturnsSignInClaimOrigin()
+    {
+        var origin = ProvenanceLogic.ResolveChangeValueOrigin(null, null, null, null,
+            contributedByKind: ValueContributorKind.SignInClaim, contributedByClaimType: "preferred_username");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.SignInClaim));
+            Assert.That(origin.ClaimType, Is.EqualTo("preferred_username"));
+        }
+    }
+
+    [Test]
+    public void ResolveChangeValueOrigin_SystemRecorded_ReturnsSystemOrigin()
+    {
+        var origin = ProvenanceLogic.ResolveChangeValueOrigin(null, null, null, null, contributedByKind: ValueContributorKind.System);
+
+        Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.System));
+    }
 
     [Test]
     public void ResolveChangeValueOrigin_GeneratedValue_IsAGeneratedValueThatKeepsItsSystemAndRule()
@@ -363,6 +437,30 @@ public class ProvenanceLogicTests
             Assert.That(entry.SyncRuleId, Is.EqualTo(5));
             Assert.That(entry.SyncRuleName, Is.EqualTo("HR Import"));
             Assert.That(truncated, Is.False);
+        }
+    }
+
+    [Test]
+    public void PairAttributeHistory_SignInClaimSource_CarriesKindAndClaimTypeOnSetAndAddedEntries()
+    {
+        var setChange = Guid.NewGuid();
+        var addChange = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var claimAdd = Row(setChange, ValueChangeType.Add, "Jo", now);
+        claimAdd.ContributedByKind = ValueContributorKind.SignInClaim;
+        claimAdd.ClaimType = "given_name";
+        var claimOnlyAdd = Row(addChange, ValueChangeType.Add, "Joanne", now.AddMinutes(-1));
+        claimOnlyAdd.ContributedByKind = ValueContributorKind.SignInClaim;
+        claimOnlyAdd.ClaimType = "given_name";
+        var rows = new List<MetaverseAttributeHistoryRawEntry> { claimAdd, Row(setChange, ValueChangeType.Remove, "Joanne", now), claimOnlyAdd };
+
+        var (entries, _) = ProvenanceLogic.PairAttributeHistory(rows, AttributePlurality.SingleValued, cap: 50);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entries, Has.Count.EqualTo(2));
+            Assert.That(entries.Select(e => e.ContributedByKind), Is.All.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(entries.Select(e => e.ClaimType), Is.All.EqualTo("given_name"));
         }
     }
 

@@ -995,6 +995,28 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     padding-left: 10px;
 }
 
+/* An object that no longer exists (ObjectChip's Deleted): no fill, a dashed outline, a low-lighted name and glyph,
+   and a bin icon after the name. The outline takes the place of the fill so the chip keeps its size, and nothing
+   here responds to hover, because a deleted object's chip is never a link. */
+.jim-object-chip.deleted {
+    background: transparent;
+    outline: 1px dashed color-mix(in srgb, var(--mud-palette-text-primary) 28%, transparent);
+    outline-offset: -1px;
+    font-weight: 400;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-object-chip.deleted .jim-object-chip-glyph {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 38%, transparent);
+    color: var(--mud-palette-background);
+}
+
+.jim-object-chip-deleted-icon.mud-icon-root {
+    font-size: 1rem;
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+}
+
 /* Linked chips lift on hover by strengthening the background and glyph, matching JIM's MudChip convention
    (background/avatar colour change) rather than a border outline. jim-chip-link goes on the link wrapper
    rather than the chip because the link is the hover target. */
@@ -1039,7 +1061,11 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
    pill compact. The Connected System Object keeps the secondary colour and the Metaverse Object the primary,
    JIM's own. */
 .jim-object-chip-glyph.cso,
-.jim-object-chip-glyph.mvo {
+.jim-object-chip-glyph.mvo,
+.jim-object-chip-glyph.key,
+.jim-object-chip-glyph.sch,
+.jim-object-chip-glyph.jim,
+.jim-object-chip-glyph.act {
     width: auto;
     min-width: 24px;
     padding: 0 6px;
@@ -1056,6 +1082,30 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
 .jim-object-chip-glyph.mvo {
     background: var(--mud-palette-primary);
     color: var(--mud-palette-primary-text, #fff);
+}
+
+/* Who did something (InitiatorChip): an API key, a Schedule, or JIM itself. A person is a Metaverse Object and a
+   Synchronisation Rule is a rule, so they keep those glyphs; these three are the initiators that are nothing else. */
+.jim-object-chip-glyph.key {
+    background: var(--mud-palette-success);
+    color: var(--mud-palette-success-text, #fff);
+}
+
+.jim-object-chip-glyph.sch {
+    background: var(--mud-palette-tertiary);
+    color: var(--mud-palette-tertiary-text, #fff);
+}
+
+.jim-object-chip-glyph.jim {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 55%, transparent);
+    color: var(--mud-palette-background);
+}
+
+/* An Activity (a parent Activity, say): a slate drawn from the primary, dark in both themes so its white text
+   holds, and distinct from System's neutral blend beside it in an Activity's Summary. */
+.jim-object-chip-glyph.act {
+    background: color-mix(in srgb, var(--mud-palette-primary) 30%, #37474f);
+    color: #fff;
 }
 
 .jim-object-chip-type {
@@ -1206,6 +1256,11 @@ a.jim-system-rule-chip-part:focus-visible {
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 10px;
+}
+
+.jim-contribution-actions {
+    margin-left: auto;
+    align-self: center;
 }
 
 .jim-contribution-title {
@@ -1568,6 +1623,19 @@ a.jim-system-rule-chip-part:focus-visible {
 
 .jim-value-origin-chip > .jim-system-rule-chip {
     flex-shrink: 1;
+}
+
+/* The colour of values JIM set itself in the contribution bar and source dots (#2472): the grey the JIM chip glyph
+   wears, so the source reads as JIM's wherever it is drawn. Declared on :root because ValueOriginGrouping hands it
+   out as a token beside the palette's own. */
+:root {
+    --jim-source-system: color-mix(in srgb, var(--mud-palette-text-primary) 55%, transparent);
+}
+
+/* The claim a sign-in value was read from (#2472): the claim's own name, in code type, read after the source as a
+   rule's name is. */
+.jim-value-origin-claim {
+    color: var(--mud-palette-text-secondary);
 }
 
 /* !important is required so the monospace font and size win over MudBlazor's
@@ -2640,17 +2708,12 @@ html[lang] .jim-schema-change-table td {
     box-shadow: none !important;
 }
 
-/* Who started an Activity (<ActivityInitiator />): the icon stays beside the name, centred on its first line, however
-   narrow the column; a long name wraps beside the icon rather than under it. */
-.jim-activity-initiator {
+/* Who did something (<InitiatorChip />): the chip sits in running text ("Created 2 days ago by ...") as well as in
+   table cells, so it centres on the line and never grows past its container; the chip clips its own name. */
+.jim-initiator-chip {
     display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
+    max-width: 100%;
     vertical-align: middle;
-}
-
-.jim-activity-initiator > .mud-icon-root {
-    flex-shrink: 0;
 }
 
 /* Activity detail slide-out panel (Operations History) */
@@ -4236,6 +4299,30 @@ html[lang] .jim-kv-table td:first-child {
     margin: 4px 0 0;
 }
 
+/* ─── Import read range (Activity Summary) ─── */
+
+/* A Connector's persisted state can be long (an LDAP Connector's lists every control the directory supports), so the
+   field may never widen its grid row, and the recorded state scrolls within itself rather than down the page. */
+.jim-import-read-range {
+    min-width: 0;
+}
+
+/* One line per Object Type or source, for a Connector that keeps a watermark for each. */
+.jim-import-read-range-point {
+    overflow-wrap: anywhere;
+}
+
+/* Sits under the reading it explains, as the stack trace toggle sits under its message. */
+.jim-import-read-range-toggle {
+    margin-top: 4px;
+}
+
+.jim-import-read-range-state {
+    max-height: 320px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
 /* ─── Tooltip measure ─── */
 
 /* MudBlazor sets no max-width on a tooltip, so a long explanatory one grows to a single line as wide
@@ -5226,21 +5313,14 @@ html[lang] .jim-password-guidance.mud-alert {
     background-color: color-mix(in srgb, currentColor 14%, transparent);
 }
 
-/* A border triangle rather than an icon, so the head is sized to the line it ends. Which border
-   carries the colour decides which way it points. */
+/* A border triangle rather than an icon, so the head is sized to the line it ends. It always points
+   right: the strip puts the source on the left, whichever way the rule runs. */
 .jim-identity-flow-head {
     width: 0;
     height: 0;
     border-top: 0.3125rem solid transparent;
     border-bottom: 0.3125rem solid transparent;
-}
-
-.jim-identity-flow-outbound .jim-identity-flow-head {
     border-left: 0.4375rem solid currentColor;
-}
-
-.jim-identity-flow-inbound .jim-identity-flow-head {
-    border-right: 0.4375rem solid currentColor;
 }
 
 .jim-identity-strip-system {
@@ -5793,6 +5873,60 @@ html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-ch
 .jim-virtualised-list-placeholder-toolbar {
     height: 64px;
     border-bottom: 1px solid var(--mud-palette-table-lines);
+}
+
+/* A slow search, sort or refresh: the rows on screen belong to the match set being replaced, so they fade and stop
+   taking clicks until the new one arrives. A slow window fetched by scrolling never sets this (ShowsStaleRows in
+   VirtualisedDataGrid.razor), because the rows already shown are still the right ones. */
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row {
+    transition: opacity 0.15s;
+}
+
+html[lang] .jim-virtualised-list-stale .mud-table-root .mud-table-body .mud-table-row {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+/* A search box whose list is slow to answer (SearchField's Loading): the magnifier gives way to a spinner in the
+   same place, so nothing in the field moves. Hidden rather than removed, so the adornment keeps its size. */
+.jim-search-field-loading .mud-input-adornment-start {
+    position: relative;
+}
+
+.jim-search-field-loading .mud-input-adornment-start .mud-icon-root {
+    visibility: hidden;
+}
+
+.jim-search-field-loading .mud-input-adornment-start::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    box-sizing: border-box;
+    border: 2px solid color-mix(in srgb, var(--mud-palette-primary) 25%, transparent);
+    border-top-color: var(--mud-palette-primary);
+    border-radius: 50%;
+    animation: jim-search-field-spin 0.8s linear infinite;
+}
+
+@keyframes jim-search-field-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jim-search-field-loading .mud-input-adornment-start::after {
+        animation: none;
+        border-right-color: var(--mud-palette-primary);
+    }
+
+    html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row {
+        transition: none;
+    }
 }
 
 /* Container Scope: Simple / Advanced mode switch and the text editor behind it (#1255) */
@@ -6785,4 +6919,183 @@ html[lang] .mud-chip.jim-unresolved-fix-count {
 .jim-unresolved-fix-more {
     grid-column: 1 / -1;
     padding: 8px 0 4px;
+}
+
+/* ─── Object Changes (ObjectChangeList.razor, ObjectChangeDetail.razor) ─── */
+
+/* The row whose change the side panel shows: the Inspect table's selected treatment, a light primary tint with a
+   primary rail on the leading edge. */
+html[lang] .mud-table tbody tr.jim-row-selected > td {
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 8%, transparent);
+}
+
+html[lang] .mud-table tbody tr.jim-row-selected > td:first-child {
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+}
+
+/* Labels a deletion's Attributes cell, so the object's last values do not read as values being cleared. */
+.jim-final-values-label {
+    flex: none;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 4px;
+    padding: 0 6px;
+    margin-right: 8px;
+}
+
+/* The side panel sits below the app bar, like the navigation drawer, and scrolls its own content. */
+.jim-object-change-drawer.mud-drawer {
+    top: var(--mud-appbar-height);
+    height: calc(100% - var(--mud-appbar-height));
+}
+
+.jim-object-change-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px 20px 24px;
+    height: 100%;
+    overflow-y: auto;
+    outline: none;
+}
+
+.jim-object-change-detail-fields {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 16px;
+    margin: 0;
+}
+
+.jim-object-change-detail-fields dt {
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-object-change-detail-fields dd {
+    margin: 0;
+    min-width: 0;
+}
+
+/* ─── Attribute Flow dialog (#2471): settings beside a Try it pane ───
+   The frame is a size container, so the split follows the dialog's own width rather than the window's: a wide dialog
+   shows two panes that scroll on their own, the Try it pane staying in view beside the settings; a narrow one stacks
+   Try it under the settings. */
+.jim-flow-editor-frame {
+    container-type: inline-size;
+}
+
+.jim-flow-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+}
+
+.jim-flow-editor-try {
+    min-width: 0;
+    padding: 12px 16px 16px;
+    border: 1px solid var(--jim-inner-border-color);
+    border-radius: 8px;
+    background: var(--jim-dialog-inner-surface);
+}
+
+.jim-flow-editor-try-heading {
+    display: block;
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.08em;
+    line-height: 1.6;
+    margin-bottom: 4px;
+}
+
+@container (min-width: 960px) {
+    .jim-flow-editor-split {
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        align-items: start;
+    }
+
+    .jim-flow-editor-split > .jim-flow-editor-settings,
+    .jim-flow-editor-split > .jim-flow-editor-try {
+        max-height: calc(100vh - 230px);
+        overflow-y: auto;
+    }
+
+    .jim-flow-editor-split > .jim-flow-editor-settings {
+        padding-right: 4px;
+    }
+}
+
+/* A collapsible settings section (#2471): a header row naming the section and, while closed, what it is set to. */
+.jim-settings-section {
+    border: 1px solid var(--jim-inner-border-color);
+    border-radius: 6px;
+}
+
+.jim-settings-section + .jim-settings-section {
+    margin-top: 8px;
+}
+
+.jim-settings-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.jim-settings-section-header:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.jim-settings-section-header:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.jim-settings-section-chevron {
+    color: var(--mud-palette-text-secondary);
+    flex: none;
+}
+
+.jim-settings-section-title {
+    font-weight: 500;
+    flex: none;
+}
+
+.jim-settings-section-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+}
+
+.jim-settings-section-attention {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex: none;
+    color: var(--mud-palette-warning);
+    font-size: 0.8125rem;
+}
+
+.jim-settings-section-body {
+    padding: 4px 12px 12px 40px;
+}
+
+/* A wide table in the Try it pane (a Generated Value's "Checked with each candidate") scrolls within itself. */
+.jim-flow-editor-try .mud-simple-table .mud-table-container {
+    overflow-x: auto;
 }

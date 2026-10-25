@@ -1,3 +1,4 @@
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Enums
@@ -124,7 +125,10 @@ else
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="margin-right: 12px;">
                                             @GetRelativeTime(changeGroup.ChangeTime)</MudText>
                                         </MudTooltip>
-                                        @GetTimelineInitiatorDisplay(changeGroup)
+                                        <InitiatorChip InitiatedByType="@changeGroup.InitiatedByType" InitiatedById="@changeGroup.ChangeInitiatorId"
+                                                       InitiatedByName="@changeGroup.ChangeInitiatorName" ChangeInitiatorType="@MechanismInitiator(changeGroup)"
+                                                       SyncRuleId="@changeGroup.SyncRuleId" SyncRuleName="@changeGroup.SyncRuleName"
+                                                       ConnectedSystemId="@changeGroup.ConnectedSystemId" ConnectedSystemName="@changeGroup.ConnectedSystemName" />
                                     </MudStack>
 
                                     <!-- Summary of Changes -->
@@ -254,10 +258,11 @@ else
                                             <!-- Initiated By (Who) - the principal that triggered the change -->
                                             <div>
                                                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
-                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                    @GetModalPrincipalIcon(_selectedChange)
-                                                    @GetModalPrincipalText(_selectedChange)
-                                                </MudStack>
+                                                @* Who only: the rule, the how, is the Mechanism beside it. *@
+                                                <div>
+                                                    <InitiatorChip InitiatedByType="@_selectedChange.InitiatedByType" InitiatedById="@_selectedChange.ChangeInitiatorId"
+                                                                   InitiatedByName="@_selectedChange.ChangeInitiatorName" ChangeInitiatorType="@MechanismInitiator(_selectedChange)" />
+                                                </div>
                                             </div>
 
                                             <!-- Mechanism (How) - how the change was triggered -->
@@ -463,80 +468,7 @@ else
                                                         <MudText Typo="Typo.button">Value</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
-                                                        @{
-                                                            // Captured here, and the reference values captured inside
-                                                            // their own guards below, rather than dereferenced through
-                                                            // the guards in markup: a chained dereference under a guard
-                                                            // is what CodeQL reads as a possible null.
-                                                            var change = context.Item;
-                                                        }
-                                                        @if (change.IsUpdate)
-                                                        {
-                                                            @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
-                                                            {
-                                                                @* SVA reference update: old → new, with the old value de-emphasised. *@
-                                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                    @if (change.OldReferenceValue != null)
-                                                                    {
-                                                                        var oldReference = change.OldReferenceValue;
-                                                                        <MudLink Href="@oldReference.Href" Class="mud-text-secondary">@oldReference.DisplayName</MudLink>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <MudText Class="mud-text-secondary">(none)</MudText>
-                                                                    }
-                                                                    <MudText Class="mud-text-secondary">→</MudText>
-                                                                    @if (change.NewReferenceValue != null)
-                                                                    {
-                                                                        var newReference = change.NewReferenceValue;
-                                                                        <MudLink Href="@newReference.Href">@newReference.DisplayName</MudLink>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <MudText Class="mud-text-secondary">(none)</MudText>
-                                                                    }
-                                                                </MudStack>
-                                                            }
-                                                            else
-                                                            {
-                                                                @* Scalar update: old value de-emphasised, new value plain. *@
-                                                                @* The values take the app's shared code face; the arrow between them does
-                                                                   not, being punctuation rather than part of either value. *@
-                                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                    <MudText Class="mud-text-secondary jim-text-code">@change.OldValue</MudText>
-                                                                    <MudText Class="mud-text-secondary">→</MudText>
-                                                                    <MudText Class="jim-text-code">@change.NewValue</MudText>
-                                                                </MudStack>
-                                                            }
-                                                        }
-                                                        else if (change.ReferenceValue != null)
-                                                        {
-                                                            var reference = change.ReferenceValue;
-                                                            @* MVA reference Add/Remove. *@
-                                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                <MudChip T="string" Color="Color.Default">@reference.TypeName</MudChip>
-                                                                <MudLink Href="@reference.Href">@reference.DisplayName</MudLink>
-                                                                @if (!string.IsNullOrEmpty(reference.SecondaryId))
-                                                                {
-                                                                    <MudText Class="mud-text-secondary">(@reference.SecondaryId)</MudText>
-                                                                }
-                                                            </MudStack>
-                                                        }
-                                                        else
-                                                        {
-                                                            @* Simple scalar Add/Remove: de-emphasised where the value went away. The code
-                                                               face goes on TextValueDisplay's Class, which applies it to a real value only,
-                                                               so the empty and whitespace affordances keep the ordinary face: neither is a
-                                                               value, and setting them in code type would read as one. *@
-                                                            @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
-                                                            {
-                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@change.DisplayValue" Class="jim-text-code" /></MudText>
-                                                            }
-                                                            else
-                                                            {
-                                                                <MudText><TextValueDisplay Value="@change.DisplayValue" Class="jim-text-code" /></MudText>
-                                                            }
-                                                        }
+                                                        <ChangeValueCell Change="@context.Item" />
                                                     </CellTemplate>
                                                 </TemplateColumn>
                                             </Columns>
@@ -747,9 +679,10 @@ else
         public ObjectChangeType ChangeType { get; set; }
         public DateTime ChangeTime { get; set; }
         /// <summary>
-        /// The principal type (User, ApiKey, Import) that initiated this change - used for icon display.
+        /// The kind of principal that made the change (a person, an API key, JIM itself), which decides the chip
+        /// <see cref="InitiatorChip"/> draws for it.
         /// </summary>
-        public string ChangeInitiatorType { get; set; } = string.Empty;
+        public ActivityInitiatorType InitiatedByType { get; set; }
         public string? ChangeInitiatorName { get; set; }
         public Guid? ChangeInitiatorId { get; set; }
         /// <summary>
@@ -905,7 +838,7 @@ else
     /// <summary>
     /// Converts raw AttributeChanges into display items, collapsing SVA Add+Remove pairs into Updates.
     /// </summary>
-    private List<AttributeChangeDisplay> GetDisplayChanges(ChangeGroup changeGroup)
+    public static List<AttributeChangeDisplay> GetDisplayChanges(ChangeGroup changeGroup)
     {
         var result = new List<AttributeChangeDisplay>();
 
@@ -1010,8 +943,10 @@ else
             {
                 ChangeType = cg.ChangeType,
                 ChangeTime = cg.ChangeTime,
-                ChangeInitiatorType = cg.ChangeInitiatorType,
+                InitiatedByType = cg.InitiatedByType,
                 ChangeInitiatorName = cg.ChangeInitiatorName,
+                ConnectedSystemId = cg.ConnectedSystemId,
+                ConnectedSystemName = cg.ConnectedSystemName,
                 ChangeInitiatorId = cg.ChangeInitiatorId,
                 SyncRuleId = cg.SyncRuleId,
                 SyncRuleName = cg.SyncRuleName,
@@ -1319,190 +1254,10 @@ else
         return $"{(int)(diff.TotalDays / 365)}y ago";
     }
 
-    /// <summary>
-    /// Generates the timeline card initiator display.
-    /// Format: "{icon} Synchronisation by {Name}" for sync changes
-    /// Format: "{icon} {Name}" for direct user changes
-    /// </summary>
-    private RenderFragment GetTimelineInitiatorDisplay(ChangeGroup changeGroup)
-    {
-        return builder =>
-        {
-            int seq = 0;
 
-            // Determine if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
-            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
-    changeGroup.SyncRuleId != null ||
-    !string.IsNullOrEmpty(changeGroup.SyncRuleName);
 
-            if (isSyncChange)
-            {
-                // Sync icon
-                builder.OpenComponent<MudIcon>(seq++);
-                builder.AddAttribute(seq++, "Icon", Icons.Material.Filled.Sync);
-                builder.AddAttribute(seq++, "Size", Size.Small);
-                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
-                builder.AddAttribute(seq++, "Style", "margin-right: 4px;");
-                builder.CloseComponent();
 
-                // "Synchronisation by {Name}"
-                builder.OpenComponent<MudText>(seq++);
-                builder.AddAttribute(seq++, "Typo", Typo.body2);
-                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
-                if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
-                {
-                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"Synchronisation by {changeGroup.ChangeInitiatorName}")));
-                }
-                else
-                {
-                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Synchronisation")));
-                }
-                builder.CloseComponent();
-            }
-            else
-            {
-                // Direct change by user/API key - use appropriate icon based on principal type
-                builder.OpenComponent<MudIcon>(seq++);
-                builder.AddAttribute(seq++, "Icon", Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType));
-                builder.AddAttribute(seq++, "Size", Size.Small);
-                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
-                builder.AddAttribute(seq++, "Style", "margin-right: 4px;");
-                builder.CloseComponent();
 
-                builder.OpenComponent<MudText>(seq++);
-                builder.AddAttribute(seq++, "Typo", Typo.body2);
-                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName ??
-        "Unknown")));
-                builder.CloseComponent();
-            }
-        };
-    }
-
-    /// <summary>
-    /// Generates the icon for the modal initiator display.
-    /// </summary>
-    private RenderFragment GetModalInitiatorIcon(ChangeGroup changeGroup)
-    {
-        return builder =>
-        {
-            // Check if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
-            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
-    changeGroup.SyncRuleId != null ||
-    !string.IsNullOrEmpty(changeGroup.SyncRuleName);
-
-            string icon = isSyncChange ? Icons.Material.Filled.Sync : Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType);
-
-            builder.OpenComponent<MudIcon>(0);
-            builder.AddAttribute(1, "Icon", icon);
-            builder.AddAttribute(2, "Size", Size.Small);
-            builder.AddAttribute(3, "Class", "mud-text-secondary");
-            builder.CloseComponent();
-        };
-    }
-
-    private RenderFragment GetModalInitiatorText(ChangeGroup changeGroup)
-    {
-        return builder =>
-        {
-            int seq = 0;
-
-            // Check if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
-            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
-    changeGroup.SyncRuleId != null ||
-    !string.IsNullOrEmpty(changeGroup.SyncRuleName);
-
-            if (isSyncChange)
-            {
-                // For sync changes: "Synchronisation" or "Synchronisation by {Name}"
-                builder.OpenComponent<MudText>(seq++);
-                if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
-                {
-                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"Synchronisation by {changeGroup.ChangeInitiatorName}")));
-                }
-                else
-                {
-                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Synchronisation")));
-                }
-                builder.CloseComponent();
-            }
-            else if (changeGroup.ChangeInitiatorId != null && !string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
-            {
-                // Linked initiator name
-                builder.OpenComponent<MudLink>(seq++);
-                builder.AddAttribute(seq++, "Href", GetInitiatorHref(changeGroup));
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
-                builder.CloseComponent();
-            }
-            else if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
-            {
-                // Plain text initiator name
-                builder.OpenComponent<MudText>(seq++);
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
-                builder.CloseComponent();
-            }
-            else
-            {
-                // Unknown
-                builder.OpenComponent<MudText>(seq++);
-                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Unknown")));
-                builder.CloseComponent();
-            }
-        };
-    }
-
-    /// <summary>
-    /// Generates the icon for the modal principal (who) display.
-    /// Shows User, ApiKey, or Import icon based on the principal type.
-    /// </summary>
-    private RenderFragment GetModalPrincipalIcon(ChangeGroup changeGroup)
-    {
-        return builder =>
-        {
-            builder.OpenComponent<MudIcon>(0);
-            builder.AddAttribute(1, "Icon", Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType));
-            builder.AddAttribute(2, "Size", Size.Small);
-            builder.AddAttribute(3, "Class", "mud-text-secondary");
-            builder.CloseComponent();
-        };
-    }
-
-    /// <summary>
-    /// Generates the text/link for the modal principal (who) display.
-    /// Renders the principal name as a clickable link when ID is available.
-    /// </summary>
-    private RenderFragment GetModalPrincipalText(ChangeGroup changeGroup)
-    {
-        return builder =>
-        {
-            int seq = 0;
-
-            if (changeGroup.ChangeInitiatorId != null && !string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
-            {
-                // Linked principal name
-                builder.OpenComponent<MudLink>(seq++);
-                builder.AddAttribute(seq++, "Href", GetInitiatorHref(changeGroup));
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
-                builder.CloseComponent();
-            }
-            else if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
-            {
-                // Plain text principal name (no ID to link to)
-                builder.OpenComponent<MudText>(seq++);
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
-                builder.CloseComponent();
-            }
-            else
-            {
-                // Unknown
-                builder.OpenComponent<MudText>(seq++);
-                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Unknown")));
-                builder.CloseComponent();
-            }
-        };
-    }
 
     /// <summary>
     /// Generates the icon for the modal mechanism (how) display.
@@ -1667,19 +1422,13 @@ else
         };
     }
 
-    private string GetInitiatorHref(ChangeGroup changeGroup)
-    {
-        if (changeGroup.ChangeInitiatorId is not { } initiatorId)
-            return "#";
-
-        return changeGroup.ChangeInitiatorType switch
-        {
-            "User" => Utilities.GetMetaverseObjectHref(initiatorId, Constants.BuiltInObjectTypes.UserPluralName),
-            "ApiKey" => $"/admin/apikeys/{initiatorId}",
-            "SynchronisationRule" => $"/admin/sync-rules/{initiatorId}",
-            _ => "#"
-        };
-    }
+    /// <summary>
+    /// JIM as the mechanism, for a change recorded without its initiator: its chip still says System.
+    /// </summary>
+    private static MetaverseObjectChangeInitiatorType MechanismInitiator(ChangeGroup changeGroup) =>
+        changeGroup.ChangeMechanismType == nameof(MetaverseObjectChangeInitiatorType.System)
+            ? MetaverseObjectChangeInitiatorType.System
+            : MetaverseObjectChangeInitiatorType.NotSet;
 
     private string GetChangeTypeIcon(ObjectChangeType changeType) =>
         Helpers.GetOperationIcon(changeType);

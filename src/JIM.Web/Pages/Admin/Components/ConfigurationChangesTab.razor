@@ -81,10 +81,9 @@ else
                                     <MudChip T="string" Variant="Variant.Text" Color="@OperationColour(item.Operation)" Icon="@OperationIcon(item.Operation)">@OperationLabel(item.Operation)</MudChip>
                                     <MudText Typo="Typo.subtitle2">v@(item.Version)</MudText>
                                     <MudText Typo="Typo.body2">
-                                        <ActivityInitiator InitiatedByType="@item.InitiatedByType"
+                                        <InitiatorChip InitiatedByType="@item.InitiatedByType"
                                                            InitiatedById="@item.InitiatedById"
-                                                           InitiatedByName="@item.InitiatedByName"
-                                                           Dense="true" />
+                                                           InitiatedByName="@item.InitiatedByName" />
                                     </MudText>
                                     <MudText Typo="Typo.body2" Class="mud-text-disabled">·</MudText>
                                     <MudTooltip Text="@item.When.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -142,7 +141,7 @@ else
     @if (_items.Count < _totalResults)
     {
         <div class="d-flex justify-center mt-3">
-            <MudButton Variant="Variant.Outlined" OnClick="LoadMoreAsync" Disabled="_loadingMore">Load more (@(_totalResults - _items.Count) remaining)</MudButton>
+            <MudButton Variant="Variant.Filled" OnClick="LoadMoreAsync" Disabled="_loadingMore">Load more (@(_totalResults - _items.Count) remaining)</MudButton>
         </div>
     }
 }

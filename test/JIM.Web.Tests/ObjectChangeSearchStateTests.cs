@@ -193,6 +193,36 @@ public class ObjectChangeSearchStateTests
         }
     }
 
+    [Test]
+    public void Summarise_DeletedChange_ShowsTheRemovedValuesAsTheObjectsFinalValues()
+    {
+        var accountName = Attribute(1, "Account Name", AttributePlurality.SingleValued);
+        accountName.ValueChanges = [new MvoValueChangeDto { ValueChangeType = ValueChangeType.Remove, StringValue = "tina.adams" }];
+        var result = new MetaverseObjectChangeSearchResult
+        {
+            Change = new MvoChangeHistoryDto { ChangeType = ObjectChangeType.Deleted, AttributeChanges = [accountName] }
+        };
+
+        var summary = ObjectChangeSummary.Summarise(result).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.FinalValues, Is.True, "a deletion records the object's last values, not values being cleared");
+            Assert.That(summary.RemovedValues, Is.EqualTo(new[] { "tina.adams" }));
+        }
+    }
+
+    [Test]
+    public void Summarise_UpdatedChange_IsNotFinalValues()
+    {
+        var result = new MetaverseObjectChangeSearchResult
+        {
+            Change = new MvoChangeHistoryDto { ChangeType = ObjectChangeType.AttributeFlow, AttributeChanges = [Attribute(1, "Department", AttributePlurality.SingleValued)] }
+        };
+
+        Assert.That(ObjectChangeSummary.Summarise(result).Single().FinalValues, Is.False);
+    }
+
     private static MvoAttributeChangeDto Attribute(int id, string name, AttributePlurality plurality) => new()
     {
         AttributeId = id,

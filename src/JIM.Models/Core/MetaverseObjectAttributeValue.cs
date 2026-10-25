@@ -65,6 +65,20 @@ public class MetaverseObjectAttributeValue
     public int? ContributedBySyncRuleId { get; set; }
 
     /// <summary>
+    /// What kind of source set this value (#2472): a Synchronisation Rule, a sign-in claim, JIM itself, or a person.
+    /// Null when no source was recorded. A value a Synchronisation Rule contributed also carries
+    /// <see cref="ContributedBySystemId"/>, which stays the authority for that case: origin resolution reads the
+    /// Connected System first, so a stale kind can never make a synchronised value read as anything else.
+    /// </summary>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>
+    /// The type of the sign-in claim that supplied this value (for example <c>given_name</c>), when
+    /// <see cref="ContributedByKind"/> is <see cref="ValueContributorKind.SignInClaim"/>; otherwise null.
+    /// </summary>
+    public string? ContributedByClaimType { get; set; }
+
+    /// <summary>
     /// When true, this row is an asserted null: a connected, in-scope contributor positively asserted "no value"
     /// for this attribute ("Null is a value" set on the winning mapping, or an import expression evaluating to null).
     /// All value columns are null and the row carries provenance. Distinct from the absence of any row, which means

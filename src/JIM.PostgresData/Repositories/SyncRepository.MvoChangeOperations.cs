@@ -163,6 +163,14 @@ public partial class SyncRepository
                 await writer.WriteAsync(c.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            if (c.ActivityId.HasValue)
+                await writer.WriteAsync(c.ActivityId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (c.DeletedByRunProfileExecutionItemId.HasValue)
+                await writer.WriteAsync(c.DeletedByRunProfileExecutionItemId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -270,6 +278,14 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (v.ContributedBySyncRuleName is not null)
                 await writer.WriteAsync(v.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (v.ContributedByKind.HasValue)
+                await writer.WriteAsync((int)v.ContributedByKind.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (v.ContributedByClaimType is not null)
+                await writer.WriteAsync(v.ContributedByClaimType, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
         }
