@@ -10,6 +10,9 @@ function Get-JIMConnectedSystemObjectChangeHistory {
         Gets the changes made to a Connected System Object, most recent first: when each was made, who or what made
         it, and what it changed. Returns one page unless -All is given.
 
+        Each changed attribute carries its first ten value changes and, in valueChangeTotal, how many there are. A
+        change to a large group can carry one per member; Get-JIMConnectedSystemObjectChangeValue gets the rest.
+
     .PARAMETER ConnectedSystemId
         The ID of the Connected System the object belongs to.
 

@@ -258,6 +258,8 @@
         'Get-JIMDeletedObject',
         'Get-JIMHistoryCount',
         'Search-JIMMetaverseObjectChange',
+        'Get-JIMConnectedSystemObjectChangeValue',
+        'Get-JIMMetaverseObjectChangeValue',
         'Invoke-JIMHistoryCleanup',
 
         # Configuration Change Previews

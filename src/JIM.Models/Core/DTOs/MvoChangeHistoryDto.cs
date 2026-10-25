@@ -195,10 +195,10 @@ public class MvoValueChangeDto
     public string? ContributedByClaimType { get; set; }
 
     /// <summary>
-    /// True when a Generated Value Attribute Flow produced this value (#399): the contributing Synchronisation Rule
-    /// is the generating one and the value is one the generation produced. Set by
-    /// <c>MetaverseServer.GetMvoChangeHistoryAsync</c>, not by the repository.
+    /// True when a Generated Value Attribute Flow produced this value; false when a Synchronisation Rule mapping, a
+    /// sign-in claim or another source did.
     /// </summary>
+    // Set by MetaverseServer.GetMvoChangeHistoryAsync, not by the repository (#399).
     public bool IsGeneratedValue { get; set; }
 
     /// <summary>

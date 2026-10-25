@@ -191,7 +191,8 @@ public class MetaverseObjectChangeSearchItem
                 AttributeName = ac.AttributeName,
                 Matched = ac.AttributeId.HasValue && result.MatchedAttributeIds.Contains(ac.AttributeId.Value),
                 AddedValues = ValueTexts(ac, ValueChangeType.Add),
-                RemovedValues = ValueTexts(ac, ValueChangeType.Remove)
+                RemovedValues = ValueTexts(ac, ValueChangeType.Remove),
+                ValueChangeTotal = ac.ValueChangeTotal
             })
             .ToList()
     };
@@ -224,13 +225,19 @@ public class MetaverseObjectChangeSearchAttributeItem
     public bool Matched { get; set; }
 
     /// <summary>
-    /// The values added, as text. A reference is the referenced Metaverse Object's display name, or its id when it
-    /// has none.
+    /// The values added, as text, among the attribute's first ten value changes. A reference is the referenced
+    /// Metaverse Object's display name, or its id when it has none.
     /// </summary>
     public List<string> AddedValues { get; set; } = [];
 
     /// <summary>
-    /// The values removed, as text.
+    /// The values removed, as text, among the attribute's first ten value changes.
     /// </summary>
     public List<string> RemovedValues { get; set; } = [];
+
+    /// <summary>
+    /// How many value changes the attribute has in all. When it is more than ten, the rest are read a page at a time
+    /// from the change's attribute values endpoint.
+    /// </summary>
+    public int ValueChangeTotal { get; set; }
 }
