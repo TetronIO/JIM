@@ -6,7 +6,9 @@
 # scenario (Run-IntegrationTests.ps1 -DirectoryType ActiveDirectory), then the RequiresActiveDirectory NUnit probes
 # against the same domain controller, uploads the regression report and the domain controller OS build as artefacts,
 # submits results to the metrics API, and posts a commit status named `jim-ad-lab` on the SHA it tested: `success` only
-# when everything passed, with the scenario count and the OS build in its description. `/release` and release.yml
+# when everything passed, with the scenario count and the OS build in its description. It also signs people in to JIM
+# through the lab's AD FS server (Scenario 031, #2441) and posts that as a status of its own, `jim-ad-lab-adfs`, so a
+# sign-in failure never turns `jim-ad-lab` red or the reverse. `/release` and release.yml
 # require `success` for the SHA being tagged (scripts/Test-AdLabReleaseGate.ps1) once the repository variable
 # JIM_AD_LAB_GATE_ENFORCED is `true` (set after the lab's first green run); from then on there is no override, so the
 # remedy for a red night is a fix and a dispatched run.
@@ -215,6 +217,26 @@ jobs:
             }
           }
 
+      # What this run covers. The LDAP scenarios (the suite, reported as jim-ad-lab) and the AD FS sign-in checks
+      # (Scenario 031, reported as jim-ad-lab-adfs, #2441) run as separate steps, so a failure in one never colours
+      # the other's status: a night (or a dispatch of All) runs both, a dispatch of Scenario 031 runs the sign-in
+      # checks only, and a dispatch of any other scenario runs that scenario in the suite only. The decision is the
+      # runner's own (Test-ScenarioRunsOnItsOwn), which also keeps Scenario 031 out of the suite's sweep.
+      - name: Decide what this run covers
+        id: plan
+        env:
+          SCENARIO: ${{ inputs.scenario || 'All' }}
+        run: |
+          . ./test/integration/utils/Resolve-IntegrationScenarioName.ps1
+          . ./test/integration/utils/Get-ScenarioDirectoryTypes.ps1
+          $name = Resolve-IntegrationScenarioName -Scenario $env:SCENARIO -ScenariosPath ./test/integration/scenarios
+          $signInOnly = Test-ScenarioRunsOnItsOwn -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $name)
+          $suite = -not $signInOnly
+          $signIn = ($name -eq 'All') -or $signInOnly
+          "suite=$($suite.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "sign_in=$($signIn.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Scenario '$env:SCENARIO' ($name): LDAP suite $suite, AD FS sign-in checks $signIn"
+
       # The suite. -ContinueOnFailure so one red scenario does not hide the others: the point of a night's run is
       # the full list. The runner reverts each domain controller to its checkpoint, populates and re-checkpoints
       # when the populate scripts changed, trusts each domain controller's LDAPS certificate in JIM, and streams
@@ -222,6 +244,7 @@ jobs:
       # scenario and template reach the script through env, never interpolated into it.
       - name: Run the integration suite against the lab
         id: suite
+        if: ${{ steps.plan.outputs.suite == 'true' }}
         env:
           SCENARIO: ${{ inputs.scenario || 'All' }}
           TEMPLATE: ${{ inputs.template || 'Medium' }}
@@ -237,19 +260,19 @@ jobs:
       # RequiresActiveDirectory tier, modelled on RequiresLdaps). They run after the suite, so the integration
       # run has reverted the domain controllers, started them and written the certificate the probes trust.
       - name: Setup .NET
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_probes) }}
+        if: ${{ !cancelled() && steps.plan.outputs.suite == 'true' && (github.event_name == 'schedule' || inputs.run_probes) }}
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
         with:
           dotnet-version: 10.0.x
       - name: Restore dependencies
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_probes) }}
+        if: ${{ !cancelled() && steps.plan.outputs.suite == 'true' && (github.event_name == 'schedule' || inputs.run_probes) }}
         run: dotnet restore JIM.sln --locked-mode
       - name: Build the probe tier
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_probes) }}
+        if: ${{ !cancelled() && steps.plan.outputs.suite == 'true' && (github.event_name == 'schedule' || inputs.run_probes) }}
         run: dotnet build test/JIM.Worker.Tests/ --no-restore
       - name: Run the Active Directory probes (RequiresActiveDirectory)
         id: probes
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_probes) }}
+        if: ${{ !cancelled() && steps.plan.outputs.suite == 'true' && (github.event_name == 'schedule' || inputs.run_probes) }}
         env:
           JIM_TEST_AD_HOST: dc1.panoply.local
           JIM_TEST_AD_PORT: '636'
@@ -271,6 +294,25 @@ jobs:
             --logger "trx;LogFileName=ad-probes.trx" --results-directory "$env:GITHUB_WORKSPACE/test/integration/results/probes"
           exit $LASTEXITCODE
 
+      # The AD FS sign-in checks (Scenario 031, #2441): people sign in to JIM through the lab's AD FS server, adfs-primary,
+      # with JIM registered there by Register-JIMIdentityProvider: the portal, the initial administrator from oid, a
+      # bearer token on /api, Connect-JIM through PKCE, the same person from both, a renamed account, and a person with
+      # no JIM role. Their own run of the harness, after the suite, reported as jim-ad-lab-adfs below.
+      # continue-on-error keeps a sign-in failure out of the job's status, which jim-ad-lab is posted from; the step's
+      # own outcome is what jim-ad-lab-adfs is posted from. The template is not used by the scenario.
+      - name: Run the AD FS sign-in checks against the lab
+        id: sign_in
+        if: ${{ !cancelled() && steps.plan.outputs.sign_in == 'true' }}
+        continue-on-error: true
+        env:
+          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
+          JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
+          JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+        run: |
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 31 -Template Nano -DirectoryType ActiveDirectory
+          exit $LASTEXITCODE
+
       # What the run left, condensed: scenario counts and the domain controller OS builds (recorded by the runner in
       # the regression report, or in the performance file for a single scenario) into dc-builds.json, the job
       # summary and the one-line description of the commit status. The logic is Get-LabRunSummary in the lab
@@ -281,6 +323,7 @@ jobs:
         env:
           SUITE_OUTCOME: ${{ steps.suite.outcome }}
           PROBES_OUTCOME: ${{ steps.probes.outcome }}
+          SIGN_IN_OUTCOME: ${{ steps.sign_in.outcome }}
         run: |
           Import-Module ./test/integration/ad-lab/guest/LabDomainController.psm1 -Force
           $results = Join-Path (Get-Location) 'test/integration/results'
@@ -302,7 +345,7 @@ jobs:
             $lines += 'Failed scenarios: ' + (($summary.FailedScenarios | ForEach-Object { "``$_``" }) -join ', ')
           }
           $lines += ''
-          $lines += "Suite: $env:SUITE_OUTCOME. Probes: $env:PROBES_OUTCOME."
+          $lines += "Suite: $env:SUITE_OUTCOME. Probes: $env:PROBES_OUTCOME. AD FS sign-in checks: $env:SIGN_IN_OUTCOME."
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       # Artefacts are readable by anyone who can read the repository, and GitHub only masks secrets in the log, not
@@ -356,7 +399,7 @@ jobs:
       # nothing, so it can neither open the gate nor close it on a commit it did not finish testing. The
       # description is capped at GitHub's 140 characters by the summary step; values reach the script through env.
       - name: Post the jim-ad-lab commit status
-        if: ${{ always() && job.status != 'cancelled' }}
+        if: ${{ always() && job.status != 'cancelled' && steps.plan.outputs.suite == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -375,6 +418,27 @@ jobs:
           $description = $env:SUMMARY_DESCRIPTION
           if (-not $description) { $description = 'the run stopped before the lab was tested' }
           gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-ad-lab' -f description="$description" -f target_url="$env:RUN_URL"
+          exit $LASTEXITCODE
+
+      # The AD FS sign-in checks' own status, which the release gate reads apart from jim-ad-lab
+      # (scripts/Test-AdLabFederationReleaseGate.ps1). From the sign-in step's outcome: success only when every check
+      # passed, failure when one failed, error when the step never ran to the end. Posted only by a run that set out to
+      # run the checks; a cancelled run posts nothing.
+      - name: Post the jim-ad-lab-adfs commit status
+        if: ${{ always() && job.status != 'cancelled' && steps.plan.outputs.sign_in == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TESTED_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SIGN_IN_OUTCOME: ${{ steps.sign_in.outcome }}
+        run: |
+          switch ($env:SIGN_IN_OUTCOME) {
+            'success' { $state = 'success'; $description = 'AD FS sign-in checks passed (Scenario 031)' }
+            'failure' { $state = 'failure'; $description = 'AD FS sign-in checks failed (Scenario 031); see the run' }
+            default   { $state = 'error'; $description = 'the run stopped before the AD FS sign-in checks ran' }
+          }
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-ad-lab-adfs' -f description="$description" -f target_url="$env:RUN_URL"
           exit $LASTEXITCODE
 
       # The runner is not ephemeral: without teardown the stack and the key persist between jobs. Always run.

@@ -393,6 +393,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 # The Active Directory lab (-DirectoryType ActiveDirectory): control-plane calls over SSH, the LDAP
 # toolbox helpers, and the runner's checkpoint and compose decisions.
 . "$scriptRoot/utils/LDAP-Helpers.ps1"
+. "$scriptRoot/utils/Directory-Helpers.ps1"
 . "$scriptRoot/utils/Invoke-LabControl.ps1"
 . "$scriptRoot/utils/ActiveDirectoryLab-Helpers.ps1"
 . "$scriptRoot/utils/Get-ScenarioDirectoryTypes.ps1"
@@ -1816,6 +1817,27 @@ if ($DirectoryType -eq "All") {
 # a container recreation. The decisions (which machines, which checkpoint, whether to populate) are the
 # tested functions in utils/ActiveDirectoryLab-Helpers.ps1; these are the runner's thin, impure wrappers.
 
+function Wait-JimWebApiHealthy {
+    # Polls /api/v1/health until it answers 200 or the time is up; true when it did. For a wait after jim.web is
+    # recreated part-way through setup (Step 4e); the first wait (Step 4) is written out where it runs.
+    param(
+        [Parameter(Mandatory=$true)][string]$Url,
+        [Parameter(Mandatory=$true)][int]$TimeoutSeconds
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            if ((Invoke-WebRequest -Uri "$Url/api/v1/health" -Method GET -TimeoutSec 5 -ErrorAction Stop).StatusCode -eq 200) { return $true }
+        }
+        catch {
+            Write-Verbose "JIM Web API not ready yet: $($_.Exception.Message)"
+        }
+        Start-Sleep -Seconds 3
+    }
+    return $false
+}
+
 function Get-ActiveDirectoryLabRunContext {
     # The configs of the lab machines a scenario uses, and their state from the control plane. Throws, naming
     # the variable, when a JIM_AD_LAB_* variable the scenario needs is missing, and, naming the machine, when
@@ -2109,6 +2131,14 @@ if ($Scenario -eq "All") {
     if ($unsupportedOnThisDirectory.Count -gt 0) {
         Write-Host "${YELLOW}Skipping scenario(s) not supported on ${DirectoryType}: $($unsupportedOnThisDirectory -join ', ')${NC}"
         $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notin $unsupportedOnThisDirectory })
+    }
+
+    # A scenario the lab workflow runs in a step of its own, and reports as a status of its own, is not run by the
+    # sweep too (Test-ScenarioRunsOnItsOwn: Scenario 031, the AD FS sign-in checks, reported as jim-ad-lab-adfs).
+    $runOnItsOwn = @($implementedScenarios | Where-Object { Test-ScenarioRunsOnItsOwn -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_) })
+    if ($runOnItsOwn.Count -gt 0) {
+        Write-Host "${YELLOW}Leaving out scenario(s) run on their own: $($runOnItsOwn -join ', ')${NC}"
+        $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notin $runOnItsOwn })
     }
 
     # Directory-agnostic scenarios (011, 015, 016) don't use a directory at all. A -DirectoryType
@@ -3473,32 +3503,6 @@ elseif ($isActiveDirectoryRun) {
         exit 1
     }
     Write-Success "Active Directory domain controllers are ready"
-
-    # A scenario that signs in through the lab's AD FS server needs JIM registered there, as customers register it
-    # (Register-JIMIdentityProvider, from a host copy of the module checked to be this commit's; #2441). The AD FS
-    # server was reverted to a baseline with no registration and has just answered, so this is a fresh one with a new
-    # client secret. jim.web is recreated to pick it up from this process's environment; the JIM API wait below then
-    # covers its restart.
-    if ($script:AdLabContext.Configs.ContainsKey("AdfsPrimary")) {
-        Write-Step "Registering JIM on the AD FS server..."
-        try {
-            $adfsRegistration = Register-ActiveDirectoryLabIdentityProvider -FederationConfig $script:AdLabContext.Configs["AdfsPrimary"] `
-                -Url (Get-ActiveDirectoryLabJimUrl) -ModuleDigest (Get-ActiveDirectoryLabModuleDigest -RepositoryRoot $repoRoot)
-        }
-        catch {
-            Write-Failure "Could not register JIM on the AD FS server ($($script:AdLabContext.Configs["AdfsPrimary"].VmName))"
-            Write-Host "${GRAY}  $($_.Exception.Message)${NC}"
-            exit 1
-        }
-        Set-ActiveDirectoryLabSsoEnvironment -Registration $adfsRegistration
-        $webResult = docker compose @script:JimComposeArgs --profile with-db up -d jim.web 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Failure "Failed to restart jim.web with the AD FS registration"
-            Write-Host "${GRAY}$webResult${NC}"
-            exit 1
-        }
-        Write-Success "JIM is registered on AD FS (portal client $($adfsRegistration.ClientId)) and jim.web restarted with it"
-    }
 }
 else {
     # Wait for Samba AD Primary
@@ -3640,6 +3644,52 @@ elseif ($isActiveDirectoryRun) {
         if (-not $script:AdLabContext.Configs.ContainsKey($adInstance)) { continue }
         Add-ActiveDirectoryCertificateToJimStore -DirectoryConfig $script:AdLabContext.Configs[$adInstance] -JIMUrl "http://localhost:5200" -ApiKey $apiKey
     }
+}
+
+# Step 4e (Active Directory, AD FS): set JIM up to sign people in through the lab's AD FS server, as a customer does
+# before turning AD FS sign-in on (#2441), for the scenarios that use it:
+#   1. register JIM on AD FS with Register-JIMIdentityProvider, from a host copy of the module checked to be this
+#      commit's. The AD FS server was reverted to a baseline with no registration, so this is a fresh one with a new
+#      client secret;
+#   2. create the account that signs in as JIM's initial administrator, jim-sso-admin in dc-primary, with a password
+#      drawn for this run;
+#   3. recreate jim.web with all of it, through this process's environment (never a file), and wait for it: the
+#      registration's oid claim matched to the built-in Object GUID attribute, and jim-sso-admin's objectGUID as the
+#      initial administrator. Both only exist once the AD FS server and dc-primary answer, after JIM first started.
+# The client secret and the password are masked in the log and removed from every artefact
+# (Protect-ActiveDirectoryLabSecret).
+if ($isActiveDirectoryRun -and $script:AdLabContext.Configs.ContainsKey("AdfsPrimary")) {
+    Write-Section "Step 4e: Setting JIM Up to Sign People In Through AD FS"
+    try {
+        Write-Step "Registering JIM on the AD FS server..."
+        $adfsRegistration = Register-ActiveDirectoryLabIdentityProvider -FederationConfig $script:AdLabContext.Configs["AdfsPrimary"] `
+            -Url (Get-ActiveDirectoryLabJimUrl) -ModuleDigest (Get-ActiveDirectoryLabModuleDigest -RepositoryRoot $repoRoot)
+        Write-Success "JIM is registered on AD FS (portal client $($adfsRegistration.ClientId))"
+
+        Write-Step "Creating the sign-in administrator in $($script:AdLabContext.Configs["Primary"].VmName)..."
+        $adfsAdministrator = New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:AdLabContext.Configs["Primary"]
+        Write-Success "$($adfsAdministrator.UserPrincipalName) created (objectGUID $($adfsAdministrator.ObjectGuid))"
+    }
+    catch {
+        Write-Failure "Could not set JIM up to sign people in through AD FS: $($_.Exception.Message)"
+        exit 1
+    }
+
+    Set-ActiveDirectoryLabSsoEnvironment -Registration $adfsRegistration
+    Set-ActiveDirectoryLabSignInEnvironment -Registration $adfsRegistration -Administrator $adfsAdministrator
+    Write-Step "Restarting jim.web with AD FS sign-in..."
+    $webResult = docker compose @script:JimComposeArgs --profile with-db up -d jim.web 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to restart jim.web with AD FS sign-in"
+        Write-Host "${GRAY}$webResult${NC}"
+        exit 1
+    }
+    if (-not (Wait-JimWebApiHealthy -Url $script:Lane.JimUrl -TimeoutSeconds $TimeoutSeconds)) {
+        Write-Failure "JIM Web API did not become ready within ${TimeoutSeconds}s after restarting with AD FS sign-in"
+        Write-Host "${YELLOW}  Check logs: docker logs $($script:Lane.WebContainer)${NC}"
+        exit 1
+    }
+    Write-Success "jim.web signs people in through AD FS: $($adfsRegistration.ClaimType) matched to '$($adfsRegistration.MvAttribute)', $($adfsAdministrator.UserPrincipalName) as initial administrator"
 }
 
 # Step 4b: Prepare Samba AD for testing
