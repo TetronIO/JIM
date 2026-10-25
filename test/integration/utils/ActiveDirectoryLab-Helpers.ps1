@@ -33,7 +33,7 @@ $script:AdLabInstanceOrder = @('Primary', 'Source', 'Target', 'AdfsPrimary')
 
 # The scenarios that sign in through the lab's AD FS server. Only these revert it (it takes minutes: AD FS is a
 # delayed-start service) and start JIM with it as the identity provider.
-$script:AdLabFederationScenarios = @(30)
+$script:AdLabFederationScenarios = @(30, 31)
 
 function Test-ActiveDirectoryLabFederationScenario {
     <#
@@ -802,15 +802,141 @@ function Register-ActiveDirectoryLabIdentityProvider {
 
     $output = Invoke-LabControl -Script 'Register-LabIdentityProvider.ps1' -Arguments @('-Name', $FederationConfig.VmName, '-Url', $Url, '-ModuleDigest', $ModuleDigest)
     $registration = ConvertFrom-LabIdentityProviderRegistrationOutput -Text $output
-
-    if ($env:GITHUB_ACTIONS -eq 'true') {
-        Write-Host "::add-mask::$($registration.ClientSecret)"
-        if ($env:GITHUB_ENV) {
-            Add-Content -LiteralPath $env:GITHUB_ENV -Value "JIM_AD_LAB_SCRUB_$([guid]::NewGuid().ToString('N'))=$($registration.ClientSecret)" -Encoding utf8
-        }
-    }
+    Protect-ActiveDirectoryLabSecret -Secret $registration.ClientSecret
 
     return $registration
+}
+
+function Protect-ActiveDirectoryLabSecret {
+    <#
+    .SYNOPSIS
+        Keeps a secret the run made (a client secret, a throwaway account's password) out of everything it publishes:
+        in Actions, masks it in the log and hands it to the workflow's scrub step through GITHUB_ENV, as
+        JIM_AD_LAB_SCRUB_<id>, which removes it from every result file before upload. Outside Actions it does nothing.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'The ::add-mask:: command must reach the Actions log.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Secret
+    )
+
+    if ($env:GITHUB_ACTIONS -ne 'true') { return }
+    Write-Host "::add-mask::$Secret"
+    if ($env:GITHUB_ENV) {
+        Add-Content -LiteralPath $env:GITHUB_ENV -Value "JIM_AD_LAB_SCRUB_$([guid]::NewGuid().ToString('N'))=$Secret" -Encoding utf8
+    }
+}
+
+function ConvertFrom-LdapObjectGuidOutput {
+    <#
+    .SYNOPSIS
+        Reads the objectGUID from ldapsearch output, which prints it base64 (objectGUID:: ...), as the GUID Windows and
+        JIM read it: the bytes in Microsoft order, so the same value AD FS issues as the oid claim (#2438).
+    #>
+    [CmdletBinding()]
+    [OutputType([guid])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [string[]]$Line
+    )
+
+    $value = @($Line | ForEach-Object { if ("$_" -match '^objectGUID::\s*(\S+)\s*$') { $Matches[1] } }) | Select-Object -First 1
+    if (-not $value) { throw 'The search returned no objectGUID.' }
+    $bytes = [Convert]::FromBase64String($value)
+    if ($bytes.Length -ne 16) { throw "The objectGUID returned is $($bytes.Length) bytes, not 16 bytes." }
+    return [guid]::new($bytes)
+}
+
+function Get-ActiveDirectoryObjectGuid {
+    <#
+    .SYNOPSIS
+        An Active Directory object's objectGUID, read over LDAPS as the directory administrator.
+    #>
+    [CmdletBinding()]
+    [OutputType([guid])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Dn
+    )
+
+    $output = Invoke-LDAPSearch -DirectoryConfig $DirectoryConfig -BaseDN $Dn -BindDN $DirectoryConfig.BindDN -BindPassword $DirectoryConfig.BindPassword `
+        -Filter '(objectClass=*)' -Attributes @('objectGUID')
+    if ($null -eq $output) { throw "Could not read the objectGUID of '$Dn'." }
+    return (ConvertFrom-LdapObjectGuidOutput -Line @($output))
+}
+
+function New-ActiveDirectoryLabSignInAdministrator {
+    <#
+    .SYNOPSIS
+        Creates the account JIM's AD FS sign-in checks sign in as its initial administrator (#2441): jim-sso-admin in
+        dc-primary's CN=Users, with a password drawn for this run. Returns SamAccountName, UserPrincipalName, Password
+        and ObjectGuid.
+
+    .DESCRIPTION
+        A customer turning SSO on names one of their own accounts as JIM_SSO_INITIAL_ADMIN; this is the lab's. It is
+        never the domain Administrator, whose password the lab's control plane depends on. dc-primary is reverted to
+        its baseline before every scenario, so the account is new each time and dies at the next revert. The password
+        is protected (Protect-ActiveDirectoryLabSecret) before the account is made, and no message repeats it.
+
+    .PARAMETER DirectoryConfig
+        dc-primary's configuration (Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Primary).
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Creates a throwaway account in a lab directory the next revert discards.')]
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig
+    )
+
+    $samAccountName = 'jim-sso-admin'
+    $domain = ([string]$DirectoryConfig.Domain).ToLowerInvariant()
+    $dn = "CN=$samAccountName,CN=Users,$($DirectoryConfig.BaseDN)"
+    $password = Get-ActiveDirectoryFixturePassword -Avoid @($samAccountName, 'jim', 'sso', 'admin')
+    Protect-ActiveDirectoryLabSecret -Secret $password
+
+    $created = New-DirectoryUser -DirectoryConfig $DirectoryConfig -Dn $dn -SamAccountName $samAccountName -Password $password `
+        -Attributes ([ordered]@{ givenName = 'Single'; sn = 'Sign-On'; displayName = 'JIM Sign-In Administrator'; mail = "$samAccountName@$domain" })
+    if ($created.Outcome -ne 'Created') {
+        throw "Could not create the sign-in administrator '$dn' (outcome $($created.Outcome)). dc-primary should have been reverted to its baseline, which holds no such account."
+    }
+
+    return [pscustomobject]@{
+        SamAccountName    = $samAccountName
+        UserPrincipalName = "$samAccountName@$domain"
+        Password          = $password
+        ObjectGuid        = Get-ActiveDirectoryObjectGuid -DirectoryConfig $DirectoryConfig -Dn $dn
+    }
+}
+
+function Set-ActiveDirectoryLabSignInEnvironment {
+    <#
+    .SYNOPSIS
+        Switches JIM to the identifier the AD FS registration returned, with the lab's administrator as the initial
+        admin, by setting the JIM_AD_LAB_ADFS_* variables docker-compose.ad-lab-adfs.yml reads (claim type, Metaverse
+        attribute, initial admin), and gives the sign-in checks the administrator's name and password (ADMIN_UPN,
+        ADMIN_PASSWORD). All in this process's environment; nothing is written to a file.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Sets this process''s environment only.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [object]$Registration,
+
+        [Parameter(Mandatory=$true)]
+        [object]$Administrator
+    )
+
+    $env:JIM_AD_LAB_ADFS_CLAIM_TYPE = $Registration.ClaimType
+    $env:JIM_AD_LAB_ADFS_MV_ATTRIBUTE = $Registration.MvAttribute
+    $env:JIM_AD_LAB_ADFS_INITIAL_ADMIN = ([guid]$Administrator.ObjectGuid).ToString()
+    $env:JIM_AD_LAB_ADFS_ADMIN_UPN = $Administrator.UserPrincipalName
+    $env:JIM_AD_LAB_ADFS_ADMIN_PASSWORD = $Administrator.Password
 }
 
 function Set-ActiveDirectoryLabSsoEnvironment {
@@ -835,14 +961,16 @@ function Set-ActiveDirectoryLabSsoEnvironment {
 function Get-ActiveDirectoryLabJimUrl {
     <#
     .SYNOPSIS
-        JIM's address as the AD FS sign-in checks reach it: jim.web's HTTPS port, published on this machine's loopback
-        by docker-compose.ad-lab-adfs.yml. Its certificate (Initialize-JimWebTlsCertificate) names localhost.
+        JIM's address as the AD FS sign-in checks reach it: jim.web's HTTPS port on the Docker network. The checks run
+        in the LDAP toolbox container, the lab's stand-in for an administrator's workstation, which resolves both
+        jim.web and the AD FS server's name; jim.web's certificate (Initialize-JimWebTlsCertificate) names jim.web. The
+        registration's redirect URIs are made from it.
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param()
 
-    return 'https://localhost:5243'
+    return 'https://jim.web:8443'
 }
 
 function Get-ActiveDirectoryLabGuestBuild {

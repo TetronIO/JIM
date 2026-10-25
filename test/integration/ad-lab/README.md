@@ -321,7 +321,7 @@ C:\jim-ad-lab\New-LabFederationServer.ps1 @arguments
 
 It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB of memory while running.
 
-**How a run uses it.** Only the scenarios that sign in through AD FS use the AD FS server (Scenario 030 so far;
+**How a run uses it.** Only the scenarios that sign in through AD FS use the AD FS server (Scenarios 030 and 031;
 `$script:AdLabFederationScenarios` in `test/integration/utils/ActiveDirectoryLab-Helpers.ps1`). For those, the runner:
 
 1. reverts `dc-primary`, then `adfs-primary`, to `baseline`;
@@ -330,20 +330,34 @@ It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB o
 3. reads the AD FS server's HTTPS certificate off the wire into `test/integration/ad-lab-certs/adfs-primary.pem`, and
    waits until it publishes its discovery document, verified against that certificate and the service name (AD FS
    answers 503 for a minute or two after the machine starts);
-4. registers JIM on it (#2441), with `Register-LabIdentityProvider.ps1` on the host, which runs JIM's own
-   `Register-JIMIdentityProvider -Provider ADFS` against the AD FS server over PowerShell Direct, with JIM's address
-   as the checks reach it, `https://localhost:5243` (jim.web's HTTPS port, published on the runner's loopback by the
-   overlay). The registration is made from the copy of the JIM PowerShell module that `Install-LabScripts.ps1` put on
-   the host, and refuses to run unless that copy's digest is the commit's (`Get-LabModuleDigest`): **after any change
-   to `src/JIM.PowerShell`, run `Install-LabScripts.ps1` on the host again before the next run**, or the AD FS
-   scenarios fail, saying so;
-5. recreates `jim.web` with what the registration returned (the client IDs and the API scope; the sign-in
-   identifier stays `sub` and `Subject Identifier` until a check creates the `Object GUID` attribute, since JIM refuses
-   to start naming an attribute that does not exist), passed through its own process environment. The portal's client secret is new on every run and
-   dies at the next revert. It comes back over SSH standard output, is masked in the log at once, and is handed to
-   the workflow's scrub step through `GITHUB_ENV`, which removes it from every artefact; it is written to no other
-   file.
+4. sets JIM up to sign people in through it, as a customer does before turning AD FS sign-in on (Step 4e, #2441):
+   - registers JIM on it with `Register-LabIdentityProvider.ps1` on the host, which runs JIM's own
+     `Register-JIMIdentityProvider -Provider ADFS` against the AD FS server over PowerShell Direct, with JIM's address as
+     the sign-in checks reach it, `https://jim.web:8443` (`Get-ActiveDirectoryLabJimUrl`). The registration is made from
+     the copy of the JIM PowerShell module that `Install-LabScripts.ps1` put on the host, and refuses to run unless that
+     copy's digest is the commit's (`Get-LabModuleDigest`): **after any change to `src/JIM.PowerShell`, run
+     `Install-LabScripts.ps1` on the host again before the next run**, or the AD FS scenarios fail, saying so;
+   - creates the account that signs in as JIM's initial administrator, `jim-sso-admin` in `dc-primary`'s `CN=Users`,
+     with a password drawn for the run (never the domain Administrator, whose password the control plane depends on);
+   - recreates `jim.web` with all of it, through its own process environment: the client IDs, the API scope, `oid`
+     matched to the built-in `Object GUID` attribute, and `jim-sso-admin`'s objectGUID as `JIM_SSO_INITIAL_ADMIN`.
+     JIM first starts on `.env`'s `sub`, because the registration and the account only exist once the AD FS server
+     and `dc-primary` answer.
 
+   The portal's client secret and the administrator's password are new on every run and die at the next revert. Each
+   is masked in the log at once and handed to the workflow's scrub step through `GITHUB_ENV`, which removes it from
+   every artefact; neither is written to any other file.
+
+**The AD FS sign-in checks** are Scenario 031, which `ad-lab.yml` runs in a step of its own after the LDAP scenarios
+and reports as the commit status `jim-ad-lab-adfs` (`Test-ScenarioRunsOnItsOwn` keeps it out of `-Scenario All`). It
+trusts AD FS's certificate, creates an ordinary employee in `OU=Users,OU=Corp` and synchronises Active Directory into
+JIM (`Setup-Scenario-031.ps1`), then signs people in from the LDAP toolbox container, the lab's stand-in for an
+administrator's workstation: it resolves `jim.web` and the AD FS server's name, trusts their certificates, and has
+PowerShell (`AdfsSignIn-Helpers.ps1`, `AdfsSignInClient.psm1`). There is no browser: the client follows JIM's redirect
+to AD FS, fills in AD FS's forms sign-in page, posts the `form_post` reply back to JIM, and stands in for the browser
+`Connect-JIM` opens. It checks the portal sign-in, the initial administrator provisioned from `oid`, a bearer token on
+`/api`, `Connect-JIM` through PKCE, the same person from both, the employee renamed in Active Directory, and the
+employee's `User`-only access.
 The runner does not give JIM the certificate: the scenario trusts it the way an administrator would, with
 `Add-JIMCertificate -FromIdentityProvider`. It reads the certificate off the wire rather than copying
 `adfs-primary-ca.cer` from the guest, the same way it reads the domain controllers'.

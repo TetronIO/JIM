@@ -156,8 +156,9 @@ Describe 'Get-ActiveDirectoryLabInstance' {
 }
 
 Describe 'Test-ActiveDirectoryLabFederationScenario' {
-    It 'is true for Scenario 30 only' {
+    It 'is true for Scenarios 30 and 31 only' {
         Test-ActiveDirectoryLabFederationScenario -ScenarioNumber 30 | Should -BeTrue
+        Test-ActiveDirectoryLabFederationScenario -ScenarioNumber 31 | Should -BeTrue
         foreach ($number in 1, 8, 25, 28, $null) {
             Test-ActiveDirectoryLabFederationScenario -ScenarioNumber $number | Should -BeFalse
         }
@@ -967,6 +968,12 @@ Describe 'Get-ActiveDirectoryFixturePassword' {
     }
 }
 
+Describe 'Get-ActiveDirectoryLabJimUrl' {
+    It 'is jim.web''s HTTPS address on the Docker network, where the sign-in checks run (the toolbox) and its certificate names' {
+        Get-ActiveDirectoryLabJimUrl | Should -Be 'https://jim.web:8443'
+    }
+}
+
 Describe 'Get-ActiveDirectoryLabModuleDigest' {
     It 'is the digest of the checkout''s PowerShell module, as the host computes it over its copy' {
         Import-Module (Join-Path $PSScriptRoot '..' 'ad-lab' 'guest' 'LabFederationServer.psm1') -Force
@@ -1066,18 +1073,120 @@ Describe 'Set-ActiveDirectoryLabSsoEnvironment' {
         $env:JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID | Should -Be 'p1'
     }
 
-    It 'leaves the overlay''s sign-in identifier as one a fresh JIM can start with' {
-        # JIM refuses to start when JIM_SSO_MV_ATTRIBUTE names an attribute that does not exist, and a fresh JIM has
-        # no Object GUID: setting it here kept jim.web from ever starting (run 40191625345).
-        $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
-        $overlay | Should -Not -Match '(?m)^\s*-\s*JIM_SSO_MV_ATTRIBUTE='
-        $overlay | Should -Not -Match '(?m)^\s*-\s*JIM_SSO_CLAIM_TYPE='
-    }
-
     It 'is what the overlay names' {
         $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
         foreach ($name in 'JIM_AD_LAB_ADFS_CLIENT_ID', 'JIM_AD_LAB_ADFS_CLIENT_SECRET', 'JIM_AD_LAB_ADFS_API_SCOPE', 'JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID') {
             $overlay | Should -Match ([regex]::Escape("`${$name"))
         }
+    }
+}
+
+Describe 'ConvertFrom-LdapObjectGuidOutput' {
+    It 'reads objectGUID in the byte order Windows and JIM use' {
+        # 550e8400-e29b-41d4-a716-446655440000 as Active Directory stores it (Microsoft order: the first three groups
+        # little-endian), base64 as ldapsearch prints a binary value.
+        $guid = ConvertFrom-LdapObjectGuidOutput -Line @('dn: CN=jim-sso-admin,CN=Users,DC=panoply,DC=local', 'objectGUID:: AIQOVZvi1EGnFkRmVUQAAA==')
+        $guid | Should -Be ([guid]'550e8400-e29b-41d4-a716-446655440000')
+    }
+
+    It 'refuses output with no objectGUID' {
+        { ConvertFrom-LdapObjectGuidOutput -Line @('dn: CN=x,DC=panoply,DC=local') } | Should -Throw '*objectGUID*'
+    }
+
+    It 'refuses a value that is not 16 bytes' {
+        { ConvertFrom-LdapObjectGuidOutput -Line @('objectGUID:: AAEC') } | Should -Throw '*16 bytes*'
+    }
+}
+
+Describe 'Protect-ActiveDirectoryLabSecret' {
+    BeforeEach {
+        $script:Previous = @{ Actions = $env:GITHUB_ACTIONS; Env = $env:GITHUB_ENV }
+        $script:EnvFile = Join-Path ([System.IO.Path]::GetTempPath()) "jim-github-env-$([guid]::NewGuid().ToString('N'))"
+    }
+
+    AfterEach {
+        $env:GITHUB_ACTIONS = $script:Previous.Actions
+        $env:GITHUB_ENV = $script:Previous.Env
+        Remove-Item -LiteralPath $script:EnvFile -ErrorAction SilentlyContinue
+    }
+
+    It 'in Actions, masks the secret and hands it to the scrub step' {
+        $env:GITHUB_ACTIONS = 'true'
+        $env:GITHUB_ENV = $script:EnvFile
+        $output = Protect-ActiveDirectoryLabSecret -Secret 'placeholder-secret' 6>&1 | Out-String
+        $output | Should -Match '::add-mask::placeholder-secret'
+        (Get-Content -LiteralPath $script:EnvFile -Raw) | Should -Match '(?m)^JIM_AD_LAB_SCRUB_[0-9a-f]{32}=placeholder-secret\r?$'
+    }
+
+    It 'outside Actions, prints and writes nothing' {
+        $env:GITHUB_ACTIONS = $null
+        $env:GITHUB_ENV = $script:EnvFile
+        $output = Protect-ActiveDirectoryLabSecret -Secret 'placeholder-secret' 6>&1 | Out-String
+        $output | Should -Not -Match 'placeholder-secret'
+        (Test-Path -LiteralPath $script:EnvFile) | Should -BeFalse
+    }
+}
+
+Describe 'New-ActiveDirectoryLabSignInAdministrator' {
+    BeforeAll {
+        . "$PSScriptRoot/Directory-Helpers.ps1"
+        $script:PrimaryConfig = (Get-TestConfig -Instance Primary) + @{ Domain = 'panoply.local' }
+    }
+
+    BeforeEach {
+        $previousActions = $env:GITHUB_ACTIONS
+        $env:GITHUB_ACTIONS = $null
+        Mock New-DirectoryUser { return @{ Outcome = 'Created'; Success = $true; ExitCode = 0; Output = '' } }
+        Mock Invoke-LDAPSearch { return @("dn: $BaseDN", 'objectGUID:: AIQOVZvi1EGnFkRmVUQAAA==') }
+    }
+
+    AfterEach {
+        $env:GITHUB_ACTIONS = $previousActions
+    }
+
+    It 'creates jim-sso-admin in CN=Users with a fresh password, and returns its sign-in name and objectGUID' {
+        $admin = New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:PrimaryConfig
+        $admin.UserPrincipalName | Should -Be 'jim-sso-admin@panoply.local'
+        $admin.ObjectGuid | Should -Be ([guid]'550e8400-e29b-41d4-a716-446655440000')
+        $admin.Password.Length | Should -BeGreaterOrEqual 20
+        Should -Invoke New-DirectoryUser -Times 1 -ParameterFilter {
+            $Dn -eq 'CN=jim-sso-admin,CN=Users,DC=panoply,DC=local' -and $SamAccountName -eq 'jim-sso-admin' -and $Password -eq $admin.Password
+        }
+    }
+
+    It 'draws a different password each time' {
+        (New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:PrimaryConfig).Password |
+            Should -Not -Be (New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:PrimaryConfig).Password
+    }
+
+    It 'fails, without the password in the message, when the account cannot be created' {
+        Mock New-DirectoryUser { return @{ Outcome = 'AlreadyExists'; Success = $true; ExitCode = 68; Output = 'Already exists' } }
+        { New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:PrimaryConfig } | Should -Throw '*AlreadyExists*'
+    }
+}
+
+Describe 'Set-ActiveDirectoryLabSignInEnvironment' {
+    AfterEach {
+        foreach ($name in 'JIM_AD_LAB_ADFS_CLAIM_TYPE', 'JIM_AD_LAB_ADFS_MV_ATTRIBUTE', 'JIM_AD_LAB_ADFS_INITIAL_ADMIN', 'JIM_AD_LAB_ADFS_ADMIN_UPN', 'JIM_AD_LAB_ADFS_ADMIN_PASSWORD') {
+            [Environment]::SetEnvironmentVariable($name, $null)
+        }
+    }
+
+    It 'switches JIM to the registration''s identifier, with the administrator as the initial admin, in the process environment' {
+        $registration = [pscustomobject]@{ ClaimType = 'oid'; MvAttribute = 'Object GUID' }
+        $admin = [pscustomobject]@{ UserPrincipalName = 'jim-sso-admin@panoply.local'; Password = 'placeholder-password'; ObjectGuid = [guid]'550e8400-e29b-41d4-a716-446655440000' }
+        Set-ActiveDirectoryLabSignInEnvironment -Registration $registration -Administrator $admin
+        $env:JIM_AD_LAB_ADFS_CLAIM_TYPE | Should -Be 'oid'
+        $env:JIM_AD_LAB_ADFS_MV_ATTRIBUTE | Should -Be 'Object GUID'
+        $env:JIM_AD_LAB_ADFS_INITIAL_ADMIN | Should -Be '550e8400-e29b-41d4-a716-446655440000'
+        $env:JIM_AD_LAB_ADFS_ADMIN_UPN | Should -Be 'jim-sso-admin@panoply.local'
+        $env:JIM_AD_LAB_ADFS_ADMIN_PASSWORD | Should -Be 'placeholder-password'
+    }
+
+    It 'is what the overlay reads, with defaults a fresh JIM can start with' {
+        $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
+        $overlay | Should -Match ([regex]::Escape('JIM_SSO_CLAIM_TYPE=${JIM_AD_LAB_ADFS_CLAIM_TYPE:-sub}'))
+        $overlay | Should -Match ([regex]::Escape('JIM_SSO_MV_ATTRIBUTE=${JIM_AD_LAB_ADFS_MV_ATTRIBUTE:-Subject Identifier}'))
+        $overlay | Should -Match ([regex]::Escape('JIM_SSO_INITIAL_ADMIN=${JIM_AD_LAB_ADFS_INITIAL_ADMIN:-'))
     }
 }

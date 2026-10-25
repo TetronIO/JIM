@@ -22,14 +22,15 @@
 # what it returns in its own process environment (JIM_AD_LAB_ADFS_*, never a file) and recreates jim.web, so these
 # are interpolated from there. Until then they read "unregistered", which names no client on AD FS.
 #
-# JIM_SSO_CLAIM_TYPE and JIM_SSO_MV_ATTRIBUTE are deliberately not set here: they stay .env's sub and Subject
-# Identifier. The registration returns oid, matched to Object GUID, but a fresh JIM has no Object GUID attribute (an
-# administrator makes it when synchronising Active Directory), and JIM refuses to start when JIM_SSO_MV_ATTRIBUTE names
-# an attribute that does not exist. The sign-in checks switch to oid once the attribute is in place.
+# The sign-in identifier starts as .env's sub, Subject Identifier and placeholder initial admin: the registration and
+# the administrator account it names only exist once the AD FS server and dc-primary answer, after JIM first starts.
+# The runner then sets JIM up as a customer would before turning AD FS sign-in on (#2441): it registers JIM, creates
+# the administrator account in dc-primary (jim-sso-admin), and recreates jim.web with the registration's oid matched to
+# the built-in Object GUID attribute, and that account as the initial admin.
 #
-# jim.web's HTTPS port is published on the runner's loopback, as https://localhost:5243 (Get-ActiveDirectoryLabJimUrl),
-# the address the registration's redirect URIs are made from and the sign-in checks use. Its certificate names
-# localhost.
+# JIM is registered, and signed in to, at https://jim.web:8443 (Get-ActiveDirectoryLabJimUrl), jim.web's HTTPS port on
+# the Docker network: the sign-in checks run in the LDAP toolbox container, which resolves jim.web and the AD FS
+# server's name (docker-compose.integration-tests.yml), as an administrator's workstation resolves both.
 
 services:
   jim.web:
@@ -40,10 +41,11 @@ services:
       - JIM_SSO_SECRET=${JIM_AD_LAB_ADFS_CLIENT_SECRET:-unregistered}
       - JIM_SSO_API_SCOPE=${JIM_AD_LAB_ADFS_API_SCOPE:-unregistered}
       - JIM_SSO_PUBLIC_CLIENT_ID=${JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID:-unregistered}
+      - JIM_SSO_CLAIM_TYPE=${JIM_AD_LAB_ADFS_CLAIM_TYPE:-sub}
+      - JIM_SSO_MV_ATTRIBUTE=${JIM_AD_LAB_ADFS_MV_ATTRIBUTE:-Subject Identifier}
+      - JIM_SSO_INITIAL_ADMIN=${JIM_AD_LAB_ADFS_INITIAL_ADMIN:-00000000-0000-0000-0000-000000000001}
       # Empty, so docker-compose.override.yml's Keycloak issuers are not trusted here: JIM accepts the issuers AD FS's
       # discovery document names (#2440).
       - JIM_SSO_VALID_ISSUERS=
-    ports:
-      - "127.0.0.1:5243:8443"
     extra_hosts:
       - "${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}:${JIM_AD_LAB_ADFS_PRIMARY_ADDRESS:-0.0.0.0}"
