@@ -1,4 +1,4 @@
-﻿// Copyright (c) Tetron Limited. All rights reserved.
+// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Utilities;
@@ -297,7 +297,10 @@ try
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";
             options.UsePkce = true;
-            options.Scope.Add("profile");
+
+            // openid, profile and email from every provider; from AD FS, also the Web API as the resource with
+            // allatclaims, so the API's claim rules shape the ID token too (#2439). See PortalSignInRequest.
+            PortalSignInRequest.Configure(options, authority, apiScope, clientId);
 
             // Disable Pushed Authorization Requests (PAR), enabled by default in .NET 10.
             // JIM must work with any OIDC provider; PAR support varies widely (e.g. Entra ID
@@ -1020,7 +1023,8 @@ static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrinc
         DisplayName = principal.FindFirstValue(SsoIdentity.DisplayNameClaimType),
         FirstName = principal.FindFirstValue(SsoIdentity.FirstNameClaimType),
         LastName = principal.FindFirstValue(SsoIdentity.LastNameClaimType),
-        UserPrincipalName = principal.FindFirstValue(SsoIdentity.UserPrincipalNameClaimType)
+        UserPrincipalName = principal.FindFirstValue(SsoIdentity.UserPrincipalNameClaimType),
+        Email = principal.FindFirstValue(SsoIdentity.EmailClaimType)
     };
 
     var user = await jim.Auth.ResolveOrProvisionSsoIdentityAsync(ssoIdentity);

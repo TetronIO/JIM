@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ JIM accepts an API token from the `access_token_issuer` the identity provider's discovery document publishes, as well as from its `issuer`, so AD FS, which issues access tokens under its federation service identifier, no longer needs `JIM_SSO_VALID_ISSUERS`. A token from any other issuer is still refused. (#2440)
+- ✨ Signing in keeps **Email** current from the identity provider, as it does the other profile values: the portal now asks every provider for the `email` scope. (#2439)
 - ✨ Administrators JIM does not synchronise, such as the initial administrator, keep their profile current from the identity provider: each sign-in refreshes Display Name, First Name, Last Name and User Principal Name from the token, while values a Synchronisation Rule supplies are never touched. (#2383)
 - ✨ Values JIM sets outside synchronisation now say where they came from, instead of **Source not recorded**: a value read from a sign-in token names the claim (such as `given_name`), and a value JIM fixes itself, such as the initial administrator's Type, reads **Set by JIM**. Shown in the Inspect view, the Changes tab, REST and PowerShell (`ContributedByKind`, `ClaimType`). Existing values keep "Source not recorded" until set again. (#2472)
 - ✨ Select a change on the Object Changes page to see it in full in a panel beside the list: every attribute it changed, with old and new values, who made it and its Activity. Selecting the object itself still opens it. (#2460)
@@ -96,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 With AD FS, the portal now asks for JIM's Web API as its resource with the `allatclaims` scope, so the Web API's claim rules shape the portal's sign-in as they do the API's. Permit `allatclaims` to JIM's server application in AD FS, or sign-in is refused. (#2439)
 - 🖥️ Lists now show when a search, sort or filter is slow to answer: a progress bar, a spinner in the search box and a "Searching…" count, with the old rows faded until results arrive. Quick results appear as before, with no flicker.
 - 🔄 The Causality Explorer is for Administrators only, like the REST API reads it draws on, and other users no longer see links to it. On a Metaverse Object, **Explore causality** moves from beside the tabs into the **Inspect** view: at the end of its source panel (**Where this User gets its values**, named for the object's type), and in each attribute's inspector beside **Open in Timeline**.
 - 🔄 A Synchronisation Rule's identity strip, and the Object Type pickers that create one, read in the direction data flows: an import rule shows the Connected System Object Type then the Metaverse Object Type, and an export rule the reverse.
