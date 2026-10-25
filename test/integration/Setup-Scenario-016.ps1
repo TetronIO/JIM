@@ -627,7 +627,7 @@ $importMappings = @(
     @{ Cs = 'START_DATE';          Mv = 'Employee Start Date' }
     # Offset-carrying (-05:00 in the seeded data): unambiguous on the wire, so no setting applies.
     @{ Cs = 'HIRED_AT';            Mv = 'Employee End Date'   }
-    @{ Cs = 'EMPLOYEE_GUID';       Mv = 'objectGUID'          }
+    @{ Cs = 'EMPLOYEE_GUID';       Mv = 'Object GUID'         }
     @{ Cs = 'PHOTO';               Mv = 'Photo'               }
     @{ Cs = 'MANAGER_EMPLOYEE_ID'; Mv = 'Manager'             }
     @{ Cs = 'PhoneNumbers';        Mv = 'Other Telephones'    }

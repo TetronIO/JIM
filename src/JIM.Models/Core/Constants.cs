@@ -86,8 +86,8 @@ public static class Constants
         public static string Emails => "Emails";
         public static string HideFromAddressLists => "Hide From Address Lists?";
         public static string MailNickname => "Mail Nickname";
-        public static string ObjectGuid => "objectGUID";
-        public static string ObjectSid => "objectSid";
+        public static string ObjectGuid => "Object GUID";
+        public static string ObjectSid => "Object SID";
         public static string ProxyAddresses => "Proxy Addresses";
 
         // users
@@ -143,10 +143,10 @@ public static class Constants
         public static string PreferredLanguage => "Preferred Language";
         public static string Pronouns => "Pronouns";
         public static string ScriptPath => "Script Path";
-        public static string SidHistory => "sIDHistory";
+        public static string SidHistory => "SID History";
         public static string StateOrProvince => "State or Province";
         public static string Status => "Status";
-        public static string StreetAddress => "StreetAddress";
+        public static string StreetAddress => "Street Address";
         public static string Team => "Team";
         public static string TelephoneNumber => "Telephone Number";
         public static string TimeZone => "Time Zone";
@@ -156,7 +156,7 @@ public static class Constants
         public static string UserCertificates => "User Certificates";
         public static string UserPrincipalName => "User Principal Name";
         public static string UserSharedFolder => "User Shared Folder";
-        public static string WebPage => "WebPage";
+        public static string WebPage => "Web Page";
 
         // groups
         // https://docs.microsoft.com/en-us/windows/win32/ad/group-objects
