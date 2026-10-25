@@ -75,12 +75,12 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId, objectTypeId, createdOnOrAfter);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId);
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
@@ -147,8 +147,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
         => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(connectedSystemId, objectTypeId, partitionId);
 
-    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
-        => _repo.ConnectedSystems.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(connectedSystemId, objectTypeId, partitionId, pendingExportIds);
+    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
+        => HideQueued(await _repo.ConnectedSystems.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(connectedSystemId, objectTypeId, partitionId, pendingExportIds));
 
     public Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
         => _repo.ConnectedSystems.GetExportedCreatePendingExportRetryCandidateSummariesAsync(connectedSystemId, objectTypeId, partitionId);
@@ -296,8 +296,10 @@ public partial class SyncRepository : ISyncRepository
 
     #region Pending Exports
 
-    public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
+    // The reads and writes below route through the Pending Export batch scope (SyncRepository.PendingExportBatch.cs,
+    // #2492): reads hide a Pending Export queued for deletion, and writes land in the order the deletes would have.
+    public async Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+        => HideQueued(await _repo.ConnectedSystems.GetPendingExportsAsync(connectedSystemId));
 
     /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
@@ -306,29 +308,45 @@ public partial class SyncRepository : ISyncRepository
     /// HasUnresolvedReferences) so the common zero-deferred case costs a single
     /// index probe rather than hydrating every Pending Export for the system (#1102).
     /// </summary>
-    public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId);
+    public async Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+        => HideQueued(await _repo.ConnectedSystems.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId));
 
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
 
     public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-        => _repo.ConnectedSystems.DeletePendingExportsAsync(pendingExports);
+    {
+        var exportList = pendingExports.ToList();
+        ForgetQueued(exportList);
+        return _repo.ConnectedSystems.DeletePendingExportsAsync(exportList);
+    }
 
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-        => _repo.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
+    {
+        var exportList = pendingExports.ToList();
+        ThrowIfAnyQueued(exportList.Select(pe => pe.Id), nameof(UpdatePendingExportsAsync));
+        return _repo.ConnectedSystems.UpdatePendingExportsAsync(exportList);
+    }
 
-    public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
-        => _repo.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+    public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+        => IsQueuedForDeleteByCsoId(connectedSystemObjectId)
+            ? null
+            : HideQueued(await _repo.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId));
 
-    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
-        => _repo.ConnectedSystems.GetPendingExportLightweightByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+    public async Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+    {
+        if (IsQueuedForDeleteByCsoId(connectedSystemObjectId))
+            return null;
+        if (TryGetPrefetched(connectedSystemObjectId, out var prefetched))
+            return prefetched;
+        return HideQueued(await _repo.ConnectedSystems.GetPendingExportLightweightByConnectedSystemObjectIdAsync(connectedSystemObjectId));
+    }
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-        => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+        => HideQueued(await _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds));
 
-    public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
+    public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
+        => HideQueued(await _repo.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId));
 
     public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
@@ -342,11 +360,11 @@ public partial class SyncRepository : ISyncRepository
             .Select(pe => pe.ConnectedSystemObjectId!.Value)
             .Distinct()
             .ToListAsync();
-        return found.ToHashSet();
+        return HideQueued(found.ToHashSet());
     }
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
-        => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId, chunkSize);
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
+        => HideQueued(await _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId, chunkSize));
 
     #endregion
 
@@ -605,26 +623,42 @@ public partial class SyncRepository : ISyncRepository
 
     #region Pending Export — Singular Convenience Methods
 
-    public Task CreatePendingExportAsync(PendingExport pendingExport)
-        => _repo.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+    public async Task CreatePendingExportAsync(PendingExport pendingExport)
+    {
+        await ExecuteQueuedDeletesForAsync([pendingExport.ConnectedSystemObjectId]);
+        await _repo.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+    }
 
     public Task DeletePendingExportAsync(PendingExport pendingExport)
-        => _repo.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+    {
+        ForgetQueued([pendingExport]);
+        return _repo.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+    }
 
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
-        => _repo.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+    {
+        ThrowIfAnyQueued([pendingExport.Id], nameof(UpdatePendingExportAsync));
+        return _repo.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+    }
 
     public Task AppendAttributeChangesToPendingExportAsync(
         Guid pendingExportId,
         IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
         IReadOnlyList<Guid> changeIdsToRemove)
-        => _repo.ConnectedSystems.AppendAttributeChangesToPendingExportAsync(pendingExportId, changesToAdd, changeIdsToRemove);
+    {
+        ThrowIfAnyQueued([pendingExportId], nameof(AppendAttributeChangesToPendingExportAsync));
+        return _repo.ConnectedSystems.AppendAttributeChangesToPendingExportAsync(pendingExportId, changesToAdd, changeIdsToRemove);
+    }
 
     public Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds)
         => _repo.ConnectedSystems.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(connectedSystemId, classMembershipAttributeIds);
 
     public Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds)
-        => _repo.ConnectedSystems.WithdrawPendingExportAttributeChangesAsync(attributeChangeIds);
+    {
+        // Addressed by change, so it cannot say which objects it touches: drop every prefetched answer.
+        ForgetAllPrefetched();
+        return _repo.ConnectedSystems.WithdrawPendingExportAttributeChangesAsync(attributeChangeIds);
+    }
 
     #endregion
 
@@ -689,8 +723,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
         => _repo.ConnectedSystems.RecoverStrandedExecutingPendingExportsAsync();
 
-    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
-        => _repo.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds);
+    public async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+        => HideQueued(await _repo.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds));
 
     #endregion
 

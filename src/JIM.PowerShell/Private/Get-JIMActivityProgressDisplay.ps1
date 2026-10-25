@@ -42,6 +42,10 @@ function Get-JIMActivityProgressDisplay {
     $objectsProcessed = [int]($Progress.objectsProcessed ?? 0)
     $message = "$($Progress.message ?? '')"
 
+    # What the counters count in this step: objects, except while a Synchronisation resolves cross-page references,
+    # which counts reference values (#2492). A server that does not report a unit counts objects.
+    $unit = if ("$($Progress.countUnit)" -eq 'ReferenceValues') { 'reference values' } else { 'objects' }
+
     # The step the run is on, where the server records them (#454). Shown as "Step 3 of 7: Saving
     # changes" so the counter restarting between steps reads as progress rather than lost work.
     # Composed by the shared helper so this sentence matches the portal and the other cmdlets (#1162).
@@ -64,11 +68,11 @@ function Get-JIMActivityProgressDisplay {
         } else {
             $percent = [Math]::Max(0, [Math]::Min(100, [int](($objectsProcessed / $objectsToProcess) * 100)))
         }
-        $statusText += " - $objectsProcessed of $objectsToProcess objects"
+        $statusText += " - $objectsProcessed of $objectsToProcess $unit"
     } elseif ($objectsProcessed -gt 0) {
         # A paged import never learns a total, so there is no percentage to show; what has arrived
         # so far is still worth reporting, and the progress message no longer carries it.
-        $statusText += " - $objectsProcessed objects processed"
+        $statusText += " - $objectsProcessed $unit processed"
     } elseif ($ElapsedSeconds -ge 0) {
         $statusText += " - Elapsed: ${ElapsedSeconds}s"
     }
@@ -97,7 +101,7 @@ function Get-JIMActivityProgressDisplay {
 
     $objectsPerSecond = $Progress.objectsPerSecond
     if ($null -ne $objectsPerSecond -and [double]$objectsPerSecond -gt 0) {
-        $progressParams.CurrentOperation = ('{0:N1} objects/second' -f [double]$objectsPerSecond)
+        $progressParams.CurrentOperation = ('{0:N1} {1}/second' -f [double]$objectsPerSecond, $unit)
     }
 
     return $progressParams

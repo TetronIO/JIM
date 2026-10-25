@@ -36,6 +36,10 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 22 | Should -Be @('OpenLDAP')
     }
 
+    It 'restricts Scenario 032 (Intra-type References) to OpenLDAP' {
+        Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 32 | Should -Be @('OpenLDAP')
+    }
+
     It 'restricts Scenario 017 (Initial Password) to Samba AD and the Active Directory lab' {
         Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 17 | Should -Be @('SambaAD', 'ActiveDirectory')
     }
@@ -90,7 +94,7 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
             if ($number -in 24, 25, 30, 31) {
                 $supported | Should -Be @('ActiveDirectory') -Because "Scenario $number needs a real domain controller or the lab's AD FS server"
             }
-            elseif ($number -in 14, 19, 22) {
+            elseif ($number -in 14, 19, 22, 32) {
                 $supported | Should -Not -Contain 'ActiveDirectory' -Because "Scenario $number is OpenLDAP only"
             }
             else {

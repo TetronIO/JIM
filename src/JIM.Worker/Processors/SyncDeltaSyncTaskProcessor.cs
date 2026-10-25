@@ -179,40 +179,40 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
         var throughput = new ThroughputTracker();
 
-        // Keyset cursor, as in full sync, and here it is a correctness requirement rather than a speed-up: each page
-        // boundary deletes that page's obsolete CSOs (FlushObsoleteCsoOperationsAsync), so the modified set shrinks
-        // while we page through it. An OFFSET into it skips the rows that move up into the gap: with a whole page of
-        // obsolete CSOs, every other page (Scenario 008 LeaverCohort: 1,000 of 2,000 obsolete target accounts never
-        // processed, and the watermark then moved past them). The cursor must advance to the last row of each page
-        // exactly as the repository returned it.
-        var csoPageCursor = Guid.Empty;
+        // Page through the Object Types in dependency order (#2492), as full sync does (see there): a referenced object
+        // new in this same delta is then projected before the objects referencing it are processed, so the reference
+        // resolves in this loop rather than in the cross-page reference step.
+        //
+        // Each type is walked with its own keyset cursor, as in full sync, and here it is a correctness requirement
+        // rather than a speed-up: each page boundary deletes that page's obsolete CSOs (FlushObsoleteCsoOperationsAsync),
+        // so the modified set shrinks while we page through it. An OFFSET into it skips the rows that move up into the
+        // gap: with a whole page of obsolete CSOs, every other page (Scenario 008 LeaverCohort: 1,000 of 2,000 obsolete
+        // target accounts never processed, and the watermark then moved past them). The cursor must advance to the
+        // last row of each page exactly as the repository returned it.
+        //
+        // Each type pages until a page comes back empty, not to the count taken at the start (#2092): objects that
+        // enter the selection while the run is in flight (an import committing alongside it, or this run provisioning
+        // into its own system) would otherwise push the original tail past a page budget fixed before they arrived. A
+        // closing sweep picks up objects created mid-run behind a type already walked. The count is the progress
+        // estimate only, and ObjectsProcessed may exceed it. A mark set behind a cursor mid-run is picked up by the
+        // next run.
+        var deltaSyncStartedAt = DateTime.UtcNow;
+        var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, deltaSyncStartedAt,
+            (afterId, objectTypeId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
+                _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
+            "Delta Synchronisation", observeUndeclaredReferenceTargets: false);
 
-        // Page until a page comes back empty, not to the count taken at the start (#2092): objects that enter the
-        // selection while the run is in flight (an import committing alongside it, or this run provisioning into its
-        // own system) would otherwise push the original tail past a page budget fixed before they arrived. The count
-        // is the progress estimate only, and ObjectsProcessed may exceed it. A mark set below the cursor mid-run is
-        // picked up by the next run.
         for (var page = 1; ; page++)
         {
 
-            PagedResultSet<ConnectedSystemObject> csoPagedResult;
+            PagedResultSet<ConnectedSystemObject>? csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadModifiedCsoPage"))
             {
-                // Use the delta-specific query that filters by LastUpdated > watermark
-                // Note: Page is 1-indexed to match the repository's paging convention
-                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
-                    _connectedSystem.Id,
-                    lastSyncTimestamp,
-                    page,
-                    pageSize,
-                    totalCsosToProcess,
-                    csoPageCursor);
+                csoPagedResult = await csoPager.NextPageAsync();
             }
 
-            if (csoPagedResult.Results.Count == 0)
+            if (csoPagedResult == null)
                 break;
-
-            csoPageCursor = csoPagedResult.Results[^1].Id;
 
             // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
             // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve

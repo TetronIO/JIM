@@ -191,32 +191,35 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         var throughput = new ThroughputTracker();
         var csoPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        // Keyset cursor for CSO page loads. Starting at Guid.Empty (below every generated uuid in
-        // both PostgreSQL's bytewise and .NET's component-wise ordering) keeps every page on the
-        // keyset path, so per-page cost stays O(pageSize) instead of degrading with OFFSET depth
-        // (measured at Scale500k25kGroups: 977s across 1,050 page loads). The cursor must advance
-        // to the last row of each page exactly as the repository returned it; a client-side max
-        // would diverge from PostgreSQL's uuid ordering and skip rows.
-        var csoPageCursor = Guid.Empty;
+        // Page through the Object Types in dependency order (#2492), referenced types first, so a group's members have
+        // been projected by the time its page is processed and its member references resolve in this loop rather than
+        // being deferred to the cross-page reference step, which would reload the group and redo its work. Each type
+        // is walked with its own keyset cursor starting at Guid.Empty (below every generated uuid in both PostgreSQL's
+        // bytewise and .NET's component-wise ordering), which keeps every page O(pageSize) instead of degrading with
+        // OFFSET depth (measured at Scale500k25kGroups: 977s across 1,050 page loads); the cursor advances to the last
+        // row of each page exactly as the repository returned it, since a client-side max would diverge from
+        // PostgreSQL's uuid ordering and skip rows.
+        //
+        // Each type pages until a page comes back empty, not to the count taken at the start (#2092): objects created
+        // while the run is in flight would otherwise push the original tail past a page budget fixed before they
+        // arrived. A closing sweep then picks up objects created mid-run behind a type that had already been walked.
+        // The count is the progress estimate only, and ObjectsProcessed may exceed it.
+        var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, fullSyncStartedAt,
+            (afterId, objectTypeId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectsAsync(
+                _connectedSystem.Id, 1, pageSize, totalCsosToProcess, csoLoadWatermark, afterId, objectTypeId, createdOnOrAfter),
+            "Full Synchronisation", observeUndeclaredReferenceTargets: true);
 
-        // Page until a page comes back empty, not to the count taken at the start (#2092): objects created while the
-        // run is in flight would otherwise push the original tail past a page budget fixed before they arrived. The
-        // count is the progress estimate only, and ObjectsProcessed may exceed it.
         for (var i = 1; ; i++)
         {
 
-            PagedResultSet<ConnectedSystemObject> csoPagedResult;
+            PagedResultSet<ConnectedSystemObject>? csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
             {
-                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(
-                    _connectedSystem.Id, i, pageSize, totalCsosToProcess,
-                    csoLoadWatermark, csoPageCursor);
+                csoPagedResult = await csoPager.NextPageAsync();
             }
 
-            if (csoPagedResult.Results.Count == 0)
+            if (csoPagedResult == null)
                 break;
-
-            csoPageCursor = csoPagedResult.Results[^1].Id;
 
             // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
             // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve

@@ -22,6 +22,8 @@ A Run Profile is one of:
 - **Delta Synchronisation**<br /> Evaluate only objects with pending changes since the last sync. Faster.
 - **Export**<br /> Flush Pending Exports out to the Connected System.
 
+A synchronisation works through the Connected System's Object Types in dependency order, so people come before the groups they belong to, and membership resolves as each group is processed. Where the schema does not say which type an attribute points at (LDAP `member` and `manager`), a Full Synchronisation reads which types its values point at; a Delta Synchronisation assumes any type. References within one type (managers, nested groups) can still need the **Resolving cross-page references** step. The worker's service log records the order in a line starting `Full Synchronisation type order:` or `Delta Synchronisation type order:`.
+
 ## Page size
 
 How many objects an import asks the Connected System for at a time: the page of an LDAP paged search, a SQL query or a SCIM request. The default is 100. A larger page means fewer round trips to the Connected System and more memory held at once. The File Connector reads its file whole, so the setting does nothing there, and synchronisation is paged by the `Sync.PageSize` [Service Setting](../administration/configuration.md#service-settings) instead.

@@ -231,6 +231,7 @@
                        within it. *@
                     <RunProgressMetrics ObjectsProcessed="@_activity.ObjectsProcessed"
                                         ObjectsToProcess="@_activity.ObjectsToProcess"
+                                        CountUnit="@RunProfilePhaseCatalogue.GetCountUnit(_activity.ConnectedSystemRunType, RunPhaseReading.ActiveTopLevel(_phases)?.Key)"
                                         ObjectsPerSecond="@_etaEstimate.ObjectsPerSecond"
                                         EstimatedSecondsRemaining="@_etaEstimate.EstimatedSecondsRemaining"
                                         Phases="_phases"

@@ -3101,7 +3101,7 @@ if ($DirectoryType -eq "OpenLDAP") {
     # Attribute Flows) composes the same substrate and asserts on every account it provisions.
     # S010-S013 and S015-S018 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -3201,7 +3201,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
     # verified: a snapshot baked from a stale base is stale. S026 is excluded for S023's reasons.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3818,11 +3818,13 @@ if ($adPopulateEntries.Count -gt 0) {
 # Skip for S022: self-populating (Populate-OpenLDAP-Scenario-022.ps1, called by
 # Invoke-Scenario-022-OpenLdapPasswordPolicy.ps1), and its Scenario 001 substrate provisions into an
 # ou=People that must start empty; the general population would fill it.
+# Skip for S032 (Intra-type References): self-populating (Populate-OpenLDAP-Scenario-032.ps1), and it asserts on
+# everything it provisions into an empty target suffix.
 # Skip for S023 (Unique Value Generation): its substrate is Setup-Scenario-001.ps1
 # -GenerateAccountName, and every value it asserts on is generated, not sourced, so the target
 # directory must start empty exactly as it must for S001. S026 (Metaverse-Derived Attribute Flows) composes
 # the same substrate and asserts on every account it provisions, so it too needs an empty directory.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29 -and -not $script:UsingRfcDirectorySnapshots) {
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
@@ -4119,7 +4121,7 @@ $scenarioParams = @{
 # turn comes, which would wrongly pass SkipPopulate to the scenario and leave its directory empty, so the
 # Employee ID join finds nothing (14, 19) or the policy fixture is missing (22). Mirrors the
 # exclusions already on the snapshot-detection and general-population guards above.
-if (($script:UsingSnapshots -or $script:UsingRfcDirectorySnapshots -or $script:UsingAdLabCheckpoints) -and $scenarioNumber -notin 14, 19, 22) {
+if (($script:UsingSnapshots -or $script:UsingRfcDirectorySnapshots -or $script:UsingAdLabCheckpoints) -and $scenarioNumber -notin 14, 19, 22, 32) {
     $scenarioParams.SkipPopulate = $true
 }
 

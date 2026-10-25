@@ -75,7 +75,13 @@ public interface ISyncRepository
     /// page O(pageSize) at scale. Sequential callers must pass the ID of the last row of the previous
     /// page exactly as returned. Null behaves as the offset-based page requested via
     /// <paramref name="page"/>.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
+    /// <param name="objectTypeId">When provided, restricts the page to Connected System Objects of this Object Type,
+    /// so a synchronisation can page through types in dependency order (#2492): referenced types first, so references
+    /// between types resolve in the main page loop. The keyset cursor then runs within the type, served by
+    /// <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>.</param>
+    /// <param name="createdOnOrAfter">When provided, restricts the page to objects created at or after this instant:
+    /// the closing sweep of a type-ordered run, for objects created while it was in flight.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
@@ -89,7 +95,27 @@ public interface ISyncRepository
     /// each page boundary deletes that page's obsolete CSOs; the modified set shrinks under an OFFSET, which then
     /// skips the rows that moved up into the gap (every other page, when a whole page is deleted). Null behaves
     /// as the offset-based page requested via <paramref name="page"/>.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null);
+    /// <param name="objectTypeId">As for <see cref="GetConnectedSystemObjectsAsync"/>: restricts the page to one Object
+    /// Type.</param>
+    /// <param name="createdOnOrAfter">As for <see cref="GetConnectedSystemObjectsAsync"/>: restricts the page to
+    /// objects created at or after this instant.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+
+    /// <summary>
+    /// The Object Types that hold at least one of the Connected System's objects (#2492). A type-ordered
+    /// synchronisation pages only these: a schema can declare a hundred types while the objects use two. Answered from
+    /// the (ConnectedSystemId, TypeId, Id) index one type at a time, so it costs a probe per type in use, not a scan.
+    /// </summary>
+    Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId);
+
+    /// <summary>
+    /// For each of the given reference attributes, the Object Types its stored values point at (#2492). A Full
+    /// Synchronisation asks this about mapped reference attributes whose schema declares no target type (LDAP's
+    /// <c>member</c> and <c>manager</c>), so it can page referenced types first rather than assume each attribute
+    /// reaches every type. Every attribute asked about is in the result; one holding no resolved reference values maps
+    /// to an empty set. One aggregate over the attributes' values.
+    /// </summary>
+    Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds);
 
     /// <summary>
     /// Gets a single CSO by ID with full attribute values.
@@ -1484,6 +1510,42 @@ public interface ISyncRepository
     /// Deletes a single Pending Export. Convenience wrapper around <see cref="DeletePendingExportsAsync"/>.
     /// </summary>
     Task DeletePendingExportAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Opens a Pending Export batch (#2492): until <see cref="FlushPendingExportBatchAsync"/> or
+    /// <see cref="AbandonPendingExportBatch"/>, <see cref="DeletePendingExportForMergeAsync"/> queues its delete rather
+    /// than executing it, so the cross-page reference step deletes the Pending Exports its re-evaluation replaces in
+    /// one statement per batch. The queue is invisible to every caller: a queued Pending Export reads as already
+    /// deleted, anything inserted for the same Connected System Object first executes that object's queued delete,
+    /// and a write naming a queued Pending Export throws. Only one batch may be open at a time.
+    /// </summary>
+    void BeginPendingExportBatch();
+
+    /// <summary>
+    /// Deletes the Pending Export a merge is replacing: queued while a Pending Export batch is open (see
+    /// <see cref="BeginPendingExportBatch"/>), otherwise at once, exactly as <see cref="DeletePendingExportAsync"/>.
+    /// </summary>
+    Task DeletePendingExportForMergeAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Loads, in one query, the Pending Exports of Connected System Objects the open Pending Export batch is about to
+    /// evaluate, so <see cref="GetPendingExportLightweightByConnectedSystemObjectIdAsync"/> answers them without a round
+    /// trip each (#2492). They are the same tracked instances that method's own query returns, and any write touching
+    /// one of them drops it, so a later read goes back to the database. Requires an open batch.
+    /// </summary>
+    Task PrefetchPendingExportsForBatchAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Executes the open Pending Export batch's queued deletes in one statement and closes the batch. Call it before
+    /// the replacements are inserted.
+    /// </summary>
+    Task FlushPendingExportBatchAsync();
+
+    /// <summary>
+    /// Closes the open Pending Export batch without executing its queued deletes, for a batch that failed before
+    /// staging its replacements: executing them would lose the queued changes outright.
+    /// </summary>
+    void AbandonPendingExportBatch();
 
     /// <summary>
     /// Updates a single Pending Export. Convenience wrapper around <see cref="UpdatePendingExportsAsync"/>.

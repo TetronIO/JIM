@@ -264,7 +264,9 @@ public abstract class SyncTaskProcessorBase
     // been joined/projected yet), the CSO ID and applicable Synchronisation Rule IDs are recorded here.
     // After all pages, these CSOs are reloaded from the DB (where all MVOs now exist)
     // and reference attributes are re-processed in ResolveCrossPageReferencesAsync.
-    protected readonly List<(Guid CsoId, List<int> SyncRuleIds)> _unresolvedCrossPageReferences = [];
+    // ReferenceValueCount is the object's mapped reference values, all of which the step re-flows: it is what the
+    // step's progress counts and its batches are budgeted by (#2492), since one object can hold 750,000 of them.
+    protected readonly List<(Guid CsoId, List<int> SyncRuleIds, int ReferenceValueCount)> _unresolvedCrossPageReferences = [];
 
     // Summary stats are accumulated incrementally during each FlushRpeisAsync call via
     // Worker.AccumulateActivitySummaryStats, so RPEIs can be released immediately without
@@ -2026,7 +2028,17 @@ public abstract class SyncTaskProcessorBase
     {
         _syncRepo.ClearChangeTracker();
         _mvoIdentityMap.Clear();
+        _snapshotReferenceCsos.Clear();
     }
+
+    /// <summary>
+    /// The target Connected System Object each referenced Metaverse Object resolved to in this page's (or cross-page
+    /// batch's) export change snapshots, or null where the database held none. Every report of one manager, and every
+    /// group sharing a member, used to query the same object again (#2492: about 6 ms of each object's export
+    /// evaluation on Scenario 032). Cleared with the change tracker, because the objects it holds are tracked ones, and
+    /// once the page's provisioning objects are written, so a lookup that found none is asked again.
+    /// </summary>
+    private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), ConnectedSystemObject?> _snapshotReferenceCsos = [];
 
     /// <summary>
     /// Queues a Metaverse Object for the page-flush batch update (<see cref="_pendingMvoUpdates"/>), keyed
@@ -4260,7 +4272,9 @@ public abstract class SyncTaskProcessorBase
             if (hasUnresolvedCrossPageRefs)
             {
                 var syncRuleIds = syncRules.Select(sr => sr.Id).ToList();
-                _unresolvedCrossPageReferences.Add((cso.Id, syncRuleIds));
+                var referenceValueCount = cso.AttributeValues.Count(av =>
+                    mappedRefAttributeIds.Contains(av.AttributeId) && av.ReferenceValueId.HasValue);
+                _unresolvedCrossPageReferences.Add((cso.Id, syncRuleIds, referenceValueCount));
             }
 
             // Count changes from reference attribute processing
@@ -4429,8 +4443,10 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("csoCount", _unresolvedCrossPageReferences.Count);
 
         var totalCrossPagesToResolve = _unresolvedCrossPageReferences.Count;
-        Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs",
-            totalCrossPagesToResolve);
+        var totalReferenceValuesToResolve = _unresolvedCrossPageReferences.Sum(x => (long)x.ReferenceValueCount);
+        span.SetTag("referenceValueCount", totalReferenceValuesToResolve);
+        Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs holding {ReferenceValueCount} reference values",
+            totalCrossPagesToResolve, totalReferenceValuesToResolve);
 
         // Memory snapshot at phase entry — cross-page resolution reloads CSO graphs with deep
         // includes, rebuilds outcome trees, and re-evaluates exports, so its memory footprint
@@ -4446,7 +4462,13 @@ public abstract class SyncTaskProcessorBase
         // The counting window moves to this step's own work. It follows the page loop, whose totals
         // would otherwise still be showing: the step would report itself complete the moment it
         // started, for however long it actually took.
-        _activity.ObjectsToProcess = totalCrossPagesToResolve;
+        //
+        // The step's work is its reference values, not its objects (#2492): it re-flows every mapped reference value
+        // of each object, so a 750,000-member group is 750,000 units and a 3-member group is 3. Counting objects
+        // made each count as one, and the time remaining read a fraction of the truth. An object whose references
+        // were all withdrawn since it was deferred still costs a reload, so it counts as one.
+        var progressUnits = _unresolvedCrossPageReferences.Select(x => Math.Max(x.ReferenceValueCount, 1)).ToList();
+        _activity.ObjectsToProcess = (int)Math.Min(progressUnits.Sum(u => (long)u), int.MaxValue);
         _activity.ObjectsProcessed = 0;
 
         await _phases.EnterAsync(RunPhaseKeys.SyncResolveCrossPageReferences);
@@ -4496,10 +4518,14 @@ public abstract class SyncTaskProcessorBase
             .Where(sr => requiredSyncRuleIds.Contains(sr.Id))
             .ToDictionary(sr => sr.Id);
 
-        // Process in batches to avoid loading too many CSOs at once
+        // Process in batches to avoid loading too many CSOs at once: at most a page of objects, and at most the value
+        // budget's worth of reference values (#2492), so a batch holding several very large groups does not hold all
+        // of them in memory together. A group larger than the budget gets a batch of its own.
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
-        var totalItems = _unresolvedCrossPageReferences.Count;
-        var totalBatches = (int)Math.Ceiling((double)totalItems / pageSize);
+        var batchPlan = CrossPageReferenceBatchPlanner.Plan(
+            _unresolvedCrossPageReferences.Select(x => x.ReferenceValueCount).ToList(),
+            pageSize, CrossPageReferenceBatchPlanner.DefaultValueBudget);
+        var totalBatches = batchPlan.Count;
 
         var resolvedCount = 0;
         var updatedExistingRpeis = new List<ActivityRunProfileExecutionItem>();
@@ -4512,14 +4538,13 @@ public abstract class SyncTaskProcessorBase
 
         for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
         {
-            var batch = _unresolvedCrossPageReferences
-                .Skip(batchIndex * pageSize)
-                .Take(pageSize)
-                .ToList();
+            var (batchStart, batchCount) = batchPlan[batchIndex];
+            var batch = _unresolvedCrossPageReferences.GetRange(batchStart, batchCount);
 
+            // The counters carry the reference values; the message names the objects, which the counters no longer do.
             _activity.ObjectsProcessed = resolvedCount;
             await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Loading batch {batchIndex + 1} of {totalBatches}");
+                $"Loading batch {batchIndex + 1} of {totalBatches} ({totalCrossPagesToResolve:N0} objects in all)");
 
             // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
             var csoIds = batch.Select(x => x.CsoId).ToList();
@@ -4538,7 +4563,7 @@ public abstract class SyncTaskProcessorBase
             // Index reloaded CSOs by ID for O(1) lookup
             var csosById = reloadedCsos.ToDictionary(c => c.Id);
 
-            foreach (var (csoId, syncRuleIds) in batch)
+            foreach (var (csoId, syncRuleIds, _) in batch)
             {
                 if (!csosById.TryGetValue(csoId, out var cso) || cso.MetaverseObject == null)
                 {
@@ -4712,7 +4737,8 @@ public abstract class SyncTaskProcessorBase
             // Pending Provisioning object look like one whose Create had already been sent: the
             // re-evaluation then staged an Update for an object that did not exist yet (Scenario 008).
 
-            resolvedCount += batch.Count;
+            for (var unitIndex = batchStart; unitIndex < batchStart + batchCount; unitIndex++)
+                resolvedCount += progressUnits[unitIndex];
 
             // Disable AutoDetectChangesEnabled for the flush sequence (including the status update).
             // After ClearChangeTracker(), the change tracker contains entities loaded by the cross-page
@@ -4786,7 +4812,26 @@ public abstract class SyncTaskProcessorBase
 
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
                 await EvaluateQueuedDriftAsync();
-                await EvaluatePendingExportsAsync();
+
+                // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
+                // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
+                // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
+                // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
+                // batch instead, since deleting rows whose replacements were never staged would lose their changes.
+                var pendingExportBatchFlushed = false;
+                _syncRepo.BeginPendingExportBatch();
+                try
+                {
+                    await EvaluatePendingExportsAsync(prefetchPendingExports: true);
+                    await _syncRepo.FlushPendingExportBatchAsync();
+                    pendingExportBatchFlushed = true;
+                }
+                finally
+                {
+                    if (!pendingExportBatchFlushed)
+                        _syncRepo.AbandonPendingExportBatch();
+                }
+
                 await FlushPendingExportOperationsAsync();
 
                 // Flush any RPEIs generated during the flush sequence
@@ -4859,7 +4904,10 @@ public abstract class SyncTaskProcessorBase
     /// Creating Update exports for recalled attributes on a doomed MVO is spurious and can produce
     /// invalid attribute values (e.g., empty DN from expression evaluation against recalled attributes).
     /// </summary>
-    protected async Task EvaluatePendingExportsAsync()
+    /// <param name="prefetchPendingExports">The caller has opened a Pending Export batch (the cross-page reference step,
+    /// #2492): load the Pending Exports of every target object this evaluation will look up in one query, rather than
+    /// one round trip per object (twice for an object still being provisioned).</param>
+    protected async Task EvaluatePendingExportsAsync(bool prefetchPendingExports = false)
     {
         if (_pendingExportEvaluations.Count == 0)
             return;
@@ -4878,6 +4926,23 @@ public abstract class SyncTaskProcessorBase
                 .Where(id => id != Guid.Empty)
                 .Distinct();
             await _syncServer.RefreshExportEvaluationCacheForPageAsync(_exportEvaluationCache, mvoIdsForExport);
+
+            if (prefetchPendingExports)
+            {
+                var targetCsoIds = _pendingExportEvaluations
+                    .Select(x => x.Mvo.Id)
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .SelectMany(mvoId => _exportEvaluationCache.TargetSystemIds
+                        .Select(systemId => _exportEvaluationCache.CsoLookup.GetValueOrDefault((mvoId, systemId))))
+                    .Where(cso => cso != null && cso.Id != Guid.Empty)
+                    .Select(cso => cso!.Id)
+                    .ToList();
+                using (Diagnostics.Sync.StartSpan("PrefetchPendingExportsForBatch").SetTag("csoCount", targetCsoIds.Count))
+                {
+                    await _syncRepo.PrefetchPendingExportsForBatchAsync(targetCsoIds);
+                }
+            }
         }
 
         // Build a set of MVO IDs pending immediate deletion.
@@ -5036,6 +5101,10 @@ public abstract class SyncTaskProcessorBase
 
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} provisioning CSOs in batch", _provisioningCsosToCreate.Count);
             _provisioningCsosToCreate.Clear();
+
+            // A snapshot lookup that found no target object may have been for one just written here; the snapshots
+            // the rest of the page flush takes (deletion cascades, reference recall) must see it.
+            _snapshotReferenceCsos.Clear();
         }
 
         // Unique Value Generation (#242, Phase 2 work package H): commit this page's export-mode
@@ -6792,12 +6861,26 @@ public abstract class SyncTaskProcessorBase
                 .Where(g => !resolvedReferences.ContainsKey(g))
                 .ToList();
 
-            if (unresolvedMvoGuids.Count > 0)
+            // Answered from this page's earlier lookups first; only Metaverse Objects not looked up yet reach the database.
+            var connectedSystemId = pendingExport.ConnectedSystemId;
+            var notYetLookedUp = new List<Guid>();
+            foreach (var mvoGuid in unresolvedMvoGuids)
             {
-                var dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(unresolvedMvoGuids, pendingExport.ConnectedSystemId);
-                foreach (var kvp in dbResolved)
+                if (!_snapshotReferenceCsos.TryGetValue((mvoGuid, connectedSystemId), out var known))
+                    notYetLookedUp.Add(mvoGuid);
+                else if (known != null)
+                    resolvedReferences.TryAdd(mvoGuid, known);
+            }
+
+            if (notYetLookedUp.Count > 0)
+            {
+                var dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
+                foreach (var mvoGuid in notYetLookedUp)
                 {
-                    resolvedReferences.TryAdd(kvp.Key, kvp.Value);
+                    var found = dbResolved.GetValueOrDefault(mvoGuid);
+                    _snapshotReferenceCsos[(mvoGuid, connectedSystemId)] = found;
+                    if (found != null)
+                        resolvedReferences.TryAdd(mvoGuid, found);
                 }
 
                 // Some references may remain unresolved if the referenced objects haven't been
@@ -7444,6 +7527,76 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("importMappingCount", _importMappingCache.Count);
         span.SetTag("enforceStateExportRuleCount", _driftDetectionExportRules.Count);
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// How far before the run's start the closing sweep of <see cref="TypeOrderedCsoPager"/> reaches, so an object a
+    /// writer stamped with a clock a little behind this run's is still swept. Objects inside the margin that a type walk
+    /// already handed out are not handed out again, so a generous margin costs only a slightly larger sweep query.
+    /// </summary>
+    private static readonly TimeSpan TypeOrderedSweepClockSkewMargin = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Creates the page source for a synchronisation's main loop (#2492): the Connected System's Object Types in
+    /// dependency order (referenced types first, from the run's mapped reference attributes), each walked with its own
+    /// keyset cursor, then a sweep for objects created while the run was in flight. Logs the order, so a run's
+    /// behaviour can be explained from its log.
+    /// </summary>
+    /// <param name="activeSyncRules">The run's Synchronisation Rules.</param>
+    /// <param name="runStartedAt">When the run started; the sweep's creation floor is derived from it.</param>
+    /// <param name="loadPage">The repository page load for this run kind.</param>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    /// <param name="observeUndeclaredReferenceTargets">Whether to ask the database which types the mapped reference
+    /// attributes with no declared target actually point at (one aggregate over their values, about 2 seconds at
+    /// 7 million values), rather than assume each reaches every type. Worth it for a Full Synchronisation: without it
+    /// LDAP's <c>member</c> and <c>manager</c> collapse people and groups into one id-ordered group. A Delta
+    /// Synchronisation defers only references to objects new in the same delta, too few to pay for the query.</param>
+    protected async Task<TypeOrderedCsoPager> CreateTypeOrderedPagerAsync(
+        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage, string runKind,
+        bool observeUndeclaredReferenceTargets)
+    {
+        // Only the types holding objects are paged: a schema can declare a hundred (OpenLDAP's does) while the objects
+        // use two. A type the loaded schema does not carry still has its objects paged, ordered as one with no
+        // reference mappings. A type that gains its first object mid-run is reached by the closing sweep.
+        var typeIdsInUse = await _syncRepo.GetConnectedSystemObjectTypeIdsInUseAsync(_connectedSystem.Id);
+        var loadedTypes = (_connectedSystem.ObjectTypes ?? []).Where(t => typeIdsInUse.Contains(t.Id)).ToList();
+        var objectTypes = loadedTypes
+            .Concat(typeIdsInUse
+                .Where(id => loadedTypes.TrueForAll(t => t.Id != id))
+                .Select(id => new ConnectedSystemObjectType { Id = id, Name = id.ToString(CultureInfo.InvariantCulture) }))
+            .ToList();
+
+        Dictionary<int, IReadOnlySet<int>>? observedTargetTypeIds = null;
+        if (observeUndeclaredReferenceTargets)
+        {
+            var undeclaredAttributeIds = SyncObjectTypeOrdering.GetUndeclaredMappedReferenceAttributeIds(objectTypes, activeSyncRules);
+            if (undeclaredAttributeIds.Count > 0)
+            {
+                using var observeSpan = Diagnostics.Sync.StartSpan("ObserveReferenceTargetTypes")
+                    .SetTag("attributeCount", undeclaredAttributeIds.Count);
+                observedTargetTypeIds = await _syncRepo.GetReferencedObjectTypeIdsAsync(undeclaredAttributeIds.ToList());
+                observeSpan.SetSuccess();
+            }
+        }
+
+        var order = SyncObjectTypeOrdering.Compute(objectTypes, activeSyncRules, observedTargetTypeIds);
+        var namesById = objectTypes.ToDictionary(t => t.Id, t => t.Name);
+        if (order.TypeIds.Count == 0)
+        {
+            Log.Information("{RunKind} type order: no objects to page; sweeping for any created during the run", runKind);
+            return new TypeOrderedCsoPager(loadPage, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
+        }
+
+        string NameOf(int id) => LogSanitiser.Sanitise(namesById.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture))) ?? string.Empty;
+
+        Log.Information("{RunKind} type order: {TypeOrder}", runKind, order.Describe(NameOf));
+        if (order.SelfReferencingTypeIds.Count > 0)
+        {
+            Log.Information("{RunKind} type order: references within {Types} can still need the cross-page reference step",
+                runKind, string.Join(", ", order.SelfReferencingTypeIds.Order().Select(NameOf)));
+        }
+
+        return new TypeOrderedCsoPager(loadPage, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
     }
 
     /// <summary>

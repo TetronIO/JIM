@@ -53,6 +53,31 @@ public class ActivityPhaseDtoTests
     };
 
     [Test]
+    public void ActivityProgressDtoFromEntity_CrossPageReferenceStepRunning_ReportsReferenceValuesAsTheCountUnit()
+    {
+        var progress = ProgressWith(
+            Phase(RunPhaseKeys.SyncProcessObjects, "Processing Connected System Objects", 1, ActivityPhaseStatus.Completed),
+            Phase(RunPhaseKeys.SyncResolveCrossPageReferences, "Resolving cross-page references", 2, ActivityPhaseStatus.Active));
+        progress.RunType = JIM.Models.Staging.ConnectedSystemRunType.FullSynchronisation;
+
+        var dto = ActivityProgressDto.FromEntity(progress, new ActivityEtaEstimate(null, null), Started);
+
+        Assert.That(dto.CountUnit, Is.EqualTo(RunPhaseCountUnit.ReferenceValues));
+    }
+
+    [Test]
+    public void ActivityProgressDtoFromEntity_ObjectCountingStepRunning_ReportsObjectsAsTheCountUnit()
+    {
+        var progress = ProgressWith(
+            Phase(RunPhaseKeys.SyncProcessObjects, "Processing Connected System Objects", 1, ActivityPhaseStatus.Active));
+        progress.RunType = JIM.Models.Staging.ConnectedSystemRunType.FullSynchronisation;
+
+        var dto = ActivityProgressDto.FromEntity(progress, new ActivityEtaEstimate(null, null), Started);
+
+        Assert.That(dto.CountUnit, Is.EqualTo(RunPhaseCountUnit.Objects));
+    }
+
+    [Test]
     public void FromEntity_CompletedPhase_ReportsItsDuration()
     {
         var phase = Phase(RunPhaseKeys.ImportSave, "Saving changes", 4, ActivityPhaseStatus.Completed,

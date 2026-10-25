@@ -556,3 +556,20 @@ public enum MatchCandidateKind
     /// <summary>A Connected System Object provisioning could have claimed.</summary>
     ConnectedSystemObject = 1
 }
+
+/// <summary>
+/// What an Activity's progress counters (objects processed, objects to process) count during a step (#2492).
+/// </summary>
+public enum RunPhaseCountUnit
+{
+    /// <summary>
+    /// Objects: the unit of almost every step.
+    /// </summary>
+    Objects = 0,
+
+    /// <summary>
+    /// Reference values: a Synchronisation's cross-page reference step, whose work is every reference value of each
+    /// object it resolves, so a large group weighs what it costs.
+    /// </summary>
+    ReferenceValues = 1
+}

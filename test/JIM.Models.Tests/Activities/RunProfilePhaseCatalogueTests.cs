@@ -32,6 +32,40 @@ public class RunProfilePhaseCatalogueTests
         }
     }
 
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    public void GetCountUnit_CrossPageReferenceStep_CountsReferenceValues(ConnectedSystemRunType runType)
+    {
+        // The step re-flows every reference value of each object it reloads, so a 750,000-member group is 750,000
+        // units of its work, not one (#2492).
+        Assert.That(RunProfilePhaseCatalogue.GetCountUnit(runType, RunPhaseKeys.SyncResolveCrossPageReferences),
+            Is.EqualTo(RunPhaseCountUnit.ReferenceValues));
+    }
+
+    [Test]
+    public void GetCountUnit_EveryOtherDeclaredStep_CountsObjects()
+    {
+        foreach (var runType in ExecutableRunTypes)
+        {
+            foreach (var phase in RunProfilePhaseCatalogue.GetPhases(runType)
+                         .Where(p => p.Key != RunPhaseKeys.SyncResolveCrossPageReferences))
+            {
+                Assert.That(RunProfilePhaseCatalogue.GetCountUnit(runType, phase.Key), Is.EqualTo(RunPhaseCountUnit.Objects),
+                    $"{runType} step {phase.Key}");
+            }
+        }
+    }
+
+    [Test]
+    public void GetCountUnit_UndeclaredOrMissingStep_CountsObjects()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(RunProfilePhaseCatalogue.GetCountUnit(ConnectedSystemRunType.FullImport, "connector.fetch"), Is.EqualTo(RunPhaseCountUnit.Objects));
+            Assert.That(RunProfilePhaseCatalogue.GetCountUnit(null, null), Is.EqualTo(RunPhaseCountUnit.Objects));
+        }
+    }
+
     [Test]
     public void GetPhases_NotSetRunType_DeclaresNoPhases()
     {

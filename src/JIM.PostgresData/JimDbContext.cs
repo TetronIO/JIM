@@ -907,10 +907,12 @@ public class JimDbContext : DbContext
             .IsUnique();
 
         // Performance indexes for frequently queried tables
-        // ConnectedSystemObject: composite index for lookups by system and type
+        // ConnectedSystemObject: composite index for lookups by system and type. Id is the trailing key so that a
+        // synchronisation paging one Object Type at a time (#2492) walks its keyset cursor within the type on the
+        // index, keeping every page O(pageSize); the (system, type) prefix still serves the plain lookups.
         modelBuilder.Entity<ConnectedSystemObject>()
-            .HasIndex(cso => new { cso.ConnectedSystemId, cso.TypeId })
-            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId");
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.TypeId, cso.Id })
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id");
 
         // PendingExport: composite index for export queries by system and status
         modelBuilder.Entity<PendingExport>()

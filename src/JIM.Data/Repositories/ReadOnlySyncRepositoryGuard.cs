@@ -38,11 +38,17 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _inner.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
-        => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId, objectTypeId, createdOnOrAfter);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
-        => _inner.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId);
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
+        => _inner.GetConnectedSystemObjectTypeIdsInUseAsync(connectedSystemId);
+
+    public Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
+        => _inner.GetReferencedObjectTypeIdsAsync(attributeIds);
+
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        => _inner.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _inner.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
@@ -649,6 +655,22 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task DeletePendingExportAsync(PendingExport pendingExport)
         => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportAsync));
+
+    public void BeginPendingExportBatch()
+        => throw new PreviewWriteAttemptedException(nameof(BeginPendingExportBatch));
+
+    public Task DeletePendingExportForMergeAsync(PendingExport pendingExport)
+        => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportForMergeAsync));
+
+    public Task FlushPendingExportBatchAsync()
+        => throw new PreviewWriteAttemptedException(nameof(FlushPendingExportBatchAsync));
+
+    // A read, but only meaningful inside a Pending Export batch, which a preview can never open.
+    public Task PrefetchPendingExportsForBatchAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(PrefetchPendingExportsForBatchAsync));
+
+    public void AbandonPendingExportBatch()
+        => throw new PreviewWriteAttemptedException(nameof(AbandonPendingExportBatch));
 
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => throw new PreviewWriteAttemptedException(nameof(UpdatePendingExportAsync));

@@ -57,7 +57,10 @@ function Get-ScenarioSupportedDirectoryTypes {
         # mechanism. The 389 Directory Server lab has two suffixes too, but these scenarios' fixtures
         # and assertions are written against OpenLDAP (cn=config, the ppolicy overlay, olc*
         # attributes), so it is treated like Samba AD here.
-        { $_ -in 14, 19, 22 } { return @('OpenLDAP') }
+        # Scenario 032 (Intra-type References) composes Scenario 008's OpenLDAP setup with a bespoke two-suffix
+        # dataset of its own (Populate-OpenLDAP-Scenario-032.ps1); the cross-page reference step it measures is
+        # directory-independent, so one directory covers it.
+        { $_ -in 14, 19, 22, 32 } { return @('OpenLDAP') }
 
         # Scenario 017 (Initial Password) is Active Directory family only (Samba AD and the Active
         # Directory lab): "must change at next sign-in" (its central assertion) is an Active Directory

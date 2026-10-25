@@ -1539,7 +1539,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         int pageSize,
         int? knownTotalCount = null,
         DateTime? lastSyncTimestamp = null,
-        Guid? afterId = null)
+        Guid? afterId = null,
+        int? objectTypeId = null,
+        DateTime? createdOnOrAfter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1578,9 +1580,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             var watermark = lastSyncTimestamp.Value;
 
             // Step 1: Load all CSOs for this page WITHOUT attribute values (scalars + Type only)
-            var csoScalarQuery = Repository.Database.ConnectedSystemObjects
+            var csoScalarQuery = ApplySyncPageFilters(Repository.Database.ConnectedSystemObjects
                 .Include(cso => cso.Type)
-                .Where(q => q.ConnectedSystemId == connectedSystemId)
+                .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter)
                 .OrderBy(cso => cso.Id)
                 .AsQueryable();
             csoScalarQuery = afterId.HasValue
@@ -1640,11 +1642,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         {
             // Standard loading: full Include chain for all CSOs (no watermark available).
             // Used for first-ever sync or when caller doesn't provide a watermark.
-            var csoQuery = Repository.Database.ConnectedSystemObjects
+            var csoQuery = ApplySyncPageFilters(Repository.Database.ConnectedSystemObjects
                 .Include(cso => cso.Type)
                 .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.Attribute)
-                .Where(q => q.ConnectedSystemId == connectedSystemId)
+                .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter)
                 .OrderBy(cso => cso.Id)
                 .AsQueryable();
 
@@ -1752,7 +1754,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         int page,
         int pageSize,
         int? knownTotalCount = null,
-        Guid? afterId = null)
+        Guid? afterId = null,
+        int? objectTypeId = null,
+        DateTime? createdOnOrAfter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1781,7 +1785,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // Order by Id for consistent pagination.
         // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
         // must identity-fix with already-tracked instances from the Connected System/Synchronisation Rule queries.
-        var csoQuery = Repository.Database.ConnectedSystemObjects
+        var csoQuery = ApplySyncPageFilters(Repository.Database.ConnectedSystemObjects
             .AsTracking()
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
@@ -1790,7 +1794,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                          (cso.SynchronisationPending ||
                           cso.DerivedInputChangePending ||
                           cso.Created > modifiedSince ||
-                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
+                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince))), objectTypeId, createdOnOrAfter)
             .OrderBy(cso => cso.Id);
 
         // Get count with lightweight query (no includes)
@@ -1841,6 +1845,30 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The optional filters both synchronisation page loaders share (#2492): one Object Type, so a run can page through
+    /// types in dependency order (served by <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>, which keeps
+    /// the keyset cursor O(pageSize) within the type), and a creation floor, for the closing sweep that picks up
+    /// objects created while the run was in flight.
+    /// </summary>
+    private static IQueryable<ConnectedSystemObject> ApplySyncPageFilters(
+        IQueryable<ConnectedSystemObject> query, int? objectTypeId, DateTime? createdOnOrAfter)
+    {
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            query = query.Where(cso => cso.TypeId == typeId);
+        }
+
+        if (createdOnOrAfter.HasValue)
+        {
+            var createdFloor = createdOnOrAfter.Value;
+            query = query.Where(cso => cso.Created >= createdFloor);
+        }
+
+        return query;
     }
 
     /// <summary>

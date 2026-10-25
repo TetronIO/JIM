@@ -55,7 +55,7 @@
 - Unit tests MUST cover: null values, type mismatches, corrupt data states
 - Integration tests MUST verify error reporting when edge cases occur
 - Never assume data will always be in expected state
-- Changes to Pending Export staging or lifecycle (`ExportEvaluationServer`, `SyncEngine.ExportStaging`, `SyncEngine.Reconciliation`, the sync processors' export flush and cross-page pass) MUST also run Scenario 008 (`Scenario-008-CrossDomainEntitlementSync`, Medium) before the PR: it is the only end-to-end exercise of the cross-page reference pass against a real directory, and unit coverage of that pass is limited to `CrossPageReferenceProvisioningTests`
+- Changes to Pending Export staging or lifecycle (`ExportEvaluationServer`, `SyncEngine.ExportStaging`, `SyncEngine.Reconciliation`, the sync processors' export flush and cross-page pass) MUST also run Scenario 008 (`Scenario-008-CrossDomainEntitlementSync`, Medium) and Scenario 032 (`Scenario-032-IntraTypeReferences`, OpenLDAP, Medium) before the PR. Since synchronisation pages Object Types in dependency order (#2492), Scenario 008's group-to-user references resolve in the page loop, so Scenario 032 (managers and nested groups, references within one type) is the end-to-end exercise of the cross-page reference pass against a real directory; unit coverage of that pass is limited to `CrossPageReferenceProvisioningTests`
 
 ### 7. Code Review Focus for Sync Code
 

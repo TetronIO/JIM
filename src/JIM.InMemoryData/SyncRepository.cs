@@ -386,7 +386,8 @@ public class SyncRepository : ISyncRepository
         (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null,
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null)
     {
         if (afterId.HasValue)
         {
@@ -395,7 +396,7 @@ public class SyncRepository : ISyncRepository
             // used for both the ordering and the filter, so the cursor chain is self-consistent
             // within this provider, mirroring the production contract.
             var afterIdValue = afterId.Value;
-            var remaining = GetCsosForSystem(connectedSystemId)
+            var remaining = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
                 .OrderBy(c => c.Id)
                 .Where(c => c.Id.CompareTo(afterIdValue) > 0)
                 .ToList();
@@ -405,12 +406,26 @@ public class SyncRepository : ISyncRepository
             return Task.FromResult(keysetResult);
         }
 
-        var all = GetCsosForSystem(connectedSystemId)
+        var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
         var result = BuildPagedResult(all, page, pageSize);
         FlagUnchangedObjects(result.Results, lastSyncTimestamp);
         return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// The page loaders' optional Object Type and creation-floor filters (#2492), as the production loaders apply them.
+    /// </summary>
+    private static IEnumerable<ConnectedSystemObject> ApplySyncPageFilters(
+        IEnumerable<ConnectedSystemObject> csos, int? objectTypeId, DateTime? createdOnOrAfter)
+    {
+        // Tests often build objects with only the Type navigation set, so match on either.
+        if (objectTypeId.HasValue)
+            csos = csos.Where(c => c.TypeId == objectTypeId.Value || c.Type?.Id == objectTypeId.Value);
+        if (createdOnOrAfter.HasValue)
+            csos = csos.Where(c => c.Created >= createdOnOrAfter.Value);
+        return csos;
     }
 
     /// <summary>
@@ -425,9 +440,10 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null)
     {
-        var modified = GetCsosForSystem(connectedSystemId)
+        var modified = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
             .Where(c => IsModifiedSince(c, modifiedSince));
 
         if (afterId.HasValue)
@@ -448,6 +464,29 @@ public class SyncRepository : ISyncRepository
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
+    }
+
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
+    {
+        // Tests often build objects with only the Type navigation set, so read either.
+        IReadOnlySet<int> inUse = GetCsosForSystem(connectedSystemId)
+            .Select(c => c.TypeId != 0 ? c.TypeId : c.Type?.Id ?? 0)
+            .Where(id => id != 0)
+            .ToHashSet();
+        return Task.FromResult(inUse);
+    }
+
+    public Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
+    {
+        var wanted = attributeIds.ToHashSet();
+        var result = wanted.ToDictionary(id => id, _ => (IReadOnlySet<int>)new HashSet<int>());
+        foreach (var av in _csos.Values.SelectMany(c => c.AttributeValues)
+                     .Where(av => wanted.Contains(av.AttributeId) && av.ReferenceValueId.HasValue))
+        {
+            if (_csos.TryGetValue(av.ReferenceValueId!.Value, out var target))
+                ((HashSet<int>)result[av.AttributeId]).Add(target.TypeId != 0 ? target.TypeId : target.Type?.Id ?? 0);
+        }
+        return Task.FromResult(result);
     }
 
     /// <summary>
@@ -2815,6 +2854,38 @@ public class SyncRepository : ISyncRepository
     public Task DeletePendingExportAsync(PendingExport pendingExport)
         => DeletePendingExportsAsync(new[] { pendingExport });
 
+    private bool _pendingExportBatchOpen;
+
+    /// <summary>
+    /// This fake store enforces no unique index and has no change tracker, so a merge's delete is executed at once
+    /// whether or not a batch is open: from a caller's side that is indistinguishable from the production queue, which
+    /// hides a queued row from every read. Opening, flushing and abandoning still police the single open batch.
+    /// </summary>
+    public void BeginPendingExportBatch()
+    {
+        if (_pendingExportBatchOpen)
+            throw new InvalidOperationException("A Pending Export batch is already open.");
+        _pendingExportBatchOpen = true;
+    }
+
+    public Task DeletePendingExportForMergeAsync(PendingExport pendingExport)
+        => DeletePendingExportAsync(pendingExport);
+
+    public Task PrefetchPendingExportsForBatchAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (!_pendingExportBatchOpen)
+            throw new InvalidOperationException("No Pending Export batch is open.");
+        return Task.CompletedTask;
+    }
+
+    public Task FlushPendingExportBatchAsync()
+    {
+        _pendingExportBatchOpen = false;
+        return Task.CompletedTask;
+    }
+
+    public void AbandonPendingExportBatch() => _pendingExportBatchOpen = false;
+
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => UpdatePendingExportsAsync(new[] { pendingExport });
 
@@ -3028,6 +3099,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Every (Metaverse Object, Connected System) <see cref="GetConnectedSystemObjectsByMetaverseObjectIdsAsync"/> has been
+    /// asked for, in call order, so a test can prove a lookup is not repeated (#2492).
+    /// </summary>
+    public List<(Guid MetaverseObjectId, int ConnectedSystemId)> ConnectedSystemObjectLookupsByMetaverseObjectId { get; } = [];
+
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
     {
@@ -3035,6 +3112,7 @@ public class SyncRepository : ISyncRepository
 
         foreach (var mvoId in metaverseObjectIds)
         {
+            ConnectedSystemObjectLookupsByMetaverseObjectId.Add((mvoId, connectedSystemId));
             if (_csosByMvo.TryGetValue(mvoId, out var csoIds))
             {
                 foreach (var csoId in csoIds)
