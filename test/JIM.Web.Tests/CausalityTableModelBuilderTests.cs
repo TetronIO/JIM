@@ -10,6 +10,7 @@ using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Web.Causality;
 using NUnit.Framework;
 using JimUtilities = JIM.Utilities.Utilities;
@@ -906,6 +907,43 @@ public class CausalityTableModelBuilderTests
             Assert.That(exportRow.SyncRuleId, Is.EqualTo(9));
             Assert.That(attributeRows.Select(r => r.Via), Has.All.EqualTo("Glitterband People - Outbound"));
             Assert.That(attributeRows.Select(r => r.SyncRuleId), Has.All.EqualTo(9));
+        }
+    }
+
+    // ─── Change values read for display (#2498) ───
+
+    /// <summary>
+    /// The new joiner, read for display: its export's staged change snapshot is summarised in <paramref name="changeValues"/>
+    /// rather than carrying its value changes. Returns the item and the snapshot's id.
+    /// </summary>
+    private static (ActivityRunProfileExecutionItem Item, Guid SnapshotId) NewJoinerWithSnapshotId()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var snapshot = item.SyncOutcomes.Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated).ConnectedSystemObjectChange!;
+        snapshot.Id = Guid.NewGuid();
+        return (item, snapshot.Id);
+    }
+
+    [Test]
+    public void Build_EventWithTooManyAttributeRowsToCarry_ListsOneRowStandingForThemAll()
+    {
+        var (item, snapshotId) = NewJoinerWithSnapshotId();
+        var summary = new ChangeValueSummary(snapshotId, SetCount: 1, AddCount: 600_000, RemoveCount: 6, 7, "AD Group Export");
+        var changeValues = new CausalityChangeValues { Summaries = new Dictionary<Guid, ChangeValueSummary> { [snapshotId] = summary } };
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), changeValues: changeValues);
+
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var summaryRow = table.Rows.Single(r => r.ChangeKind == CausalityTableChangeKind.AttributeChange);
+        var downstream = table.Objects.Single(o => o.Key == summaryRow.ObjectKey);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summaryRow.SummarisedRowCount, Is.EqualTo(600_007), "one row stands for every attribute row, never a partial list");
+            Assert.That(summaryRow.SummarisedEvent?.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated),
+                "it opens the event's own drawer, which reads the rows a window at a time");
+            Assert.That(summaryRow.Via, Is.EqualTo("AD Group Export"), "the rule every value agrees on, as when the rows were listed");
+            Assert.That(downstream.RowCount, Is.EqualTo(600_007 + table.Rows.Count(r => r.ObjectKey == downstream.Key) - 1),
+                "the object's count still counts every row");
         }
     }
 }

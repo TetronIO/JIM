@@ -1183,7 +1183,7 @@ public class ActivitiesControllerTests
 
         await _controller.GetActivityExecutionItemAsync(item.Id);
 
-        _mockActivityRepo.Verify(r => r.GetActivityRunProfileExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
+        _mockActivityRepo.Verify(r => r.GetActivityRunProfileExecutionItemDetailAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Test]

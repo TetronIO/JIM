@@ -60,13 +60,15 @@ else
                                 LivePendingExportIds="item.LivePendingExportIds"
                                 Timestamp="item.Timestamp"
                                 Chain="item.Chain"
+                                ChangeValues="item.ChangeValues"
                                 DeletionPolicySnapshot="item.DeletionPolicySnapshot"
                                 IsSynchronisationRun="item.IsSynchronisationRun"
                                 LineageOnly="true"
                                 Consequences="_consequences"
                                 ConsequencesLoading="_consequencesLoading"
                                 OnCheckConsequencesAgain="CheckConsequencesAgainAsync"
-                                LoadConsequenceMembers="LoadConsequenceMembersAsync" />
+                                LoadConsequenceMembers="LoadConsequenceMembersAsync"
+                                LoadAttributeRows="LoadAttributeRowsAsync" />
             }
         }
         else if (_timeline is { } timeline && _links is { } links && (timeline.Header != null || _rows.Count > 0))
@@ -253,6 +255,13 @@ else
         _consequences = null;
         _consequencesReadFor = null;
         return ReadConsequencesAsync();
+    }
+
+    private async Task<JIM.Models.Utility.RangeResultSet<CausalityAttributeRow>> LoadAttributeRowsAsync(
+        CausalityAttributeRowSource source, JIM.Models.Utility.ChangeValueRowQuery query)
+    {
+        using var jim = JimFactory.Create();
+        return await CausalityAttributeRowReader.ReadAsync(jim, source, query);
     }
 
     private async Task<JIM.Models.Utility.PagedResultSet<CausalConsequenceMember>?> LoadConsequenceMembersAsync(string cohortKey, int page, string? search)

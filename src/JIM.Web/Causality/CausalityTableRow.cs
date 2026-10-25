@@ -44,6 +44,12 @@ namespace JIM.Web.Causality;
 /// deletion's grace text (<see cref="CausalityTableModelBuilder"/>). Null for every other row, including
 /// every attribute-change row (its reasoning is the value change itself).
 /// </param>
+/// <param name="SummarisedRowCount">
+/// For a row standing in for an event's attribute changes when they are too many to list (#2498), how many attribute
+/// rows it stands for; 0 for every other row. The view states the counts and offers <paramref name="SummarisedEvent"/>'s
+/// drawer, which reads the rows a window at a time.
+/// </param>
+/// <param name="SummarisedEvent">The event whose attribute rows a summary row stands for; null for every other row.</param>
 public sealed record CausalityTableRow(
     string ObjectKey,
     CausalityTableChangeKind ChangeKind,
@@ -54,7 +60,9 @@ public sealed record CausalityTableRow(
     int? SyncRuleId,
     string OutcomeLabel,
     CausalityTone Tone,
-    string? OutcomeDetail = null)
+    string? OutcomeDetail = null,
+    int SummarisedRowCount = 0,
+    CausalityEvent? SummarisedEvent = null)
 {
     /// <summary>
     /// The plain label for <see cref="ChangeKind"/>, shown in the grid's Change column.

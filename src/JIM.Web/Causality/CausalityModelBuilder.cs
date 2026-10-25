@@ -9,6 +9,7 @@ using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using MudBlazor;
 using JimUtilities = JIM.Utilities.Utilities;
 
@@ -49,14 +50,22 @@ public static class CausalityModelBuilder
     /// (create, update or delete), carried on the queueing edge's reason code, so an Exported outcome
     /// can state its decision rather than a bare "Exported" (#1495). Null keeps the bare label.
     /// </param>
+    /// <param name="changeValues">
+    /// The item's change values, where it was read for display (#2498): each change record's summary, and the rows of
+    /// the small ones. A change with a summary takes its rows from here, and one with more rows than it carries is read
+    /// a window at a time where it is shown; a change without one is normalised from the value changes it carries, as a
+    /// hand-built item's are. Null for none.
+    /// </param>
     public static CausalityModel Build(
         ActivityRunProfileExecutionItem item,
         CausalityPageContext context,
         IReadOnlySet<Guid>? livePendingExportIds = null,
         MvoDeletionPolicySnapshot? deletionPolicySnapshot = null,
         bool isSynchronisationRun = false,
-        CausalChain? chain = null)
+        CausalChain? chain = null,
+        CausalityChangeValues? changeValues = null)
     {
+        changeValues ??= CausalityChangeValues.None;
         var outcomes = item.SyncOutcomes;
         var outcomeIds = outcomes.Select(o => o.Id).ToHashSet();
 
@@ -75,14 +84,16 @@ public static class CausalityModelBuilder
         // Identity's attribute changes (MetaverseObjectChange) belong to Attribute Flow. Keeping
         // them separate stops an event's expander count disagreeing with its outcome's DetailCount
         // when an item carries both sets (e.g. a leaver's record deletion plus attribute recall).
-        var recordAttributeRows = NormaliseAttributeRows(item.ConnectedSystemObjectChange?.AttributeChanges, null);
-        var identityAttributeRows = NormaliseAttributeRows(null, item.MetaverseObjectChange?.AttributeChanges);
+        var recordAttributeRows = AttributeSetFor(changeValues, CausalityChangeSide.ConnectedSystemObject,
+            item.ConnectedSystemObjectChange?.Id, item.ConnectedSystemObjectChange?.AttributeChanges, null);
+        var identityAttributeRows = AttributeSetFor(changeValues, CausalityChangeSide.MetaverseObject,
+            item.MetaverseObjectChange?.Id, null, item.MetaverseObjectChange?.AttributeChanges);
 
         var roots = outcomes
             .Where(o => !attachedChildIds.Contains(o.Id))
             .OrderBy(o => o.Ordinal)
             .Select(o => BuildEvent(o, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
-                livePendingExportIds, chain))
+                livePendingExportIds, chain, changeValues))
             .ToList();
 
         if (BuildDeclinedDeletionEvent(item, deletionPolicySnapshot, isSynchronisationRun) is { } declined)
@@ -420,10 +431,11 @@ public static class CausalityModelBuilder
         ActivityRunProfileExecutionItemSyncOutcome outcome,
         Dictionary<Guid, List<ActivityRunProfileExecutionItemSyncOutcome>> childrenByParentId,
         CausalityPageContext context,
-        IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
-        IReadOnlyList<CausalityAttributeRow> identityAttributeRows,
+        AttributeSet recordAttributeRows,
+        AttributeSet identityAttributeRows,
         IReadOnlySet<Guid>? livePendingExportIds,
         CausalChain? chain,
+        CausalityChangeValues changeValues,
         int? parentSyncRuleId = null,
         string? parentSyncRuleName = null,
         CausalityLane? parentLane = null)
@@ -451,6 +463,7 @@ public static class CausalityModelBuilder
 
         var links = BuildLinks(outcome, childOutcomes, parsedDetail, context, livePendingExportIds);
         var (systemId, systemName) = GetOwningSystem(outcome, lane, usesIdChannel, parsedDetail, context);
+        var attributeSet = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows, changeValues);
 
         return new CausalityEvent
         {
@@ -472,11 +485,14 @@ public static class CausalityModelBuilder
             EffectiveSyncRuleId = effectiveSyncRuleId,
             EffectiveSyncRuleName = effectiveSyncRuleName,
             Links = links,
-            AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
+            AttributeRows = attributeSet.Rows,
+            AttributeRowCount = attributeSet.Count,
+            AttributeRowSource = attributeSet.Source,
+            AttributeRowSummary = attributeSet.Summary,
             Operation = OutcomeDisplayMap.GetEventOperation(outcome.OutcomeType, exportReasonCode, outcome.StagedChangeType),
             Children = childOutcomes
                 .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
-                    livePendingExportIds, chain, effectiveSyncRuleId, effectiveSyncRuleName, lane))
+                    livePendingExportIds, chain, changeValues, effectiveSyncRuleId, effectiveSyncRuleName, lane))
                 .ToList()
         };
     }
@@ -957,14 +973,17 @@ public static class CausalityModelBuilder
     /// never share the combined item-level list, so each event's row count agrees with its own
     /// outcome's DetailCount.
     /// </summary>
-    private static IReadOnlyList<CausalityAttributeRow> GetAttributeRows(
+    private static AttributeSet GetAttributeRows(
         ActivityRunProfileExecutionItemSyncOutcome outcome,
-        IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
-        IReadOnlyList<CausalityAttributeRow> identityAttributeRows)
+        AttributeSet recordAttributeRows,
+        AttributeSet identityAttributeRows,
+        CausalityChangeValues changeValues)
     {
         if (SyncOutcomeTypes.IsPendingExport(outcome.OutcomeType)
             || outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
-            return NormaliseAttributeRows(outcome.ConnectedSystemObjectChange?.AttributeChanges, null);
+            return AttributeSetFor(changeValues, CausalityChangeSide.ConnectedSystemObject,
+                outcome.ConnectedSystemObjectChangeId ?? outcome.ConnectedSystemObjectChange?.Id,
+                outcome.ConnectedSystemObjectChange?.AttributeChanges, null);
 
         return outcome.OutcomeType switch
         {
@@ -977,8 +996,43 @@ public static class CausalityModelBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
                 => recordAttributeRows,
-            _ => []
+            _ => AttributeSet.Empty
         };
+    }
+
+    /// <summary>
+    /// One change record's attribute rows, as an event carries them (#2498).
+    /// </summary>
+    /// <param name="Rows">The rows, when there are few enough to carry; else empty.</param>
+    /// <param name="Count">How many rows there are in all.</param>
+    /// <param name="Source">Where the rows are read from when <paramref name="Rows"/> does not hold them all.</param>
+    /// <param name="Summary">The change's summary, where it was read rather than built from the change itself.</param>
+    private sealed record AttributeSet(
+        IReadOnlyList<CausalityAttributeRow> Rows, int Count, CausalityAttributeRowSource? Source, ChangeValueSummary? Summary)
+    {
+        public static readonly AttributeSet Empty = new([], 0, null, null);
+    }
+
+    /// <summary>
+    /// A change record's attribute rows: from its summary and, for a small change, its rows read whole, where the item
+    /// was read for display (a large group's change is read a window at a time); else normalised from whatever value
+    /// changes the change record itself carries, as a hand-built graph does.
+    /// </summary>
+    private static AttributeSet AttributeSetFor(
+        CausalityChangeValues changeValues,
+        CausalityChangeSide side,
+        Guid? changeId,
+        IEnumerable<ConnectedSystemObjectChangeAttribute>? csoAttributeChanges,
+        IEnumerable<MetaverseObjectChangeAttribute>? mvoAttributeChanges)
+    {
+        if (changeId is { } id && changeValues.Summaries.TryGetValue(id, out var summary))
+        {
+            var rows = changeValues.Rows.GetValueOrDefault(id) ?? [];
+            return new AttributeSet(rows, summary.RowCount, rows.Count >= summary.RowCount ? null : new CausalityAttributeRowSource(side, id), summary);
+        }
+
+        var normalised = NormaliseAttributeRows(csoAttributeChanges, mvoAttributeChanges);
+        return new AttributeSet(normalised, normalised.Count, null, null);
     }
 
     /// <summary>
@@ -1024,7 +1078,7 @@ public static class CausalityModelBuilder
         {
             var changes = group.ToList();
             var isMultiValued = changes[0].IsMultiValued;
-            var typeAndPlurality = GetTypeAndPlurality(changes[0].AttributeType, isMultiValued);
+            var typeAndPlurality = CausalityAttributeRowMapper.TypeAndPlurality(changes[0].AttributeType, isMultiValued);
 
             if (!isMultiValued)
             {
@@ -1076,25 +1130,6 @@ public static class CausalityModelBuilder
             return valueChange.ToString();
 
         return valueChange.ReferenceValue.NameOrId ?? valueChange.ReferenceValue.Id.ToString();
-    }
-
-    private static string GetTypeAndPlurality(AttributeDataType attributeType, bool isMultiValued)
-    {
-        var typeName = attributeType switch
-        {
-            AttributeDataType.NotSet => "Unknown",
-            AttributeDataType.Text => "Text",
-            AttributeDataType.Number => "Number",
-            AttributeDataType.DateTime => "Date and Time",
-            AttributeDataType.Binary => "Binary",
-            AttributeDataType.Reference => "Reference",
-            AttributeDataType.Guid => "GUID",
-            AttributeDataType.Boolean => "Boolean",
-            AttributeDataType.LongNumber => "Long Number",
-            _ => attributeType.ToString()
-        };
-
-        return $"{typeName} · {(isMultiValued ? "Multi-valued" : "Single-valued")}";
     }
 
     /// <summary>

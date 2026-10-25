@@ -962,6 +962,13 @@ public interface IConnectedSystemRepository
     Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
 
     /// <summary>
+    /// Each given Connected System Object's name, as <c>ConnectedSystemObject.NameOrId</c> resolves it (the naming
+    /// tiers, then its external ids), read without materialising the object's values; an object that no longer exists,
+    /// or has no name, has no entry.
+    /// </summary>
+    Task<Dictionary<Guid, string>> GetConnectedSystemObjectNamesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>

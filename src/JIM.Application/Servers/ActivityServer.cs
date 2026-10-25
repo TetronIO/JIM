@@ -734,14 +734,35 @@ public partial class ActivityServer
         return await Application.Repository.Activity.GetActivityRpeiErrorCountsAsync(activityId);
     }
 
-    public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
+    /// <summary>
+    /// A Run Profile Execution Item as its portal page shows it (#2498): the item bounded however large the group it
+    /// changed, and a summary of each change record it carries in place of the change's values. Null when no item has
+    /// the id.
+    /// </summary>
+    public async Task<ExecutionItemDetail?> GetActivityRunProfileExecutionItemDetailAsync(Guid id)
     {
-        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemAsync(id);
+        var item = await Application.Repository.Activity.GetActivityRunProfileExecutionItemDetailAsync(id);
+        if (item == null)
+            return null;
+
+        var connectedSystemObjectChangeIds = item.SyncOutcomes
+            .Select(o => o.ConnectedSystemObjectChangeId)
+            .Append(item.ConnectedSystemObjectChange?.Id)
+            .OfType<Guid>()
+            .Distinct()
+            .ToList();
+        var summaries = connectedSystemObjectChangeIds.Count > 0
+            ? await Application.ConnectedSystems.GetCsoChangeValueSummariesAsync(connectedSystemObjectChangeIds)
+            : [];
+        if (item.MetaverseObjectChange is { } metaverseObjectChange)
+            summaries.AddRange(await Application.Metaverse.GetMvoChangeValueSummariesAsync([metaverseObjectChange.Id]));
+
+        return new ExecutionItemDetail { Item = item, ChangeValueSummaries = summaries.ToDictionary(s => s.ChangeId) };
     }
 
     /// <summary>
     /// One Run Profile Execution Item's own fields (error type, message and stack trace, snapshots and the ids of what
-    /// it is about) without the graph <see cref="GetActivityRunProfileExecutionItemAsync"/> loads for the portal. Null
+    /// it is about) without what <see cref="GetActivityRunProfileExecutionItemDetailAsync"/> loads for the portal. Null
     /// when no item has the id.
     /// </summary>
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id)

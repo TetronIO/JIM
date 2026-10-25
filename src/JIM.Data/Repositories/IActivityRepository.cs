@@ -241,12 +241,18 @@ public interface IActivityRepository
     /// </summary>
     public Task FinaliseActivityRunProfileExecutionStatsAsync(Activity activity);
 
-    public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
+    /// <summary>
+    /// A Run Profile Execution Item as its portal page shows it, bounded however large the group it changed (#2498):
+    /// its own row and sync outcomes; its Connected System Object with only the attribute values that name and identify
+    /// it, the joined Metaverse Object's row and type; and its change records (its own, and each outcome's staged
+    /// snapshot) without their attribute changes, which are read a window at a time. Null when no item has the id.
+    /// </summary>
+    public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemDetailAsync(Guid id);
 
     /// <summary>
     /// One Run Profile Execution Item's own row, with no navigation loaded: its error type, message and stack trace,
     /// its snapshots and the ids of what it is about. The light counterpart of
-    /// <see cref="GetActivityRunProfileExecutionItemAsync"/>, which loads the graph the portal's detail page renders.
+    /// <see cref="GetActivityRunProfileExecutionItemDetailAsync"/>, which loads what the portal's detail page renders.
     /// Null when no item has the id.
     /// </summary>
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id);

@@ -1675,6 +1675,12 @@
     color: var(--cz-text-dim);
 }
 
+/* A row standing for an event's attribute changes when they are too many to list (#2498): the counts, then the action
+   that opens the event's drawer, on one line across the Attribute, Current and Would be columns. */
+.causality-panel .tv-summary {
+    white-space: nowrap;
+}
+
 @media (max-width: 820px) {
     /* The Table view stacks its navigation above the grid, matching the Lineage's own breakpoint. The
        resize handle has nothing to do in a single-column stack, so it is hidden rather than laid out. */

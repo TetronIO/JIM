@@ -1,12 +1,15 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
 using Microsoft.AspNetCore.Components.Web;
@@ -676,5 +679,40 @@ public class CausalityTableViewTests
 
         cut.WaitForAssertion(() =>
             Assert.That(_context.JSInterop.Invocations.Any(i => i.Identifier == "jimTableViewColumnResizer.attach"), Is.True));
+    }
+
+    /// <summary>
+    /// A change to a large group (#2498): the export's attribute changes are summarised rather than carried, so the
+    /// table lists one row standing for them all.
+    /// </summary>
+    private static CausalityTableModel LargeExportTableModel()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var snapshot = item.SyncOutcomes.Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated).ConnectedSystemObjectChange!;
+        snapshot.Id = Guid.NewGuid();
+        var changeValues = new CausalityChangeValues
+        {
+            Summaries = new Dictionary<Guid, ChangeValueSummary> { [snapshot.Id] = new(snapshot.Id, 1, 600_000, 6, null, null) }
+        };
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), changeValues: changeValues);
+        return CausalityTableModelBuilder.Build(model);
+    }
+
+    [Test]
+    public void Render_EventWithTooManyAttributeRows_ShowsOneRowWithItsCountsAndAViewAllAction()
+    {
+        CausalityEvent? viewed = null;
+        var model = LargeExportTableModel();
+        var cut = _context.Render<CausalityTableView>(ps => ps
+            .Add(c => c.Model, model)
+            .Add(c => c.OnViewAllAttributeChanges, (CausalityEvent e) => viewed = e));
+
+        var summary = cut.Find(".tv-summary");
+        Assert.That(summary.TextContent, Does.Contain("600,000 added").And.Contain("6 removed").And.Contain("1 set"));
+
+        cut.Find(".tv-summary-view-all").Click();
+
+        Assert.That(viewed, Is.SameAs(model.Rows.Single(r => r.SummarisedRowCount > 0).SummarisedEvent),
+            "View all opens the event's own drawer, which reads the rows a window at a time");
     }
 }
