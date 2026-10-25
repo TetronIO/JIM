@@ -38,7 +38,7 @@ function Get-ScenarioSupportedDirectoryTypes {
 
     .DESCRIPTION
         The Active Directory lab runs whatever Samba AD runs, except the scenarios only a real domain
-        controller or its AD FS server can hold (024, 025 and 030), which run on the lab only. $null (the
+        controller or its AD FS server can hold (024, 025, 030 and 031), which run on the lab only. $null (the
         "All" scenario) has no restriction.
     #>
     [CmdletBinding()]
@@ -81,9 +81,9 @@ function Get-ScenarioSupportedDirectoryTypes {
         # password policy and a Fine-Grained Password Policy; 025 asserts the Active Directory Recycle
         # Bin and the restore-from-backup behaviour of a Hyper-V checkpoint revert. A Samba AD
         # container and the OpenLDAP and 389 Directory Server labs have none of these to assert against.
-        # Scenario 030 (AD FS identity provider trust) signs in through the lab's AD FS server, adfs-primary,
-        # which only the Active Directory lab has.
-        { $_ -in 24, 25, 30 } { return @('ActiveDirectory') }
+        # Scenarios 030 (AD FS identity provider trust) and 031 (AD FS sign-in) sign in through the lab's AD FS
+        # server, adfs-primary, which only the Active Directory lab has.
+        { $_ -in 24, 25, 30, 31 } { return @('ActiveDirectory') }
 
         # Every other scenario, including the directory-agnostic ones (see
         # Test-ScenarioIsDirectoryAgnostic below), is architecturally able to run against any of the
@@ -157,4 +157,25 @@ function Test-ScenarioIsDirectoryAgnostic {
     # compatibility but never read it (015, 016, 027, 028 and 029 explicitly discard it with
     # `$null = $DirectoryConfig`); their results are identical on every directory type.
     return $ScenarioNumber -in 11, 15, 16, 27, 28, 29
+}
+
+function Test-ScenarioRunsOnItsOwn {
+    <#
+    .SYNOPSIS
+        $true when Scenario $ScenarioNumber is left out of -Scenario All because the lab workflow runs it in a step of
+        its own and reports it as a commit status of its own.
+    .DESCRIPTION
+        Scenario 031 (AD FS sign-in, #2441) is reported as jim-ad-lab-adfs, apart from the LDAP scenarios'
+        jim-ad-lab, so that a sign-in failure never turns the LDAP result red or the reverse: ad-lab.yml runs it after
+        the sweep (-Scenario 31), and the sweep does not run it too. It still runs by itself on request.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
+    return $ScenarioNumber -eq 31
 }
