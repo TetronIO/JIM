@@ -1,6 +1,6 @@
 ---
 title: History
-description: "The cmdlets that query Configuration Change History, deleted objects and changes to Metaverse Objects, page through a large change's values, and count and clean up change history."
+description: "The cmdlets that query Configuration Change History, deleted objects and object changes, page a large change's values, and clean up change history."
 type: reference
 audience: automation-author
 ---
