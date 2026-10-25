@@ -1959,7 +1959,6 @@ public partial class ActivityRepository : IActivityRepository
             errorTypeCounts.GetValueOrDefault(ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved);
 
         // NoChange stats (always from RPEIs — no outcome equivalent)
-        var totalNoChanges = ChangeTypeCount(ObjectChangeType.NoChange);
         var totalMvoNoAttributeChanges = aggregation.NoChangeReasonCounts.GetValueOrDefault(NoChangeReason.MvoNoAttributeChanges);
         var totalCsoAlreadyCurrent = aggregation.NoChangeReasonCounts.GetValueOrDefault(NoChangeReason.CsoAlreadyCurrent);
 
@@ -2011,9 +2010,6 @@ public partial class ActivityRepository : IActivityRepository
             TotalPendingExportsFailed = totalPendingExportsFailed,
 
             // NoChange stats
-#pragma warning disable CS0618 // Type or member is obsolete
-            TotalNoChanges = totalNoChanges,
-#pragma warning restore CS0618
             TotalMvoNoAttributeChanges = totalMvoNoAttributeChanges,
             TotalCsoAlreadyCurrent = totalCsoAlreadyCurrent,
         };
