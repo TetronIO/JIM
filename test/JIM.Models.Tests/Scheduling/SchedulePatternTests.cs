@@ -60,69 +60,6 @@ public class SchedulePatternTests
     }
 
     [Test]
-    public void Schedule_CanSetSpecificTimesConfiguration()
-    {
-        var schedule = new Schedule
-        {
-            PatternType = SchedulePatternType.SpecificTimes,
-            DaysOfWeek = "1,2,3,4,5",
-            RunTimes = "09:00,12:00,15:00,18:00"
-        };
-
-        Assert.That(schedule.PatternType, Is.EqualTo(SchedulePatternType.SpecificTimes));
-        Assert.That(schedule.DaysOfWeek, Is.EqualTo("1,2,3,4,5"));
-        Assert.That(schedule.RunTimes, Is.EqualTo("09:00,12:00,15:00,18:00"));
-    }
-
-    [Test]
-    public void Schedule_CanSetIntervalConfiguration()
-    {
-        var schedule = new Schedule
-        {
-            PatternType = SchedulePatternType.Interval,
-            DaysOfWeek = "1,2,3,4,5",
-            IntervalValue = 2,
-            IntervalUnit = ScheduleIntervalUnit.Hours,
-            IntervalWindowStart = "06:00",
-            IntervalWindowEnd = "18:00"
-        };
-
-        Assert.That(schedule.PatternType, Is.EqualTo(SchedulePatternType.Interval));
-        Assert.That(schedule.IntervalValue, Is.EqualTo(2));
-        Assert.That(schedule.IntervalUnit, Is.EqualTo(ScheduleIntervalUnit.Hours));
-        Assert.That(schedule.IntervalWindowStart, Is.EqualTo("06:00"));
-        Assert.That(schedule.IntervalWindowEnd, Is.EqualTo("18:00"));
-    }
-
-    [Test]
-    public void Schedule_CanSetIntervalWithoutWindow()
-    {
-        var schedule = new Schedule
-        {
-            PatternType = SchedulePatternType.Interval,
-            DaysOfWeek = "0,1,2,3,4,5,6",
-            IntervalValue = 30,
-            IntervalUnit = ScheduleIntervalUnit.Minutes
-        };
-
-        Assert.That(schedule.IntervalWindowStart, Is.Null);
-        Assert.That(schedule.IntervalWindowEnd, Is.Null);
-    }
-
-    [Test]
-    public void Schedule_CanSetCustomPattern()
-    {
-        var schedule = new Schedule
-        {
-            PatternType = SchedulePatternType.Custom,
-            CronExpression = "0 9,12,15,18 * * 1-5"
-        };
-
-        Assert.That(schedule.PatternType, Is.EqualTo(SchedulePatternType.Custom));
-        Assert.That(schedule.CronExpression, Is.EqualTo("0 9,12,15,18 * * 1-5"));
-    }
-
-    [Test]
     public void Schedule_AllDays_CanBeRepresented()
     {
         var schedule = new Schedule

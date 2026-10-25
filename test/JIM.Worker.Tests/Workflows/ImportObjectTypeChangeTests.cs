@@ -329,6 +329,92 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
         Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
     }
 
+    #region Deletions reported without an Object Type (#1066)
+
+    // A directory's change log can say which object was deleted (its External ID) without saying what it was: OpenLDAP
+    // records a deleted entry's object classes only in reqOld, whose logold setting costs a large group's whole member
+    // list on every membership change. Where External IDs name one object across every Object Type, JIM types the
+    // deletion from the object it holds.
+
+    [Test]
+    public async Task DeltaImport_DeleteWithoutAnObjectType_RetiresTheObjectHeldUnderItsExternalIdAsync()
+    {
+        var context = await ArrangeAsync();
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.DeltaImport, [UntypedDeletion(held.ExternalId)]);
+
+        Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+        Assert.That(ErroredRpeis(context), Is.Empty);
+        var deleted = context.Activity.RunProfileExecutionItems.SingleOrDefault(r => r.ObjectChangeType == ObjectChangeType.Deleted);
+        Assert.That(deleted, Is.Not.Null, "The deletion is recorded against the object it retired");
+        Assert.That(deleted!.ConnectedSystemObjectId, Is.EqualTo(held.Cso.Id));
+    }
+
+    [Test]
+    public async Task DeltaImport_DeleteWithoutAnObjectTypeOfAnObjectJimDoesNotHold_IsIgnoredWithoutErrorAsync()
+    {
+        // A deletion of something JIM never imported (outside the selected Object Types, say) has nothing to retire.
+        var context = await ArrangeAsync();
+        var other = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.DeltaImport, [UntypedDeletion(Guid.NewGuid())]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ErroredRpeis(context), Is.Empty);
+            Assert.That(context.Activity.RunProfileExecutionItems.Where(r => r.ObjectChangeType == ObjectChangeType.Deleted), Is.Empty);
+            Assert.That(other.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_DeleteWithoutAnObjectTypeWhereExternalIdsAreNotUniqueAcrossObjectTypes_IsRefusedAndRetiresNothingAsync()
+    {
+        // Where the same value can name different objects of different types, the value alone cannot say which was
+        // deleted: retiring the one JIM holds could retire the wrong object.
+        var context = await ArrangeAsync(externalIdsUniqueAcrossObjectTypes: false);
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.DeltaImport, [UntypedDeletion(held.ExternalId)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(held.Cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+            Assert.That(SingleErroredRpei(context).ErrorMessage, Does.Contain("Object Type"));
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_DeleteWithoutAnObjectTypeNextToAnUpdateOfTheSameObject_IsTreatedAsThatObjectsRepeatAsync()
+    {
+        // Typed, the deletion joins the object's other copy on the page, so the page's duplicate rule applies to both,
+        // exactly as it would had the Connector named the type.
+        var context = await ArrangeAsync();
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunImportAsync(context, ConnectedSystemRunType.DeltaImport,
+            [ImportObject(context.UserType, held.ExternalId, ObjectChangeType.Updated), UntypedDeletion(held.ExternalId)]);
+
+        Assert.That(ErroredRpeis(context).Select(r => r.ErrorType), Is.All.EqualTo(ActivityRunProfileExecutionItemErrorType.DuplicateObject));
+    }
+
+    private static ConnectedSystemImportObject UntypedDeletion(Guid externalId) => new()
+    {
+        ChangeType = ObjectChangeType.Deleted,
+        Attributes =
+        [
+            new ConnectedSystemImportObjectAttribute
+            {
+                Name = "ExternalId",
+                Type = AttributeDataType.Guid,
+                GuidValues = [externalId]
+            }
+        ]
+    };
+
+    #endregion
+
     #region Helpers
 
     private sealed record ImportContext(

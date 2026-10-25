@@ -249,6 +249,38 @@ public class AuthServerProvisioningTests
     }
 
     [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_InitialAdminFirstContactWithEmail_CopiesTheEmailAsync()
+    {
+        // Every provider issues email once the portal asks for the email scope (#2439).
+        Environment.SetEnvironmentVariable(Constants.Config.SsoInitialAdmin, AdminSub);
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, _uniqueIdAttribute, AdminSub))
+            .ReturnsAsync((MetaverseObject?)null);
+        MetaverseObject? created = null;
+        _mockMetaverse.Setup(r => r.CreateMetaverseObjectAsync(It.IsAny<MetaverseObject>()))
+            .Callback<MetaverseObject>(m => { m.Id = Guid.NewGuid(); created = m; })
+            .Returns(Task.CompletedTask);
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = AdminSub, Email = "jay.admin@panoply.local" });
+
+        Assert.That(created!.AttributeValues.Single(av => av.Attribute!.Name == Constants.BuiltInAttributes.Email).StringValue,
+            Is.EqualTo("jay.admin@panoply.local"));
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_ExistingUserWithoutEmail_SupplementsTheEmailAsync()
+    {
+        var existing = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType, Origin = MetaverseObjectOrigin.Projected };
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, _uniqueIdAttribute, "synced-user-sub"))
+            .ReturnsAsync(existing);
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "synced-user-sub", Email = "synced.user@panoply.local" });
+
+        Assert.That(existing.AttributeValues.Single(av => av.Attribute!.Name == Constants.BuiltInAttributes.Email).StringValue,
+            Is.EqualTo("synced.user@panoply.local"));
+        _mockMetaverse.Verify(r => r.UpdateMetaverseObjectAsync(existing), Times.Once);
+    }
+
+    [Test]
     public async Task ResolveOrProvisionSsoIdentityAsync_ExistingNonAdminUser_SupplementsMissingAttributesAndDoesNotGrantAdminAsync()
     {
         Environment.SetEnvironmentVariable(Constants.Config.SsoInitialAdmin, AdminSub);

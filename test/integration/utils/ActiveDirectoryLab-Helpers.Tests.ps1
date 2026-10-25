@@ -966,3 +966,118 @@ Describe 'Get-ActiveDirectoryFixturePassword' {
         { Get-ActiveDirectoryFixturePassword -Length 8 } | Should -Throw
     }
 }
+
+Describe 'Get-ActiveDirectoryLabModuleDigest' {
+    It 'is the digest of the checkout''s PowerShell module, as the host computes it over its copy' {
+        Import-Module (Join-Path $PSScriptRoot '..' 'ad-lab' 'guest' 'LabFederationServer.psm1') -Force
+        $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' '..'))
+        $expected = Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $root 'src' 'JIM.PowerShell'))
+        Get-ActiveDirectoryLabModuleDigest -RepositoryRoot $root | Should -Be $expected
+    }
+}
+
+Describe 'ConvertFrom-LabIdentityProviderRegistrationOutput' {
+    BeforeAll {
+        $script:Json = ([ordered]@{
+                authority = 'https://adfs.panoply.local/adfs'; clientId = '11111111-1111-1111-1111-111111111111'
+                clientSecret = 'placeholder-client-secret'; publicClientId = '22222222-2222-2222-2222-222222222222'
+                apiScope = 'api://11111111-1111-1111-1111-111111111111'; claimType = 'oid'; mvAttribute = 'Object GUID'
+                changes = @('Create the Application Group'); moduleDigest = ('a' * 64)
+            } | ConvertTo-Json -Compress)
+    }
+
+    It 'reads the JSON the host printed last, past any line before it' {
+        $registration = ConvertFrom-LabIdentityProviderRegistrationOutput -Text "WARNING: something`n$($script:Json)`n"
+        $registration.ClientId | Should -Be '11111111-1111-1111-1111-111111111111'
+        $registration.ClientSecret | Should -Be 'placeholder-client-secret'
+        $registration.PublicClientId | Should -Be '22222222-2222-2222-2222-222222222222'
+        $registration.ApiScope | Should -Be 'api://11111111-1111-1111-1111-111111111111'
+        $registration.ClaimType | Should -Be 'oid'
+        $registration.MvAttribute | Should -Be 'Object GUID'
+    }
+
+    It 'refuses output with no JSON, naming none of it' {
+        { ConvertFrom-LabIdentityProviderRegistrationOutput -Text 'not json at all' } | Should -Throw '*not the JSON*'
+    }
+
+    It 'refuses JSON without a client secret' {
+        $json = $script:Json | ConvertFrom-Json
+        $json.clientSecret = ''
+        { ConvertFrom-LabIdentityProviderRegistrationOutput -Text ($json | ConvertTo-Json -Compress) } | Should -Throw '*clientSecret*'
+    }
+}
+
+Describe 'Register-ActiveDirectoryLabIdentityProvider' {
+    BeforeEach {
+        $script:Previous = @{ Actions = $env:GITHUB_ACTIONS; Env = $env:GITHUB_ENV }
+        $script:EnvFile = Join-Path ([System.IO.Path]::GetTempPath()) "jim-github-env-$([guid]::NewGuid().ToString('N'))"
+        $env:GITHUB_ACTIONS = $null
+        $env:GITHUB_ENV = $null
+        Mock Invoke-LabControl {
+            return ([ordered]@{
+                    authority = 'https://adfs.panoply.local/adfs'; clientId = 'c1'; clientSecret = 'placeholder-client-secret'
+                    publicClientId = 'p1'; apiScope = 'api://c1'; claimType = 'oid'; mvAttribute = 'Object GUID'
+                    changes = @(); moduleDigest = ('b' * 64)
+                } | ConvertTo-Json -Compress)
+        }
+    }
+
+    AfterEach {
+        $env:GITHUB_ACTIONS = $script:Previous.Actions
+        $env:GITHUB_ENV = $script:Previous.Env
+        Remove-Item -LiteralPath $script:EnvFile -ErrorAction SilentlyContinue
+    }
+
+    It 'runs Register-LabIdentityProvider.ps1 on the host for the AD FS server, the URL and the digest' {
+        $null = Register-ActiveDirectoryLabIdentityProvider -FederationConfig (Get-TestFederationConfig) -Url 'https://localhost:5243' -ModuleDigest ('b' * 64)
+        Should -Invoke Invoke-LabControl -Times 1 -ParameterFilter {
+            $Script -eq 'Register-LabIdentityProvider.ps1' -and
+            (($Arguments -join ' ') -eq "-Name adfs-primary -Url https://localhost:5243 -ModuleDigest $('b' * 64)")
+        }
+    }
+
+    It 'returns the registration' {
+        $registration = Register-ActiveDirectoryLabIdentityProvider -FederationConfig (Get-TestFederationConfig) -Url 'https://localhost:5243' -ModuleDigest ('b' * 64)
+        $registration.ClientId | Should -Be 'c1'
+        $registration.ClientSecret | Should -Be 'placeholder-client-secret'
+    }
+
+    It 'in Actions, masks the client secret in the log and hands it to the scrub step, but writes it nowhere else' {
+        $env:GITHUB_ACTIONS = 'true'
+        $env:GITHUB_ENV = $script:EnvFile
+        $output = Register-ActiveDirectoryLabIdentityProvider -FederationConfig (Get-TestFederationConfig) -Url 'https://localhost:5243' -ModuleDigest ('b' * 64) 6>&1 | Out-String
+        $output | Should -Match '::add-mask::placeholder-client-secret'
+        (Get-Content -LiteralPath $script:EnvFile -Raw) | Should -Match '(?m)^JIM_AD_LAB_SCRUB_[0-9a-f]{32}=placeholder-client-secret\r?$'
+    }
+}
+
+Describe 'Set-ActiveDirectoryLabSsoEnvironment' {
+    AfterEach {
+        foreach ($name in 'JIM_AD_LAB_ADFS_CLIENT_ID', 'JIM_AD_LAB_ADFS_CLIENT_SECRET', 'JIM_AD_LAB_ADFS_API_SCOPE', 'JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID') {
+            [Environment]::SetEnvironmentVariable($name, $null)
+        }
+    }
+
+    It 'puts the registration where docker-compose.ad-lab-adfs.yml reads it, in the process environment' {
+        Set-ActiveDirectoryLabSsoEnvironment -Registration ([pscustomobject]@{ ClientId = 'c1'; ClientSecret = 'placeholder-client-secret'; ApiScope = 'api://c1'; PublicClientId = 'p1' })
+        $env:JIM_AD_LAB_ADFS_CLIENT_ID | Should -Be 'c1'
+        $env:JIM_AD_LAB_ADFS_CLIENT_SECRET | Should -Be 'placeholder-client-secret'
+        $env:JIM_AD_LAB_ADFS_API_SCOPE | Should -Be 'api://c1'
+        $env:JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID | Should -Be 'p1'
+    }
+
+    It 'leaves the overlay''s sign-in identifier as one a fresh JIM can start with' {
+        # JIM refuses to start when JIM_SSO_MV_ATTRIBUTE names an attribute that does not exist, and a fresh JIM has
+        # no Object GUID: setting it here kept jim.web from ever starting (run 40191625345).
+        $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
+        $overlay | Should -Not -Match '(?m)^\s*-\s*JIM_SSO_MV_ATTRIBUTE='
+        $overlay | Should -Not -Match '(?m)^\s*-\s*JIM_SSO_CLAIM_TYPE='
+    }
+
+    It 'is what the overlay names' {
+        $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
+        foreach ($name in 'JIM_AD_LAB_ADFS_CLIENT_ID', 'JIM_AD_LAB_ADFS_CLIENT_SECRET', 'JIM_AD_LAB_ADFS_API_SCOPE', 'JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID') {
+            $overlay | Should -Match ([regex]::Escape("`${$name"))
+        }
+    }
+}

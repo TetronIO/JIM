@@ -55,8 +55,8 @@ public sealed class BearerSigningKeyRecovery
         parameters.IssuerSigningKeys = configuration.SigningKeys;
         if (string.IsNullOrEmpty(parameters.ValidAudience) && !string.IsNullOrEmpty(options.Audience))
             parameters.ValidAudience = options.Audience;
-        if (!string.IsNullOrEmpty(configuration.Issuer))
-            parameters.ValidIssuers = (parameters.ValidIssuers ?? []).Append(configuration.Issuer).ToArray();
+        parameters.ValidIssuers = (parameters.ValidIssuers ?? []).Concat(DiscoveredIssuers.From(configuration)).ToArray();
+
 
         // Each token handler in turn, as JwtBearerHandler tries them.
         foreach (var handler in options.TokenHandlers)

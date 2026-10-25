@@ -15,9 +15,9 @@ namespace JIM.Worker.Tests.Connectors;
 
 /// <summary>
 /// How a deleted entry's identity is read back out of the LDIF-shaped lines a change log keeps of it
-/// (<see cref="LdapDeletedEntryIdentity"/>): OpenLDAP's accesslog <c>reqOld</c> values and 389 Directory Server's
-/// Retro Changelog <c>changes</c> attribute both describe the deleted entry this way, and the import object built
-/// from either has to match the one a live entry would have produced, or the deletion finds nothing to delete.
+/// (<see cref="LdapDeletedEntryIdentity"/>): 389 Directory Server's Retro Changelog <c>changes</c> attribute describes
+/// the deleted entry this way, and the import object built from it has to match the one a live entry would have
+/// produced, or the deletion finds nothing to delete.
 /// </summary>
 [TestFixture]
 public class LdapDeletedEntryIdentityTests
@@ -34,11 +34,10 @@ public class LdapDeletedEntryIdentityTests
     public void SetUp() => _log = new CapturingSink();
 
     [Test]
-    public void Identify_PlainLines_ResolvesTheObjectTypeExternalIdAndDn()
+    public void ParseThenToImportObject_PlainLines_ResolvesTheObjectTypeExternalIdAndDn()
     {
-        var deleted = LdapDeletedEntryIdentity.Identify(
-            ["objectClass: top", "objectClass: person", "objectClass: inetOrgPerson", "uid: carol", $"entryUUID: {Uuid}"],
-            DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(
+            ["objectClass: top", "objectClass: person", "objectClass: inetOrgPerson", "uid: carol", $"entryUUID: {Uuid}"]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         Assert.That(deleted, Is.Not.Null);
         using (Assert.EnterMultipleScope())
@@ -51,22 +50,20 @@ public class LdapDeletedEntryIdentityTests
     }
 
     [Test]
-    public void Identify_CommentsAndBlankLines_AreIgnored()
+    public void ParseThenToImportObject_CommentsAndBlankLines_AreIgnored()
     {
-        var deleted = LdapDeletedEntryIdentity.Identify(
-            ["# the deleted entry", "", "objectClass: inetOrgPerson", "", $"entryUUID: {Uuid}", "# end"],
-            DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(
+            ["# the deleted entry", "", "objectClass: inetOrgPerson", "", $"entryUUID: {Uuid}", "# end"]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         Assert.That(deleted?.ObjectType, Is.EqualTo("inetOrgPerson"));
     }
 
     [Test]
-    public void Identify_FoldedLines_AreUnfoldedBeforeParsing()
+    public void ParseThenToImportObject_FoldedLines_AreUnfoldedBeforeParsing()
     {
         // RFC 2849: a line beginning with a single space continues the previous one.
-        var deleted = LdapDeletedEntryIdentity.Identify(
-            ["objectClass: inetOrg", " Person", "entryUUID: " + Uuid[..12], " " + Uuid[12..]],
-            DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(
+            ["objectClass: inetOrg", " Person", "entryUUID: " + Uuid[..12], " " + Uuid[12..]]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         Assert.That(deleted, Is.Not.Null);
         using (Assert.EnterMultipleScope())
@@ -77,13 +74,12 @@ public class LdapDeletedEntryIdentityTests
     }
 
     [Test]
-    public void Identify_Base64Value_IsDecoded()
+    public void ParseThenToImportObject_Base64Value_IsDecoded()
     {
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(Uuid));
 
-        var deleted = LdapDeletedEntryIdentity.Identify(
-            ["objectClass:: " + Convert.ToBase64String(Encoding.UTF8.GetBytes("inetOrgPerson")), "entryUUID:: " + encoded],
-            DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(
+            ["objectClass:: " + Convert.ToBase64String(Encoding.UTF8.GetBytes("inetOrgPerson")), "entryUUID:: " + encoded]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         Assert.That(deleted, Is.Not.Null);
         using (Assert.EnterMultipleScope())
@@ -94,21 +90,19 @@ public class LdapDeletedEntryIdentityTests
     }
 
     [Test]
-    public void Identify_UrlValue_IsIgnored()
+    public void ParseThenToImportObject_UrlValue_IsIgnored()
     {
-        var deleted = LdapDeletedEntryIdentity.Identify(
-            ["objectClass: inetOrgPerson", "jpegPhoto:< file:///tmp/carol.jpg", $"entryUUID: {Uuid}"],
-            DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(
+            ["objectClass: inetOrgPerson", "jpegPhoto:< file:///tmp/carol.jpg", $"entryUUID: {Uuid}"]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         Assert.That(deleted?.ObjectType, Is.EqualTo("inetOrgPerson"), "a URL-valued attribute is neither a class nor an identity, and must not derail the parse");
     }
 
     [Test]
-    public void Identify_AttributeNamesInAnyCase_AreMatched()
+    public void ParseThenToImportObject_AttributeNamesInAnyCase_AreMatched()
     {
-        var deleted = LdapDeletedEntryIdentity.Identify(
-            ["OBJECTCLASS: inetorgperson", $"EntryUUID: {Uuid}"],
-            DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(
+            ["OBJECTCLASS: inetorgperson", $"EntryUUID: {Uuid}"]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         Assert.That(deleted, Is.Not.Null);
         using (Assert.EnterMultipleScope())
@@ -119,30 +113,9 @@ public class LdapDeletedEntryIdentityTests
     }
 
     [Test]
-    public void Identify_EntryUuidSupplied_TakesPrecedenceOverTheParsedOne()
+    public void ParseThenToImportObject_NoObjectClass_ReturnsNullWithAWarning()
     {
-        const string direct = "9f9f9f9f-0000-4b2b-9c3e-1e2f3a4b5c6d";
-
-        var deleted = LdapDeletedEntryIdentity.Identify(
-            ["objectClass: inetOrgPerson", $"entryUUID: {Uuid}"],
-            DeletedDn, entryUuid: direct, ObjectTypes(), Logger());
-
-        Assert.That(deleted?.Attributes.Single(a => a.Name == "entryUUID").StringValues, Is.EqualTo(new[] { direct }),
-            "the accesslog's reqEntryUUID is the directory's own statement and outranks what reqOld says");
-    }
-
-    [Test]
-    public void Identify_EntryUuidSuppliedAndNoneParsed_UsesTheSuppliedOne()
-    {
-        var deleted = LdapDeletedEntryIdentity.Identify(["objectClass: inetOrgPerson"], DeletedDn, entryUuid: Uuid, ObjectTypes(), Logger());
-
-        Assert.That(deleted?.Attributes.Single(a => a.Name == "entryUUID").StringValues, Is.EqualTo(new[] { Uuid }));
-    }
-
-    [Test]
-    public void Identify_NoObjectClass_ReturnsNullWithAWarning()
-    {
-        var deleted = LdapDeletedEntryIdentity.Identify(["uid: carol", $"entryUUID: {Uuid}"], DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(["uid: carol", $"entryUUID: {Uuid}"]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         using (Assert.EnterMultipleScope())
         {
@@ -152,17 +125,17 @@ public class LdapDeletedEntryIdentityTests
     }
 
     [Test]
-    public void Identify_ObjectClassNotASelectedObjectType_ReturnsNull()
+    public void ParseThenToImportObject_ObjectClassNotASelectedObjectType_ReturnsNull()
     {
-        var deleted = LdapDeletedEntryIdentity.Identify(["objectClass: organizationalUnit", $"entryUUID: {Uuid}"], DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(["objectClass: organizationalUnit", $"entryUUID: {Uuid}"]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         Assert.That(deleted, Is.Null, "a deletion of something this Connected System does not import is nothing to stage");
     }
 
     [Test]
-    public void Identify_NoEntryUuid_ReturnsNullWithAWarning()
+    public void ParseThenToImportObject_NoEntryUuid_ReturnsNullWithAWarning()
     {
-        var deleted = LdapDeletedEntryIdentity.Identify(["objectClass: inetOrgPerson", "uid: carol"], DeletedDn, entryUuid: null, ObjectTypes(), Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(["objectClass: inetOrgPerson", "uid: carol"]).ToImportObject(DeletedDn, ObjectTypes(), Logger());
 
         using (Assert.EnterMultipleScope())
         {
@@ -172,11 +145,11 @@ public class LdapDeletedEntryIdentityTests
     }
 
     [Test]
-    public void Identify_ObjectTypeWithoutAnExternalIdAttribute_CarriesOnlyTheDn()
+    public void ParseThenToImportObject_ObjectTypeWithoutAnExternalIdAttribute_CarriesOnlyTheDn()
     {
         var objectType = new ConnectedSystemObjectType { Id = 1, Name = "inetOrgPerson", Selected = true };
 
-        var deleted = LdapDeletedEntryIdentity.Identify(["objectClass: inetOrgPerson", $"entryUUID: {Uuid}"], DeletedDn, entryUuid: null, [objectType], Logger());
+        var deleted = LdapDeletedEntryIdentity.Parse(["objectClass: inetOrgPerson", $"entryUUID: {Uuid}"]).ToImportObject(DeletedDn, [objectType], Logger());
 
         Assert.That(deleted?.Attributes.Select(a => a.Name), Is.EqualTo(new[] { "distinguishedName" }));
     }

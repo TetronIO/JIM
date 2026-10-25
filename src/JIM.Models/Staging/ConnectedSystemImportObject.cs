@@ -12,7 +12,9 @@ namespace JIM.Models.Staging;
 public class ConnectedSystemImportObject
 {
     /// <summary>
-    /// The object type in the Connected System, e.g. user, group.
+    /// The object type in the Connected System, e.g. user, group. A deletion may leave it empty when the Connector can
+    /// say which object went (its External ID) but not what it was; where the Connector's External IDs name one object
+    /// across every Object Type, the import gives the deletion the type of the object it names (#1066).
     /// </summary>
     public string? ObjectType { get; set; }
 

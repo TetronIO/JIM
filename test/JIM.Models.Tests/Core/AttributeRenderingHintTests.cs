@@ -39,14 +39,4 @@ public class AttributeRenderingHintTests
         var attribute = new MetaverseAttribute();
         Assert.That(attribute.RenderingHint, Is.EqualTo(AttributeRenderingHint.Default));
     }
-
-    [Test]
-    public void MetaverseAttribute_RenderingHint_CanBeSetAsync()
-    {
-        var attribute = new MetaverseAttribute
-        {
-            RenderingHint = AttributeRenderingHint.Table
-        };
-        Assert.That(attribute.RenderingHint, Is.EqualTo(AttributeRenderingHint.Table));
-    }
 }

@@ -41,6 +41,9 @@ namespace JIM.Web.Api.Tests;
 /// passed.</item>
 /// <item>A token signed by a key the identity provider no longer publishes is refused: IdentityModel's last known
 /// good configuration, which would accept it for up to an hour, is turned off.</item>
+/// <item>A token issued under the <c>access_token_issuer</c> the discovery document publishes (AD FS's federation
+/// service identifier) is accepted with no issuer configured for it, and a token from any other issuer is refused
+/// (#2440).</item>
 /// </list>
 /// </summary>
 [TestFixture]
@@ -235,7 +238,7 @@ public class SigningKeyRolloverTests
         var strays = Enumerable.Range(0, 10).Select(i => SigningKey.Create($"stray{i}")).ToList();
         try
         {
-            var results = await Task.WhenAll(strays.Select(AuthenticateAsync));
+            var results = await Task.WhenAll(strays.Select(s => AuthenticateAsync(s)));
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
@@ -297,6 +300,95 @@ public class SigningKeyRolloverTests
         });
     }
 
+    [Test]
+    public async Task AuthenticateAsync_TokenFromPublishedAccessTokenIssuer_AcceptedAsync()
+    {
+        using var key = SigningKey.Create("current");
+        _identityProvider.Publish(key);
+        _identityProvider.AccessTokenIssuer = _identityProvider.AdfsAccessTokenIssuer;
+        BuildBearerScheme();
+
+        // AD FS signs people in as https://{host}/adfs, but issues access tokens as http://{host}/adfs/services/trust.
+        var result = await AuthenticateAsync(key, _identityProvider.AdfsAccessTokenIssuer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.True, "no JIM_SSO_VALID_ISSUERS is needed for the issuer discovery names");
+            Assert.That(_audit.Reasons, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_TokenFromAccessTokenIssuerTheProviderDoesNotPublish_RefusedAsync()
+    {
+        using var key = SigningKey.Create("current");
+        _identityProvider.Publish(key);
+        BuildBearerScheme();
+        Assert.That(await AuthenticateAsync(key), Is.True, "baseline: a token from the authority's issuer");
+
+        var result = await AuthenticateAsync(key, _identityProvider.AdfsAccessTokenIssuer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.False);
+            Assert.That(_audit.Reasons, Is.EqualTo(new[] { "Access token issuer invalid" }));
+        });
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_TokenFromAnyOtherIssuer_RefusedAsync()
+    {
+        using var key = SigningKey.Create("current");
+        _identityProvider.Publish(key);
+        _identityProvider.AccessTokenIssuer = _identityProvider.AdfsAccessTokenIssuer;
+        BuildBearerScheme();
+
+        var result = await AuthenticateAsync(key, "https://attacker.example.com/adfs/services/trust");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.False);
+            Assert.That(_audit.Reasons, Is.EqualTo(new[] { "Access token issuer invalid" }));
+        });
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_UnannouncedRolloverTokenFromPublishedAccessTokenIssuer_AcceptedAsync()
+    {
+        using var old = SigningKey.Create("old");
+        using var replacement = SigningKey.Create("replacement");
+        _identityProvider.Publish(old);
+        _identityProvider.AccessTokenIssuer = _identityProvider.AdfsAccessTokenIssuer;
+        BuildBearerScheme();
+        Assert.That(await AuthenticateAsync(old, _identityProvider.AdfsAccessTokenIssuer), Is.True, "baseline");
+
+        // The rollover recovery validates the token itself, so it too must accept the published access token issuer.
+        _identityProvider.Publish(replacement);
+        var first = await AuthenticateAsync(replacement, _identityProvider.AdfsAccessTokenIssuer);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first, Is.True);
+            Assert.That(_audit.Reasons, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task AuthenticateAsync_UnannouncedRolloverTokenFromAnyOtherIssuer_RefusedAsync()
+    {
+        using var old = SigningKey.Create("old");
+        using var replacement = SigningKey.Create("replacement");
+        _identityProvider.Publish(old);
+        _identityProvider.AccessTokenIssuer = _identityProvider.AdfsAccessTokenIssuer;
+        BuildBearerScheme();
+        Assert.That(await AuthenticateAsync(old), Is.True, "baseline");
+
+        _identityProvider.Publish(replacement);
+        var first = await AuthenticateAsync(replacement, "https://attacker.example.com/adfs/services/trust");
+
+        Assert.That(first, Is.False);
+    }
+
     private void BuildBearerScheme(TimeSpan? refreshInterval = null)
     {
         var snapshot = new SignInCertificateSnapshot(_ => Task.FromResult<IReadOnlyCollection<X509Certificate2>>([TestPki.PublicOnly(_root)]),
@@ -325,14 +417,14 @@ public class SigningKeyRolloverTests
         _services = services.BuildServiceProvider();
     }
 
-    private async Task<bool> AuthenticateAsync(SigningKey key) => (await AuthenticateForResultAsync(key)).Succeeded;
+    private async Task<bool> AuthenticateAsync(SigningKey key, string? issuer = null) => (await AuthenticateForResultAsync(key, issuer)).Succeeded;
 
-    private async Task<AuthenticateResult> AuthenticateForResultAsync(SigningKey key)
+    private async Task<AuthenticateResult> AuthenticateForResultAsync(SigningKey key, string? issuer = null)
     {
         // One scope per request, as ASP.NET Core gives each request: the handler, and the result it caches, are scoped.
         await using var scope = _services.CreateAsyncScope();
         var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        context.Request.Headers.Authorization = $"Bearer {key.IssueToken(_identityProvider.Issuer, Audience)}";
+        context.Request.Headers.Authorization = $"Bearer {key.IssueToken(issuer ?? _identityProvider.Issuer, Audience)}";
         return await context.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
     }
 
@@ -363,11 +455,18 @@ public class SigningKeyRolloverTests
 
         public string Issuer => $"https://localhost:{Port}/realms/jim";
 
+        /// <summary>An access token issuer in the form AD FS publishes: its federation service identifier.</summary>
+        public string AdfsAccessTokenIssuer => $"http://localhost:{Port}/adfs/services/trust";
+
+        /// <summary>The <c>access_token_issuer</c> discovery publishes, if any.</summary>
+        public string? AccessTokenIssuer { get; set; }
+
         public int KeySetFetches => Volatile.Read(ref _keySetFetches);
 
         public void Reset()
         {
             _keySet = """{"keys":[]}""";
+            AccessTokenIssuer = null;
             Interlocked.Exchange(ref _keySetFetches, 0);
         }
 
@@ -377,13 +476,18 @@ public class SigningKeyRolloverTests
         public string? Respond(string path)
         {
             if (path.EndsWith("/.well-known/openid-configuration", StringComparison.Ordinal))
-                return JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                var discovery = new Dictionary<string, string>
                 {
                     ["issuer"] = Issuer,
                     ["jwks_uri"] = $"{Issuer}/protocol/openid-connect/certs",
                     ["authorization_endpoint"] = $"{Issuer}/protocol/openid-connect/auth",
                     ["token_endpoint"] = $"{Issuer}/protocol/openid-connect/token"
-                });
+                };
+                if (AccessTokenIssuer is { } accessTokenIssuer)
+                    discovery["access_token_issuer"] = accessTokenIssuer;
+                return JsonSerializer.Serialize(discovery);
+            }
 
             if (path.EndsWith("/protocol/openid-connect/certs", StringComparison.Ordinal))
             {

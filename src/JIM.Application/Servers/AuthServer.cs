@@ -162,6 +162,7 @@ public class AuthServer
             await AddAttributeFromValueAsync(user, identity.FirstName, Constants.BuiltInAttributes.FirstName, SsoIdentity.FirstNameClaimType);
             await AddAttributeFromValueAsync(user, identity.LastName, Constants.BuiltInAttributes.LastName, SsoIdentity.LastNameClaimType);
             await AddAttributeFromValueAsync(user, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName, SsoIdentity.UserPrincipalNameClaimType);
+            await AddAttributeFromValueAsync(user, identity.Email, Constants.BuiltInAttributes.Email, SsoIdentity.EmailClaimType);
 
             // System made the object, inside the Activity recording its creation, and the change record says both.
             await Application.Metaverse.CreateMetaverseObjectAsync(
@@ -324,6 +325,7 @@ public class AuthServer
         await RefreshAttributeFromClaimAsync(user, additions, removals, identity.FirstName, Constants.BuiltInAttributes.FirstName, SsoIdentity.FirstNameClaimType);
         await RefreshAttributeFromClaimAsync(user, additions, removals, identity.LastName, Constants.BuiltInAttributes.LastName, SsoIdentity.LastNameClaimType);
         await RefreshAttributeFromClaimAsync(user, additions, removals, identity.UserPrincipalName, Constants.BuiltInAttributes.UserPrincipalName, SsoIdentity.UserPrincipalNameClaimType);
+        await RefreshAttributeFromClaimAsync(user, additions, removals, identity.Email, Constants.BuiltInAttributes.Email, SsoIdentity.EmailClaimType);
 
         if (additions.Count > 0)
         {

@@ -47,7 +47,6 @@ function Register-JIMIdentityProvider {
         JIM.IdentityProviderRegistration
         Provider (string): The identity provider, ADFS.
         Authority (string): The value for JIM_SSO_AUTHORITY.
-        ValidIssuers (string[]): The value for JIM_SSO_VALID_ISSUERS, joined with commas. AD FS issues access tokens under its federation service identifier, not the authority.
         ClientId (string): The portal's client identifier, the value for JIM_SSO_CLIENT_ID.
         ClientSecret (securestring): The portal's client secret, the value for JIM_SSO_SECRET. Empty unless this run created or replaced it.
         PublicClientId (string): The PowerShell module's client identifier, the value for JIM_SSO_PUBLIC_CLIENT_ID.
@@ -137,7 +136,6 @@ function Register-JIMIdentityProvider {
         $result = [PSCustomObject]@{
             Provider       = $Provider
             Authority      = $authority
-            ValidIssuers   = @($authority, $current.Identifier | Where-Object { $_ } | Select-Object -Unique)
             ClientId       = $plan.ClientId
             ClientSecret   = $secret
             PublicClientId = $plan.PublicClientId

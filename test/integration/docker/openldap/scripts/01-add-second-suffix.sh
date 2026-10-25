@@ -171,8 +171,6 @@ olcAccessLogDB: cn=accesslog
 olcAccessLogOps: writes
 olcAccessLogPurge: 07+00:00 01+00:00
 olcAccessLogSuccess: TRUE
-olcAccessLogOld: (objectClass=*)
-olcAccessLogOldAttr: objectClass
 ALDIF
     echo "[openldap-init] Accesslog overlay added to Glitterband database"
 fi
@@ -288,6 +286,31 @@ olcSizeLimit: unlimited
 ALMODIFY
     echo "[openldap-init] Accesslog database configured (mapsize=128GB, sizeLimit=unlimited)"
 fi
+
+# Log no old values (logold) on either suffix's accesslog overlay (#1066). Bitnami sets
+# olcAccessLogOld: (objectClass=*) and olcAccessLogOldAttr: objectClass on the overlay it creates for
+# the primary suffix. logold matches entries, not operations, and logs the old values of every
+# modified attribute, so every membership modify of a large group re-logged its whole member list:
+# about 8 bytes of accesslog for every byte of directory data at Scale750k40kGroups (34 GB against
+# 4.5 GB). JIM needs none of it: a deletion is matched by reqEntryUUID, which the accesslog records
+# whatever logold says. Removed from every accesslog overlay, so the Glitterband one (added above
+# without it) and the primary one end up alike, whatever Bitnami's defaults become.
+echo "[openldap-init] Removing logold from every accesslog overlay..."
+for OVERLAY_DN in $(ldapsearch -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" -o ldif-wrap=no \
+    -b "cn=config" "(&(objectClass=olcAccessLogConfig)(olcAccessLogOld=*))" dn -LLL 2>/dev/null | grep "^dn:" | sed 's/^dn: //'); do
+    ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<NOLOGOLD
+dn: $OVERLAY_DN
+changetype: modify
+delete: olcAccessLogOld
+NOLOGOLD
+    # logoldattr means nothing without logold; removed separately so an overlay without it still loses logold.
+    ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<NOLOGOLDATTR || true
+dn: $OVERLAY_DN
+changetype: modify
+delete: olcAccessLogOldAttr
+NOLOGOLDATTR
+    echo "[openldap-init] logold removed from $OVERLAY_DN"
+done
 
 # Load the password policy overlay (slapo-ppolicy) and attach it to BOTH databases.
 #
