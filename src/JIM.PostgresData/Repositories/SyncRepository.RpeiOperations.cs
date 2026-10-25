@@ -651,10 +651,43 @@ public partial class SyncRepository
     /// <summary>
     /// Bulk inserts ConnectedSystemObjectChangeAttributeValue rows using COPY binary import.
     /// </summary>
+    /// <summary>
+    /// Which of the given Connected System Object ids have a row, read on the given connection inside the caller's
+    /// transaction, so rows the caller's own transaction wrote count.
+    /// </summary>
+    private async Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(NpgsqlConnection connection, IEnumerable<Guid> candidateIds)
+    {
+        var candidates = candidateIds.Distinct().ToArray();
+        if (candidates.Length == 0)
+            return [];
+
+        var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+        await using var command = new NpgsqlCommand(
+            """SELECT "Id" FROM "ConnectedSystemObjects" WHERE "Id" = ANY(@ids)""", connection, transaction);
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = candidates });
+
+        var existing = new HashSet<Guid>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            existing.Add(reader.GetGuid(0));
+        return existing;
+    }
+
     private async Task BulkInsertCsoChangeAttributeValuesRawAsync(List<(Guid AttrChangeId, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+
+        // An import pre-generates every new object's id before writing them in batches, so a reference can point at
+        // an object a later batch has yet to write (a manager, a nested group): its id is known, its row is not. Its
+        // foreign key would fail the whole write with 23503 (#2492, found by Scenario 031), so only references to
+        // rows that exist are written; the rest keep their DN in StringValue, and
+        // FixupCrossBatchChangeRecordReferenceIdsAsync resolves them once every batch has been written. Must run
+        // before the COPY below opens, since the connection cannot run another command while it is open.
+        var writtenReferenceIds = await GetExistingConnectedSystemObjectIdsAsync(npgsqlConn, valueChanges
+            .Select(vc => vc.Value.ReferenceValue?.Id)
+            .Where(id => id.HasValue && id.Value != Guid.Empty)
+            .Select(id => id!.Value));
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             $"""
@@ -701,14 +734,12 @@ public partial class SyncRepository
                 await writer.WriteAsync(v.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
             else
                 await writer.WriteNullAsync();
-            // Write the ReferenceValueId FK if the referenced CSO has a known ID.
-            // With the two-phase parallel writer (Part C), CSO rows from the current batch are
-            // committed before change records are persisted, so the FK constraint will succeed
-            // for within-batch references. Cross-batch references (future batches) still have
-            // ReferenceValue == null and are written as null — FixupCrossBatchChangeRecordReferenceIdsAsync
-            // resolves these after all batches complete.
+            // Write the ReferenceValueId FK only when the referenced CSO's row exists (see the lookup above). With
+            // the two-phase parallel writer (Part C), CSO rows from the current batch are committed before change
+            // records are persisted, so within-batch references are written; references to a future batch are
+            // written as null and FixupCrossBatchChangeRecordReferenceIdsAsync resolves them after all batches.
             var refId = v.ReferenceValue?.Id;
-            if (refId.HasValue && refId.Value != Guid.Empty)
+            if (refId.HasValue && writtenReferenceIds.Contains(refId.Value))
                 await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
