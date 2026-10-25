@@ -1,6 +1,6 @@
 # Dependency-Ordered Synchronisation Paging
 
-- **Status:** Planned
+- **Status:** Doing
 - **Issue:** [#2492](https://github.com/TetronIO/JIM/issues/2492)
 - **Last Updated:** 2026-10-25
 
@@ -102,6 +102,8 @@ Cross-page step: only intra-type references (nested groups, managers), value-bud
 - Raw-SQL reference-only reload (Summary-tier DTO), replacing `GetConnectedSystemObjectsForReferenceResolutionAsync` on this path, with a `RequiresPostgres` round-trip test.
 - Bulk Pending Export merge for the step, sharing the per-object merge rules so behaviour is identical (Scenario 008's Pending Provisioning case must still rebuild a Create, not stage an Update). Tests cover Create, exported Create and pending Update merges.
 - Value-budgeted batching.
+
+**As delivered:** the step's cost turned out to be per-object round trips in export re-evaluation, not the reload. The step now queues the merge deletes and runs them as one statement (a Pending Export batch scope in the Sync repository: reads hide queued rows, and an insert for the same object executes its queued delete first, so every merge decision is unchanged), prefetches the batch's Pending Exports in one query, and memoises the target objects the change snapshot resolves per page. Scenario 031 Medium: 14.4 ms to 3.9 ms per reference value (11.1 s to 2.8 s), 3.7x against the 5x criterion. Of the remaining 2.7 s, export evaluation is 1.4 s and the reload 0.4 s, so the raw-SQL reference-only reload was dropped: it could save at most about 0.3 s, and a reference attribute's flow expression may read the object's other attributes, which a reference-only reload would silently withhold.
 
 ### Phase 3: Progress by reference values
 
