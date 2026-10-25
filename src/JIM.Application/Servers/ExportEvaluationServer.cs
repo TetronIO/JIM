@@ -2952,11 +2952,13 @@ public class ExportEvaluationServer
 
                 replacedPendingExport = dbPendingExport;
 
-                // Delete the old PE from the database
+                // Delete the old PE from the database: at once, or queued for the batch's single delete when the
+                // caller has opened a Pending Export batch (the cross-page reference step, #2492). Either way it reads
+                // as gone from here on, and the replacement below is inserted after it.
                 using (var deleteSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("DeletePendingExportForMerge")
                     .SetTag("attributeChangeCount", dbPendingExport.AttributeValueChanges.Count))
                 {
-                    await SyncRepo.DeletePendingExportAsync(dbPendingExport);
+                    await SyncRepo.DeletePendingExportForMergeAsync(dbPendingExport);
                     deleteSpan.SetSuccess();
                 }
 

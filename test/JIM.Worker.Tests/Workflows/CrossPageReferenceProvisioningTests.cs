@@ -25,6 +25,10 @@ namespace JIM.Worker.Tests.Workflows;
 /// Scenario 008 (cross-domain entitlement synchronisation) found the cross-page pass replacing that unsent
 /// Create with an Update carrying only the member references: the export then tried to modify a group
 /// that had never been created and the directory refused it.
+///
+/// Since synchronisation pages Object Types in dependency order (#2492), a group's user members are projected before
+/// any group is processed, so they no longer defer it. A nested group does: it is the same type, and here it sits on a
+/// later page than the group containing it. That is what keeps this test on the cross-page pass.
 /// </summary>
 [TestFixture]
 public class CrossPageReferenceProvisioningTests : WorkflowTestBase
@@ -35,6 +39,121 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
         // Two objects per page: the group and one member on page one, the remaining members on later pages.
         await SetSyncPageSizeAsync(2);
 
+        var (source, target, userType, groupType, groupMemberAttr, targetGroupType, targetGroupDisplayNameAttr, targetGroupMemberAttr) =
+            await BuildDirectoriesAsync();
+
+        // --- Source objects. Users are paged before groups; within the group type pages are ordered by Id, two to a
+        // page, so Team Alpha (page one) contains Team Beta, which only Alpha's own page has not reached yet. ---
+        var group = SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000001"), "Team Alpha");
+        SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000002"), "Team Gamma");
+        var nestedGroup = SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000003"), "Team Beta");
+        var members = Enumerable.Range(1, 4)
+            .Select(i => SeedSourceCso(source.Id, userType, new Guid($"10000000-0000-0000-0000-00000000000{i}"), $"Member {i}"))
+            .Append(nestedGroup)
+            .ToList();
+        foreach (var member in members)
+        {
+            group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = groupMemberAttr.Id,
+                Attribute = groupMemberAttr,
+                ReferenceValueId = member.Id,
+                ReferenceValue = member,
+                ConnectedSystemObject = group
+            });
+        }
+
+        // --- Act: one Full Sync over three pages, ending in the cross-page reference pass ---
+        var reloadedSource = await ReloadEntityAsync(source);
+        var profile = await CreateRunProfileAsync(reloadedSource.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(reloadedSource.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloadedSource, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        // --- Assert: the group's provisioning survived the cross-page pass intact ---
+        // The cross-page step moves the Activity's counting window to its own work, counted in reference values: every
+        // one of Team Alpha's five, so the pass ran, for Alpha alone.
+        Assert.That(activity.ObjectsToProcess, Is.EqualTo(members.Count),
+            "Team Alpha, and only Alpha, should have been deferred to the cross-page reference pass");
+
+        var targetGroupCso = SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.ConnectedSystemId == target.Id && c.TypeId == targetGroupType.Id && c.MetaverseObjectId == group.MetaverseObjectId);
+        Assert.That(targetGroupCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            "The group has not been exported yet, so its target object is still awaiting provisioning");
+
+        var groupPendingExports = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObjectId == targetGroupCso.Id)
+            .ToList();
+        Assert.That(groupPendingExports, Has.Count.EqualTo(1), "One Pending Export per target object");
+
+        var groupExport = groupPendingExports[0];
+        Assert.That(groupExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+            "The Create was never sent, so the cross-page pass must not turn it into an Update");
+        Assert.That(groupExport.Status, Is.EqualTo(PendingExportStatus.Pending));
+        Assert.That(groupExport.AttributeValueChanges.Any(avc => avc.AttributeId == targetGroupDisplayNameAttr.Id && avc.StringValue == "Team Alpha"),
+            "The rebuilt Create carries the non-reference attributes staged on the group's own page");
+        Assert.That(groupExport.AttributeValueChanges.Count(avc => avc.AttributeId == targetGroupMemberAttr.Id), Is.EqualTo(members.Count),
+            "The rebuilt Create carries every member, the nested group included, resolved across pages");
+    }
+
+    /// <summary>
+    /// The change snapshot each staged export records resolves its references to the target objects; every group sharing
+    /// a member, and every report sharing a manager, used to query the same object again (#2492). Within one page each
+    /// referenced object's target is looked up once.
+    /// </summary>
+    [Test]
+    public async Task FullSync_TwoGroupsOnOnePageSharingMembers_LooksUpEachMembersTargetOnceAsync()
+    {
+        await SetSyncPageSizeAsync(10);
+        var (source, target, userType, groupType, groupMemberAttr, _, _, _) = await BuildDirectoriesAsync();
+
+        var members = Enumerable.Range(1, 4)
+            .Select(i => SeedSourceCso(source.Id, userType, new Guid($"10000000-0000-0000-0000-00000000000{i}"), $"Member {i}"))
+            .ToList();
+        foreach (var group in new[]
+                 {
+                     SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000001"), "Team Alpha"),
+                     SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000002"), "Team Gamma")
+                 })
+        {
+            foreach (var member in members)
+            {
+                group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    Id = Guid.NewGuid(), AttributeId = groupMemberAttr.Id, Attribute = groupMemberAttr,
+                    ReferenceValueId = member.Id, ReferenceValue = member, ConnectedSystemObject = group
+                });
+            }
+        }
+
+        var reloadedSource = await ReloadEntityAsync(source);
+        var profile = await CreateRunProfileAsync(reloadedSource.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(reloadedSource.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloadedSource, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        var memberMvoIds = members.Select(m => m.MetaverseObjectId!.Value).ToHashSet();
+        var memberLookups = SyncRepo.ConnectedSystemObjectLookupsByMetaverseObjectId
+            .Where(lookup => lookup.ConnectedSystemId == target.Id && memberMvoIds.Contains(lookup.MetaverseObjectId))
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(memberLookups.Select(l => l.MetaverseObjectId), Is.EquivalentTo(memberMvoIds),
+                "Each member's target object is looked up once for both groups' snapshots.");
+            Assert.That(SyncRepo.PendingExports.Values.Count(pe => pe.ConnectedSystemId == target.Id), Is.EqualTo(6),
+                "Four users and two groups are provisioned.");
+        }
+    }
+
+    /// <summary>
+    /// A source directory of users and groups (Member flowing to a multi-valued Metaverse reference), projecting into the
+    /// Metaverse, and a target directory provisioning both, the group carrying DisplayName and Member.
+    /// </summary>
+    private async Task<(ConnectedSystem Source, ConnectedSystem Target, ConnectedSystemObjectType UserType, ConnectedSystemObjectType GroupType,
+        ConnectedSystemObjectTypeAttribute GroupMemberAttr, ConnectedSystemObjectType TargetGroupType,
+        ConnectedSystemObjectTypeAttribute TargetGroupDisplayNameAttr, ConnectedSystemObjectTypeAttribute TargetGroupMemberAttr)> BuildDirectoriesAsync()
+    {
         // --- Source directory: users, and a group whose Member attribute references them ---
         var source = await CreateConnectedSystemAsync("Directory Source");
         var userExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
@@ -93,50 +212,7 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
         groupExportRule.AttributeFlowRules.Add(BuildExportMapping(groupExportRule, targetGroupMemberAttr, mvMemberAttr));
         await DbContext.SaveChangesAsync();
 
-        // --- Source objects. Pages are ordered by Id, so the group's Id sorts before every member's. ---
-        var group = SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000001"), "Team Alpha");
-        var members = Enumerable.Range(1, 4)
-            .Select(i => SeedSourceCso(source.Id, userType, new Guid($"10000000-0000-0000-0000-00000000000{i}"), $"Member {i}"))
-            .ToList();
-        foreach (var member in members)
-        {
-            group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-            {
-                Id = Guid.NewGuid(),
-                AttributeId = groupMemberAttr.Id,
-                Attribute = groupMemberAttr,
-                ReferenceValueId = member.Id,
-                ReferenceValue = member,
-                ConnectedSystemObject = group
-            });
-        }
-
-        // --- Act: one Full Sync over three pages, ending in the cross-page reference pass ---
-        var reloadedSource = await ReloadEntityAsync(source);
-        var profile = await CreateRunProfileAsync(reloadedSource.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
-        var activity = await CreateActivityAsync(reloadedSource.Id, profile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloadedSource, profile, activity, new CancellationTokenSource())
-            .PerformFullSyncAsync();
-
-        // --- Assert: the group's provisioning survived the cross-page pass intact ---
-        var targetGroupCso = SyncRepo.ConnectedSystemObjects.Values
-            .Single(c => c.ConnectedSystemId == target.Id && c.TypeId == targetGroupType.Id);
-        Assert.That(targetGroupCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
-            "The group has not been exported yet, so its target object is still awaiting provisioning");
-
-        var groupPendingExports = SyncRepo.PendingExports.Values
-            .Where(pe => pe.ConnectedSystemObjectId == targetGroupCso.Id)
-            .ToList();
-        Assert.That(groupPendingExports, Has.Count.EqualTo(1), "One Pending Export per target object");
-
-        var groupExport = groupPendingExports[0];
-        Assert.That(groupExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
-            "The Create was never sent, so the cross-page pass must not turn it into an Update");
-        Assert.That(groupExport.Status, Is.EqualTo(PendingExportStatus.Pending));
-        Assert.That(groupExport.AttributeValueChanges.Any(avc => avc.AttributeId == targetGroupDisplayNameAttr.Id && avc.StringValue == "Team Alpha"),
-            "The rebuilt Create carries the non-reference attributes staged on the group's own page");
-        Assert.That(groupExport.AttributeValueChanges.Count(avc => avc.AttributeId == targetGroupMemberAttr.Id), Is.EqualTo(members.Count),
-            "The rebuilt Create carries every member, resolved across pages");
+        return (source, target, userType, groupType, groupMemberAttr, targetGroupType, targetGroupDisplayNameAttr, targetGroupMemberAttr);
     }
 
     /// <summary>

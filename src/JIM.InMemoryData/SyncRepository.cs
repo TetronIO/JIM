@@ -2854,6 +2854,38 @@ public class SyncRepository : ISyncRepository
     public Task DeletePendingExportAsync(PendingExport pendingExport)
         => DeletePendingExportsAsync(new[] { pendingExport });
 
+    private bool _pendingExportBatchOpen;
+
+    /// <summary>
+    /// This fake store enforces no unique index and has no change tracker, so a merge's delete is executed at once
+    /// whether or not a batch is open: from a caller's side that is indistinguishable from the production queue, which
+    /// hides a queued row from every read. Opening, flushing and abandoning still police the single open batch.
+    /// </summary>
+    public void BeginPendingExportBatch()
+    {
+        if (_pendingExportBatchOpen)
+            throw new InvalidOperationException("A Pending Export batch is already open.");
+        _pendingExportBatchOpen = true;
+    }
+
+    public Task DeletePendingExportForMergeAsync(PendingExport pendingExport)
+        => DeletePendingExportAsync(pendingExport);
+
+    public Task PrefetchPendingExportsForBatchAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (!_pendingExportBatchOpen)
+            throw new InvalidOperationException("No Pending Export batch is open.");
+        return Task.CompletedTask;
+    }
+
+    public Task FlushPendingExportBatchAsync()
+    {
+        _pendingExportBatchOpen = false;
+        return Task.CompletedTask;
+    }
+
+    public void AbandonPendingExportBatch() => _pendingExportBatchOpen = false;
+
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => UpdatePendingExportsAsync(new[] { pendingExport });
 
@@ -3067,6 +3099,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Every (Metaverse Object, Connected System) <see cref="GetConnectedSystemObjectsByMetaverseObjectIdsAsync"/> has been
+    /// asked for, in call order, so a test can prove a lookup is not repeated (#2492).
+    /// </summary>
+    public List<(Guid MetaverseObjectId, int ConnectedSystemId)> ConnectedSystemObjectLookupsByMetaverseObjectId { get; } = [];
+
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
     {
@@ -3074,6 +3112,7 @@ public class SyncRepository : ISyncRepository
 
         foreach (var mvoId in metaverseObjectIds)
         {
+            ConnectedSystemObjectLookupsByMetaverseObjectId.Add((mvoId, connectedSystemId));
             if (_csosByMvo.TryGetValue(mvoId, out var csoIds))
             {
                 foreach (var csoId in csoIds)

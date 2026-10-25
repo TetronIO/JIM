@@ -656,6 +656,22 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task DeletePendingExportAsync(PendingExport pendingExport)
         => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportAsync));
 
+    public void BeginPendingExportBatch()
+        => throw new PreviewWriteAttemptedException(nameof(BeginPendingExportBatch));
+
+    public Task DeletePendingExportForMergeAsync(PendingExport pendingExport)
+        => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportForMergeAsync));
+
+    public Task FlushPendingExportBatchAsync()
+        => throw new PreviewWriteAttemptedException(nameof(FlushPendingExportBatchAsync));
+
+    // A read, but only meaningful inside a Pending Export batch, which a preview can never open.
+    public Task PrefetchPendingExportsForBatchAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(PrefetchPendingExportsForBatchAsync));
+
+    public void AbandonPendingExportBatch()
+        => throw new PreviewWriteAttemptedException(nameof(AbandonPendingExportBatch));
+
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => throw new PreviewWriteAttemptedException(nameof(UpdatePendingExportAsync));
 
