@@ -47,6 +47,10 @@ On OpenLDAP the limit is `olcSizeLimit` (default 500) and it is enforced across 
 
 On 389 Directory Server the limits are `nsslapd-sizelimit` (default 2000) and `nsslapd-lookthroughlimit` (default 5000), applied across a paged search in the same way for every account but the Directory Manager. Set `nsSizeLimit`, `nsLookThroughLimit` and `nsPagedSizeLimit` to `-1` on the service account's own entry, as the recipe under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server) does, rather than raising the server-wide limits.
 
+## Delta Import fails with "the directory stopped reading cn=accesslog at its size limit"
+
+On OpenLDAP, the account JIM binds as is subject to `olcSizeLimit` on the `cn=accesslog` database, and more changes were logged since the last import than the limit allows one search to return. The run ends as **Failed with error** before staging anything: carrying on from the newest change it had read could miss a change that started earlier and was logged later. Exempt the JIM group from the size limit on the accesslog database, as on each suffix (see [Service Account Permissions](jim-ldap-connector-permissions.md)), then run the Delta Import again; a Full Import works meanwhile and detects deletions by absence.
+
 ## Delta import not detecting changes
 
 If delta imports return no changes when changes are expected:
