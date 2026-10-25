@@ -241,18 +241,35 @@ public class ChangeValueRowsDatabaseTests
     // ─── Operation counts ───
 
     [Test]
-    public async Task GetCsoChangeValueOperationCountsAsync_CountsNormalisedRowsPerOperationAsync()
+    public async Task GetCsoChangeValueSummariesAsync_CountsNormalisedRowsPerOperationAsync()
     {
         var change = await SeedCsoChangeAsync(memberAdds: 4, memberRemoves: 2, descriptionReplacement: ("old", "new"));
 
-        var counts = await NewJim().ConnectedSystems.GetCsoChangeValueOperationCountsAsync([change.ChangeId]);
+        var summary = (await NewJim().ConnectedSystems.GetCsoChangeValueSummariesAsync([change.ChangeId])).Single();
 
-        Assert.That(counts, Is.EquivalentTo(new[]
-        {
-            new ChangeValueOperationCount(change.ChangeId, ChangeValueOperation.Add, 4),
-            new ChangeValueOperationCount(change.ChangeId, ChangeValueOperation.Remove, 2),
-            new ChangeValueOperationCount(change.ChangeId, ChangeValueOperation.Set, 1)
-        }));
+        Assert.That(summary, Is.EqualTo(new ChangeValueSummary(change.ChangeId, SetCount: 1, AddCount: 4, RemoveCount: 2, null, null)));
+        Assert.That(summary.RowCount, Is.EqualTo(7));
+    }
+
+    [Test]
+    public async Task GetCsoChangeValueSummariesAsync_EveryRowNamesOneRule_NamesItAsAgreedAsync()
+    {
+        var change = await SeedCsoChangeAsync(memberAdds: 3, syncRule: (7, "AD Export"));
+
+        var summary = (await NewJim().ConnectedSystems.GetCsoChangeValueSummariesAsync([change.ChangeId])).Single();
+
+        Assert.That((summary.AgreedSyncRuleId, summary.AgreedSyncRuleName), Is.EqualTo(((int?)7, (string?)"AD Export")));
+    }
+
+    [Test]
+    public async Task GetCsoChangeValueSummariesAsync_RowsNameTwoRules_AgreeOnNoneAsync()
+    {
+        var change = await SeedCsoChangeAsync(memberAdds: 3, syncRule: (7, "AD Export"), descriptionAdd: "x", descriptionSyncRule: (8, "LDAP Export"));
+
+        var summary = (await NewJim().ConnectedSystems.GetCsoChangeValueSummariesAsync([change.ChangeId])).Single();
+
+        Assert.That(summary.AgreedSyncRuleId, Is.Null);
+        Assert.That(summary.AgreedSyncRuleName, Is.Null);
     }
 
     // ─── Metaverse Object changes ───
@@ -287,17 +304,13 @@ public class ChangeValueRowsDatabaseTests
     }
 
     [Test]
-    public async Task GetMvoChangeValueOperationCountsAsync_CountsNormalisedRowsPerOperationAsync()
+    public async Task GetMvoChangeValueSummariesAsync_CountsNormalisedRowsPerOperationAsync()
     {
         var change = await SeedMvoChangeAsync(proxyAddressAdds: 3, managerNames: ["Alice Smith"]);
 
-        var counts = await NewJim().Metaverse.GetMvoChangeValueOperationCountsAsync([change.ChangeId]);
+        var summary = (await NewJim().Metaverse.GetMvoChangeValueSummariesAsync([change.ChangeId])).Single();
 
-        Assert.That(counts, Is.EquivalentTo(new[]
-        {
-            new ChangeValueOperationCount(change.ChangeId, ChangeValueOperation.Add, 3),
-            new ChangeValueOperationCount(change.ChangeId, ChangeValueOperation.Set, 1)
-        }));
+        Assert.That(summary, Is.EqualTo(new ChangeValueSummary(change.ChangeId, SetCount: 1, AddCount: 3, RemoveCount: 0, null, null)));
     }
 
     // ─── Helpers ───
@@ -331,7 +344,9 @@ public class ChangeValueRowsDatabaseTests
         string? descriptionAdd = null,
         (string Old, string New)? descriptionReplacement = null,
         int idBase = 0,
-        SeededChange? reuseSchemaFrom = null)
+        SeededChange? reuseSchemaFrom = null,
+        (int Id, string Name)? syncRule = null,
+        (int Id, string Name)? descriptionSyncRule = null)
     {
         await using var ctx = NewContext();
         var schema = reuseSchemaFrom?.Schema ?? await SeedCsoSchemaAsync();
@@ -370,6 +385,8 @@ public class ChangeValueRowsDatabaseTests
             ctx.Add(referenced);
             member.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(member, ValueChangeType.Add, referenced) { Id = IdFor(++ordinal) });
         }
+        foreach (var value in member.ValueChanges)
+            (value.SyncRuleId, value.SyncRuleName) = (syncRule?.Id, syncRule?.Name);
         if (member.ValueChanges.Count > 0)
             change.AttributeChanges.Add(member);
 
@@ -387,6 +404,8 @@ public class ChangeValueRowsDatabaseTests
                 description.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(description, ValueChangeType.Add, replacement.New) { Id = IdFor(++ordinal) });
                 description.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(description, ValueChangeType.Remove, replacement.Old) { Id = IdFor(++ordinal) });
             }
+            foreach (var value in description.ValueChanges)
+                (value.SyncRuleId, value.SyncRuleName) = (descriptionSyncRule?.Id ?? syncRule?.Id, descriptionSyncRule?.Name ?? syncRule?.Name);
             change.AttributeChanges.Add(description);
         }
 

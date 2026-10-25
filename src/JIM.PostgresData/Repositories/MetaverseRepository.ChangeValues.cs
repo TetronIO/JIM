@@ -60,12 +60,12 @@ public partial class MetaverseRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<ChangeValueOperationCount>> GetMvoChangeValueOperationCountsAsync(IReadOnlyCollection<Guid> changeIds)
+    public async Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
-        using var span = ActivitySource.StartActivity("Mvo.LoadChangeValueOperationCounts");
+        using var span = ActivitySource.StartActivity("Mvo.LoadChangeValueSummaries");
         var connection = Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
-        return await ChangeValueRowsSql.ReadOperationCountsAsync(connection, ChangeValueRowsSql.MetaverseObject, changeIds);
+        return await ChangeValueRowsSql.ReadSummariesAsync(connection, ChangeValueRowsSql.MetaverseObject, changeIds);
     }
 
     private sealed record MvoChangeValueDetail(

@@ -1317,12 +1317,12 @@ public partial class MetaverseServer
     }
 
     /// <summary>
-    /// How many of each given Metaverse Object change's value rows are Sets, Adds and Removes (#2498), as
-    /// <see cref="GetMvoChangeValueRowsAsync"/> reads them.
+    /// A summary of each given Metaverse Object change's value rows (#2498), as <see cref="GetMvoChangeValueRowsAsync"/>
+    /// reads them: how many are Sets, Adds and Removes, and the one Synchronisation Rule they agree on.
     /// </summary>
-    public async Task<List<ChangeValueOperationCount>> GetMvoChangeValueOperationCountsAsync(IReadOnlyCollection<Guid> changeIds)
+    public async Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
-        return await Application.Repository.Metaverse.GetMvoChangeValueOperationCountsAsync(changeIds);
+        return await Application.Repository.Metaverse.GetMvoChangeValueSummariesAsync(changeIds);
     }
 
     /// <summary>

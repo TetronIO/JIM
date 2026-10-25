@@ -9490,12 +9490,12 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// How many of each given Connected System Object change's value rows are Sets, Adds and Removes (#2498), as
-    /// <see cref="GetCsoChangeValueRowsAsync"/> reads them.
+    /// A summary of each given Connected System Object change's value rows (#2498), as <see cref="GetCsoChangeValueRowsAsync"/>
+    /// reads them: how many are Sets, Adds and Removes, and the one Synchronisation Rule they agree on.
     /// </summary>
-    public async Task<List<ChangeValueOperationCount>> GetCsoChangeValueOperationCountsAsync(IReadOnlyCollection<Guid> changeIds)
+    public async Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
-        return await Application.Repository.ConnectedSystems.GetCsoChangeValueOperationCountsAsync(changeIds);
+        return await Application.Repository.ConnectedSystems.GetCsoChangeValueSummariesAsync(changeIds);
     }
 
     /// <summary>

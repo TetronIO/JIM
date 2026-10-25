@@ -52,12 +52,12 @@ public partial class ConnectedSystemRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<ChangeValueOperationCount>> GetCsoChangeValueOperationCountsAsync(IReadOnlyCollection<Guid> changeIds)
+    public async Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
-        using var span = ActivitySource.StartActivity("Cso.LoadChangeValueOperationCounts");
+        using var span = ActivitySource.StartActivity("Cso.LoadChangeValueSummaries");
         var connection = Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
-        return await ChangeValueRowsSql.ReadOperationCountsAsync(connection, ChangeValueRowsSql.ConnectedSystemObject, changeIds);
+        return await ChangeValueRowsSql.ReadSummariesAsync(connection, ChangeValueRowsSql.ConnectedSystemObject, changeIds);
     }
 
     private sealed record CsoChangeValueDetail(string AttributeName, AttributeDataType AttributeType, AttributePlurality AttributePlurality, CsoValueChangeDto Value);

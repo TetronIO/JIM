@@ -34,7 +34,9 @@ internal static class ChangeValueRowsSql
         string AttributesTable,
         Func<string, string> ReferenceName,
         bool ReferenceNameReadsNameParameters,
-        string? PendingExportStubColumn);
+        string? PendingExportStubColumn,
+        string SyncRuleIdColumn,
+        string SyncRuleNameColumn);
 
     internal static readonly Side ConnectedSystemObject = new(
         AttributeChangesTable: "ConnectedSystemObjectChangeAttributes",
@@ -44,7 +46,9 @@ internal static class ChangeValueRowsSql
         AttributesTable: "ConnectedSystemAttributes",
         ReferenceName: ConnectedSystemObjectNameSql,
         ReferenceNameReadsNameParameters: true,
-        PendingExportStubColumn: "IsPendingExportStub");
+        PendingExportStubColumn: "IsPendingExportStub",
+        SyncRuleIdColumn: "SyncRuleId",
+        SyncRuleNameColumn: "SyncRuleName");
 
     internal static readonly Side MetaverseObject = new(
         AttributeChangesTable: "MetaverseObjectChangeAttributes",
@@ -54,7 +58,9 @@ internal static class ChangeValueRowsSql
         AttributesTable: "MetaverseAttributes",
         ReferenceName: id => $"""(SELECT ref_mvo."CachedDisplayName" FROM "MetaverseObjects" ref_mvo WHERE ref_mvo."Id" = {id})""",
         ReferenceNameReadsNameParameters: false,
-        PendingExportStubColumn: null);
+        PendingExportStubColumn: null,
+        SyncRuleIdColumn: "ContributedBySyncRuleId",
+        SyncRuleNameColumn: "ContributedBySyncRuleName");
 
     /// <summary>
     /// A Connected System Object's best-effort name, mirroring <c>ConnectedSystemObject.NameOrId</c> and the
@@ -131,14 +137,14 @@ internal static class ChangeValueRowsSql
                        v."ValueChangeType" AS value_change_type, v."ReferenceValueId" AS reference_id, {stubColumn} AS is_stub,
                        v."StringValue" AS string_value, v."DateTimeValue" AS date_time_value, v."IntValue" AS int_value,
                        v."LongValue" AS long_value, v."DecimalValue" AS decimal_value, v."GuidValue" AS guid_value,
-                       v."BoolValue" AS bool_value
+                       v."BoolValue" AS bool_value, v."{side.SyncRuleIdColumn}" AS rule_id, v."{side.SyncRuleNameColumn}" AS rule_name
                 FROM "{side.AttributeChangesTable}" ac
                 JOIN "{side.ValuesTable}" v ON v."{side.AttributeChangeForeignKey}" = ac."Id"
                 LEFT JOIN "{side.AttributesTable}" a ON a."Id" = ac."AttributeId"
                 WHERE ac."{side.ChangeForeignKey}" = ANY(@change_ids) {attributeFilter}
             ){paired},
             normalised AS (
-                SELECT b.change_id, b.value_id, p.remove_id AS previous_value_id, b.attribute_name,
+                SELECT b.change_id, b.value_id, p.remove_id AS previous_value_id, b.attribute_name, b.rule_id, b.rule_name,
                        CASE WHEN p.attribute_change_id IS NOT NULL THEN @op_set
                             {singleValuedOperation}
                             WHEN b.value_change_type = @value_add THEN @op_add
@@ -189,13 +195,23 @@ internal static class ChangeValueRowsSql
     }
 
     /// <summary>
-    /// Sets <paramref name="command"/> to count each change's normalised rows per operation: change_id, operation, count.
+    /// Sets <paramref name="command"/> to summarise each change's normalised rows: change_id, the Set, Add and Remove
+    /// counts, how many distinct Synchronisation Rules the rows name, and (meaningful only when that is one) the rule.
+    /// A Set row carries its new value's rule, as the causality panel has always attributed it.
     /// </summary>
-    internal static void PrepareOperationCountsCommand(DbCommand command, Side side, IReadOnlyCollection<Guid> changeIds)
+    internal static void PrepareSummariesCommand(DbCommand command, Side side, IReadOnlyCollection<Guid> changeIds)
     {
         var query = new ChangeValueRowQuery { ChangeIds = changeIds.ToList(), Count = 1 };
         command.CommandText = RowsSql(side, query, needsValueText: false) + """
-            SELECT n.change_id, n.operation, count(*) FROM normalised n GROUP BY n.change_id, n.operation
+            SELECT n.change_id,
+                   count(*) FILTER (WHERE n.operation = @op_set),
+                   count(*) FILTER (WHERE n.operation = @op_add),
+                   count(*) FILTER (WHERE n.operation = @op_remove),
+                   count(DISTINCT (n.rule_id, n.rule_name)) FILTER (WHERE n.rule_id IS NOT NULL AND btrim(n.rule_name) <> ''),
+                   min(n.rule_id) FILTER (WHERE n.rule_id IS NOT NULL AND btrim(n.rule_name) <> ''),
+                   min(n.rule_name) FILTER (WHERE n.rule_id IS NOT NULL AND btrim(n.rule_name) <> '')
+            FROM normalised n
+            GROUP BY n.change_id
             """;
         AddQueryParameters(command, side, query);
     }
@@ -238,20 +254,29 @@ internal static class ChangeValueRowsSql
         return (window, total);
     }
 
-    /// <summary>Reads each change's normalised row count per operation.</summary>
-    internal static async Task<List<ChangeValueOperationCount>> ReadOperationCountsAsync(
+    /// <summary>Reads a summary of each change's normalised rows; a change with no values has none.</summary>
+    internal static async Task<List<ChangeValueSummary>> ReadSummariesAsync(
         DbConnection connection, Side side, IReadOnlyCollection<Guid> changeIds)
     {
         if (changeIds.Count == 0)
             return [];
 
         await using var command = connection.CreateCommand();
-        PrepareOperationCountsCommand(command, side, changeIds);
-        var counts = new List<ChangeValueOperationCount>();
+        PrepareSummariesCommand(command, side, changeIds);
+        var summaries = new List<ChangeValueSummary>();
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
-            counts.Add(new ChangeValueOperationCount(reader.GetGuid(0), (ChangeValueOperation)reader.GetInt32(1), (int)reader.GetInt64(2)));
-        return counts;
+        {
+            var agreed = reader.GetInt64(4) == 1;
+            summaries.Add(new ChangeValueSummary(
+                reader.GetGuid(0),
+                (int)reader.GetInt64(1),
+                (int)reader.GetInt64(2),
+                (int)reader.GetInt64(3),
+                agreed ? reader.GetInt32(5) : null,
+                agreed ? reader.GetString(6) : null));
+        }
+        return summaries;
     }
 
     /// <summary>The ids a window's rows are read in full by: each row's value, and a Set row's previous value.</summary>

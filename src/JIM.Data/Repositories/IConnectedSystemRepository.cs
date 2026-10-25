@@ -956,10 +956,10 @@ public interface IConnectedSystemRepository
     Task<RangeResultSet<CsoChangeValueRow>> GetCsoChangeValueRowsAsync(ChangeValueRowQuery query);
 
     /// <summary>
-    /// How many of each given change's normalised value rows are Sets, Adds and Removes (#2498); an operation with
-    /// none is omitted.
+    /// A summary of each given change's normalised value rows (#2498): how many are Sets, Adds and Removes, and the
+    /// one Synchronisation Rule they agree on. A change with no values is omitted.
     /// </summary>
-    Task<List<ChangeValueOperationCount>> GetCsoChangeValueOperationCountsAsync(IReadOnlyCollection<Guid> changeIds);
+    Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
 
     /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).

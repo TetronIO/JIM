@@ -190,10 +190,10 @@ public interface IMetaverseRepository
     public Task<RangeResultSet<MvoChangeValueRow>> GetMvoChangeValueRowsAsync(ChangeValueRowQuery query);
 
     /// <summary>
-    /// How many of each given change's normalised value rows are Sets, Adds and Removes (#2498); an operation with
-    /// none is omitted.
+    /// A summary of each given change's normalised value rows (#2498): how many are Sets, Adds and Removes, and the
+    /// one Synchronisation Rule they agree on. A change with no values is omitted.
     /// </summary>
-    public Task<List<ChangeValueOperationCount>> GetMvoChangeValueOperationCountsAsync(IReadOnlyCollection<Guid> changeIds);
+    public Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
