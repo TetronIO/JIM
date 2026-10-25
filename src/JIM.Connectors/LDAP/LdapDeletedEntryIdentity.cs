@@ -12,10 +12,11 @@ namespace JIM.Connectors.LDAP;
 /// <summary>
 /// What a change log kept of an entry that has since been deleted, read back out of the LDIF-shaped lines it
 /// stores: the object classes, which resolve the Object Type the deletion is recorded against, and the entryUUID,
-/// which is the external id the deletion is matched on. OpenLDAP's accesslog keeps these lines in <c>reqOld</c>
-/// (one attribute value per line) and 389 Directory Server's Retro Changelog in the delete record's <c>changes</c>
-/// attribute (one LDIF text, once <c>nsslapd-log-deleted</c> is on); both are read here so that a deletion from
-/// either builds the same import object a live entry would have, which is the only kind the import can match.
+/// which is the external id the deletion is matched on. 389 Directory Server's Retro Changelog keeps these lines in the
+/// delete record's <c>changes</c> attribute (one LDIF text, once <c>nsslapd-log-deleted</c> is on), and they are read
+/// here so that a deletion builds the same import object a live entry would have, which is the only kind the import
+/// can match. (OpenLDAP's accesslog keeps them only in <c>reqOld</c>, which JIM does not read: its deletions are
+/// matched by reqEntryUUID alone, #1066.)
 /// <para>
 /// The lines are LDIF (RFC 2849) in all but the <c>dn:</c> line, which neither log keeps: a line beginning with a
 /// single space continues the one before it, <c>name: value</c> is plain, <c>name:: value</c> is base64, and
@@ -49,8 +50,7 @@ internal sealed class LdapDeletedEntryIdentity
     /// Reads the object classes and entryUUID out of the lines.
     /// </summary>
     /// <param name="ldifLines">The LDIF-shaped lines describing the deleted entry, without a <c>dn:</c> line.</param>
-    /// <param name="entryUuid">The entryUUID when the log states it directly (the accesslog's <c>reqEntryUUID</c>); it outranks any the lines carry.</param>
-    internal static LdapDeletedEntryIdentity Parse(IEnumerable<string> ldifLines, string? entryUuid = null)
+    internal static LdapDeletedEntryIdentity Parse(IEnumerable<string> ldifLines)
     {
         var objectClasses = new List<string>();
         string? parsedEntryUuid = null;
@@ -63,15 +63,8 @@ internal sealed class LdapDeletedEntryIdentity
                 parsedEntryUuid ??= value;
         }
 
-        return new LdapDeletedEntryIdentity(objectClasses, string.IsNullOrEmpty(entryUuid) ? parsedEntryUuid : entryUuid);
+        return new LdapDeletedEntryIdentity(objectClasses, parsedEntryUuid);
     }
-
-    /// <summary>
-    /// Reads the lines and builds the import object in one step. Null, with a warning, when the deletion cannot
-    /// be recorded against an Object Type or matched by external id.
-    /// </summary>
-    internal static ConnectedSystemImportObject? Identify(IEnumerable<string> ldifLines, string? deletedDn, string? entryUuid, IReadOnlyList<ConnectedSystemObjectType> objectTypes, ILogger logger) =>
-        Parse(ldifLines, entryUuid).ToImportObject(deletedDn, objectTypes, logger);
 
     /// <summary>
     /// The deletion as an import object: the Object Type the classes resolve to (the same precedence a live entry

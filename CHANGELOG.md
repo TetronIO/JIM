@@ -98,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 With AD FS, the portal now asks for JIM's Web API as its resource with the `allatclaims` scope, so the Web API's claim rules shape the portal's sign-in as they do the API's. Permit `allatclaims` to JIM's server application in AD FS, or sign-in is refused. (#2439)
+- 🔄 Delta Import from OpenLDAP no longer needs the accesslog to record old values (`logold`): a deletion is matched to the object JIM holds by its `entryUUID`. Turn `logold` off, as JIM's own lab now does; on directories with large groups it logged the whole member list on every membership change. (#1066)
 - 🖥️ Lists now show when a search, sort or filter is slow to answer: a progress bar, a spinner in the search box and a "Searching…" count, with the old rows faded until results arrive. Quick results appear as before, with no flicker.
 - 🔄 The Causality Explorer is for Administrators only, like the REST API reads it draws on, and other users no longer see links to it. On a Metaverse Object, **Explore causality** moves from beside the tabs into the **Inspect** view: at the end of its source panel (**Where this User gets its values**, named for the object's type), and in each attribute's inspector beside **Open in Timeline**.
 - 🔄 A Synchronisation Rule's identity strip, and the Object Type pickers that create one, read in the direction data flows: an import rule shows the Connected System Object Type then the Metaverse Object Type, and an export rule the reverse.
@@ -164,8 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 🐛 A Delta Import from OpenLDAP or 389 Directory Server no longer reads the whole change log into memory at once, which could exhaust the server's memory after a large export to the same directory server. It reads a page at a time, OpenLDAP asks for the selected partitions' changes only, and a deletion's old values are read only for deletions. On OpenLDAP, a Delta Import stopped part-way by a size limit now fails, naming the limit, where it could miss changes. (#2486)
 - 🐛 The Logs page no longer shows a database query JIM cancelled on purpose, such as when someone leaves a page before it finishes loading, as an error: PostgreSQL's "canceling statement due to user request" now shows at Debug. A query stopped by the statement timeout is still an error.
+- 🐛 A Delta Import from OpenLDAP or 389 Directory Server no longer reads the whole change log into memory at once, which could exhaust the server's memory after a large export to the same directory server. It reads a page at a time, OpenLDAP asks for the selected partitions' changes only, and 389 Directory Server reads a deleted entry's copy only for deletions. On OpenLDAP, a Delta Import stopped part-way by a size limit now fails, naming the limit, where it could miss changes. (#2486)
 - 🐛 A running import's Activity page fills its Run Profile Execution Items table as the run saves them, rather than staying as it was when the page opened, and says items are still to come instead of that the run recorded none.
 - 🐛 The Connector Space's Secondary External Id column now appears as soon as the list loads, rather than only once the list had been searched, sorted or filtered.
 - 🐛 On the Operations page's Queue, a running task's name can now be clicked through to its Activity at any point in the run. While progress was arriving quickly, as during the import phase of a large Full Import, the click often did nothing.

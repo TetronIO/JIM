@@ -488,13 +488,11 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     private const string PaginationTokenName = "accesslog";
 
     /// <summary>
-    /// What the change read asks for: everything but reqOld, which holds a modified attribute's previous values (a
-    /// large group's whole member list on every membership change) and which only a deletion needs.
+    /// What the change read asks for: when, what kind of write, to which entry, and that entry's entryUUID, which is
+    /// how a deletion is matched to the object JIM holds. Never reqOld: it holds a modified attribute's previous values
+    /// (a large group's whole member list on every membership change), and JIM needs none of it (#1066).
     /// </summary>
     private static readonly string[] ChangeAttributes = ["reqStart", "reqType", "reqDN", "reqEntryUUID"];
-
-    /// <summary>What a deletion's own log entry is read for: the deleted entry's attributes, to identify it by.</summary>
-    private static readonly string[] DeletionAttributes = ["reqDN", "reqEntryUUID", "reqOld"];
 
     /// <inheritdoc />
     /// <remarks>
@@ -638,10 +636,9 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
             if (objectChangeType == ObjectChangeType.Deleted)
             {
-                // For deletes, extract object type and external ID from the accesslog entry.
-                // The reqOld attribute contains the old attribute values (key: value format),
-                // and reqEntryUUID contains the entryUUID of the deleted object.
-                var deleteObject = BuildDeleteImportObjectFromAccesslog(ReadDeletionEntry(entry, context.SearchTimeout), context.ObjectTypes);
+                // A deleted object cannot be fetched, so the deletion is built from its log entry: the entryUUID it
+                // is matched on, and its DN.
+                var deleteObject = BuildDeletion(entry, reqDn, context);
                 if (deleteObject != null)
                     result.ImportObjects.Add(deleteObject);
             }
@@ -689,18 +686,6 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     }
 
     /// <summary>
-    /// A deletion's own log entry, read by its name with reqOld, the attributes the change read leaves out. The entry
-    /// as the change read returned it stands in when the directory answers nothing, and is then identified from
-    /// reqEntryUUID alone or passed over with a warning, as a log entry without reqOld always was.
-    /// </summary>
-    private SearchResultEntry ReadDeletionEntry(SearchResultEntry changeEntry, TimeSpan searchTimeout)
-    {
-        var request = new SearchRequest(changeEntry.DistinguishedName, "(objectClass=*)", SearchScope.Base, DeletionAttributes);
-        var response = (SearchResponse)_executor.SendRequest(request, searchTimeout);
-        return response?.Entries.Count > 0 ? response.Entries[0] : changeEntry;
-    }
-
-    /// <summary>
     /// The failure a Delta Import stops with when the directory stopped the change read at its size limit: an account
     /// the limit applies to cannot read the whole log, and resuming from the newest timestamp seen could miss an
     /// operation that started earlier and was logged later.
@@ -733,19 +718,43 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     }
 
     /// <summary>
-    /// Builds a delete import object from an accesslog auditDelete entry: reqOld holds the deleted entry's
-    /// attributes as "name: value" lines, and reqEntryUUID states its entryUUID directly, outranking any reqOld
-    /// carries. The import object matches what the USN-based delete detection produces (Object Type, external id,
-    /// DN); null, with a warning, when reqOld names no selected Object Type or no entryUUID can be found.
+    /// A deletion as an import object, from its accesslog auditDelete entry: the deleted entry's entryUUID
+    /// (reqEntryUUID) under each selected Object Type's external id attribute, and its DN as
+    /// <c>distinguishedName</c>. It names no Object Type: the accesslog records a deleted entry's object classes only in
+    /// reqOld, which costs a large group's whole member list on every membership change (#1066), so JIM types the
+    /// deletion from the object it holds with that external id instead. Null, with a note on the run, when the entry
+    /// carries no reqEntryUUID, since nothing would then match it.
     /// </summary>
-    private ConnectedSystemImportObject? BuildDeleteImportObjectFromAccesslog(SearchResultEntry accesslogEntry, IReadOnlyList<ConnectedSystemObjectType> objectTypes)
+    private ConnectedSystemImportObject? BuildDeletion(SearchResultEntry accesslogEntry, string reqDn, LdapDeltaReadContext context)
     {
-        var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
-        var reqEntryUuid = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqEntryUUID");
-        var reqOldValues = LdapConnectorUtilities.GetEntryAttributeStringValues(accesslogEntry, "reqOld") ?? [];
+        var entryUuid = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqEntryUUID");
+        if (string.IsNullOrEmpty(entryUuid))
+        {
+            _logger.Warning("GetDeltaResultsUsingAccesslog: The accesslog's record of the deletion of {Dn} carries no reqEntryUUID, so the deletion cannot be matched to an object and is not staged.",
+                LogSanitiser.Sanitise(reqDn));
+            context.Notes.Record(reqDn, DescribeUnidentifiedDeletion(reqDn));
+            return null;
+        }
 
-        return LdapDeletedEntryIdentity.Identify(reqOldValues, reqDn, reqEntryUuid, objectTypes, _logger);
+        var deletion = new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Deleted };
+
+        // Every selected Object Type's external id attribute carries the entryUUID, so whichever type JIM holds the
+        // object under, its own external id is there to match on. On a directory that is entryUUID itself.
+        var externalIdAttributeNames = context.ObjectTypes
+            .Where(t => t.Selected)
+            .SelectMany(t => t.Attributes.Where(a => a.IsExternalId).Select(a => a.Name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .DefaultIfEmpty(context.PreviousRootDse.ExternalIdAttributeName);
+        deletion.Attributes.AddRange(externalIdAttributeNames.Select(name => new ConnectedSystemImportObjectAttribute { Name = name, StringValues = [entryUuid] }));
+
+        deletion.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "distinguishedName", StringValues = [reqDn] });
+        return deletion;
     }
+
+    /// <summary>The note a run carries for a deletion the accesslog did not record well enough to match.</summary>
+    internal static string DescribeUnidentifiedDeletion(string deletedDn) =>
+        $"The deletion of {deletedDn} could not be identified: the accesslog's record of it carries no reqEntryUUID, so the object stays in JIM. " +
+        "Run a Full Import, which detects deletions by absence.";
 
     #endregion
 }
