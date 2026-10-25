@@ -57,6 +57,7 @@ This template creates a **Server application** (the confidential web client) and
     - `openid`
     - `profile`
     - `email`
+    - `allatclaims` (JIM asks for it so that the Web API's claim rules also shape the ID token the portal signs people in with; without it, AD FS refuses the sign-in)
     - `offline_access` (required for refresh-token issuance; enables PowerShell silent renewal and token persistence)
 2. Click **Next**, then **Next** again on the Summary screen, and **Close**
 

@@ -428,6 +428,32 @@ public class LogReaderServiceTests
     }
 
     [Test]
+    public async Task GetLogEntriesAsync_WithPostgresJsonLog_ClientCancelledStatementMapsToDebug()
+    {
+        var today = DateTime.UtcNow.Date;
+        var fileName = $"jim.database.{today:yyyyMMdd}.json";
+        await File.WriteAllTextAsync(Path.Combine(_testLogPath, fileName),
+            "{\"timestamp\":\"2026-01-04 10:00:00.000 UTC\",\"error_severity\":\"ERROR\",\"message\":\"canceling statement due to user request\",\"state_code\":\"57014\"}");
+
+        var entries = await _service.GetLogEntriesAsync(date: today);
+
+        Assert.That(entries[0].Level, Is.EqualTo("Debug"));
+    }
+
+    [Test]
+    public async Task GetLogEntriesAsync_WithPostgresJsonLog_StatementTimeoutStaysError()
+    {
+        var today = DateTime.UtcNow.Date;
+        var fileName = $"jim.database.{today:yyyyMMdd}.json";
+        await File.WriteAllTextAsync(Path.Combine(_testLogPath, fileName),
+            "{\"timestamp\":\"2026-01-04 10:00:00.000 UTC\",\"error_severity\":\"ERROR\",\"message\":\"canceling statement due to statement timeout\",\"state_code\":\"57014\"}");
+
+        var entries = await _service.GetLogEntriesAsync(date: today);
+
+        Assert.That(entries[0].Level, Is.EqualTo("Error"));
+    }
+
+    [Test]
     public async Task GetLogEntriesAsync_WithPostgresJsonLog_MapsFatalSeverity()
     {
         var today = DateTime.UtcNow.Date;

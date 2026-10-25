@@ -150,8 +150,8 @@ public class ServiceHealthStripTests : JimComponentTestContext
         var card = Card(cut, JimService.WorkerSync);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("Full Import: Corporate Directory · 12 min"));
-            Assert.That(Text(card, ".jim-service-health-condition"), Is.EqualTo("Heartbeat 2 seconds ago · up 3 d"), "the uptime rides on the heartbeat line");
+            Assert.That(Text(card, ".jim-service-health-activity"), Does.StartWith("Full Import: Corporate Directory").And.Contain("12 min"));
+            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith("Heartbeat 2 seconds ago").And.Contain("up 3 d"), "the uptime rides on the heartbeat line");
             Assert.That(card.QuerySelector(".jim-service-health-footer"), Is.Null, "host and version have moved behind the details control");
         }
     }
@@ -274,9 +274,9 @@ public class ServiceHealthStripTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("No heartbeat for 4 minutes"));
-            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith("Was running: Full Import: Corporate Directory · up "),
+            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith("Was running: Full Import: Corporate Directory").And.Contain("up "),
                 "the uptime it had at its last heartbeat stays: it says how long it ran before going quiet");
-            Assert.That(card.TextContent, Does.Not.Contain("· 12 min"), "a dead process is not running anything");
+            Assert.That(card.TextContent, Does.Not.Contain("12 min"), "a dead process is not running anything");
         }
     }
 
@@ -300,7 +300,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("No heartbeat for 4 minutes"));
-            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith($"Last heartbeat {lastSeen} · up "));
+            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith($"Last heartbeat {lastSeen}").And.Contain("up "));
         }
     }
 

@@ -128,8 +128,11 @@ cd C:\src\JIM
 ```
 
 `Install-LabScripts.ps1` copies the host scripts flat into `C:\jim-ad-lab` (or `-Destination`), the `guest` folder beside
-them and the delegation file into `delegation`, which is the layout `JIM_AD_LAB_SCRIPT_ROOT` points the runner at. It is
-idempotent, prints `new`, `updated` or `unchanged` per file, never deletes anything, and does not deploy itself. It also
+them, the delegation file into `delegation` and the JIM PowerShell module into `module\JIM` (it registers JIM on the AD
+FS server), which is the layout `JIM_AD_LAB_SCRIPT_ROOT` points the runner at. It is idempotent, prints `new`,
+`updated`, `unchanged` or `removed` per file, and does not deploy itself. It deletes nothing, except a file under
+`module\JIM` that the checkout's module no longer has, because the registration refuses a module copy that is not
+exactly the commit's. It also
 writes `settings.example.json`, and with `-CreateSettings` creates `settings.json` from it when there is none; it refuses
 (before copying anything) if `settings.json` already exists, and never touches that file otherwise. Run it again after any
 change to the lab code, and after pulling a new release: the scripts on the host are a copy, not the checkout.
@@ -275,8 +278,9 @@ through these phases:
 | `Farm` | Installs AD FS, creates a self-signed TLS certificate for `adfs.panoply.local` (exported as `adfs-primary-ca.cer`, as the LDAPS certificates are), creates the farm on the Windows Internal Database running as the gMSA, and sets sign-in to forms everywhere, because a headless browser outside the domain cannot complete Windows Integrated Authentication |
 | `Verify` | Membership and secure channel, the service and its account, then the OpenID Connect discovery document and key set fetched over HTTPS by the service name, as JIM will. It also reports the `access_token_issuer` AD FS publishes, which #2355 needs to know |
 
-Nothing about JIM is configured here: the Application Group that registers JIM is created later, by the registration
-command JIM ships for administrators (#2364), so the lab tests exactly what customers run.
+Nothing about JIM is configured here: the Application Group that registers JIM is created on every run, after the
+revert, by the registration command JIM ships for administrators (`Register-JIMIdentityProvider`, #2364), so the lab
+tests exactly what customers run (see "How a run uses it" below).
 
 **It depends on `dc-primary`.** Its computer account, the gMSA and the KDS root key live in `dc-primary`'s directory,
 which is reverted to its checkpoints all the time. So the two are a pair:
@@ -325,7 +329,20 @@ It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB o
    provider and maps `adfs.panoply.local` to `JIM_AD_LAB_ADFS_PRIMARY_ADDRESS` inside `jim.web`;
 3. reads the AD FS server's HTTPS certificate off the wire into `test/integration/ad-lab-certs/adfs-primary.pem`, and
    waits until it publishes its discovery document, verified against that certificate and the service name (AD FS
-   answers 503 for a minute or two after the machine starts).
+   answers 503 for a minute or two after the machine starts);
+4. registers JIM on it (#2441), with `Register-LabIdentityProvider.ps1` on the host, which runs JIM's own
+   `Register-JIMIdentityProvider -Provider ADFS` against the AD FS server over PowerShell Direct, with JIM's address
+   as the checks reach it, `https://localhost:5243` (jim.web's HTTPS port, published on the runner's loopback by the
+   overlay). The registration is made from the copy of the JIM PowerShell module that `Install-LabScripts.ps1` put on
+   the host, and refuses to run unless that copy's digest is the commit's (`Get-LabModuleDigest`): **after any change
+   to `src/JIM.PowerShell`, run `Install-LabScripts.ps1` on the host again before the next run**, or the AD FS
+   scenarios fail, saying so;
+5. recreates `jim.web` with what the registration returned (the client IDs and the API scope; the sign-in
+   identifier stays `sub` and `Subject Identifier` until a check creates the `Object GUID` attribute, since JIM refuses
+   to start naming an attribute that does not exist), passed through its own process environment. The portal's client secret is new on every run and
+   dies at the next revert. It comes back over SSH standard output, is masked in the log at once, and is handed to
+   the workflow's scrub step through `GITHUB_ENV`, which removes it from every artefact; it is written to no other
+   file.
 
 The runner does not give JIM the certificate: the scenario trusts it the way an administrator would, with
 `Add-JIMCertificate -FromIdentityProvider`. It reads the certificate off the wire rather than copying
@@ -388,6 +405,7 @@ standard output only where the runner needs data (`Get-LabDomainController.ps1 -
 | After population | `Checkpoint-LabDomainController.ps1 -Name <vm> -Checkpoint populated-<template>-<hash> -Replace` | |
 | Record the OS build in run metadata | `Get-LabDomainController.ps1 -Name <vm> -AsJson` | `{ name, state, generation, checkpointType, uptimeSeconds, checkpoints: [{ name, createdUtc }], guest: { productName, displayVersion, currentBuild, ubr, buildString } or null }` |
 | A scenario creates a container at run time | `Grant-LabDelegation.ps1 -Name <vm> -ContainerDn <dn>` | The Windows counterpart of `jim-delegate.sh`; idempotent; one output line per outcome. Runs the same guest function the build's `Configure` phase uses |
+| An AD FS scenario registers JIM | `Register-LabIdentityProvider.ps1 -Name <vm> -Url <jim url> -ModuleDigest <digest>` | Refuses unless the host's copy of the JIM PowerShell module is the commit's; prints one JSON object, which holds the portal's new client secret (see "How a run uses it") |
 
 The host-side variables the runner reads are `JIM_AD_LAB_CONTROL_HOST`, `JIM_AD_LAB_CONTROL_USER` (default `jim-lab`),
 `JIM_AD_LAB_CONTROL_KEY`, `JIM_AD_LAB_CONTROL_PORT` (default `22`) and `JIM_AD_LAB_SCRIPT_ROOT` (default `C:\jim-ad-lab`),

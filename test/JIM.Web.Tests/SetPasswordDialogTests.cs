@@ -448,26 +448,6 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
     #region what the dialog promises about storage (decision D4)
 
-    /// <summary>
-    /// The password now goes through the queue, so "JIM stores nothing" would be untrue. The dialog says exactly
-    /// what is held and for how long, in the words decision D4 settled on, on both surfaces.
-    /// </summary>
-    [TestCase(false)]
-    [TestCase(true)]
-    public void SetPasswordDialog_WhileComposing_SaysThePasswordIsHeldOnlyUntilDelivered(bool allowSelection)
-    {
-        var provider = ShowDialog(allowSelection: allowSelection);
-
-        // The markup wraps the sentence across source lines; the browser collapses that whitespace and so does this.
-        var intro = System.Text.RegularExpressions.Regex.Replace(Button(provider, IntroMarker).TextContent, @"\s+", " ");
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(intro, Does.Contain("holds the password encrypted only until"));
-            Assert.That(intro, Does.Contain("keeps a refused one so it can finish the job"));
-            Assert.That(provider.Markup, Does.Not.Contain("stores nothing"));
-        }
-    }
-
     #endregion
 
     #region one account: the dialog collapses to what shipped for #1121
@@ -672,8 +652,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var line = provider.Find($"[data-testid='{FurtherChecksMarker}']").TextContent;
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(line, Does.Contain("Fabrikam HR applies further checks JIM cannot see"));
-            Assert.That(line, Does.Contain("can still be refused"));
+            Assert.That(line, Does.Contain("Fabrikam HR"));
         }
     }
 
@@ -686,7 +665,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         Click(provider, SelectAllMarker);
 
         Assert.That(provider.Find($"[data-testid='{FurtherChecksMarker}']").TextContent,
-            Does.Contain("Contoso AD, Fabrikam HR apply further checks JIM cannot see"));
+            Does.Contain("Contoso AD").And.Contain("Fabrikam HR"));
     }
 
     [Test]

@@ -12,7 +12,9 @@
     functions with them:
 
       scripts/Test-AdLabReleaseGate.ps1      context jim-ad-lab        (.github/workflows/ad-lab.yml)
+      scripts/Test-AdLabFederationReleaseGate.ps1  context jim-ad-lab-adfs  (.github/workflows/ad-lab.yml)
       scripts/Test-PreReleaseGate.ps1        context jim-pre-release   (.github/workflows/pre-release.yml)
+      scripts/Test-DeployLabReleaseGate.ps1  context jim-deploy-lab    (.github/workflows/deploy-lab.yml)
 
     The context is a parameter here, never on a gate script: a gate that could be pointed at another context would be
     a gate with an override. Nothing in this file skips, softens or accepts a stale result either; failing to read the
