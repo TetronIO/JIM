@@ -22,6 +22,8 @@ A Run Profile is one of:
 - **Delta Synchronisation**<br /> Evaluate only objects with pending changes since the last sync. Faster.
 - **Export**<br /> Flush Pending Exports out to the Connected System.
 
+A synchronisation works through the Connected System's Object Types in dependency order: a type comes after the types its reference Attribute Flows can point at, so people are synchronised before the groups whose members they are, and each group's membership is resolved as the group is processed. Where an attribute's schema does not say which type it points at (LDAP `member`, for example), JIM assumes it can point at any type, so a type with no reference Attribute Flows comes first. References between objects of the same type, such as a manager or a nested group, can still need the **Resolving cross-page references** step. The run's log records the order it used.
+
 ## Page size
 
 How many objects an import asks the Connected System for at a time: the page of an LDAP paged search, a SQL query or a SCIM request. The default is 100. A larger page means fewer round trips to the Connected System and more memory held at once. The File Connector reads its file whole, so the setting does nothing there, and synchronisation is paged by the `Sync.PageSize` [Service Setting](../administration/configuration.md#service-settings) instead.
