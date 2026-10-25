@@ -40,6 +40,7 @@ function ConvertFrom-AdfsSignInCheckOutput {
     param(
         [Parameter(Mandatory)]
         [AllowEmptyCollection()]
+        [AllowEmptyString()]
         [string[]]$Line
     )
 
