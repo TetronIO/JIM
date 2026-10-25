@@ -3419,6 +3419,134 @@ public class FullSyncTests
     }
 
     /// <summary>
+    /// A group whose members sit on a later page in id order must no longer be deferred to the cross-page reference
+    /// step (#2492): the run pages Object Types in dependency order, so the members' type is processed first and the
+    /// group's member reference resolves in the main page loop.
+    ///
+    /// Scenario: one group (GUID "11111111-...") with a MEMBER reference to one user (GUID "FFFFFFFF-..."), page size 1.
+    /// Paging in id order put the group on page 1, before its member had been projected, and deferred it.
+    /// </summary>
+    [Test]
+    public async Task FullSync_GroupSortingBeforeItsMemberInIdOrder_ResolvesMembershipInTheMainLoopAsync()
+    {
+        var csUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER");
+        var csGroupType = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_GROUP");
+
+        var user = new ConnectedSystemObject
+        {
+            Id = Guid.Parse("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"),
+            ConnectedSystemId = 1,
+            Type = csUserType,
+            TypeId = csUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow.AddHours(-1),
+        };
+        user.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            Attribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID),
+            ConnectedSystemObject = user,
+            GuidValue = Guid.NewGuid()
+        });
+
+        var group = new ConnectedSystemObject
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            ConnectedSystemId = 1,
+            Type = csGroupType,
+            TypeId = csGroupType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow.AddHours(-1),
+        };
+        group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.GROUP_UID,
+            Attribute = csGroupType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.GROUP_UID),
+            ConnectedSystemObject = group,
+            GuidValue = Guid.NewGuid()
+        });
+        group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.MEMBER,
+            Attribute = csGroupType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.MEMBER),
+            ConnectedSystemObject = group,
+            ReferenceValue = user,
+            ReferenceValueId = user.Id
+        });
+
+        ConnectedSystemObjectsData.Clear();
+        ConnectedSystemObjectsData.Add(group);
+        ConnectedSystemObjectsData.Add(user);
+        MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
+
+        MetaverseObjectsData.Clear();
+        MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
+        MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
+
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            mvos: MetaverseObjectsData,
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData);
+        SyncRepo.SetSyncPageSize(1);
+        SyncRepo.SimulateRawSqlPersistence = true;
+
+        Jim?.Dispose();
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
+
+        SyncRulesData.Single(q => q.Id == 1).ProjectToMetaverse = true;
+        var groupImportRule = SyncRulesData.Single(q => q.Id == 3);
+        groupImportRule.ProjectToMetaverse = true;
+        var mvGroupType = MetaverseObjectTypesData.Single(q => q.Name == "Group");
+        var memberMapping = new SyncRuleMapping
+        {
+            Id = 300,
+            SyncRule = groupImportRule,
+            TargetMetaverseAttribute = mvGroupType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Member),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.Member
+        };
+        memberMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 3000,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.MEMBER,
+            ConnectedSystemAttribute = csGroupType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.MEMBER),
+        });
+        groupImportRule.AttributeFlowRules.Add(memberMapping);
+
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q =>
+            q.ConnectedSystemId == connectedSystem!.Id &&
+            q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var processedOrder = new List<Guid>();
+        syncProcessor.OnConnectedSystemObjectProcessedInPass2 = cso => processedOrder.Add(cso.Id);
+
+        await syncProcessor.PerformFullSyncAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(processedOrder, Is.EqualTo(new[] { user.Id, group.Id }),
+                "The members' type must be paged before the type that references it.");
+            Assert.That(group.MetaverseObject, Is.Not.Null);
+            Assert.That(user.MetaverseObject, Is.Not.Null);
+            var member = group.MetaverseObject!.AttributeValues
+                .SingleOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.Member);
+            Assert.That(member?.ReferenceValueId, Is.EqualTo(user.MetaverseObject?.Id),
+                "The group's member reference must resolve to the user's Metaverse Object.");
+            // The cross-page step moves the Activity's counting window to its own work when it runs; untouched, the
+            // window still describes the page loop, which proves the step had nothing to do.
+            Assert.That(activity.ObjectsToProcess, Is.EqualTo(2),
+                "No object should have been deferred to the cross-page reference step.");
+        }
+    }
+
+    /// <summary>
     /// Tests that cross-page reference resolution merges Attribute Flow into the existing RPEI
     /// rather than creating a duplicate RPEI for the same CSO.
     ///

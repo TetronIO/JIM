@@ -75,7 +75,13 @@ public interface ISyncRepository
     /// page O(pageSize) at scale. Sequential callers must pass the ID of the last row of the previous
     /// page exactly as returned. Null behaves as the offset-based page requested via
     /// <paramref name="page"/>.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
+    /// <param name="objectTypeId">When provided, restricts the page to Connected System Objects of this Object Type,
+    /// so a synchronisation can page through types in dependency order (#2492): referenced types first, so references
+    /// between types resolve in the main page loop. The keyset cursor then runs within the type, served by
+    /// <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>.</param>
+    /// <param name="createdOnOrAfter">When provided, restricts the page to objects created at or after this instant:
+    /// the closing sweep of a type-ordered run, for objects created while it was in flight.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
@@ -89,7 +95,11 @@ public interface ISyncRepository
     /// each page boundary deletes that page's obsolete CSOs; the modified set shrinks under an OFFSET, which then
     /// skips the rows that moved up into the gap (every other page, when a whole page is deleted). Null behaves
     /// as the offset-based page requested via <paramref name="page"/>.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null);
+    /// <param name="objectTypeId">As for <see cref="GetConnectedSystemObjectsAsync"/>: restricts the page to one Object
+    /// Type.</param>
+    /// <param name="createdOnOrAfter">As for <see cref="GetConnectedSystemObjectsAsync"/>: restricts the page to
+    /// objects created at or after this instant.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Gets a single CSO by ID with full attribute values.

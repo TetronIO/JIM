@@ -7447,6 +7447,49 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// How far before the run's start the closing sweep of <see cref="TypeOrderedCsoPager"/> reaches, so an object a
+    /// writer stamped with a clock a little behind this run's is still swept. Objects inside the margin that a type walk
+    /// already handed out are not handed out again, so a generous margin costs only a slightly larger sweep query.
+    /// </summary>
+    private static readonly TimeSpan TypeOrderedSweepClockSkewMargin = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Creates the page source for a synchronisation's main loop (#2492): the Connected System's Object Types in
+    /// dependency order (referenced types first, from the run's mapped reference attributes), each walked with its own
+    /// keyset cursor, then a sweep for objects created while the run was in flight. Logs the order, so a run's
+    /// behaviour can be explained from its log.
+    /// </summary>
+    /// <param name="activeSyncRules">The run's Synchronisation Rules.</param>
+    /// <param name="runStartedAt">When the run started; the sweep's creation floor is derived from it.</param>
+    /// <param name="loadPage">The repository page load for this run kind.</param>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected TypeOrderedCsoPager CreateTypeOrderedPager(
+        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage, string runKind)
+    {
+        var objectTypes = _connectedSystem.ObjectTypes ?? [];
+        if (objectTypes.Count == 0)
+        {
+            // Nothing to order by: one sweep from the beginning of time is a plain id-ordered walk of every object.
+            Log.Information("{RunKind} type order: no Object Types loaded on Connected System {ConnectedSystemId}; paging all objects in id order",
+                runKind, _connectedSystem.Id);
+            return new TypeOrderedCsoPager(loadPage, [], DateTime.MinValue);
+        }
+
+        var order = SyncObjectTypeOrdering.Compute(objectTypes, activeSyncRules);
+        var namesById = objectTypes.ToDictionary(t => t.Id, t => t.Name);
+        string NameOf(int id) => LogSanitiser.Sanitise(namesById.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture)));
+
+        Log.Information("{RunKind} type order: {TypeOrder}", runKind, order.Describe(NameOf));
+        if (order.SelfReferencingTypeIds.Count > 0)
+        {
+            Log.Information("{RunKind} type order: references within {Types} can still need the cross-page reference step",
+                runKind, string.Join(", ", order.SelfReferencingTypeIds.Order().Select(NameOf)));
+        }
+
+        return new TypeOrderedCsoPager(loadPage, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
+    }
+
+    /// <summary>
     /// Builds a set of object type IDs that have inbound import rules with reference attribute mappings.
     /// Used to determine whether unchanged CSOs need reference attribute processing.
     /// </summary>

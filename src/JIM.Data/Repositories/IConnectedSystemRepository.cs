@@ -1195,7 +1195,9 @@ public interface IConnectedSystemRepository
         bool includeTotalCount = true,
         bool? hasUnresolvedReferences = null,
         CancellationToken cancellationToken = default);
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
+    /// <param name="objectTypeId">Keyset callers only: restricts the page to one Object Type; see <see cref="ISyncRepository.GetConnectedSystemObjectsAsync"/>.</param>
+    /// <param name="createdOnOrAfter">Keyset callers only: restricts the page to objects created at or after this instant.</param>
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
@@ -1250,13 +1252,17 @@ public interface IConnectedSystemRepository
     /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
     /// <param name="afterId">Keyset cursor; see <see cref="ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync"/>.</param>
+    /// <param name="objectTypeId">Restricts the page to one Object Type; see <see cref="ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync"/>.</param>
+    /// <param name="createdOnOrAfter">Restricts the page to objects created at or after this instant.</param>
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId,
         DateTime modifiedSince,
         int page,
         int pageSize,
         int? knownTotalCount = null,
-        Guid? afterId = null);
+        Guid? afterId = null,
+        int? objectTypeId = null,
+        DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.

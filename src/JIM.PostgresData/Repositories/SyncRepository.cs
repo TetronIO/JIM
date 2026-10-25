@@ -75,12 +75,12 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId, objectTypeId, createdOnOrAfter);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId);
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);

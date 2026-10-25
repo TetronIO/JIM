@@ -3646,8 +3646,8 @@ namespace JIM.PostgresData.Migrations
                         .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique")
                         .HasFilter("\"MetaverseObjectId\" IS NOT NULL");
 
-                    b.HasIndex("ConnectedSystemId", "TypeId")
-                        .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId");
+                    b.HasIndex("ConnectedSystemId", "TypeId", "Id")
+                        .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id");
 
                     b.HasIndex(new[] { "ConnectedSystemId" }, "IX_ConnectedSystemObjects_ConnectedSystemId_SynchronisationPending")
                         .HasFilter("\"SynchronisationPending\"");
