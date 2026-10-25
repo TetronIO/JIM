@@ -339,10 +339,10 @@ It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB o
      `Install-LabScripts.ps1` on the host again before the next run**, or the AD FS scenarios fail, saying so;
    - creates the account that signs in as JIM's initial administrator, `jim-sso-admin` in `dc-primary`'s `CN=Users`,
      with a password drawn for the run (never the domain Administrator, whose password the control plane depends on);
-   - creates the `Object GUID` attribute on the User type, which the registration's `oid` claim is matched to (JIM
-     refuses to start naming an attribute that does not exist, so it starts on `.env`'s `sub` first);
    - recreates `jim.web` with all of it, through its own process environment: the client IDs, the API scope, `oid`
-     matched to `Object GUID`, and `jim-sso-admin`'s objectGUID as `JIM_SSO_INITIAL_ADMIN`.
+     matched to the built-in `Object GUID` attribute, and `jim-sso-admin`'s objectGUID as `JIM_SSO_INITIAL_ADMIN`.
+     JIM first starts on `.env`'s `sub`, because the registration and the account only exist once the AD FS server
+     and `dc-primary` answer.
 
    The portal's client secret and the administrator's password are new on every run and die at the next revert. Each
    is masked in the log at once and handed to the workflow's scrub step through `GITHUB_ENV`, which removes it from

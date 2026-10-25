@@ -8,9 +8,8 @@
 .DESCRIPTION
     Signs people in to JIM through the Active Directory lab's AD FS server, adfs-primary, end to end, with JIM set up
     exactly as a customer sets it up (#2355, #2441). Before the scenario, the runner (Step 4e) registered JIM on AD FS
-    with Register-JIMIdentityProvider, created the sign-in administrator jim-sso-admin in dc-primary, created the
-    Object GUID attribute, and started JIM matching AD FS's oid claim to Object GUID with that account as its initial
-    administrator. The scenario then:
+    with Register-JIMIdentityProvider, created the sign-in administrator jim-sso-admin in dc-primary, and restarted JIM
+    matching AD FS's oid claim to the built-in Object GUID attribute, with that account as its initial administrator. The scenario then:
 
       Trust       trusts AD FS's certificate for sign-in (Add-JIMCertificate -FromIdentityProvider), as Scenario 030
                   proves in detail;

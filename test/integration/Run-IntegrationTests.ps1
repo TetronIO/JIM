@@ -3653,9 +3653,9 @@ elseif ($isActiveDirectoryRun) {
 #      client secret;
 #   2. create the account that signs in as JIM's initial administrator, jim-sso-admin in dc-primary, with a password
 #      drawn for this run;
-#   3. create the Object GUID attribute the registration's oid claim is matched to, on the User type, with the
-#      module's own cmdlet: JIM refuses to start naming an attribute that does not exist;
-#   4. recreate jim.web with all of it, through this process's environment (never a file), and wait for it.
+#   3. recreate jim.web with all of it, through this process's environment (never a file), and wait for it: the
+#      registration's oid claim matched to the built-in Object GUID attribute, and jim-sso-admin's objectGUID as the
+#      initial administrator. Both only exist once the AD FS server and dc-primary answer, after JIM first started.
 # The client secret and the password are masked in the log and removed from every artefact
 # (Protect-ActiveDirectoryLabSecret).
 if ($isActiveDirectoryRun -and $script:AdLabContext.Configs.ContainsKey("AdfsPrimary")) {
@@ -3669,23 +3669,6 @@ if ($isActiveDirectoryRun -and $script:AdLabContext.Configs.ContainsKey("AdfsPri
         Write-Step "Creating the sign-in administrator in $($script:AdLabContext.Configs["Primary"].VmName)..."
         $adfsAdministrator = New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:AdLabContext.Configs["Primary"]
         Write-Success "$($adfsAdministrator.UserPrincipalName) created (objectGUID $($adfsAdministrator.ObjectGuid))"
-
-        Write-Step "Creating the '$($adfsRegistration.MvAttribute)' attribute on the User type..."
-        Remove-Module JIM -Force -ErrorAction SilentlyContinue
-        Import-Module (Join-Path $repoRoot 'src' 'JIM.PowerShell' 'JIM.psd1') -Force -ErrorAction Stop
-        try {
-            Connect-JIM -Url $script:Lane.JimUrl -ApiKey $apiKey | Out-Null
-            $userType = Get-JIMMetaverseObjectType -Name 'User'
-            if (-not (Get-JIMMetaverseAttribute | Where-Object { $_.name -eq $adfsRegistration.MvAttribute })) {
-                New-JIMMetaverseAttribute -Name $adfsRegistration.MvAttribute -Type Guid -ObjectTypeIds @($userType.id) `
-                    -ChangeReason 'AD FS sign-in (#2441)' -ErrorAction Stop | Out-Null
-            }
-        }
-        finally {
-            Disconnect-JIM -ErrorAction SilentlyContinue
-            Remove-Module JIM -Force -ErrorAction SilentlyContinue
-        }
-        Write-Success "'$($adfsRegistration.MvAttribute)' is on the User type"
     }
     catch {
         Write-Failure "Could not set JIM up to sign people in through AD FS: $($_.Exception.Message)"

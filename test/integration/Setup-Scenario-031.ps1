@@ -14,7 +14,7 @@
       account, importing users from OU=Users,OU=Corp only (the sign-in administrator lives in CN=Users and is not
       imported: JIM makes their Metaverse Object when they first sign in);
     - an import Synchronisation Rule projecting users to the Metaverse User type, flowing objectGUID to Object GUID
-      (the attribute AD FS's oid claim is matched to, which the runner created before turning sign-in on),
+      (the built-in attribute AD FS's oid claim is matched to),
       sAMAccountName to Account Name, userPrincipalName to User Principal Name and displayName to Display Name;
     - Full Import and Full Synchronisation run profiles.
 

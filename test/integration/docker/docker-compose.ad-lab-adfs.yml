@@ -22,11 +22,11 @@
 # what it returns in its own process environment (JIM_AD_LAB_ADFS_*, never a file) and recreates jim.web, so these
 # are interpolated from there. Until then they read "unregistered", which names no client on AD FS.
 #
-# The sign-in identifier starts as .env's sub, Subject Identifier and placeholder initial admin, which a fresh JIM can
-# start with: JIM refuses to start when JIM_SSO_MV_ATTRIBUTE names an attribute that does not exist (#2499), and a
-# fresh JIM has no Object GUID. The runner then sets JIM up as a customer would before turning AD FS sign-in on
-# (#2441): it creates the Object GUID attribute and an administrator account in dc-primary (jim-sso-admin), and
-# recreates jim.web with the registration's oid matched to Object GUID, and that account as the initial admin.
+# The sign-in identifier starts as .env's sub, Subject Identifier and placeholder initial admin: the registration and
+# the administrator account it names only exist once the AD FS server and dc-primary answer, after JIM first starts.
+# The runner then sets JIM up as a customer would before turning AD FS sign-in on (#2441): it registers JIM, creates
+# the administrator account in dc-primary (jim-sso-admin), and recreates jim.web with the registration's oid matched to
+# the built-in Object GUID attribute, and that account as the initial admin.
 #
 # JIM is registered, and signed in to, at https://jim.web:8443 (Get-ActiveDirectoryLabJimUrl), jim.web's HTTPS port on
 # the Docker network: the sign-in checks run in the LDAP toolbox container, which resolves jim.web and the AD FS
