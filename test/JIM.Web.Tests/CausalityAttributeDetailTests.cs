@@ -1,11 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Bunit;
+using JIM.Models.Enums;
+using JIM.Models.Utility;
 using JIM.Web.Causality;
 using JIM.Web.Models;
 using JIM.Web.Shared;
@@ -377,5 +380,82 @@ public class CausalityAttributeDetailTests : JimComponentTestContext
             // rendering a struck-through sans string beside a monospace one.
             Assert.That(values.Any(v => v.QuerySelector(".attr-previous-value") != null), Is.True);
         }
+    }
+
+    // ─── A large change, read a window at a time (#2498) ───
+
+    private static readonly CausalityAttributeRowSource LargeSource = new(CausalityChangeSide.ConnectedSystemObject, Guid.NewGuid());
+
+    private static readonly ChangeValueSummary LargeSummary = new(LargeSource.ChangeId, SetCount: 1, AddCount: 600_000, RemoveCount: 6, null, null);
+
+    /// <summary>
+    /// Renders the detail for a change with too many rows to carry, reading through a fake that records each query and
+    /// answers it from <paramref name="serve"/>.
+    /// </summary>
+    private IRenderedComponent<CausalityAttributeDetail> RenderLargeDetail(List<ChangeValueRowQuery> queries, Func<ChangeValueRowQuery, RangeResultSet<CausalityAttributeRow>> serve)
+    {
+        var cut = Render<CausalityAttributeDetail>(ps => ps
+            .Add(c => c.Rows, Array.Empty<CausalityAttributeRow>())
+            .Add(c => c.Source, LargeSource)
+            .Add(c => c.Summary, LargeSummary)
+            .Add(c => c.LoadAttributeRows, (source, query) =>
+            {
+                Assert.That(source, Is.EqualTo(LargeSource));
+                queries.Add(query);
+                return Task.FromResult(serve(query));
+            }));
+
+        cut.WaitForAssertion(() => Assert.That(queries, Is.Not.Empty));
+        return cut;
+    }
+
+    private static RangeResultSet<CausalityAttributeRow> MemberWindow(ChangeValueRowQuery query) => new()
+    {
+        Results = Enumerable.Range(query.Offset, Math.Min(query.Count, 3))
+            .Select(i => new CausalityAttributeRow(CausalityAttributeOperation.Add, "member", "Reference · Multi-valued", $"Member {i}", null))
+            .ToList(),
+        TotalResults = query.IncludeTotalCount ? 600_007 : null
+    };
+
+    [Test]
+    public void Render_LargeChange_ReadsItsRowsFromTheSourceAWindowAtATime()
+    {
+        var queries = new List<ChangeValueRowQuery>();
+
+        var cut = RenderLargeDetail(queries, MemberWindow);
+
+        cut.WaitForAssertion(() => Assert.That(RenderedRowCount(cut), Is.EqualTo(3)));
+        var first = queries[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.ChangeIds, Is.EqualTo(new[] { LargeSource.ChangeId }));
+            Assert.That(first.Normalise, Is.True, "rows read as the panel shows them, a replacement as one Set row");
+            Assert.That(first.Offset, Is.Zero);
+            Assert.That(first.IncludeTotalCount, Is.True, "the grid counts the rows once");
+            Assert.That(first.Sort, Is.EqualTo(ChangeValueRowSort.SourceOrder));
+            Assert.That(Count(cut).Count, Is.EqualTo(600_007));
+        }
+    }
+
+    [Test]
+    public void Render_LargeChange_CountsItsOperationsFromTheSummary()
+    {
+        var cut = RenderLargeDetail([], MemberWindow);
+
+        var chipLabels = cut.FindAll(".filter-chips button").Select(b => b.TextContent.Trim()).ToList();
+        Assert.That(chipLabels, Is.EqualTo(new[] { "All", "Set · 1", "Add · 600,000", "Remove · 6" }),
+            "the chips count every row, not the window the grid happens to hold");
+    }
+
+    [Test]
+    public void FilterChip_Click_OnALargeChange_ReadsOnlyThatOperation()
+    {
+        var queries = new List<ChangeValueRowQuery>();
+        var cut = RenderLargeDetail(queries, MemberWindow);
+        cut.WaitForAssertion(() => Assert.That(RenderedRowCount(cut), Is.EqualTo(3)));
+
+        cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim().StartsWith("Remove", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() => Assert.That(queries[^1].Operation, Is.EqualTo(ChangeValueOperation.Remove)));
     }
 }

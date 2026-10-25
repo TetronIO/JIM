@@ -61,6 +61,11 @@ public sealed class CausalityItemData
     public CausalChain? Chain { get; init; }
 
     /// <summary>
+    /// The values of the item's change records (#2498): a summary of each, and the rows of the small ones.
+    /// </summary>
+    public CausalityChangeValues ChangeValues { get; init; } = CausalityChangeValues.None;
+
+    /// <summary>
     /// The Identity the item acted on, where it is still there (#1495).
     /// </summary>
     public MetaverseObjectHeader? IdentityHeader { get; init; }

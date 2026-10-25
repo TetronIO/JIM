@@ -188,6 +188,69 @@ public class ExecutionItemChangesReadDatabaseTests
         Assert.That(attribute.ValueChangeTotal, Is.EqualTo(3));
     }
 
+    /// <summary>
+    /// The portal's item page reads the item bounded (#2498): what names its object, its change records without their
+    /// values, and a summary of each change in their place, however large the group the item changed.
+    /// </summary>
+    [Test]
+    public async Task GetActivityRunProfileExecutionItemDetailAsync_ReadsWhatNamesTheObjectAndSummarisesEachChangeAsync()
+    {
+        var seeded = await SeedAsync();
+        var item = NewItem(seeded.ActivityId, ObjectChangeType.Updated);
+        item.ConnectedSystemObject = seeded.Cso;
+        item.MetaverseObjectId = seeded.MvoId;
+        item.MetaverseObjectChange = MvoChange(seeded, Enumerable.Range(0, 25).Select(i => $"Department {i:D2}").ToArray());
+        item.ConnectedSystemObjectChange = CsoChange(seeded, ObjectChangeType.Updated, Enumerable.Range(0, 25).Select(i => $"user{i:D2}@example.com").ToArray());
+        var staged = CsoChange(seeded, ObjectChangeType.Added, "a@example.com", "b@example.com", "c@example.com");
+        item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            StagedChangeType = PendingExportChangeType.Create,
+            ConnectedSystemObjectChange = staged
+        });
+        await SaveAsync(seeded, item);
+
+        var detail = await NewJim().Activities.GetActivityRunProfileExecutionItemDetailAsync(item.Id);
+
+        Assert.That(detail, Is.Not.Null);
+        var read = detail!.Item;
+        var outcome = read.SyncOutcomes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(read.ConnectedSystemObject!.NameOrId, Is.EqualTo("John Smith"));
+            Assert.That(read.ConnectedSystemObject!.ExternalIdAttributeValue?.StringValue, Is.EqualTo("jsmith@example.com"));
+            Assert.That(read.ConnectedSystemObject!.AttributeValues, Has.Count.EqualTo(2), "what names and identifies it, never its group memberships");
+            Assert.That(read.ConnectedSystemObjectChange!.AttributeChanges, Is.Empty, "a change's values are read a window at a time");
+            Assert.That(read.MetaverseObjectChange!.AttributeChanges, Is.Empty);
+            Assert.That(outcome.ConnectedSystemObjectChange?.Id, Is.EqualTo(staged.Id), "the outcome's staged change is there to name its record");
+            Assert.That(outcome.ConnectedSystemObjectChange!.AttributeChanges, Is.Empty);
+            Assert.That(detail!.ChangeValueSummaries[read.ConnectedSystemObjectChange!.Id].RowCount, Is.EqualTo(25));
+            Assert.That(detail!.ChangeValueSummaries[read.MetaverseObjectChange!.Id].RowCount, Is.EqualTo(25));
+            Assert.That(detail!.ChangeValueSummaries[staged.Id].RowCount, Is.EqualTo(3));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityRunProfileExecutionItemDetailAsync_NoSuchItem_ReturnsNullAsync()
+    {
+        await SeedAsync();
+
+        var detail = await NewJim().Activities.GetActivityRunProfileExecutionItemDetailAsync(Guid.NewGuid());
+
+        Assert.That(detail, Is.Null);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectNamesAsync_NamesEachObjectByTheNamingPolicyAndSkipsMissingOnesAsync()
+    {
+        var seeded = await SeedAsync();
+        var missing = Guid.NewGuid();
+
+        var names = await NewJim().ConnectedSystems.GetConnectedSystemObjectNamesAsync([seeded.Cso.Id, missing]);
+
+        Assert.That(names, Is.EqualTo(new Dictionary<Guid, string> { [seeded.Cso.Id] = "John Smith" }));
+    }
+
     private JimApplication NewJim() => new(new PostgresDataRepository(NewContext()));
 
     private static ActivityRunProfileExecutionItem NewItem(Guid activityId, ObjectChangeType type) => new()
@@ -276,7 +339,17 @@ public class ExecutionItemChangesReadDatabaseTests
             Name = "mail", ConnectedSystemObjectType = csType, Type = AttributeDataType.Text,
             AttributePlurality = AttributePlurality.SingleValued, Selected = true, IsExternalId = true
         };
-        csType.Attributes.Add(mail);
+        var displayName = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "displayName", ConnectedSystemObjectType = csType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+        };
+        var memberOf = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "memberOf", ConnectedSystemObjectType = csType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued, Selected = true
+        };
+        csType.Attributes.AddRange([mail, displayName, memberOf]);
         var mvType = new MetaverseObjectType { Name = "Person", PluralName = "People" };
         var department = new MetaverseAttribute { Name = "department", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
         mvType.Attributes.Add(department);
@@ -302,6 +375,11 @@ public class ExecutionItemChangesReadDatabaseTests
             Created = DateTime.UtcNow,
             JoinType = ConnectedSystemObjectJoinType.NotJoined
         };
+        // Named and identified, and a member of many groups: a detail read takes the first two and none of the third.
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, Attribute = mail, StringValue = "jsmith@example.com" });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, Attribute = displayName, StringValue = "John Smith" });
+        for (var i = 0; i < 30; i++)
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, Attribute = memberOf, StringValue = $"CN=Group {i:D2}" });
         seed.Add(cso);
         await seed.SaveChangesAsync();
 

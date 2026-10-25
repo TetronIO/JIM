@@ -9,6 +9,7 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Sync
 @using JIM.Models.Transactional
+@using JIM.Models.Utility
 @using JIM.Utilities;
 @using JIM.Web.Causality
 @using JIM.Web.Models
@@ -280,13 +281,15 @@
                                 LivePendingExportIds="causality.LivePendingExportIds"
                                 Timestamp="causality.Timestamp"
                                 Chain="causality.Chain"
+                                ChangeValues="causality.ChangeValues"
                                 DeletionPolicySnapshot="causality.DeletionPolicySnapshot"
                                 IsSynchronisationRun="causality.IsSynchronisationRun"
                                 ExplorerHref="@(_isAdministrator ? $"/causality/items/{causality.Item.Id}" : null)"
                                 Consequences="_consequences"
                                 ConsequencesLoading="_consequencesLoading"
                                 OnCheckConsequencesAgain="CheckConsequencesAgainAsync"
-                                LoadConsequenceMembers="LoadConsequenceMembersAsync" />
+                                LoadConsequenceMembers="LoadConsequenceMembersAsync"
+                                LoadAttributeRows="LoadAttributeRowsAsync" />
             </div>
 
             @* The decision-time Deletion Rule (#119), as detail behind the outcome rather than as a titled
@@ -379,9 +382,8 @@
                             @GetAttributeChangesDescription()
                         </MudText>
 
-                        @* The change records travel with the execution item, so the window is sliced from memory
-                           rather than read back; the scrolling, the search box, the count and the density all
-                           belong to the shared grid. Its URL parameters carry the ac- prefix so the two grids on
+                        @* The change's values are read a window at a time (#2498), never with the item; the
+                           scrolling, the search box, the count and the density all belong to the shared grid. Its URL parameters carry the ac- prefix so the two grids on
                            this page cannot overwrite each other's state. *@
                         <VirtualisedDataGrid T="FlattenedChange"
                                              ContainerId="rpei-attribute-changes"
@@ -417,9 +419,19 @@
                                         <MudText Typo="Typo.button">Value</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate>
-                                        @if (context.Item.ReferenceValue != null)
+                                        @if (context.Item.ReferenceValue is { } reference)
                                         {
-                                            <CsoReferenceLink ReferenceValue="@context.Item.ReferenceValue" />
+                                            @* The CsoReferenceLink shape, from the change record's reference rather than the object *@
+                                            <span class="jim-attr-reference">
+                                                <MudChip T="string" Color="Color.Default" Class="mr-1">@reference.TypeName</MudChip>
+                                                <MudLink Href="@Utilities.GetConnectedSystemObjectHref(reference.ConnectedSystemId, reference.Id)">
+                                                    @(reference.DisplayName ?? reference.Id.ToString())
+                                                </MudLink>
+                                                @if (!string.IsNullOrEmpty(reference.SecondaryId))
+                                                {
+                                                    <span class="jim-attr-secondary-id mud-text-secondary jim-text-code ml-1">- @reference.SecondaryId</span>
+                                                }
+                                            </span>
                                         }
                                         else
                                         {
@@ -548,7 +560,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     string AttributeName,
     ValueChangeType ChangeType,
     string? Value,
-    ConnectedSystemObject? ReferenceValue);
+    CsoChangeReferenceDto? ReferenceValue);
 
     /// <summary>
     /// The sort key standing for "the order the Pending Export staged them in". No column claims it, so the grid
@@ -689,6 +701,13 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         _consequences = null;
         _consequencesReadFor = null;
         return ReadConsequencesAsync();
+    }
+
+    private async Task<JIM.Models.Utility.RangeResultSet<CausalityAttributeRow>> LoadAttributeRowsAsync(
+        CausalityAttributeRowSource source, JIM.Models.Utility.ChangeValueRowQuery query)
+    {
+        using var jim = JimFactory.Create();
+        return await CausalityAttributeRowReader.ReadAsync(jim, source, query);
     }
 
     private async Task<JIM.Models.Utility.PagedResultSet<CausalConsequenceMember>?> LoadConsequenceMembersAsync(string cohortKey, int page, string? search)
@@ -958,57 +977,39 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         };
     }
 
-    private IEnumerable<FlattenedChange> GetFlattenedChanges()
-    {
-        if (_activityRunProfileExecutionItem?.ConnectedSystemObjectChange == null)
-            return Enumerable.Empty<FlattenedChange>();
-
-        return _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
-        .OrderBy(c => c.AttributeName)
-        .SelectMany(change => change.ValueChanges.Select(vc => new FlattenedChange(
-        change.AttributeName,
-        vc.ValueChangeType,
-        vc.ReferenceValue == null ? vc.ToString() : null,
-        vc.ReferenceValue
-        )));
-    }
-
     /// <summary>
-    /// Slices one window out of this item's attribute changes. They travel with the execution item that is
-    /// already loaded, so the page filters and sorts them itself and hands the result to the shared windowing
-    /// helper, which honours the request's skip-the-count contract.
+    /// Reads one window of this item's attribute changes from the database (#2498): a change to a large group carries
+    /// one value change per member, so they are never loaded with the item. Each value change is its own row, as
+    /// recorded; search and sort run in the database.
     /// </summary>
-    private Task<VirtualisedWindow<FlattenedChange>> LoadAttributeChangeWindowAsync(
+    private async Task<VirtualisedWindow<FlattenedChange>> LoadAttributeChangeWindowAsync(
         VirtualisedWindowRequest request, CancellationToken cancellationToken)
     {
-        var changes = GetFlattenedChanges();
+        if (_activityRunProfileExecutionItem?.ConnectedSystemObjectChange is not { } change)
+            return new VirtualisedWindow<FlattenedChange>([], request.IncludeTotalCount ? 0 : null);
 
-        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        using var jim = JimFactory.Create();
+        var result = await jim.ConnectedSystems.GetCsoChangeValueRowsAsync(new ChangeValueRowQuery
         {
-            var search = request.SearchText;
-            changes = changes.Where(change =>
-                ContainsText(change.AttributeName, search)
-                || ContainsText(change.ChangeType.ToString(), search)
-                || ContainsText(change.Value, search)
-                || ContainsText(change.ReferenceValue?.NameOrId, search)
-                || ContainsText(change.ReferenceValue?.Type.Name, search));
-        }
+            ChangeIds = [change.Id],
+            Normalise = false,
+            SearchText = string.IsNullOrWhiteSpace(request.SearchText) ? null : request.SearchText.Trim(),
+            Sort = request.SortBy == "change" ? ChangeValueRowSort.Operation : ChangeValueRowSort.Attribute,
+            SortDescending = request.SortDescending,
+            Offset = request.StartIndex,
+            Count = request.Count,
+            IncludeTotalCount = request.IncludeTotalCount
+        });
 
-        var sorted = request.SortBy switch
-        {
-            "change" => request.SortDescending
-                ? changes.OrderByDescending(change => change.ChangeType)
-                : changes.OrderBy(change => change.ChangeType),
-            _ => request.SortDescending
-                ? changes.OrderByDescending(change => change.AttributeName, StringComparer.OrdinalIgnoreCase)
-                : changes.OrderBy(change => change.AttributeName, StringComparer.OrdinalIgnoreCase)
-        };
-
-        return Task.FromResult(sorted.ToWindow(request));
+        var rows = result.Results
+            .Select(row => new FlattenedChange(
+                row.AttributeName,
+                row.Value.ValueChangeType,
+                row.Value.ReferenceValue == null ? row.Value.ToDisplayString() : null,
+                row.Value.ReferenceValue))
+            .ToList();
+        return new VirtualisedWindow<FlattenedChange>(rows, result.TotalResults);
     }
-
-    private static bool ContainsText(string? value, string searchText) =>
-        value != null && value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Returns the appropriate description for the attribute changes section based on operation type.

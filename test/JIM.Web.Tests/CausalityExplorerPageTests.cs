@@ -153,7 +153,7 @@ public class CausalityExplorerPageTests : JimComponentTestContext
     public void Render_ItemFocus_ShowsTheLineageAloneWithLinksThatReCentreTheExplorer()
     {
         var item = new ActivityRunProfileExecutionItem { Id = ItemId, ActivityId = Guid.NewGuid() };
-        _activityRepository.Setup(r => r.GetActivityRunProfileExecutionItemAsync(ItemId)).ReturnsAsync(item);
+        _activityRepository.Setup(r => r.GetActivityRunProfileExecutionItemDetailAsync(ItemId)).ReturnsAsync(item);
 
         var cut = RenderOn($"/causality/items/{ItemId}?trail=c:{AccountId}", ps => ps.Add(c => c.ItemId, ItemId));
 

@@ -379,6 +379,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - ⚡ Large exports no longer slow down as they progress: reading each batch of Pending Exports now costs the same at any queue size, where before every batch scanned rows already exported or still waiting. At 790,000 Pending Exports a batch read fell from about 137 ms to about 5 ms. (#2496)
+- ⚡ An execution item's page opens for a change to a group of any size: the page, its causality panel, and change history read a change's values a window at a time instead of loading every member, which timed a 600,000-member group's item out. In the causality Table view, an event with more than ten attribute changes is one row with its counts and **View all**. (#2498)
 - ⚡ Typing a new search in a large Connector Space now cancels the search still running, so the database works only on the latest term instead of finishing every earlier one.
 - ⚡ Configuration Change Previews that weigh up every affected object, such as deleting a Connected System or changing an Attribute Flow, now evaluate them once rather than twice, so the full answer arrives in about half the time. (#1530)
 - ⚡ JIM now checks an LDAP directory for a generated value already in use with one search covering every attribute the value is bound for there (plus one of the Global Catalog for forest-wide attributes), rather than one search per attribute. (#2023)

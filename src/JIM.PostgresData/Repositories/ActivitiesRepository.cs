@@ -2159,7 +2159,7 @@ public partial class ActivityRepository : IActivityRepository
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id)
     {
         // The item's own row and nothing it points at: callers read its columns only, so none of the graph
-        // GetActivityRunProfileExecutionItemAsync loads for the portal is paid for here.
+        // GetActivityRunProfileExecutionItemDetailAsync loads for the portal is paid for here.
         return await Repository.Database.ActivityRunProfileExecutionItems
             .AsNoTracking()
             .SingleOrDefaultAsync(i => i.Id == id);
@@ -2195,110 +2195,34 @@ public partial class ActivityRepository : IActivityRepository
             .ToListAsync();
     }
 
-    public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
+    /// <inheritdoc />
+    public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemDetailAsync(Guid id)
     {
-        // AsTracking required: multiple Include paths create cycles through ReferenceValue navigations
-        // (e.g. CSO -> AttributeValues -> ReferenceValue(CSO) -> AttributeValues).
+        // Every collection here is bounded by the item, never by the objects it touched (#2498). The Connected System
+        // Object's values are filtered to the ones that name and identify it (the naming tiers, its external ids), as
+        // the Metaverse Object detail load filters its connectors' values: an unfiltered load read every member of a
+        // large group. Change records come without their attribute changes; their values are summarised and read a
+        // window at a time.
+        var nameAttributes = ObjectNaming.ConnectedSystemNameAttributes.Select(name => name.ToLower()).ToList();
         return await Repository.Database.ActivityRunProfileExecutionItems
-            .AsTracking()
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            // CSO includes
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
+                .ThenInclude(cso => cso!.Type)
             .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
+                .ThenInclude(cso => cso!.AttributeValues.Where(av =>
+                    nameAttributes.Contains(av.Attribute.Name.ToLower()) || av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId))
+                    .ThenInclude(av => av.Attribute)
             .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.Type)
-            // CSO -> MVO includes (for projected/joined CSOs to access the linked MVO)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.Type)
-            // CSO change includes (for import updates/deletes)
+                .ThenInclude(cso => cso!.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.Type)
+            // For deletions, the preserved object type supports the deletion rule display.
             .Include(q => q.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(q => q.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            // For deletions, include the preserved object type to support deletion rule UI display
-            .Include(q => q.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.DeletedObjectType)
-            // MVO change includes (for sync operations that produce MVO attribute changes)
+                .ThenInclude(c => c!.DeletedObjectType)
             .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.Type)
-            // MVO change attribute detail (for displaying MVO attribute changes in outcome tree)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            // Sync outcome tree (causality chain)
+            // Each outcome's staged change names the record it staged; its values are summarised like the item's.
             .Include(q => q.SyncOutcomes)
-            // PendingExportCreated outcome CSO change snapshots (for rendering attribute detail)
-            .Include(q => q.SyncOutcomes)
-            .ThenInclude(o => o.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(q => q.SyncOutcomes)
-            .ThenInclude(o => o.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
+                .ThenInclude(o => o.ConnectedSystemObjectChange)
             .SingleOrDefaultAsync(q => q.Id == id);
     }
     #endregion

@@ -9499,6 +9499,15 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Each given Connected System Object's name, by the naming policy, without reading its values; an object that no
+    /// longer exists, or has no name, has no entry.
+    /// </summary>
+    public async Task<Dictionary<Guid, string>> GetConnectedSystemObjectNamesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectNamesAsync(connectedSystemObjectIds);
+    }
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>

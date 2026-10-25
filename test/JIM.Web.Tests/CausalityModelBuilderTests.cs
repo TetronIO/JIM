@@ -10,6 +10,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
+using JIM.Models.Utility;
 using JIM.Web.Causality;
 using NUnit.Framework;
 
@@ -1344,5 +1345,62 @@ public class CausalityModelBuilderTests
             Assert.That(joined.ObjectMatchingRuleDescription, Is.EqualTo("Employee ID equals employeeNumber"));
             Assert.That(joined.MatchedValue, Is.EqualTo("48213"));
         }
+    }
+
+    // ─── Change values read for display (#2498) ───
+
+    /// <summary>
+    /// The new joiner, read for display: its export's staged change snapshot is summarised in <paramref name="changeValues"/>
+    /// rather than carrying its value changes. Returns the item and the snapshot's id.
+    /// </summary>
+    private static (ActivityRunProfileExecutionItem Item, Guid SnapshotId) NewJoinerWithSnapshotId()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var snapshot = item.SyncOutcomes.Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated).ConnectedSystemObjectChange!;
+        snapshot.Id = Guid.NewGuid();
+        return (item, snapshot.Id);
+    }
+
+    [Test]
+    public void Build_ChangeTooLargeToCarry_EventCountsItsRowsAndNamesWhereToReadThem()
+    {
+        var (item, snapshotId) = NewJoinerWithSnapshotId();
+        var summary = new ChangeValueSummary(snapshotId, SetCount: 0, AddCount: 600_007, RemoveCount: 0, 7, "AD Group Export");
+        var changeValues = new CausalityChangeValues { Summaries = new Dictionary<Guid, ChangeValueSummary> { [snapshotId] = summary } };
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), changeValues: changeValues);
+
+        var export = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(export.AttributeRows, Is.Empty, "a large group's change is never carried whole");
+            Assert.That(export.AttributeRowCount, Is.EqualTo(600_007));
+            Assert.That(export.HasAllAttributeRows, Is.False);
+            Assert.That(export.AttributeRowSource, Is.EqualTo(new CausalityAttributeRowSource(CausalityChangeSide.ConnectedSystemObject, snapshotId)));
+            Assert.That(export.AttributeRowSummary, Is.EqualTo(summary));
+        }
+    }
+
+    [Test]
+    public void Build_SmallChangeReadForDisplay_TakesItsRowsFromTheChangeValuesAsync()
+    {
+        var (item, snapshotId) = NewJoinerWithSnapshotId();
+        List<CausalityAttributeRow> rows =
+        [
+            new(CausalityAttributeOperation.Set, "displayName", "Text · Single-valued", "Liam Allen", null),
+            new(CausalityAttributeOperation.Set, "title", "Text · Single-valued", "Director", "Analyst")
+        ];
+        var changeValues = new CausalityChangeValues
+        {
+            Summaries = new Dictionary<Guid, ChangeValueSummary> { [snapshotId] = new(snapshotId, 2, 0, 0, null, null) },
+            Rows = new Dictionary<Guid, IReadOnlyList<CausalityAttributeRow>> { [snapshotId] = rows }
+        };
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext(), changeValues: changeValues);
+
+        var export = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        Assert.That(export.AttributeRows, Is.EqualTo(rows), "the rows read for display, not the snapshot's own value changes");
+        Assert.That(export.AttributeRowSource, Is.Null, "nothing left to read");
+        Assert.That(export.HasAllAttributeRows, Is.True);
     }
 }
