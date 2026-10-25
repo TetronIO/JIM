@@ -70,7 +70,16 @@ public class CsoAttributeChangeDto
 
     public AttributePlurality AttributePlurality { get; set; }
 
+    /// <summary>
+    /// The attribute's first value changes, at most ten. When <c>valueChangeTotal</c> is larger, the rest are read a
+    /// page at a time from the change's attribute values endpoint.
+    /// </summary>
     public List<CsoValueChangeDto> ValueChanges { get; set; } = new();
+
+    /// <summary>
+    /// How many value changes the attribute has in all, including any not returned in <c>valueChanges</c>.
+    /// </summary>
+    public int ValueChangeTotal { get; set; }
 }
 
 /// <summary>
@@ -98,6 +107,12 @@ public class CsoValueChangeDto
     public bool? BoolValue { get; set; }
 
     public CsoChangeReferenceDto? ReferenceValue { get; set; }
+
+    /// <summary>
+    /// Whether the referenced object had not yet been exported when the change was recorded; <c>stringValue</c> then
+    /// holds the identifier it was given (such as its distinguished name), the value a reader recognises.
+    /// </summary>
+    public bool IsPendingExportStub { get; set; }
 
     /// <summary>
     /// The export Synchronisation Rule whose mapping produced this value. Null when the value was not

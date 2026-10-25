@@ -182,6 +182,19 @@ public interface IMetaverseRepository
     /// </summary>
     public Task<MvoChangeHistoryDto?> GetMvoChangeForExecutionItemAsync(Guid runProfileExecutionItemId);
 
+    /// <summary>
+    /// One window of the values recorded by the given Metaverse Object changes (#2498), with the total when
+    /// <see cref="ChangeValueRowQuery.IncludeTotalCount"/> asks for it. Each value's contributing Connected System is
+    /// resolved as change history resolves it.
+    /// </summary>
+    public Task<RangeResultSet<MvoChangeValueRow>> GetMvoChangeValueRowsAsync(ChangeValueRowQuery query);
+
+    /// <summary>
+    /// A summary of each given change's normalised value rows (#2498): how many are Sets, Adds and Removes, and the
+    /// one Synchronisation Rule they agree on. A change with no values is omitted.
+    /// </summary>
+    public Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
+
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
     /// <summary>

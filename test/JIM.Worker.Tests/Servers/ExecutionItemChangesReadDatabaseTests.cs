@@ -146,6 +146,48 @@ public class ExecutionItemChangesReadDatabaseTests
         Assert.That(items.Single().AttributeChanges.Single().ValueChanges.Single().StringValue, Is.EqualTo("Sales"));
     }
 
+    /// <summary>
+    /// A change to a large group carries one value change per member, so the shared projection reads each attribute's
+    /// first values and its total rather than all of them (#2498); the rest are paged on demand.
+    /// </summary>
+    [Test]
+    public async Task GetExecutionItemChangesAsync_AttributeWithMoreValueChangesThanTheCap_ReadsTheCapAndTheTotalAsync()
+    {
+        var seeded = await SeedAsync();
+        var item = NewItem(seeded.ActivityId, ObjectChangeType.Joined);
+        item.MetaverseObjectId = seeded.MvoId;
+        item.MetaverseObjectChange = MvoChange(seeded, Enumerable.Range(0, 25).Select(i => $"Department {i:D2}").ToArray());
+        item.ConnectedSystemObjectChange = CsoChange(seeded, ObjectChangeType.Updated, Enumerable.Range(0, 25).Select(i => $"user{i:D2}@example.com").ToArray());
+        await SaveAsync(seeded, item);
+
+        var changes = await NewJim().Activities.GetExecutionItemChangesAsync(item);
+
+        var csoAttribute = changes.ConnectedSystemObjectChange!.AttributeChanges.Single();
+        var mvoAttribute = changes.MetaverseObjectChange!.AttributeChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(csoAttribute.ValueChanges, Has.Count.EqualTo(10), "the Connected System Object side reads the capped sample");
+            Assert.That(csoAttribute.ValueChangeTotal, Is.EqualTo(25), "and says how many there are in all");
+            Assert.That(mvoAttribute.ValueChanges, Has.Count.EqualTo(10), "the Metaverse Object side reads the capped sample");
+            Assert.That(mvoAttribute.ValueChangeTotal, Is.EqualTo(25), "and says how many there are in all");
+        }
+    }
+
+    [Test]
+    public async Task GetExecutionItemChangesAsync_AttributeWithinTheCap_ReadsEveryValueChangeAndAMatchingTotalAsync()
+    {
+        var seeded = await SeedAsync();
+        var item = NewItem(seeded.ActivityId, ObjectChangeType.Updated);
+        item.ConnectedSystemObjectChange = CsoChange(seeded, ObjectChangeType.Updated, "a@example.com", "b@example.com", "c@example.com");
+        await SaveAsync(seeded, item);
+
+        var changes = await NewJim().Activities.GetExecutionItemChangesAsync(item);
+
+        var attribute = changes.ConnectedSystemObjectChange!.AttributeChanges.Single();
+        Assert.That(attribute.ValueChanges.Select(v => v.StringValue), Is.EquivalentTo(new[] { "a@example.com", "b@example.com", "c@example.com" }));
+        Assert.That(attribute.ValueChangeTotal, Is.EqualTo(3));
+    }
+
     private JimApplication NewJim() => new(new PostgresDataRepository(NewContext()));
 
     private static ActivityRunProfileExecutionItem NewItem(Guid activityId, ObjectChangeType type) => new()
@@ -155,7 +197,7 @@ public class ExecutionItemChangesReadDatabaseTests
         ObjectChangeType = type
     };
 
-    private static MetaverseObjectChange MvoChange(Seeded seeded, string department)
+    private static MetaverseObjectChange MvoChange(Seeded seeded, params string[] departments)
     {
         var change = new MetaverseObjectChange
         {
@@ -171,12 +213,13 @@ public class ExecutionItemChangesReadDatabaseTests
             AttributeType = AttributeDataType.Text,
             MetaverseObjectChange = change
         };
-        attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, department));
+        foreach (var department in departments)
+            attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, department));
         change.AttributeChanges.Add(attributeChange);
         return change;
     }
 
-    private static ConnectedSystemObjectChange CsoChange(Seeded seeded, ObjectChangeType type, string mail)
+    private static ConnectedSystemObjectChange CsoChange(Seeded seeded, ObjectChangeType type, params string[] mails)
     {
         var change = new ConnectedSystemObjectChange
         {
@@ -194,7 +237,8 @@ public class ExecutionItemChangesReadDatabaseTests
             AttributeType = AttributeDataType.Text,
             ConnectedSystemChange = change
         };
-        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, mail));
+        foreach (var mail in mails)
+            attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, mail));
         change.AttributeChanges.Add(attributeChange);
         return change;
     }

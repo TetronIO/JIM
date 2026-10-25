@@ -26,7 +26,7 @@ using Serilog;
 using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
 
-public class ConnectedSystemRepository : IConnectedSystemRepository
+public partial class ConnectedSystemRepository : IConnectedSystemRepository
 {
     // Picked up by the JIM diagnostic listener via the "JIM." prefix; named distinctly
     // from the Application-layer "JIM.Database" source to keep tooling traces unambiguous.
@@ -7239,7 +7239,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     AttributeName = ac.AttributeName,
                     AttributeType = ac.AttributeType,
                     AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : Models.Core.AttributePlurality.SingleValued,
+                    // Capped as the detail loads cap an object's values (#2498): a large group's change carries one
+                    // value change per member, and the rest are read a window at a time.
+                    ValueChangeTotal = ac.ValueChanges.Count(),
                     ValueChanges = ac.ValueChanges
+                        .OrderBy(vc => vc.Id)
+                        .Take(CappedMvaLimit)
                         .Select(vc => new CsoValueChangeDto
                         {
                             ValueChangeType = vc.ValueChangeType,
@@ -7290,6 +7295,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                             .FirstOrDefault()
                                         : null
                                 },
+                            IsPendingExportStub = vc.IsPendingExportStub,
                             SyncRuleId = vc.SyncRuleId,
                             SyncRuleName = vc.SyncRuleName
                         })

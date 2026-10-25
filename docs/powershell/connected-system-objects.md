@@ -221,7 +221,7 @@ The changes, most recent first.
 | `InitiatedByName` | `string` | The name of whoever made the change. |
 | `ActivityRunProfileExecutionItemId` | `guid` | The ID of the Run Profile execution item that recorded the change, when a Run Profile made it; empty otherwise. |
 | `RunProfileName` | `string` | The name of the Run Profile that made the change; empty when none did. |
-| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality` and `ValueChanges`. |
+| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality`, `ValueChanges` and `ValueChangeTotal`. |
 <!-- END GENERATED: Get-JIMConnectedSystemObjectChangeHistory -->
 
 ### Examples

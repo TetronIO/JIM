@@ -949,6 +949,19 @@ public interface IConnectedSystemRepository
     Task<List<CsoChangeHistoryDto>> GetCsoChangesAsync(IReadOnlyCollection<Guid> changeIds);
 
     /// <summary>
+    /// One window of the values recorded by the given Connected System Object changes (#2498), with the total when
+    /// <see cref="ChangeValueRowQuery.IncludeTotalCount"/> asks for it. A change to a large group carries one value change
+    /// per member, so the change-history shape caps each attribute's values and this reads the rest.
+    /// </summary>
+    Task<RangeResultSet<CsoChangeValueRow>> GetCsoChangeValueRowsAsync(ChangeValueRowQuery query);
+
+    /// <summary>
+    /// A summary of each given change's normalised value rows (#2498): how many are Sets, Adds and Removes, and the
+    /// one Synchronisation Rule they agree on. A change with no values is omitted.
+    /// </summary>
+    Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>
