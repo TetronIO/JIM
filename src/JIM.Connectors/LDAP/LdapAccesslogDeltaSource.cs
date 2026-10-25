@@ -16,9 +16,11 @@ namespace JIM.Connectors.LDAP;
 /// <para>
 /// OpenLDAP enforces olcSizeLimit (default 500) as a hard cap for non-rootDN clients, even with paging controls.
 /// The bind account used by the connector is typically not the rootDN of the cn=accesslog database, so paging
-/// alone cannot bypass the limit. Both the watermark capture and the change read work within it: when the size
-/// limit is exceeded, the latest timestamp from the partial results narrows the next query, walking forward
-/// through the accesslog until all entries have been scanned.
+/// alone cannot bypass the limit. The watermark capture works within it: when the size limit is exceeded, the
+/// latest timestamp from the partial results narrows the next query, walking forward through the accesslog until
+/// all entries have been scanned. The change read does not: it pages under the directory's own cursor, and a
+/// directory that stops it at the limit fails the Delta Import, since resuming from a timestamp could miss an
+/// operation that started earlier and was logged later.
 /// </para>
 /// <para>
 /// An accesslog that cannot be read is never taken for one that is empty. The readiness check reads the
@@ -482,17 +484,32 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
     #region Reading changes
 
+    /// <summary>The pagination token a page leaves when the directory has more of the change read to give.</summary>
+    private const string PaginationTokenName = "accesslog";
+
+    /// <summary>
+    /// What the change read asks for: everything but reqOld, which holds a modified attribute's previous values (a
+    /// large group's whole member list on every membership change) and which only a deletion needs.
+    /// </summary>
+    private static readonly string[] ChangeAttributes = ["reqStart", "reqType", "reqDN", "reqEntryUUID"];
+
+    /// <summary>What a deletion's own log entry is read for: the deleted entry's attributes, to identify it by.</summary>
+    private static readonly string[] DeletionAttributes = ["reqDN", "reqEntryUUID", "reqOld"];
+
     /// <inheritdoc />
     /// <remarks>
-    /// Queries cn=accesslog for write operations that occurred after the previous watermark timestamp. For each
-    /// change, fetches the current state of the affected object through the host; a deletion is built from the
-    /// accesslog entry itself, because the object is no longer there to fetch.
-    /// Handles the server-side size limit (olcSizeLimit, default 500) by iterating through batches: when the size
-    /// limit is exceeded, the latest timestamp from partial results is used to narrow the next query, effectively
-    /// walking forward through the accesslog until all changes are found. Everything is read in one call; nothing
-    /// is paged across calls.
+    /// Queries cn=accesslog for write operations at or after the previous watermark timestamp, one page per call. For
+    /// each change, fetches the current state of the affected object through the host; a deletion is built from its
+    /// own accesslog entry, because the object is no longer there to fetch.
+    /// <para>
+    /// cn=accesslog is shared by every database on the server, so the read is confined to the target partitions on
+    /// the server rather than read whole and filtered here. The pages come from RFC 2696 Simple Paged Results: the
+    /// directory's cursor carries the read from one page to the next, so nothing falls between pages however the
+    /// log's entries are ordered. A directory that stops the read at its size limit fails it, because an account the
+    /// limit applies to cannot read the whole log.
+    /// </para>
     /// </remarks>
-    /// <exception cref="CannotPerformDeltaImportException">The directory refused the accesslog search, or has no accesslog to search.</exception>
+    /// <exception cref="CannotPerformDeltaImportException">The directory refused the accesslog search, has no accesslog to search, or stopped the search at its size limit.</exception>
     public async Task ReadChangesAsync(LdapDeltaReadContext context, ConnectedSystemImportResult result, CancellationToken cancellationToken)
     {
         // The import establishes HasBaseline before calling, so the watermark is present.
@@ -502,18 +519,6 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
         _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes since {PreviousTimestamp}", previousTimestamp);
 
-        var currentTimestamp = previousTimestamp;
-        var totalEntries = 0;
-        var skippedOutOfScope = 0;
-        var iterations = 0;
-        const int maxIterations = 100; // Safety limit
-        // Track processed DNs+timestamps to avoid duplicates when iterating with >= filters
-        var processedEntries = new HashSet<string>(StringComparer.Ordinal);
-        // Track processed DNs to avoid importing the same object multiple times when the
-        // accesslog has multiple changes for the same DN (e.g., 3 member modifications to
-        // the same group). Since we fetch current state rather than replaying individual
-        // changes, only the first occurrence needs to be processed.
-        var processedDns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Build partition suffix list for filtering: OpenLDAP shares cn=accesslog across
         // all databases, so we must exclude entries from other suffixes.
         var partitionSuffixes = context.TargetPartitions
@@ -525,185 +530,188 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
         // import to the objects a full import would have returned.
         var targetContainers = context.ScopeDecidingContainers;
 
-        while (iterations < maxIterations)
-        {
-            iterations++;
+        var cookie = context.PaginationTokens.SingleOrDefault(t => t.Name == PaginationTokenName)?.ByteValue;
 
+        // LDAP only supports >= (not >), so we use >= and skip the watermark's own entry in code.
+        var request = new SearchRequest(AccesslogDn, ChangesFilter(previousTimestamp, partitionSuffixes), SearchScope.OneLevel, ChangeAttributes);
+        var pageControl = new PageResultRequestControl(context.PageSize) { IsCritical = false };
+        if (cookie is { Length: > 0 })
+            pageControl.Cookie = cookie;
+        request.Controls.Add(pageControl);
+
+        SearchResponse response;
+
+        // A search the directory will not answer stops the run rather than ending the read: returning here
+        // would import nothing, which the run would report as "no changes". A fault on the way to the directory
+        // (any other LdapException) propagates as the run's failure, in the directory's own words.
+        try
+        {
+            response = (SearchResponse)_executor.SendRequest(request, context.SearchTimeout);
+
+            if (response == null || response.ResultCode != ResultCode.Success)
+                throw RefusedSearch($"result code {response?.ResultCode.ToString() ?? "none"}");
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            throw MissingAccesslog();
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.SizeLimitExceeded)
+        {
+            throw SizeLimited();
+        }
+        catch (DirectoryOperationException ex)
+        {
+            throw RefusedSearch(DirectorysWords(ex));
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
+        {
+            throw MissingAccesslog();
+        }
+
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Processing {Count} accesslog entries", response.Entries.Count);
+
+        var objectsReadBefore = result.ImportObjects.Count;
+        var totalEntries = 0;
+        var skippedOutOfScope = 0;
+        // Track processed DNs to avoid importing the same object multiple times when the
+        // accesslog has multiple changes for the same DN (e.g., 3 member modifications to
+        // the same group). Since we fetch current state rather than replaying individual
+        // changes, only the first occurrence needs to be processed. A later page's copy of an
+        // object takes an earlier page's place in the import, so this only needs to span the page.
+        var processedDns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (SearchResultEntry entry in response.Entries)
+        {
             if (cancellationToken.IsCancellationRequested)
             {
                 _logger.Debug("GetDeltaResultsUsingAccesslog: Cancellation requested. Stopping");
                 return;
             }
 
-            // LDAP only supports >= (not >), so we use >= and skip already-processed entries in code.
-            var ldapFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={currentTimestamp}))";
-            // Request reqOld for delete entries; it contains the old objectClass and entryUUID
-            // which are needed to construct proper delete import objects.
-            var request = new SearchRequest(AccesslogDn, ldapFilter, SearchScope.OneLevel,
-                "reqStart", "reqType", "reqDN", "reqOld", "reqEntryUUID");
+            var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
+            var reqType = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqType");
+            var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqDN");
 
-            SearchResponse response;
-            var hitSizeLimit = false;
-            var objectsReadBeforeThisBatch = result.ImportObjects.Count;
+            if (string.IsNullOrEmpty(reqDn) || string.IsNullOrEmpty(reqStart))
+                continue;
 
-            // A search the directory will not answer stops the run rather than ending the read: returning here
-            // would import nothing, which the run would report as "no changes". A fault on the way to the directory
-            // (any other LdapException) propagates as the run's failure, in the directory's own words.
-            try
+            // The search is confined to the target partitions on the server; this keeps the selection exact
+            // whatever the directory made of the filter, at the cost of a string comparison.
+            if (partitionSuffixes.Count > 0 &&
+                !partitionSuffixes.Any(suffix => reqDn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
             {
-                response = (SearchResponse)_executor.SendRequest(request, context.SearchTimeout);
-
-                if (response == null || response.ResultCode != ResultCode.Success)
-                    throw RefusedSearch($"result code {response?.ResultCode.ToString() ?? "none"}");
-            }
-            catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
-            {
-                throw MissingAccesslog();
-            }
-            catch (DirectoryOperationException ex) when (ex.Response is SearchResponse partialResponse
-                && partialResponse.ResultCode == ResultCode.SizeLimitExceeded)
-            {
-                // Size limit exceeded; process the partial results we got
-                response = partialResponse;
-                hitSizeLimit = true;
-                _logger.Debug("GetDeltaResultsUsingAccesslog: Size limit exceeded on iteration {Iteration}. " +
-                    "Processing {Count} partial results.", iterations, response.Entries.Count);
-            }
-            catch (DirectoryOperationException ex)
-            {
-                throw RefusedSearch(DirectorysWords(ex));
-            }
-            catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
-            {
-                throw MissingAccesslog();
+                skippedOutOfScope++;
+                continue;
             }
 
-            if (response.Entries.Count == 0)
-                break;
-
-            _logger.Debug("GetDeltaResultsUsingAccesslog: Processing {Count} accesslog entries (iteration {Iteration})",
-                response.Entries.Count, iterations);
-
-            string? batchLatestTimestamp = null;
-
-            foreach (SearchResultEntry entry in response.Entries)
+            // Filter by Container scope: the entry is within a selected partition, but the administrator
+            // selects Containers within it, and a OneLevel Container excludes everything below its own level.
+            if (!LdapConnectorUtilities.IsDnInScope(reqDn, targetContainers))
             {
-                if (cancellationToken.IsCancellationRequested)
+                skippedOutOfScope++;
+                continue;
+            }
+
+            // Skip the exact timestamp match from the previous watermark
+            if (reqStart == previousTimestamp)
+                continue;
+
+            totalEntries++;
+
+            // Map accesslog reqType to ObjectChangeType
+            var objectChangeType = reqType?.ToLowerInvariant() switch
+            {
+                "add" => ObjectChangeType.Added,
+                "modify" => ObjectChangeType.Updated,
+                "delete" => ObjectChangeType.Deleted,
+                "modrdn" => ObjectChangeType.Updated,
+                _ => ObjectChangeType.NotSet
+            };
+
+            // Deduplicate by DN for non-delete operations. Multiple add/modify entries for
+            // the same DN would produce identical import objects (since we fetch current state),
+            // triggering duplicate detection errors. However, delete entries must ALWAYS be
+            // processed even if the DN was already seen: a group that was added then deleted
+            // in the same delta window must be processed as a delete (the final state).
+            if (objectChangeType != ObjectChangeType.Deleted && !processedDns.Add(reqDn))
+                continue;
+
+            if (objectChangeType == ObjectChangeType.Deleted)
+            {
+                // For deletes, extract object type and external ID from the accesslog entry.
+                // The reqOld attribute contains the old attribute values (key: value format),
+                // and reqEntryUUID contains the entryUUID of the deleted object.
+                var deleteObject = BuildDeleteImportObjectFromAccesslog(ReadDeletionEntry(entry, context.SearchTimeout), context.ObjectTypes);
+                if (deleteObject != null)
+                    result.ImportObjects.Add(deleteObject);
+            }
+            else
+            {
+                // For add/modify/modrdn, fetch the current state of the object
+                var currentObject = context.Host.GetObjectByDn(reqDn, objectChangeType);
+                if (currentObject != null)
                 {
-                    _logger.Debug("GetDeltaResultsUsingAccesslog: Cancellation requested. Stopping");
-                    return;
-                }
-
-                var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
-                var reqType = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqType");
-                var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqDN");
-
-                if (string.IsNullOrEmpty(reqDn) || string.IsNullOrEmpty(reqStart))
-                    continue;
-
-                // Filter by partition scope: only process entries whose DN falls within
-                // the Connected System's selected partitions. OpenLDAP's shared cn=accesslog
-                // records changes from ALL databases (suffixes), so we must exclude entries
-                // from other suffixes to avoid importing objects from the wrong partition.
-                if (partitionSuffixes.Count > 0 &&
-                    !partitionSuffixes.Any(suffix => reqDn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
-                {
-                    skippedOutOfScope++;
-                    continue;
-                }
-
-                // Filter by Container scope: the entry is within a selected partition, but the administrator
-                // selects Containers within it, and a OneLevel Container excludes everything below its own level.
-                if (!LdapConnectorUtilities.IsDnInScope(reqDn, targetContainers))
-                {
-                    skippedOutOfScope++;
-                    continue;
-                }
-
-                // Track the latest timestamp in this batch for the next iteration
-                if (batchLatestTimestamp == null || string.Compare(reqStart, batchLatestTimestamp, StringComparison.Ordinal) > 0)
-                    batchLatestTimestamp = reqStart;
-
-                // Skip the exact timestamp match from the previous watermark
-                if (reqStart == previousTimestamp)
-                    continue;
-
-                // Skip entries we've already processed (from overlapping >= queries)
-                var entryKey = $"{reqStart}|{reqDn}";
-                if (!processedEntries.Add(entryKey))
-                    continue;
-
-                totalEntries++;
-
-                // Map accesslog reqType to ObjectChangeType
-                var objectChangeType = reqType?.ToLowerInvariant() switch
-                {
-                    "add" => ObjectChangeType.Added,
-                    "modify" => ObjectChangeType.Updated,
-                    "delete" => ObjectChangeType.Deleted,
-                    "modrdn" => ObjectChangeType.Updated,
-                    _ => ObjectChangeType.NotSet
-                };
-
-                // Deduplicate by DN for non-delete operations. Multiple add/modify entries for
-                // the same DN would produce identical import objects (since we fetch current state),
-                // triggering duplicate detection errors. However, delete entries must ALWAYS be
-                // processed even if the DN was already seen: a group that was added then deleted
-                // in the same delta window must be processed as a delete (the final state).
-                if (objectChangeType != ObjectChangeType.Deleted && !processedDns.Add(reqDn))
-                    continue;
-
-                if (objectChangeType == ObjectChangeType.Deleted)
-                {
-                    // For deletes, extract object type and external ID from the accesslog entry.
-                    // The reqOld attribute contains the old attribute values (key: value format),
-                    // and reqEntryUUID contains the entryUUID of the deleted object.
-                    var deleteObject = BuildDeleteImportObjectFromAccesslog(entry, context.ObjectTypes);
-                    if (deleteObject != null)
-                        result.ImportObjects.Add(deleteObject);
+                    result.ImportObjects.Add(currentObject);
                 }
                 else
                 {
-                    // For add/modify/modrdn, fetch the current state of the object
-                    var currentObject = context.Host.GetObjectByDn(reqDn, objectChangeType);
-                    if (currentObject != null)
-                    {
-                        result.ImportObjects.Add(currentObject);
-                    }
-                    else
-                    {
-                        _logger.Warning("GetDeltaResultsUsingAccesslog: GetObjectByDn returned null for DN '{ReqDn}' " +
-                            "(change type: {ChangeType}). The object may have been deleted or moved since the accesslog " +
-                            "entry was recorded. Entry skipped.", LogSanitiser.Sanitise(reqDn), objectChangeType);
-                    }
+                    _logger.Warning("GetDeltaResultsUsingAccesslog: GetObjectByDn returned null for DN '{ReqDn}' " +
+                        "(change type: {ChangeType}). The object may have been deleted or moved since the accesslog " +
+                        "entry was recorded. Entry skipped.", LogSanitiser.Sanitise(reqDn), objectChangeType);
                 }
             }
-
-            // A delta that follows an outage can run to a very large number of changes, each one
-            // costing a round trip to fetch the object's current state, so report at every batch
-            // boundary rather than leaving the Activity's counters still until the whole walk ends.
-            await context.Host.ReportObjectsReadAsync(result.ImportObjects.Count - objectsReadBeforeThisBatch);
-
-            if (!hitSizeLimit)
-                break; // Got all results without hitting the limit: done
-
-            // Size limit was hit. Narrow the query to start from the latest timestamp we've seen
-            // to walk forward through the remaining entries.
-            if (batchLatestTimestamp == null || batchLatestTimestamp == currentTimestamp)
-            {
-                // No progress made: all entries have the same timestamp. Cannot narrow further.
-                _logger.Warning("GetDeltaResultsUsingAccesslog: Cannot narrow accesslog query further. " +
-                    "All {Count} entries in this batch have timestamp {Timestamp}. Some changes may be missed.",
-                    response.Entries.Count, currentTimestamp);
-                break;
-            }
-
-            currentTimestamp = batchLatestTimestamp;
         }
 
-        _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries in {Iterations} iterations. " +
-            "Skipped {SkippedOutOfScope} entries outside partition scope.",
-            totalEntries, iterations, skippedOutOfScope);
+        // A delta that follows an outage can run to a very large number of changes, each one costing a round trip
+        // to fetch the object's current state, so report every page rather than leaving the Activity's counters
+        // still until the whole read ends.
+        await context.Host.ReportObjectsReadAsync(result.ImportObjects.Count - objectsReadBefore);
+
+        if (response.Controls.OfType<PageResultResponseControl>().SingleOrDefault() is { Cookie.Length: > 0 } pageResponse)
+            result.PaginationTokens.Add(new ConnectedSystemPaginationToken(PaginationTokenName, pageResponse.Cookie));
+
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries on this page. " +
+            "Skipped {SkippedOutOfScope} entries outside the selected scope.",
+            totalEntries, skippedOutOfScope);
+    }
+
+    /// <summary>
+    /// The change read's filter: successful writes at or after the watermark, to entries within the target
+    /// partitions. dnSubtreeMatch keeps the other databases' writes on the server; with no partition to name, the
+    /// read is not narrowed.
+    /// </summary>
+    private static string ChangesFilter(string fromTimestamp, IReadOnlyList<string> partitionSuffixes)
+    {
+        var withinPartitions = partitionSuffixes.Count == 0
+            ? string.Empty
+            : $"(|{string.Concat(partitionSuffixes.Select(s => $"(reqDN:dnSubtreeMatch:={LdapConnectorUtilities.EscapeLdapFilterValue(s)})"))})";
+        return $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={fromTimestamp}){withinPartitions})";
+    }
+
+    /// <summary>
+    /// A deletion's own log entry, read by its name with reqOld, the attributes the change read leaves out. The entry
+    /// as the change read returned it stands in when the directory answers nothing, and is then identified from
+    /// reqEntryUUID alone or passed over with a warning, as a log entry without reqOld always was.
+    /// </summary>
+    private SearchResultEntry ReadDeletionEntry(SearchResultEntry changeEntry, TimeSpan searchTimeout)
+    {
+        var request = new SearchRequest(changeEntry.DistinguishedName, "(objectClass=*)", SearchScope.Base, DeletionAttributes);
+        var response = (SearchResponse)_executor.SendRequest(request, searchTimeout);
+        return response?.Entries.Count > 0 ? response.Entries[0] : changeEntry;
+    }
+
+    /// <summary>
+    /// The failure a Delta Import stops with when the directory stopped the change read at its size limit: an account
+    /// the limit applies to cannot read the whole log, and resuming from the newest timestamp seen could miss an
+    /// operation that started earlier and was logged later.
+    /// </summary>
+    private CannotPerformDeltaImportException SizeLimited()
+    {
+        _logger.Warning("GetDeltaResultsUsingAccesslog: The directory stopped reading {AccesslogDn} at its size limit. Refusing the Delta Import rather than risk missing changes.", AccesslogDn);
+        return new CannotPerformDeltaImportException(
+            $"Changes cannot be detected: the directory stopped reading {AccesslogDn} at its size limit, so the changes logged beyond it would go unnoticed. " +
+            $"Exempt the account JIM connects as from the size limit on the {AccesslogDn} database with an olcLimits entry (the LDAP Connector documentation, under Service Account Permissions, gives it), " +
+            "or run a Full Import, which also detects deletions by absence.");
     }
 
     /// <summary>

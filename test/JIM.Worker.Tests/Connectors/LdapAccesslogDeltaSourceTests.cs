@@ -477,7 +477,7 @@ public class LdapAccesslogDeltaSourceTests
     #region Reading changes: request shape and phase
 
     [Test]
-    public async Task ReadChangesAsync_Always_QueriesWriteOperationsAtOrAfterTheWatermarkOneLevelUnderCnAccesslog()
+    public async Task ReadChangesAsync_Always_QueriesWriteOperationsAtOrAfterTheWatermarkWithinTheTargetPartitionsOneLevelUnderCnAccesslog()
     {
         var executor = ExecutorReturning(LdapTestResponses.EmptySearchResponse(), out var sent);
         var host = new Mock<ILdapDeltaImportHost>();
@@ -488,9 +488,31 @@ public class LdapAccesslogDeltaSourceTests
         {
             Assert.That(sent.Value!.DistinguishedName, Is.EqualTo("cn=accesslog"));
             Assert.That(sent.Value.Scope, Is.EqualTo(SearchScope.OneLevel));
-            Assert.That(sent.Value.Filter, Is.EqualTo($"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark}))"));
-            Assert.That(sent.Value.Attributes.Cast<string>(), Is.EquivalentTo(new[] { "reqStart", "reqType", "reqDN", "reqOld", "reqEntryUUID" }));
+            Assert.That(sent.Value.Filter, Is.EqualTo($"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark})(|(reqDN:dnSubtreeMatch:={PartitionDn})))"),
+                "cn=accesslog is shared by every database on the server, so the other databases' writes are left on the server rather than read and discarded");
         }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_Always_RequestsNoReqOld()
+    {
+        var executor = ExecutorReturning(LdapTestResponses.EmptySearchResponse(), out var sent);
+
+        await Source(executor).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), new ConnectedSystemImportResult(), CancellationToken.None);
+
+        Assert.That(sent.Value!.Attributes.Cast<string>(), Is.EquivalentTo(new[] { "reqStart", "reqType", "reqDN", "reqEntryUUID" }),
+            "reqOld holds a modified attribute's previous values, a large group's whole member list on every membership change, and only a deletion needs it");
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_PartitionDnHoldingFilterSpecialCharacters_IsEscapedInTheFilter()
+    {
+        const string partitionDn = "o=R&D (Lab*),dc=corp,dc=local";
+        var executor = ExecutorReturning(LdapTestResponses.EmptySearchResponse(), out var sent);
+
+        await Source(executor).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>(), partitionDn: partitionDn), new ConnectedSystemImportResult(), CancellationToken.None);
+
+        Assert.That(sent.Value!.Filter, Does.EndWith(@"(|(reqDN:dnSubtreeMatch:=o=R&D \28Lab\2a\29,dc=corp,dc=local)))"));
     }
 
     [Test]
@@ -584,9 +606,11 @@ public class LdapAccesslogDeltaSourceTests
     [Test]
     public async Task ReadChangesAsync_AddThenDeleteOfOneDn_StillYieldsTheDelete()
     {
-        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
+        const string uuid = "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d";
+        var executor = ExecutorReading(LdapTestResponses.SearchResponseWithEntries(
             AccesslogEntry("20260921090000.000001Z", ("reqType", "add"), ("reqDN", "uid=carol," + PeopleDn)),
-            DeleteEntry("20260921090000.000002Z", "uid=carol," + PeopleDn, "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d")), out _);
+            LoggedDelete("20260921090000.000002Z", "uid=carol," + PeopleDn, uuid)),
+            DeleteEntry("20260921090000.000002Z", "uid=carol," + PeopleDn, uuid));
         var host = HostReturningObjects();
         var result = new ConnectedSystemImportResult();
 
@@ -604,8 +628,9 @@ public class LdapAccesslogDeltaSourceTests
     public async Task ReadChangesAsync_DeleteWithReqOldClassAndEntryUuid_YieldsADeletedImportObjectWithExternalIdAndDn()
     {
         const string uuid = "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d";
-        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
-            DeleteEntry("20260921090000.000001Z", "uid=carol," + PeopleDn, uuid)), out _);
+        var executor = ExecutorReading(LdapTestResponses.SearchResponseWithEntries(
+            LoggedDelete("20260921090000.000001Z", "uid=carol," + PeopleDn, uuid)),
+            DeleteEntry("20260921090000.000001Z", "uid=carol," + PeopleDn, uuid));
         var host = new Mock<ILdapDeltaImportHost>();
         var result = new ConnectedSystemImportResult();
 
@@ -623,10 +648,32 @@ public class LdapAccesslogDeltaSourceTests
     }
 
     [Test]
+    public async Task ReadChangesAsync_Delete_ReadsReqOldFromItsOwnLogEntryAndForNothingElse()
+    {
+        const string uuid = "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d";
+        var executor = ExecutorReading(LdapTestResponses.SearchResponseWithEntries(
+            ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn),
+            LoggedDelete("20260921090000.000002Z", "uid=carol," + PeopleDn, uuid)),
+            DeleteEntry("20260921090000.000002Z", "uid=carol," + PeopleDn, uuid));
+
+        await Source(executor).ReadChangesAsync(Context(HostReturningObjects()), new ConnectedSystemImportResult(), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => r is SearchRequest
+                && ((SearchRequest)r).Scope == SearchScope.Base
+                && ((SearchRequest)r).DistinguishedName == "reqStart=20260921090000.000002Z,cn=accesslog"
+                && ((SearchRequest)r).Attributes.Contains("reqOld")), Timeout), Times.Once);
+            executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => r is SearchRequest && ((SearchRequest)r).Scope == SearchScope.Base), Timeout), Times.Once,
+                "the modify needs no reqOld");
+        }
+    }
+
+    [Test]
     public async Task ReadChangesAsync_DeleteWithoutReqOld_IsSkippedWithAWarning()
     {
-        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
-            AccesslogEntry("20260921090000.000001Z", ("reqType", "delete"), ("reqDN", "uid=carol," + PeopleDn), ("reqEntryUUID", "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d"))), out _);
+        var logged = AccesslogEntry("20260921090000.000001Z", ("reqType", "delete"), ("reqDN", "uid=carol," + PeopleDn), ("reqEntryUUID", "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d"));
+        var executor = ExecutorReading(LdapTestResponses.SearchResponseWithEntries(logged), logged);
         var log = new CapturingSink();
         var result = new ConnectedSystemImportResult();
 
@@ -641,79 +688,92 @@ public class LdapAccesslogDeltaSourceTests
 
     #endregion
 
-    #region Reading changes: the size limit walk
+    #region Reading changes: paging
 
     [Test]
-    public async Task ReadChangesAsync_SizeLimitExceeded_NarrowsToTheLatestTimestampAndContinues()
+    public async Task ReadChangesAsync_FirstPage_AsksForOnePageOfTheRunProfilesPageSize()
     {
-        var executor = new Mock<ILdapOperationExecutor>();
-        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearchWithFilter(r, $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark}))")), Timeout))
-            .Throws(new DirectoryOperationException(PartialResponse(
-                ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn),
-                ModifyEntry("20260921090000.000002Z", "uid=bob," + PeopleDn)), "size limit exceeded"));
-        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearchWithFilter(r, "(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>=20260921090000.000002Z))")), Timeout))
-            .Returns(LdapTestResponses.SearchResponseWithEntries(
-                ModifyEntry("20260921090000.000002Z", "uid=bob," + PeopleDn),
-                ModifyEntry("20260921090000.000003Z", "uid=carol," + PeopleDn)));
-        var host = HostReturningObjects();
-        var result = new ConnectedSystemImportResult();
+        var executor = ExecutorReturning(LdapTestResponses.EmptySearchResponse(), out var sent);
 
-        await Source(executor).ReadChangesAsync(Context(host), result, CancellationToken.None);
+        await Source(executor).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), new ConnectedSystemImportResult(), CancellationToken.None);
 
+        var paging = sent.Value!.Controls.OfType<PageResultRequestControl>().Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.ImportObjects, Has.Count.EqualTo(3), "every distinct object across both batches, the overlap at the boundary read once");
-            host.Verify(h => h.GetObjectByDn("uid=bob," + PeopleDn, ObjectChangeType.Updated), Times.Once);
-            executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearch(r)), Timeout), Times.Exactly(2));
+            Assert.That(paging.PageSize, Is.EqualTo(500));
+            Assert.That(paging.Cookie, Is.Empty, "the first page starts the search");
         }
     }
 
     [Test]
-    public async Task ReadChangesAsync_SizeLimitExceededWithNoProgress_StopsWithAWarning()
+    public async Task ReadChangesAsync_DirectoryHasMore_LeavesAPaginationTokenThatResumesFromTheDirectorysCookie()
     {
-        // Every entry the capped batch holds carries the same reqStart, so narrowing to it asks the same question
-        // again: the walk stops rather than loops, and says that changes may have been missed.
-        var executor = new Mock<ILdapOperationExecutor>();
-        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearch(r)), Timeout))
-            .Throws(new DirectoryOperationException(PartialResponse(
-                ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn),
-                ModifyEntry("20260921090000.000001Z", "uid=bob," + PeopleDn)), "size limit exceeded"));
-        var host = HostReturningObjects();
-        var log = new CapturingSink();
-        var result = new ConnectedSystemImportResult();
+        byte[] cookie = [1, 2, 3];
+        var firstPage = ExecutorReturning(LdapTestResponses.SearchResponseWithPagingCookie(cookie,
+            ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn)), out _);
+        var firstResult = new ConnectedSystemImportResult();
+        await Source(firstPage).ReadChangesAsync(Context(HostReturningObjects()), firstResult, CancellationToken.None);
 
-        await Source(executor, log).ReadChangesAsync(Context(host), result, CancellationToken.None);
+        var secondPage = ExecutorReturning(LdapTestResponses.SearchResponseWithPagingCookie([],
+            ModifyEntry("20260921090000.000002Z", "uid=bob," + PeopleDn)), out var sent);
+        var secondResult = new ConnectedSystemImportResult();
+        await Source(secondPage).ReadChangesAsync(Context(HostReturningObjects(), paginationTokens: firstResult.PaginationTokens), secondResult, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.ImportObjects, Has.Count.EqualTo(2), "what the first batch held is still imported");
-            executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearch(r)), Timeout), Times.Exactly(2), "the narrowed query is tried once and found to make no progress");
-            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("Cannot narrow accesslog query further")), Is.True);
+            Assert.That(firstResult.PaginationTokens, Has.Count.EqualTo(1), "the import calls again while a token is left");
+            Assert.That(sent.Value!.Controls.OfType<PageResultRequestControl>().Single().Cookie, Is.EqualTo(cookie),
+                "the directory's own cursor carries the read on, so no entry can fall between two pages");
+            Assert.That(sent.Value.Filter, Is.EqualTo($"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark})(|(reqDN:dnSubtreeMatch:={PartitionDn})))"),
+                "a paged search is continued with the question it started with");
+            Assert.That(secondResult.PaginationTokens, Is.Empty, "an empty cookie is the directory saying that page was the last");
+            Assert.That(secondResult.ImportObjects, Has.Count.EqualTo(1));
         }
     }
 
     [Test]
-    public async Task ReadChangesAsync_Always_ReportsObjectsReadAtEachBatchBoundary()
+    public async Task ReadChangesAsync_EntryAtExactlyTheWatermarkOnALaterPage_IsStillSkipped()
     {
-        var executor = new Mock<ILdapOperationExecutor>();
-        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearchWithFilter(r, $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark}))")), Timeout))
-            .Throws(new DirectoryOperationException(PartialResponse(
-                ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn),
-                ModifyEntry("20260921090000.000002Z", "uid=bob," + PeopleDn)), "size limit exceeded"));
-        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearchWithFilter(r, "(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>=20260921090000.000002Z))")), Timeout))
-            .Returns(LdapTestResponses.SearchResponseWithEntries(
-                ModifyEntry("20260921090000.000002Z", "uid=bob," + PeopleDn),
-                ModifyEntry("20260921090000.000003Z", "uid=carol," + PeopleDn)));
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithPagingCookie([],
+            ModifyEntry(Watermark, "uid=alice," + PeopleDn)), out _);
+        var result = new ConnectedSystemImportResult();
+
+        await Source(executor).ReadChangesAsync(Context(HostReturningObjects(), paginationTokens: [new ConnectedSystemPaginationToken("accesslog", [9])]), result, CancellationToken.None);
+
+        Assert.That(result.ImportObjects, Is.Empty);
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_Always_ReportsThePagesObjectsRead()
+    {
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithPagingCookie([7],
+            ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn),
+            ModifyEntry("20260921090000.000002Z", "uid=bob," + PeopleDn)), out _);
         var host = HostReturningObjects();
 
         await Source(executor).ReadChangesAsync(Context(host), new ConnectedSystemImportResult(), CancellationToken.None);
 
-        using (Assert.EnterMultipleScope())
-        {
-            host.Verify(h => h.ReportObjectsReadAsync(2), Times.Once, "the first batch's two objects, reported before the second batch is fetched");
-            host.Verify(h => h.ReportObjectsReadAsync(1), Times.Once, "the second batch's one new object");
-            host.Verify(h => h.ReportObjectsReadAsync(It.IsAny<int>()), Times.Exactly(2));
-        }
+        host.Verify(h => h.ReportObjectsReadAsync(2), Times.Once);
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_SizeLimitExceeded_ThrowsNamingTheLimitAndTheRemedyAsync()
+    {
+        // The read used to carry on from the newest reqStart it had seen. The log is written in the order operations
+        // finish, not the order they start, so an operation that started earlier and finished later could fall behind
+        // that point and be missed without a word. Only an exempt account reads the whole log.
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout))
+            .Throws(new DirectoryOperationException(PartialResponse(
+                ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn)), "size limit exceeded"));
+        var result = new ConnectedSystemImportResult();
+
+        await Assert.ThatAsync(() => Source(executor).ReadChangesAsync(Context(HostReturningObjects()), result, CancellationToken.None),
+            Throws.TypeOf<CannotPerformDeltaImportException>()
+                .With.Message.StartsWith("Changes cannot be detected: the directory stopped reading cn=accesslog at its size limit")
+                .And.Message.Contains("olcLimits")
+                .And.Message.Contains("run a Full Import"));
+        Assert.That(result.ImportObjects, Is.Empty);
     }
 
     #endregion
@@ -821,10 +881,11 @@ public class LdapAccesslogDeltaSourceTests
     private static LdapAccesslogDeltaSource Source(Mock<ILdapOperationExecutor> executor, CapturingSink? sink = null) =>
         new(executor.Object, sink == null ? Log.Logger : new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger());
 
-    private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, string previousTimestamp = Watermark)
+    private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, string previousTimestamp = Watermark, string partitionDn = PartitionDn,
+        IReadOnlyList<ConnectedSystemPaginationToken>? paginationTokens = null)
     {
-        var partition = new ConnectedSystemPartition { Id = 1, ExternalId = PartitionDn, Name = PartitionDn, Selected = true };
-        var container = new ConnectedSystemContainer { Id = 1, ExternalId = PeopleDn, Name = "people", Selected = true, Scope = ConnectedSystemContainerScope.Subtree };
+        var partition = new ConnectedSystemPartition { Id = 1, ExternalId = partitionDn, Name = partitionDn, Selected = true };
+        var container = new ConnectedSystemContainer { Id = 1, ExternalId = partitionDn == PartitionDn ? PeopleDn : partitionDn, Name = "people", Selected = true, Scope = ConnectedSystemContainerScope.Subtree };
         return new LdapDeltaReadContext
         {
             PreviousRootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, LastAccesslogTimestamp = previousTimestamp },
@@ -832,7 +893,7 @@ public class LdapAccesslogDeltaSourceTests
             TargetPartitions = [partition],
             ScopeDecidingContainers = [container],
             ObjectTypes = [InetOrgPerson()],
-            PaginationTokens = [],
+            PaginationTokens = paginationTokens ?? [],
             PageSize = 500,
             SearchTimeout = Timeout,
             Notes = new LdapDeltaSourceNotes(),
@@ -875,6 +936,21 @@ public class LdapAccesslogDeltaSourceTests
         return executor;
     }
 
+    /// <summary>
+    /// An executor answering the change read with the given page, and a read of one log entry by its own name with
+    /// that entry as the directory holds it: how a deletion's reqOld is read.
+    /// </summary>
+    private static Mock<ILdapOperationExecutor> ExecutorReading(SearchResponse changes, params SearchResultEntry[] loggedEntries)
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => r is SearchRequest && ((SearchRequest)r).Scope == SearchScope.OneLevel), Timeout))
+            .Returns(changes);
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => r is SearchRequest && ((SearchRequest)r).Scope == SearchScope.Base), Timeout))
+            .Returns((DirectoryRequest request, TimeSpan _) => LdapTestResponses.SearchResponseWithEntries(
+                loggedEntries.Where(e => e.DistinguishedName == ((SearchRequest)request).DistinguishedName).ToArray()));
+        return executor;
+    }
+
     /// <summary>An executor whose untimed read, the one the readiness check makes, fails with the given exception.</summary>
     private static Mock<ILdapOperationExecutor> ExecutorThrowingOnRead(Exception exception)
     {
@@ -911,6 +987,10 @@ public class LdapAccesslogDeltaSourceTests
 
     private static SearchResultEntry ModifyEntry(string reqStart, string reqDn) =>
         AccesslogEntry(reqStart, ("reqType", "modify"), ("reqDN", reqDn));
+
+    /// <summary>An auditDelete entry as the change read returns it: without reqOld, which only the entry's own read asks for.</summary>
+    private static SearchResultEntry LoggedDelete(string reqStart, string reqDn, string entryUuid) =>
+        AccesslogEntry(reqStart, ("reqType", "delete"), ("reqDN", reqDn), ("reqEntryUUID", entryUuid));
 
     /// <summary>
     /// An auditDelete entry as slapo-accesslog writes it: reqOld holds the deleted entry's attributes as

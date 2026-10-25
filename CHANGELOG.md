@@ -164,6 +164,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A Delta Import from OpenLDAP or 389 Directory Server no longer reads the whole change log into memory at once, which could exhaust the server's memory after a large export to the same directory server. It reads a page at a time, OpenLDAP asks for the selected partitions' changes only, and a deletion's old values are read only for deletions. On OpenLDAP, a Delta Import stopped part-way by a size limit now fails, naming the limit, where it could miss changes. (#2486)
 - 🐛 The Logs page no longer shows a database query JIM cancelled on purpose, such as when someone leaves a page before it finishes loading, as an error: PostgreSQL's "canceling statement due to user request" now shows at Debug. A query stopped by the statement timeout is still an error.
 - 🐛 A running import's Activity page fills its Run Profile Execution Items table as the run saves them, rather than staying as it was when the page opened, and says items are still to come instead of that the run recorded none.
 - 🐛 The Connector Space's Secondary External Id column now appears as soon as the list loads, rather than only once the list had been searched, sorted or filtered.
