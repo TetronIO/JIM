@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ JIM tells administrators when it is running short of memory, before it fails rather than after: the Worker stops its running work when memory is nearly exhausted, instead of being killed part-way through with nothing recorded, and its Activity says why and what to do. The Operations page shows each service's memory and a **Memory low** condition, with a banner on every page. Also via REST and `Get-JIMServiceHealth`. (#2487)
 - ✨ Administrators JIM does not synchronise, such as the initial administrator, keep their profile current from the identity provider: each sign-in refreshes Display Name, First Name, Last Name and User Principal Name from the token, while values a Synchronisation Rule supplies are never touched. (#2383)
 - ✨ Values JIM sets outside synchronisation now say where they came from, instead of **Source not recorded**: a value read from a sign-in token names the claim (such as `given_name`), and a value JIM fixes itself, such as the initial administrator's Type, reads **Set by JIM**. Shown in the Inspect view, the Changes tab, REST and PowerShell (`ContributedByKind`, `ClaimType`). Existing values keep "Source not recorded" until set again. (#2472)
 - ✨ Select a change on the Object Changes page to see it in full in a panel beside the list: every attribute it changed, with old and new values, who made it and its Activity. Selecting the object itself still opens it. (#2460)

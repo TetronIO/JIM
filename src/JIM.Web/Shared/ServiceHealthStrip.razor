@@ -68,6 +68,7 @@
             var detailsOpen = _openDetails.Contains(service.Service);
             var hostName = service.HostName;
             var version = service.Version;
+            var memory = ServiceHealthDisplay.Memory(service);
             <MudPaper Outlined="true" Class="pa-3 jim-service-health-card" data-service="@service.Service" data-status="@service.Status" @key="service.Service">
                 <div class="jim-service-health-card-top">
                     <span class="jim-service-health-label jim-one-line" title="@ServiceHealthDisplay.Label(service.Service)">@ServiceHealthDisplay.Label(service.Service)</span>
@@ -144,6 +145,13 @@
                                             </MudTooltip>
                                         }
                                         @CopyButton("version", versionText)
+                                    </dd>
+                                }
+                                @if (memory != null)
+                                {
+                                    <dt>Memory</dt>
+                                    <dd>
+                                        <span class="jim-service-health-details-value" title="@memory" data-testid="service-health-memory">@memory</span>
                                     </dd>
                                 }
                                 @if (instance != null)

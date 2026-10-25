@@ -51,8 +51,10 @@ public class ServiceHeartbeatWriterTests
         _logger.Dispose();
     }
 
+    private static readonly MemoryReading Reading = new() { ProcessBytes = 41_000_000_000, TotalBytes = 62_000_000_000, AvailableBytes = 4_000_000_000 };
+
     private ServiceHeartbeatWriter NewWriter(JimService service = JimService.WorkerSync) =>
-        new(service, "host-a1b2c3", "host", "0.15.0", StartedAt, () => _now, _logger);
+        new(service, "host-a1b2c3", "host", "0.15.0", StartedAt, () => _now, _logger, () => Reading);
 
     private Task WriteAsync(ServiceHeartbeatWriter writer, string? currentWork = null, DateTime? currentWorkStartedAt = null, string? detail = null) =>
         writer.WriteAsync(_jim, currentWork, currentWorkStartedAt, detail, CancellationToken.None);
@@ -81,6 +83,9 @@ public class ServiceHeartbeatWriterTests
             Assert.That(written.CurrentWorkStartedAt, Is.EqualTo(StartedAt.AddMinutes(-2)));
             Assert.That(written.LastProgressAt, Is.Null, "no service can yet tell progress from liveness; see the writer");
             Assert.That(written.Detail, Is.EqualTo("1 task in flight"));
+            Assert.That(written.ProcessMemoryBytes, Is.EqualTo(41_000_000_000));
+            Assert.That(written.MemoryTotalBytes, Is.EqualTo(62_000_000_000));
+            Assert.That(written.MemoryAvailableBytes, Is.EqualTo(4_000_000_000));
         }
     }
 

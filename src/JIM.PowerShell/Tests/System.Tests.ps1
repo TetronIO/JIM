@@ -349,6 +349,7 @@ Describe 'Get-JIMServiceHealth' {
                             startedAt = '2026-09-05T09:00:00Z'; lastSeenAt = '2026-09-05T09:59:58Z'
                             currentWork = 'Full Import: Corporate Directory'; currentWorkStartedAt = '2026-09-05T09:50:00Z'
                             lastProgressAt = '2026-09-05T09:59:50Z'; detail = $null
+                            processMemoryBytes = 41000000000; memoryTotalBytes = 62000000000; memoryAvailableBytes = 21000000000
                         },
                         [PSCustomObject]@{
                             service = 'WorkerDelivery'; status = 'Healthy'; condition = 'Heartbeating'; reason = 'Heartbeat 2 seconds ago'
@@ -399,13 +400,17 @@ Describe 'Get-JIMServiceHealth' {
 
                 $worker.PSObject.Properties.Name | Should -Be @(
                     'Service', 'Status', 'Condition', 'Reason', 'CurrentWork', 'CurrentWorkStartedAt', 'LastSeenAt',
-                    'StartedAt', 'HostName', 'Version', 'InstanceId', 'LastProgressAt', 'Detail')
+                    'StartedAt', 'HostName', 'Version', 'InstanceId', 'LastProgressAt', 'Detail', 'ProcessMemoryBytes',
+                    'MemoryTotalBytes', 'MemoryAvailableBytes')
                 $worker.Reason | Should -Be 'Heartbeat 2 seconds ago'
                 $worker.CurrentWork | Should -Be 'Full Import: Corporate Directory'
                 $worker.HostName | Should -Be 'host-a'
                 $worker.Version | Should -Be '1.2.3'
                 $worker.InstanceId | Should -Be 'host-a:1234'
                 $worker.Detail | Should -BeNullOrEmpty
+                $worker.ProcessMemoryBytes | Should -Be 41000000000
+                $worker.MemoryTotalBytes | Should -Be 62000000000
+                $worker.MemoryAvailableBytes | Should -Be 21000000000
             }
         }
 

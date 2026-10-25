@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Services;
 using JIM.Models.Operations;
 using MudBlazor;
 
@@ -242,8 +243,9 @@ public static class ServiceHealthDisplay
 
     /// <summary>
     /// What the banner says, or null when it should not be shown. Shown for an outage (an Unhealthy service: no
-    /// heartbeat, or never started) or a stalled task (Degraded by the Stalled condition); an overdue heartbeat is
-    /// worth a glance on the strip, not an alarm on every page. Reads the report's verdict as it stands: which
+    /// heartbeat, or never started), a stalled task (Degraded by the Stalled condition) or low memory (Degraded by
+    /// MemoryLow), in that order of precedence; an overdue heartbeat is worth a glance on the strip, not an alarm on
+    /// every page. Reads the report's verdict as it stands: which
     /// services a deployment is expected to run is the read model's decision
     /// (<c>SystemHealthServer.ExpectedServices</c>), so a service reported as never started is one that should
     /// have been.
@@ -266,8 +268,62 @@ public static class ServiceHealthDisplay
             return OutageBanner(down, deliveryReported, report.GeneratedAt);
 
         var stalled = considered.Where(s => s.Condition == ServiceHealthCondition.Stalled).ToList();
-        return stalled.Count > 0 ? StalledBanner(stalled, report.GeneratedAt) : null;
+        if (stalled.Count > 0)
+            return StalledBanner(stalled, report.GeneratedAt);
+
+        var memoryLow = considered.Where(s => s.Condition == ServiceHealthCondition.MemoryLow).ToList();
+        return memoryLow.Count > 0 ? MemoryLowBanner(memoryLow) : null;
     }
+
+    /// <summary>
+    /// The Memory row in a card's details: what the process holds and how full the memory it draws on is
+    /// ("41 GB held · 41 GB of 62 GB in use (66%)"). Null for a service that did not report memory.
+    /// </summary>
+    public static string? Memory(ServiceHealth service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        if (ReadingOf(service) is not { UsedBytes: { } used, TotalBytes: { } total, UsedFraction: { } share } reading)
+            return null;
+
+        return $"{MemoryPressure.Bytes(reading.ProcessBytes)} held · {MemoryPressure.Bytes(used)} of {MemoryPressure.Bytes(total)} in use ({Percent(share)})";
+    }
+
+    /// <summary>
+    /// A warning when a service is short of memory, before it is stopped part-way through its work. The two Worker
+    /// services share one process, so they are named once as the Worker, with the synchronisation loop's figures;
+    /// the Worker's own remedy (it stops its running work at <see cref="MemoryPressure.StopShare"/>) is said only
+    /// when the Worker is the one short.
+    /// </summary>
+    private static ServiceHealthBannerContent MemoryLowBanner(List<ServiceHealth> memoryLow)
+    {
+        var sentences = new List<string>();
+
+        var worker = memoryLow.FirstOrDefault(s => s.Service == JimService.WorkerSync)
+                     ?? memoryLow.FirstOrDefault(s => s.Service == JimService.WorkerDelivery);
+        if (worker != null && ReadingOf(worker) is { } workerReading)
+        {
+            sentences.Add($"Memory is low for the Worker: {MemoryPressure.Describe(workerReading, "the Worker")}.");
+            sentences.Add($"At {Percent(MemoryPressure.StopShare)} the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.");
+        }
+
+        var scheduler = memoryLow.FirstOrDefault(s => s.Service == JimService.Scheduler);
+        if (scheduler != null && ReadingOf(scheduler) is { } schedulerReading)
+        {
+            sentences.Add($"Memory is low for the Scheduler: {MemoryPressure.Describe(schedulerReading, "the Scheduler")}.");
+            if (worker == null)
+                sentences.Add("Give JIM more memory.");
+        }
+
+        return new ServiceHealthBannerContent(Severity.Warning, string.Join(" ", sentences));
+    }
+
+    private static MemoryReading? ReadingOf(ServiceHealth service) =>
+        service is { ProcessMemoryBytes: { } process, MemoryTotalBytes: { } total, MemoryAvailableBytes: { } available }
+            ? new MemoryReading { ProcessBytes = process, TotalBytes = total, AvailableBytes = available }
+            : null;
+
+    private static string Percent(double share) => $"{(int)Math.Round(share * 100)}%";
 
     private static ServiceHealthBannerContent OutageBanner(List<ServiceHealth> down, bool deliveryReported, DateTime asOf)
     {

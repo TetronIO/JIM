@@ -5666,6 +5666,75 @@ function Assert-NoWorkerErrors {
     Write-Host "✓ PASSED: No Error/Fatal lines in $($Containers -join ', ') logs" -ForegroundColor Green
 }
 
+function Assert-JimServicesNotRestarted {
+    <#
+    .SYNOPSIS
+        Fails the scenario when a JIM service container restarted while it ran.
+
+    .DESCRIPTION
+        A process the kernel kills for lack of memory logs nothing on its way out, so the error-line scans cannot
+        see it; the container's restart can. Compares each container's start time with the scenario's start, and
+        when one restarted, quotes the kernel's out-of-memory record if it has one, so the failure names its cause
+        rather than leaving it to be dug out of dmesg.
+
+    .PARAMETER Since
+        When the scenario started (UTC).
+
+    .PARAMETER Containers
+        Containers to check. Defaults to jim.web, jim.worker, jim.scheduler.
+
+    .PARAMETER KernelLog
+        Returns the kernel log's lines. Defaults to dmesg, falling back to a non-interactive sudo when the kernel
+        log is restricted; returns nothing when neither is permitted.
+
+    .OUTPUTS
+        Throws if any container restarted. Returns quietly otherwise.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [datetime]$Since,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Containers = (Get-JimServiceContainers),
+
+        [Parameter(Mandatory=$false)]
+        [scriptblock]$KernelLog = {
+            $lines = @(dmesg -T 2>$null)
+            if ($lines.Count -eq 0) { $lines = @(sudo -n dmesg -T 2>$null) }
+            $lines
+        }
+    )
+
+    $restarted = @()
+    foreach ($container in $Containers) {
+        $state = [string](docker inspect --format '{{.State.StartedAt}}|{{.RestartCount}}' $container 2>$null)
+        if (-not $state) { continue }
+
+        $startedAt = [datetime]::Parse($state.Split('|')[0], [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
+        if ($startedAt -gt $Since.ToUniversalTime()) {
+            $restarted += $container
+        }
+    }
+
+    if ($restarted.Count -eq 0) {
+        Write-Host "✓ PASSED: No JIM service restarted during the scenario" -ForegroundColor Green
+        return
+    }
+
+    $message = "$($restarted -join ', ') restarted during the scenario"
+    $oomKills = @(& $KernelLog | Where-Object { $_ -match 'Out of memory: Killed process \d+ \(dotnet\)' })
+    if ($oomKills.Count -gt 0) {
+        $message += "; a JIM process was killed by the kernel for lack of memory: $($oomKills[-1])"
+    }
+    else {
+        $message += '; the kernel log holds no out-of-memory kill of a JIM process, or could not be read'
+    }
+
+    Write-Host "✗ FAILED: $message" -ForegroundColor Red
+    throw $message
+}
+
 function Remove-ContainerWithMissingNetwork {
     <#
     .SYNOPSIS

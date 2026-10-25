@@ -42,6 +42,7 @@ public sealed class ServiceHeartbeatWriter
     private readonly DateTime _startedAt;
     private readonly Func<DateTime> _utcNow;
     private readonly ILogger _logger;
+    private readonly Func<MemoryReading> _readMemory;
 
     private DateTime? _lastWriteAt;
     private bool _pruned;
@@ -54,8 +55,9 @@ public sealed class ServiceHeartbeatWriter
     /// <param name="startedAt">When the process started (UTC).</param>
     /// <param name="utcNow">The clock; null takes <see cref="DateTime.UtcNow"/>. Tests advance it to cross the interval.</param>
     /// <param name="logger">Where failures are reported; null takes the ambient Serilog logger.</param>
+    /// <param name="readMemory">Reads the process's memory and what it can draw on; null takes a <see cref="HostMemoryProbe"/>.</param>
     public ServiceHeartbeatWriter(JimService service, string instanceId, string hostName, string version, DateTime startedAt,
-        Func<DateTime>? utcNow = null, ILogger? logger = null)
+        Func<DateTime>? utcNow = null, ILogger? logger = null, Func<MemoryReading>? readMemory = null)
     {
         _service = service;
         _instanceId = instanceId;
@@ -64,6 +66,7 @@ public sealed class ServiceHeartbeatWriter
         _startedAt = startedAt;
         _utcNow = utcNow ?? (() => DateTime.UtcNow);
         _logger = logger ?? Log.ForContext<ServiceHeartbeatWriter>();
+        _readMemory = readMemory ?? new HostMemoryProbe().Read;
     }
 
     /// <summary>
@@ -123,6 +126,8 @@ public sealed class ServiceHeartbeatWriter
             }
         }
 
+        // Read once per write, so the three figures describe one moment.
+        var memory = _readMemory();
         var heartbeat = new ServiceHeartbeat
         {
             Service = _service,
@@ -138,7 +143,10 @@ public sealed class ServiceHeartbeatWriter
             // not the task advances. SystemHealthServer therefore never judges a service Stalled. When a progress
             // timestamp exists, thread it through here and the condition lights up with no reader change.
             LastProgressAt = null,
-            Detail = detail
+            Detail = detail,
+            ProcessMemoryBytes = memory.ProcessBytes,
+            MemoryTotalBytes = memory.TotalBytes,
+            MemoryAvailableBytes = memory.AvailableBytes
         };
 
         try
