@@ -51,8 +51,14 @@ public class VirtualisedDataGridLoadingTests : JimComponentTestContext
         return pending.Task.ContinueWith(_ => window, token, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
     }
 
+    /// <summary>
+    /// Stops holding windows and releases those already held. Holding stops first: the grid can ask for another window
+    /// after the release (MudDataGrid's first load is a one-row window, then the virtualiser asks for a screenful), and
+    /// one asked for while windows were still held would never arrive, leaving the grid without its total.
+    /// </summary>
     private void ReleaseHeldWindows()
     {
+        _holdWindows = false;
         while (_pendingWindows.TryDequeue(out var pending))
             pending.TrySetResult(null!);
     }
@@ -75,8 +81,8 @@ public class VirtualisedDataGridLoadingTests : JimComponentTestContext
 
         ReleaseHeldWindows();
 
-        cut.WaitForState(() => !cut.Instance.IsLoadingIndicatorShown, IndicatorTimeout);
-        Assert.That(cut.Instance.TotalItems, Is.EqualTo(_rows.Count));
+        // Both at once: the indicator can clear when the one-row window lands, before the screenful brings the total.
+        cut.WaitForState(() => !cut.Instance.IsLoadingIndicatorShown && cut.Instance.TotalItems == _rows.Count, IndicatorTimeout);
     }
 
     [Test]
@@ -117,7 +123,7 @@ public class VirtualisedDataGridLoadingTests : JimComponentTestContext
 
         ReleaseHeldWindows();
 
-        cut.WaitForState(() => !cut.Instance.IsLoadingIndicatorShown, IndicatorTimeout);
+        cut.WaitForState(() => !cut.Instance.IsLoadingIndicatorShown && cut.Instance.TotalItems == 1, IndicatorTimeout);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Instance.IsLoadingIndicatorShown, Is.False);
