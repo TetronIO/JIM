@@ -91,8 +91,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">Metaverse Object:</MudText>
                     <MudLink Typo="Typo.body1" Href="@Utilities.GetMetaverseObjectHref(ConnectedSystemObject.MetaverseObject)">
-                        @(Utilities.GetMetaverseObjectHrefText(ConnectedSystemObject.MetaverseObject) ??
-                                        ConnectedSystemObject.MetaverseObjectId.ToString())
+                        @ConnectedSystemObject.MetaverseObject.NameOrId
                     </MudLink>
                 </MudStack>
                 <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
