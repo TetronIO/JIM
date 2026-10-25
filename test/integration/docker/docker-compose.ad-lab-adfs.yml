@@ -20,8 +20,12 @@
 # JIM's registration on AD FS is made on every run, after the AD FS server is reverted and answers, by JIM's own
 # Register-JIMIdentityProvider (Register-ActiveDirectoryLabIdentityProvider in the runner, #2441). The runner puts
 # what it returns in its own process environment (JIM_AD_LAB_ADFS_*, never a file) and recreates jim.web, so these
-# are interpolated from there. Until then they read "unregistered", which names no client on AD FS. The client claim
-# and Metaverse attribute are the ones the registration issues and returns: oid, matched to Object GUID.
+# are interpolated from there. Until then they read "unregistered", which names no client on AD FS.
+#
+# JIM_SSO_CLAIM_TYPE and JIM_SSO_MV_ATTRIBUTE are deliberately not set here: they stay .env's sub and Subject
+# Identifier. The registration returns oid, matched to Object GUID, but a fresh JIM has no Object GUID attribute (an
+# administrator makes it when synchronising Active Directory), and JIM refuses to start when JIM_SSO_MV_ATTRIBUTE names
+# an attribute that does not exist. The sign-in checks switch to oid once the attribute is in place.
 #
 # jim.web's HTTPS port is published on the runner's loopback, as https://localhost:5243 (Get-ActiveDirectoryLabJimUrl),
 # the address the registration's redirect URIs are made from and the sign-in checks use. Its certificate names
@@ -36,8 +40,6 @@ services:
       - JIM_SSO_SECRET=${JIM_AD_LAB_ADFS_CLIENT_SECRET:-unregistered}
       - JIM_SSO_API_SCOPE=${JIM_AD_LAB_ADFS_API_SCOPE:-unregistered}
       - JIM_SSO_PUBLIC_CLIENT_ID=${JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID:-unregistered}
-      - JIM_SSO_CLAIM_TYPE=oid
-      - JIM_SSO_MV_ATTRIBUTE=Object GUID
       # Empty, so docker-compose.override.yml's Keycloak issuers are not trusted here: JIM accepts the issuers AD FS's
       # discovery document names (#2440).
       - JIM_SSO_VALID_ISSUERS=

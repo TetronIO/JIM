@@ -1066,6 +1066,14 @@ Describe 'Set-ActiveDirectoryLabSsoEnvironment' {
         $env:JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID | Should -Be 'p1'
     }
 
+    It 'leaves the overlay''s sign-in identifier as one a fresh JIM can start with' {
+        # JIM refuses to start when JIM_SSO_MV_ATTRIBUTE names an attribute that does not exist, and a fresh JIM has
+        # no Object GUID: setting it here kept jim.web from ever starting (run 40191625345).
+        $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
+        $overlay | Should -Not -Match '(?m)^\s*-\s*JIM_SSO_MV_ATTRIBUTE='
+        $overlay | Should -Not -Match '(?m)^\s*-\s*JIM_SSO_CLAIM_TYPE='
+    }
+
     It 'is what the overlay names' {
         $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
         foreach ($name in 'JIM_AD_LAB_ADFS_CLIENT_ID', 'JIM_AD_LAB_ADFS_CLIENT_SECRET', 'JIM_AD_LAB_ADFS_API_SCOPE', 'JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID') {
