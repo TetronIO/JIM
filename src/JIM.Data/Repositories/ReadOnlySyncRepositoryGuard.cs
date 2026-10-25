@@ -41,6 +41,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
         => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId, objectTypeId, createdOnOrAfter);
 
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
+        => _inner.GetConnectedSystemObjectTypeIdsInUseAsync(connectedSystemId);
+
     public Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
         => _inner.GetReferencedObjectTypeIdsAsync(attributeIds);
 

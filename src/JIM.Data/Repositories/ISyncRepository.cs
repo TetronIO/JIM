@@ -102,6 +102,13 @@ public interface ISyncRepository
     Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
+    /// The Object Types that hold at least one of the Connected System's objects (#2492). A type-ordered
+    /// synchronisation pages only these: a schema can declare a hundred types while the objects use two. Answered from
+    /// the (ConnectedSystemId, TypeId, Id) index one type at a time, so it costs a probe per type in use, not a scan.
+    /// </summary>
+    Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId);
+
+    /// <summary>
     /// For each of the given reference attributes, the Object Types its stored values point at (#2492). A Full
     /// Synchronisation asks this about mapped reference attributes whose schema declares no target type (LDAP's
     /// <c>member</c> and <c>manager</c>), so it can page referenced types first rather than assume each attribute

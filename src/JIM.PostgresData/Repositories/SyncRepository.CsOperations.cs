@@ -19,6 +19,39 @@ public partial class SyncRepository
     #region Connected System Object — Reference Targets
 
     /// <inheritdoc />
+    public async Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
+    {
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        // A loose index scan: each step asks the (ConnectedSystemId, TypeId, Id) index for the next type id above the
+        // last, so the cost is one probe per type in use rather than a pass over every object.
+        await using var command = new NpgsqlCommand(
+            """
+            WITH RECURSIVE types AS (
+                (SELECT "TypeId" FROM "ConnectedSystemObjects"
+                 WHERE "ConnectedSystemId" = @connectedSystemId
+                 ORDER BY "TypeId" LIMIT 1)
+                UNION ALL
+                SELECT (SELECT cso."TypeId" FROM "ConnectedSystemObjects" cso
+                        WHERE cso."ConnectedSystemId" = @connectedSystemId AND cso."TypeId" > types."TypeId"
+                        ORDER BY cso."TypeId" LIMIT 1)
+                FROM types
+                WHERE types."TypeId" IS NOT NULL
+            )
+            SELECT "TypeId" FROM types WHERE "TypeId" IS NOT NULL
+            """, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+
+        var inUse = new HashSet<int>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            inUse.Add(reader.GetInt32(0));
+        return inUse;
+    }
+
+    /// <inheritdoc />
     public async Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
     {
         var result = attributeIds.Distinct().ToDictionary(id => id, _ => (IReadOnlySet<int>)new HashSet<int>());

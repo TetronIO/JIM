@@ -466,6 +466,16 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
 
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
+    {
+        // Tests often build objects with only the Type navigation set, so read either.
+        IReadOnlySet<int> inUse = GetCsosForSystem(connectedSystemId)
+            .Select(c => c.TypeId != 0 ? c.TypeId : c.Type?.Id ?? 0)
+            .Where(id => id != 0)
+            .ToHashSet();
+        return Task.FromResult(inUse);
+    }
+
     public Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
     {
         var wanted = attributeIds.ToHashSet();

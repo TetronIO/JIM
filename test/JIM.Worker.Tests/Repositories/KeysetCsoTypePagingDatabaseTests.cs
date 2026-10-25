@@ -248,6 +248,41 @@ public class KeysetCsoTypePagingDatabaseTests
         Attribute = attribute, AttributeId = attribute.Id, ConnectedSystemObject = from, ReferenceValueId = toId
     };
 
+    /// <summary>
+    /// A Connected System's schema can declare a hundred Object Types (OpenLDAP's does) while its objects use two; a
+    /// type-ordered run pages, and logs, only the types that hold objects. Every type holding one is returned, whatever
+    /// the Connected System's loaded schema says, and no type of another Connected System is.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectTypeIdsInUseAsync_ReturnsOnlyTheTypesHoldingObjectsAsync()
+    {
+        var seeded = await SeedAsync(people: 3, groups: 0);
+        int otherSystemTypeId;
+        await using (var seed = NewContext())
+        {
+            var system = await seed.ConnectedSystems.SingleAsync(cs => cs.Id == seeded.SystemId);
+            seed.Add(NewType(system, "unusedType"));
+            var otherSystem = new ConnectedSystem { Name = "Glitterband", ConnectorDefinition = await seed.ConnectorDefinitions.FirstAsync() };
+            var otherType = NewType(otherSystem, "elsewhere");
+            seed.AddRange(otherSystem, otherType);
+            await seed.SaveChangesAsync();
+            AddObjects(seed, otherSystem, otherType, 2);
+            await seed.SaveChangesAsync();
+            otherSystemTypeId = otherType.Id;
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var inUse = await repository.Sync.GetConnectedSystemObjectTypeIdsInUseAsync(seeded.SystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(inUse, Is.EquivalentTo(new[] { seeded.PersonTypeId }), "The group type and the unused type hold no objects.");
+            Assert.That(inUse, Does.Not.Contain(otherSystemTypeId));
+        }
+    }
+
     private static async Task<List<Guid>> WalkAsync(Func<Guid, Task<JIM.Models.Utility.PagedResultSet<ConnectedSystemObject>>> loadPage)
     {
         var seen = new List<Guid>();

@@ -7488,14 +7488,16 @@ public abstract class SyncTaskProcessorBase
         List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage, string runKind,
         bool observeUndeclaredReferenceTargets)
     {
-        var objectTypes = _connectedSystem.ObjectTypes ?? [];
-        if (objectTypes.Count == 0)
-        {
-            // Nothing to order by: one sweep from the beginning of time is a plain id-ordered walk of every object.
-            Log.Information("{RunKind} type order: no Object Types loaded on Connected System {ConnectedSystemId}; paging all objects in id order",
-                runKind, _connectedSystem.Id);
-            return new TypeOrderedCsoPager(loadPage, [], DateTime.MinValue);
-        }
+        // Only the types holding objects are paged: a schema can declare a hundred (OpenLDAP's does) while the objects
+        // use two. A type the loaded schema does not carry still has its objects paged, ordered as one with no
+        // reference mappings. A type that gains its first object mid-run is reached by the closing sweep.
+        var typeIdsInUse = await _syncRepo.GetConnectedSystemObjectTypeIdsInUseAsync(_connectedSystem.Id);
+        var loadedTypes = (_connectedSystem.ObjectTypes ?? []).Where(t => typeIdsInUse.Contains(t.Id)).ToList();
+        var objectTypes = loadedTypes
+            .Concat(typeIdsInUse
+                .Where(id => loadedTypes.TrueForAll(t => t.Id != id))
+                .Select(id => new ConnectedSystemObjectType { Id = id, Name = id.ToString(CultureInfo.InvariantCulture) }))
+            .ToList();
 
         Dictionary<int, IReadOnlySet<int>>? observedTargetTypeIds = null;
         if (observeUndeclaredReferenceTargets)
@@ -7512,6 +7514,12 @@ public abstract class SyncTaskProcessorBase
 
         var order = SyncObjectTypeOrdering.Compute(objectTypes, activeSyncRules, observedTargetTypeIds);
         var namesById = objectTypes.ToDictionary(t => t.Id, t => t.Name);
+        if (order.TypeIds.Count == 0)
+        {
+            Log.Information("{RunKind} type order: no objects to page; sweeping for any created during the run", runKind);
+            return new TypeOrderedCsoPager(loadPage, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
+        }
+
         string NameOf(int id) => LogSanitiser.Sanitise(namesById.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture))) ?? string.Empty;
 
         Log.Information("{RunKind} type order: {TypeOrder}", runKind, order.Describe(NameOf));
