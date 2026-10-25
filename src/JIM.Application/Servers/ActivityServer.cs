@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
@@ -351,7 +352,9 @@ public partial class ActivityServer
     public async Task FailActivityWithErrorAsync(Activity activity, Exception exception)
     {
         var now = DateTime.UtcNow;
-        activity.ErrorMessage = GetFullExceptionMessage(exception);
+        activity.ErrorMessage = RanOutOfMemory(exception)
+            ? MemoryPressure.OutOfMemoryText(new HostMemoryProbe().Read())
+            : GetFullExceptionMessage(exception);
         activity.ErrorDetail = ActivityErrorDetail.TryDescribe(exception);
 
         // Only persist stack traces for unexpected errors (bugs), not for operational errors
@@ -365,6 +368,20 @@ public partial class ActivityServer
         await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
+
+    /// <summary>
+    /// Whether the run failed because the runtime could not allocate memory, anywhere in the exception's chain: a task's
+    /// failure arrives wrapped (an AggregateException from a parallel step), and the wrapper's own message says nothing.
+    /// In a container with a memory limit .NET caps its heap below the limit and throws this before the Worker's memory
+    /// guard would act.
+    /// </summary>
+    private static bool RanOutOfMemory(Exception exception) => exception switch
+    {
+        OutOfMemoryException => true,
+        AggregateException aggregate => aggregate.InnerExceptions.Any(RanOutOfMemory),
+        { InnerException: { } inner } => RanOutOfMemory(inner),
+        _ => false
+    };
 
     /// <summary>
     /// Builds a complete error message by unwrapping inner exceptions.

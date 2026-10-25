@@ -79,6 +79,18 @@ public class Worker : BackgroundService
     /// </summary>
     private readonly JIM.Application.UniqueValues.UniqueValueReservationSet _uniqueValueReservations = new();
 
+    /// <summary>How often the memory guard reads memory while tasks run.</summary>
+    private static readonly TimeSpan MemoryGuardInterval = TimeSpan.FromSeconds(1);
+
+    private readonly HostMemoryProbe _memoryProbe = new();
+    private readonly WorkerMemoryGuard _memoryGuard = new();
+
+    /// <summary>
+    /// The synchronisation loop's heartbeat writer; the memory guard also writes through it, out of turn, when it stops
+    /// work. Set before the guard's loop starts.
+    /// </summary>
+    private ServiceHeartbeatWriter? _heartbeat;
+
     public Worker(IJimApplicationFactory jimFactory, IConnectorFactory connectorFactory, IDbContextFactory<JIM.PostgresData.JimDbContext> dbContextFactory)
     {
         _jimFactory = jimFactory;
@@ -146,6 +158,12 @@ public class Worker : BackgroundService
         // version. Written wherever the file is touched; the writer throttles itself and never lets a failed write
         // into this loop.
         var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.WorkerSync);
+        _heartbeat = heartbeat;
+
+        // The memory guard runs on its own loop rather than this one: under memory pressure this loop's database round
+        // trips slow down just when the guard most needs to act, and a run that is growing fast is seconds from being
+        // killed.
+        var memoryGuard = Task.Run(() => GuardMemoryAsync(stoppingToken), stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -253,6 +271,7 @@ public class Worker : BackgroundService
                     foreach (var mainLoopNewWorkerTask in newWorkerTasksToProcess)
                     {
                         var cancellationTokenSource = new CancellationTokenSource();
+                        var memoryNotes = new TaskMemoryNotes();
                         var isParallel = newWorkerTasksToProcess.Count > 1;
                         var task = Task.Run(async () =>
                         {
@@ -838,9 +857,16 @@ public class Worker : BackgroundService
                                 }
                             }
                         
+                            // A run the memory guard stopped ends cancelled, but nobody has recorded why: unlike an
+                            // administrator's cancellation, nothing has touched its Activity or its task row. It is
+                            // failed with the guard's reason and then completed, as any other failed run is.
+                            var stoppedForMemory = memoryNotes.StopReason != null;
+                            if (stoppedForMemory && newWorkerTask.Activity.Status == ActivityStatus.InProgress)
+                                await SafeFailActivityAsync(taskJim, newWorkerTask.Activity, new MemoryExhaustedException(memoryNotes.StopReason!), "Stopped by the Worker's memory guard");
+
                             // Mark the task as complete — unless it was already cancelled by the main loop's
                             // CancelWorkerTaskAsync (which deletes the DB record and marks the activity Cancelled).
-                            if (!cancellationTokenSource.IsCancellationRequested)
+                            if (!cancellationTokenSource.IsCancellationRequested || stoppedForMemory)
                             {
                                 try
                                 {
@@ -872,6 +898,12 @@ public class Worker : BackgroundService
                                 }
                             }
 
+                            // A run that finished while memory was low says so on its Activity. Recorded after
+                            // completion, which would otherwise replace the verdict, and never for a stopped run, whose
+                            // failure already says it.
+                            if (!stoppedForMemory && memoryNotes.Warning is { } memoryWarning)
+                                await RecordMemoryWarningAsync(newWorkerTask.Activity.Id, memoryWarning);
+
                             // remove from the current tasks list after locking it for thread safety
                             lock (_currentTasksLock)
                                 CurrentTasks.RemoveAll(q => q.TaskId == newWorkerTask.Id);
@@ -887,7 +919,7 @@ public class Worker : BackgroundService
                         }, cancellationTokenSource.Token);
 
                         CurrentTasks.Add(new TaskTask(mainLoopNewWorkerTask.Id, task, cancellationTokenSource,
-                            WorkerCurrentWork.DescribeTask(mainLoopNewWorkerTask), DateTime.UtcNow));
+                            WorkerCurrentWork.DescribeTask(mainLoopNewWorkerTask), DateTime.UtcNow) { MemoryNotes = memoryNotes });
                     }
                 }
             }
@@ -901,9 +933,144 @@ public class Worker : BackgroundService
                 currentTask.CancellationTokenSource.Cancel();
             }
         }
+
+        // The guard's loop ends on the same stopping token; awaited so a shutdown does not leave it running unobserved.
+        await memoryGuard;
     }
 
     #region private methods
+
+    /// <summary>
+    /// The memory guard's loop: reads memory every <see cref="MemoryGuardInterval"/> and acts on what
+    /// <see cref="WorkerMemoryGuard"/> decides. A warning is noted on each running task, to be recorded on its
+    /// Activity when it ends. A stop cancels each running task with the reason noted, and the task fails its Activity
+    /// with it. An abort, when the stop has not taken effect and the operating system is about to kill the process,
+    /// fails each running task's Activity from here and ends the process, so the reason is recorded first; the
+    /// container restarts the Worker, and startup recovery leaves an Activity that is no longer in progress alone.
+    /// </summary>
+    private async Task GuardMemoryAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(MemoryGuardInterval, stoppingToken);
+
+                var tasks = SnapshotCurrentTasks();
+                var reading = _memoryProbe.Read();
+                switch (_memoryGuard.Evaluate(reading, tasks.Count > 0, DateTime.UtcNow))
+                {
+                    case MemoryGuardAction.Warn:
+                    {
+                        var warning = WorkerMemoryOutcome.WarningText(reading);
+                        Log.Warning("GuardMemoryAsync: {Warning}", warning);
+                        foreach (var task in tasks)
+                            task.MemoryNotes.RecordWarning(warning);
+                        break;
+                    }
+                    case MemoryGuardAction.Stop:
+                    {
+                        var reason = WorkerMemoryOutcome.StopText(reading);
+                        Log.Error("GuardMemoryAsync: Stopping {Count} running task(s). {Reason}", tasks.Count, reason);
+                        await RecordMemoryEvidenceAsync(tasks, reading, "Stopping running work: memory nearly exhausted");
+                        foreach (var task in tasks)
+                        {
+                            task.MemoryNotes.RecordStop(reason);
+                            await task.CancellationTokenSource.CancelAsync();
+                        }
+                        break;
+                    }
+                    case MemoryGuardAction.Abort:
+                        await RecordMemoryEvidenceAsync(tasks, reading, "Restarting: memory nearly exhausted and running work did not stop");
+                        await AbortForMemoryAsync(tasks, WorkerMemoryOutcome.AbortText(reading));
+                        break;
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Deliberately broad (filtered form): this loop guards the process, and a reading or a log write that
+                // fails once must not end the guarding. It tries again on the next interval.
+                Log.Error(ex, "GuardMemoryAsync: The memory guard failed to act on a reading; it tries again in {Interval}.", MemoryGuardInterval);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes the heartbeat now, with the reading that made the guard act. The operating system can kill the process
+    /// within the second, before the task records anything, and the regular heartbeat may be several seconds old; this
+    /// is what lets startup recovery say the Worker most likely ran out of memory, with the figures, if it is.
+    /// </summary>
+    private async Task RecordMemoryEvidenceAsync(List<TaskTask> tasks, MemoryReading reading, string detail)
+    {
+        if (_heartbeat == null)
+            return;
+
+        try
+        {
+            using var evidenceJim = _jimFactory.Create();
+            var (currentWork, currentWorkStartedAt) = WorkerCurrentWork.Describe(tasks);
+            await _heartbeat.WriteNowAsync(evidenceJim, currentWork, currentWorkStartedAt, detail, reading, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Evidence, not action: the stop goes ahead whether or not it could be written.
+            Log.Error(ex, "RecordMemoryEvidenceAsync: Could not write the memory reading to the heartbeat.");
+        }
+    }
+
+    /// <summary>
+    /// Records why on each running task's Activity, on a context of its own, then ends the process. Ended rather than
+    /// exited: an orderly exit waits for the running tasks, and a task blocked inside one call is the reason for the
+    /// abort in the first place.
+    /// </summary>
+    private async Task AbortForMemoryAsync(List<TaskTask> tasks, string reason)
+    {
+        Log.Fatal("GuardMemoryAsync: {Count} running task(s) did not stop when asked; recording why and ending the Worker. {Reason}", tasks.Count, reason);
+
+        foreach (var task in tasks)
+        {
+            try
+            {
+                using var abortJim = _jimFactory.Create();
+                var workerTask = await abortJim.Tasking.GetWorkerTaskAsync(task.TaskId);
+                if (workerTask?.Activity is { Status: ActivityStatus.InProgress } activity)
+                    await abortJim.Activities.FailActivityWithErrorAsync(activity, reason);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Deliberately broad (filtered form): whatever stops one Activity being recorded must not stop the
+                // next, nor the exit; an Activity left in progress is recovered at the next start.
+                Log.Error(ex, "AbortForMemoryAsync: Could not record the abort on the Activity of task {TaskId}.", task.TaskId);
+            }
+        }
+
+        await Log.CloseAndFlushAsync();
+        Environment.FailFast(reason);
+    }
+
+    /// <summary>
+    /// Adds the memory guard's warning to a finished task's Activity, read on a context of its own: the task's own may
+    /// be unusable by now, and its copy of the Activity may be stale once completion has run.
+    /// </summary>
+    private async Task RecordMemoryWarningAsync(Guid activityId, string warning)
+    {
+        try
+        {
+            using var warningJim = _jimFactory.Create();
+            var activity = await warningJim.Activities.GetActivityAsync(activityId);
+            if (activity != null)
+                await WorkerMemoryOutcome.AddWarningAsync(warningJim, activity, warning);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The warning is advice, already in the log; a run that finished is not failed for want of it.
+            Log.Error(ex, "RecordMemoryWarningAsync: Could not add the memory warning to Activity {ActivityId}.", activityId);
+        }
+    }
 
     /// <summary>
     /// A copy of the in-flight task list taken under its lock, for readers that must not observe a task thread

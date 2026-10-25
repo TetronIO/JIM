@@ -79,4 +79,22 @@ public class ServiceHeartbeat
     /// </summary>
     [MaxLength(1000)]
     public string? Detail { get; set; }
+
+    /// <summary>
+    /// The memory the instance's process held when it wrote this row (its working set), in bytes. Null when the
+    /// instance did not report it.
+    /// </summary>
+    public long? ProcessMemoryBytes { get; set; }
+
+    /// <summary>
+    /// The memory the process can draw on in all, in bytes: its container's memory limit when it has one, otherwise
+    /// the host's physical memory. Null when the instance could not read it.
+    /// </summary>
+    public long? MemoryTotalBytes { get; set; }
+
+    /// <summary>
+    /// How much of <see cref="MemoryTotalBytes"/> was still available when the row was written, in bytes, counting
+    /// file cache the system can reclaim as available. Null when the instance could not read it.
+    /// </summary>
+    public long? MemoryAvailableBytes { get; set; }
 }

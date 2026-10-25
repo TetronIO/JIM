@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Operations;
 using JIM.Models.Tasking;
 using Moq;
 
@@ -20,6 +21,7 @@ public class StaleTaskRecoveryTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<ITaskingRepository> _mockTaskingRepository = null!;
     private Mock<IActivityRepository> _mockActivityRepository = null!;
+    private Mock<ISystemRepository> _mockSystemRepository = null!;
     private JimApplication _application = null!;
 
     [SetUp]
@@ -31,6 +33,9 @@ public class StaleTaskRecoveryTests
         _mockRepository = new Mock<IRepository>();
         _mockRepository.Setup(r => r.Tasking).Returns(_mockTaskingRepository.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepository.Object);
+        _mockSystemRepository = new Mock<ISystemRepository>();
+        _mockSystemRepository.Setup(r => r.GetLatestServiceHeartbeatsAsync()).ReturnsAsync([]);
+        _mockRepository.Setup(r => r.System).Returns(_mockSystemRepository.Object);
         _application = new JimApplication(_mockRepository.Object);
     }
 
@@ -221,6 +226,63 @@ public class StaleTaskRecoveryTests
         Assert.That(capturedActivity.ErrorMessage, Does.Contain("does not indicate a data integrity issue"));
         Assert.That(capturedActivity.ExecutionTime, Is.Not.Null);
         Assert.That(capturedActivity.TotalActivityTime, Is.Not.Null);
+    }
+
+    /// <summary>Recovers one stale task with the given Worker heartbeat on record, and returns its failed Activity.</summary>
+    private async Task<Activity> RecoverOneWithWorkerHeartbeatAsync(ServiceHeartbeat? workerHeartbeat)
+    {
+        var staleTask = CreateStaleWorkerTask(DateTime.UtcNow.AddMinutes(-1));
+        _mockTaskingRepository.Setup(r => r.GetStaleProcessingWorkerTasksAsync(It.IsAny<TimeSpan>())).ReturnsAsync([staleTask]);
+        _mockTaskingRepository.Setup(r => r.DeleteWorkerTaskAsync(It.IsAny<WorkerTask>())).Returns(Task.CompletedTask);
+        _mockActivityRepository.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockSystemRepository.Setup(r => r.GetLatestServiceHeartbeatsAsync()).ReturnsAsync(workerHeartbeat == null ? [] : [workerHeartbeat]);
+
+        await _application.Tasking.RecoverStaleWorkerTasksAsync(TimeSpan.Zero);
+
+        return staleTask.Activity;
+    }
+
+    private static ServiceHeartbeat WorkerHeartbeat(long totalBytes, long availableBytes, long processBytes) => new()
+    {
+        Service = JimService.WorkerSync,
+        InstanceId = "jim-worker-1a2b3c4d",
+        HostName = "jim-worker",
+        Version = "0.15.0",
+        StartedAt = DateTime.UtcNow.AddHours(-4),
+        LastSeenAt = DateTime.UtcNow.AddMinutes(-1),
+        MemoryTotalBytes = totalBytes,
+        MemoryAvailableBytes = availableBytes,
+        ProcessMemoryBytes = processBytes
+    };
+
+    [Test]
+    public async Task RecoverStaleWorkerTasksAsync_WorkerLastReportedMemoryLow_SaysItMostLikelyRanOutOfMemoryAsync()
+    {
+        var activity = await RecoverOneWithWorkerHeartbeatAsync(WorkerHeartbeat(62_000_000_000, 3_000_000_000, 45_000_000_000));
+
+        Assert.That(activity.ErrorMessage, Does.Contain("most likely ran out of memory")
+            .And.Contain("59 GB of 62 GB in use, 45 GB of it by the Worker")
+            .And.Contain("give JIM more memory").IgnoreCase);
+    }
+
+    [Test]
+    public async Task RecoverStaleWorkerTasksAsync_WorkerLastReportedMemoryFine_SaysNothingAboutMemoryAsync()
+    {
+        var activity = await RecoverOneWithWorkerHeartbeatAsync(WorkerHeartbeat(62_000_000_000, 40_000_000_000, 10_000_000_000));
+
+        Assert.That(activity.ErrorMessage, Does.Not.Contain("memory"));
+    }
+
+    [Test]
+    public async Task RecoverStaleWorkerTasksAsync_NoWorkerHeartbeatOnRecord_SaysNothingAboutMemoryAsync()
+    {
+        var activity = await RecoverOneWithWorkerHeartbeatAsync(null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+            Assert.That(activity.ErrorMessage, Does.Not.Contain("memory"));
+        }
     }
 
     [Test]

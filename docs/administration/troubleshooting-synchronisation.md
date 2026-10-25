@@ -16,6 +16,8 @@ Every run of a Run Profile is an Activity. When a run goes wrong, open its Activ
 
 The Activity's [execution items](../configuration/activity-execution-items.md) name each object that hit a problem, with the error recorded against it (`Get-JIMActivityExecutionItem` returns the same). The entries below are titled by that error, or by the message on the Activity. The ones that protect your data come first.
 
+A run that ended because the Worker restarted, or ran short of memory, is covered in [Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md).
+
 ## `Deletion detection found ... no longer in the Connected System ... none were marked as deleted`
 
 **What it means.** A Full Import found more objects missing from the Connected System than the Run Profile's deletion detection limit allows, so JIM marked none of them as deleted and the run ended **Complete with warning**. The usual causes are a change of scope or filter, a connection that returned part of the data, or a file replaced by a smaller one; occasionally it is a genuine mass deletion. Nothing has been deleted: the Connected System Objects, and the Metaverse Objects they contribute to, are as they were before the run.
@@ -33,14 +35,6 @@ The same message names creates or updates when those are what the limit holds ba
 **How to fix.** Look at what staged them before letting them through: the Connected System's Pending Exports list shows each one and the changes it carries. If they are what you intended, run an Export Run Profile with no limit by hand, as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes. If they are not, correct whatever staged them (usually a Synchronisation Rule's scoping or an Attribute Flow), and synchronise again.
 
 **Check.** The export run ends without the warning, and the Connected System's Pending Exports list shows none still **Pending**.
-
-## `Task was abandoned due to worker crash or restart.`
-
-**What it means.** The worker stopped while it was running this Activity: it restarted, crashed, or its server went down. JIM marks the Activity **Failed with error** when the worker starts again, or when the worker has not reported progress for the [Stale task timeout](configuration.md#service-settings) Service Setting (five minutes by default). Whatever the run had already saved stays saved, and nothing is left half-written: the next run carries on from the state JIM's data is in.
-
-**How to fix.** Find out why the worker stopped, from its log (`docker logs jim.worker`, or **Logs** in the portal), then start the Run Profile again.
-
-**Check.** The new run's Activity ends **Complete**.
 
 ## **Ambiguous Match**: `This object matches ... Metaverse Objects on ...`
 

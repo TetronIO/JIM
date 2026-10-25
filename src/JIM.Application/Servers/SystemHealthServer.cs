@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Services;
 using JIM.Models.Operations;
 using JIM.Utilities;
 
@@ -137,7 +138,10 @@ public class SystemHealthServer
 
         // Precedence, most to least serious. A dead process's last words about its work are not a wedged task, so
         // no heartbeat is judged before stalled; and a wedged task matters more than a few late heartbeats, so
-        // stalled is judged before overdue. The status follows from the condition, never the other way round.
+        // stalled is judged before overdue. Memory low comes before overdue too: a process short of memory pauses, which
+        // is the likelier reason its heartbeats are late, and the one an administrator can act on. The status follows
+        // from the condition, never the other way round.
+        var memory = MemoryOf(heartbeat);
         if (age >= noHeartbeatAfter)
         {
             condition = ServiceHealthCondition.NoHeartbeat;
@@ -149,6 +153,12 @@ public class SystemHealthServer
         {
             condition = ServiceHealthCondition.Stalled;
             reason = $"Stalled: no progress on {heartbeat.CurrentWork} for {Describe(asOf - lastProgressAt)}";
+        }
+        else if (memory != null && MemoryPressure.IsLow(memory))
+        {
+            condition = ServiceHealthCondition.MemoryLow;
+            // Short enough for a status card three across; the figures are on the heartbeat for whoever wants them.
+            reason = $"Memory low: {MemoryPressure.Percent(memory.UsedFraction!.Value)} of {MemoryPressure.Bytes(memory.TotalBytes!.Value)} in use";
         }
         else if (age > HeartbeatOverdueAfter)
         {
@@ -175,9 +185,18 @@ public class SystemHealthServer
             CurrentWork = heartbeat.CurrentWork,
             CurrentWorkStartedAt = heartbeat.CurrentWorkStartedAt,
             LastProgressAt = heartbeat.LastProgressAt,
-            Detail = heartbeat.Detail
+            Detail = heartbeat.Detail,
+            ProcessMemoryBytes = heartbeat.ProcessMemoryBytes,
+            MemoryTotalBytes = heartbeat.MemoryTotalBytes,
+            MemoryAvailableBytes = heartbeat.MemoryAvailableBytes
         };
     }
+
+    /// <summary>The memory a heartbeat reported, or null when it did not report all three figures.</summary>
+    private static MemoryReading? MemoryOf(ServiceHeartbeat heartbeat) =>
+        heartbeat is { ProcessMemoryBytes: { } process, MemoryTotalBytes: { } total, MemoryAvailableBytes: { } available }
+            ? new MemoryReading { ProcessBytes = process, TotalBytes = total, AvailableBytes = available }
+            : null;
 
     /// <summary>
     /// The status each condition earns. Kept as the single mapping so the portal, the API and PowerShell cannot
@@ -188,6 +207,7 @@ public class SystemHealthServer
         ServiceHealthCondition.Heartbeating => ServiceHealthStatus.Healthy,
         ServiceHealthCondition.HeartbeatOverdue => ServiceHealthStatus.Degraded,
         ServiceHealthCondition.Stalled => ServiceHealthStatus.Degraded,
+        ServiceHealthCondition.MemoryLow => ServiceHealthStatus.Degraded,
         ServiceHealthCondition.NoHeartbeat => ServiceHealthStatus.Unhealthy,
         ServiceHealthCondition.NeverStarted => ServiceHealthStatus.Unhealthy,
         _ => throw new ArgumentOutOfRangeException(nameof(condition), condition, "Unknown service health condition")

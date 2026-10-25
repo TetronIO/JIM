@@ -18,7 +18,8 @@ internal static class ServiceHeartbeatBulkColumns
     internal static readonly string[] ServiceHeartbeats =
     [
         "Service", "InstanceId", "HostName", "Version", "StartedAt", "LastSeenAt", "CurrentWork",
-        "CurrentWorkStartedAt", "LastProgressAt", "Detail"
+        "CurrentWorkStartedAt", "LastProgressAt", "Detail", "ProcessMemoryBytes", "MemoryTotalBytes",
+        "MemoryAvailableBytes"
     ];
 
     /// <summary>
@@ -29,7 +30,7 @@ internal static class ServiceHeartbeatBulkColumns
     internal static readonly string[] ServiceHeartbeatsUpdate =
     [
         "HostName", "Version", "StartedAt", "LastSeenAt", "CurrentWork", "CurrentWorkStartedAt", "LastProgressAt",
-        "Detail"
+        "Detail", "ProcessMemoryBytes", "MemoryTotalBytes", "MemoryAvailableBytes"
     ];
 
     /// <summary>
