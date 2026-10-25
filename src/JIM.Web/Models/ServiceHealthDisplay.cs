@@ -277,16 +277,17 @@ public static class ServiceHealthDisplay
 
     /// <summary>
     /// The Memory row in a card's details: what the process holds and how full the memory it draws on is
-    /// ("41 GB held · 41 GB of 62 GB in use (66%)"). Null for a service that did not report memory.
+    /// ("41 GB held · 66% of 62 GB in use"), short enough for a card three across. Null for a service that did not
+    /// report memory.
     /// </summary>
     public static string? Memory(ServiceHealth service)
     {
         ArgumentNullException.ThrowIfNull(service);
 
-        if (ReadingOf(service) is not { UsedBytes: { } used, TotalBytes: { } total, UsedFraction: { } share } reading)
+        if (ReadingOf(service) is not { TotalBytes: { } total, UsedFraction: { } share } reading)
             return null;
 
-        return $"{MemoryPressure.Bytes(reading.ProcessBytes)} held · {MemoryPressure.Bytes(used)} of {MemoryPressure.Bytes(total)} in use ({Percent(share)})";
+        return $"{MemoryPressure.Bytes(reading.ProcessBytes)} held · {MemoryPressure.Percent(share)} of {MemoryPressure.Bytes(total)} in use";
     }
 
     /// <summary>
@@ -304,7 +305,7 @@ public static class ServiceHealthDisplay
         if (worker != null && ReadingOf(worker) is { } workerReading)
         {
             sentences.Add($"Memory is low for the Worker: {MemoryPressure.Describe(workerReading, "the Worker")}.");
-            sentences.Add($"At {Percent(MemoryPressure.StopShare)} the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.");
+            sentences.Add($"At {MemoryPressure.Percent(MemoryPressure.StopShare)} the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.");
         }
 
         var scheduler = memoryLow.FirstOrDefault(s => s.Service == JimService.Scheduler);
@@ -323,7 +324,6 @@ public static class ServiceHealthDisplay
             ? new MemoryReading { ProcessBytes = process, TotalBytes = total, AvailableBytes = available }
             : null;
 
-    private static string Percent(double share) => $"{(int)Math.Round(share * 100)}%";
 
     private static ServiceHealthBannerContent OutageBanner(List<ServiceHealth> down, bool deliveryReported, DateTime asOf)
     {

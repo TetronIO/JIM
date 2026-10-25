@@ -409,7 +409,7 @@ public class ServiceHealthDisplayTests
     {
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(ServiceHealthDisplay.Memory(Derive(JimService.WorkerSync, 2, memory: (62, 21, 41))), Is.EqualTo("41 GB held · 41 GB of 62 GB in use (66%)"));
+            Assert.That(ServiceHealthDisplay.Memory(Derive(JimService.WorkerSync, 2, memory: (62, 21, 41))), Is.EqualTo("41 GB held · 66% of 62 GB in use"));
             Assert.That(ServiceHealthDisplay.Memory(Derive(JimService.WorkerSync, 2)), Is.Null, "a service that did not report memory has no row");
         }
     }

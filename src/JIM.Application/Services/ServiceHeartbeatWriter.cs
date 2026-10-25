@@ -127,7 +127,22 @@ public sealed class ServiceHeartbeatWriter
         }
 
         // Read once per write, so the three figures describe one moment.
-        var memory = _readMemory();
+        await UpsertAsync(jim, now, currentWork, currentWorkStartedAt, detail, _readMemory());
+    }
+
+    /// <summary>
+    /// Records the heartbeat now, whatever the interval, with the memory reading given rather than a fresh one. For the
+    /// Worker's memory guard: the reading that made it stop work is the evidence of why, and the process may be killed
+    /// before the next regular write. Never throws a database failure, as <see cref="WriteAsync"/> does not.
+    /// </summary>
+    public async Task WriteNowAsync(JimApplication jim, string? currentWork, DateTime? currentWorkStartedAt, string? detail, MemoryReading memory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await UpsertAsync(jim, _utcNow(), currentWork, currentWorkStartedAt, detail, memory);
+    }
+
+    private async Task UpsertAsync(JimApplication jim, DateTime now, string? currentWork, DateTime? currentWorkStartedAt, string? detail, MemoryReading memory)
+    {
         var heartbeat = new ServiceHeartbeat
         {
             Service = _service,

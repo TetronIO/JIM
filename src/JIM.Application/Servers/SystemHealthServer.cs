@@ -157,7 +157,8 @@ public class SystemHealthServer
         else if (memory != null && MemoryPressure.IsLow(memory))
         {
             condition = ServiceHealthCondition.MemoryLow;
-            reason = $"Memory low: {MemoryPressure.Describe(memory, "this service")}";
+            // Short enough for a status card three across; the figures are on the heartbeat for whoever wants them.
+            reason = $"Memory low: {MemoryPressure.Percent(memory.UsedFraction!.Value)} of {MemoryPressure.Bytes(memory.TotalBytes!.Value)} in use";
         }
         else if (age > HeartbeatOverdueAfter)
         {

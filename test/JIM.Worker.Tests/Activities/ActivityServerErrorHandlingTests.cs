@@ -229,6 +229,34 @@ public class ActivityServerErrorHandlingTests
     #region CompleteActivityWithErrorAsync tests
 
     [Test]
+    public async Task FailActivityWithErrorAsync_WithOutOfMemoryInsideAnAggregate_SaysTheServiceRanOutOfMemoryAndWhatToDoAsync()
+    {
+        // In a container with a memory limit, .NET stops the heap at 75% of it and throws, before the Worker's memory
+        // guard acts; the run used to record only "Exception of type 'System.OutOfMemoryException' was thrown".
+        var activity = CreateTestActivity();
+        var exception = ThrowAndCatch(new AggregateException(ThrowAndCatch(new OutOfMemoryException())));
+
+        await _application.Activities.FailActivityWithErrorAsync(activity, exception);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+            Assert.That(activity.ErrorMessage, Does.StartWith("This run ran out of memory").And.Contain("give JIM more memory").IgnoreCase);
+            Assert.That(activity.ErrorStackTrace, Is.Not.Null, "where it ran out is still worth having");
+        }
+    }
+
+    [Test]
+    public async Task FailActivityWithErrorAsync_WithAnUnrelatedException_KeepsItsOwnMessageAsync()
+    {
+        var activity = CreateTestActivity();
+
+        await _application.Activities.FailActivityWithErrorAsync(activity, ThrowAndCatch(new InvalidOperationException("The directory refused the search.")));
+
+        Assert.That(activity.ErrorMessage, Is.EqualTo("The directory refused the search."));
+    }
+
+    [Test]
     public async Task CompleteActivityWithErrorAsync_WithOperationalException_DoesNotSetStackTraceAsync()
     {
         // Arrange

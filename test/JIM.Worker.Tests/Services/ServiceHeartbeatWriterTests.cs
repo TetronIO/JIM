@@ -90,6 +90,30 @@ public class ServiceHeartbeatWriterTests
     }
 
     [Test]
+    public async Task WriteNowAsync_WithinTheInterval_WritesAtOnceWithTheReadingItIsGiven()
+    {
+        // The Worker's memory guard writes the reading that made it stop work straight away: the process may be killed
+        // within the second, and the regular heartbeat could be up to an interval old by then.
+        var writer = NewWriter();
+        await WriteAsync(writer);
+        ServiceHeartbeat? written = null;
+        _mockSystemRepository.Setup(r => r.UpsertServiceHeartbeatAsync(It.IsAny<ServiceHeartbeat>()))
+            .Callback<ServiceHeartbeat>(h => written = h)
+            .Returns(Task.CompletedTask);
+        var stopping = new MemoryReading { ProcessBytes = 58_000_000_000, TotalBytes = 62_000_000_000, AvailableBytes = 1_000_000_000 };
+
+        await writer.WriteNowAsync(_jim, "Delta Import: Yellowstone APAC", StartedAt, "Stopping running work: memory nearly exhausted", stopping, CancellationToken.None);
+
+        Assert.That(written, Is.Not.Null, "the interval does not hold this write back");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written!.MemoryAvailableBytes, Is.EqualTo(1_000_000_000));
+            Assert.That(written.ProcessMemoryBytes, Is.EqualTo(58_000_000_000));
+            Assert.That(written.Detail, Is.EqualTo("Stopping running work: memory nearly exhausted"));
+        }
+    }
+
+    [Test]
     public async Task WriteAsync_TwoCallsWithinTheInterval_UpsertsOnce()
     {
         var writer = NewWriter();

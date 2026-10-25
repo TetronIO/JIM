@@ -25,6 +25,7 @@ public sealed class HostMemoryProbe
     private const string CgroupV1Usage = "/sys/fs/cgroup/memory/memory.usage_in_bytes";
     private const string CgroupV1Stat = "/sys/fs/cgroup/memory/memory.stat";
     private const string Meminfo = "/proc/meminfo";
+    private const string ProcessStatus = "/proc/self/status";
 
     /// <summary>Any cgroup v1 limit at or above this (2^62 bytes) is the kernel's way of saying there is none.</summary>
     private const long CgroupV1NoLimit = 1L << 62;
@@ -33,7 +34,7 @@ public sealed class HostMemoryProbe
     private readonly Func<long> _processBytes;
     private readonly Func<(long TotalBytes, long LoadBytes)> _runtimeFigures;
 
-    public HostMemoryProbe() : this(ReadFileOrNull, () => Environment.WorkingSet, ReadRuntimeFigures)
+    public HostMemoryProbe() : this(ReadFileOrNull, () => ProcessBytesFromStatus(ReadFileOrNull(ProcessStatus)) ?? Environment.WorkingSet, ReadRuntimeFigures)
     {
     }
 
@@ -109,6 +110,19 @@ public sealed class HostMemoryProbe
             .Where(parts => parts.Length == 2 && parts[0] == key)
             .Select(parts => ParseLong(parts[1]))
             .FirstOrDefault() ?? 0;
+
+    /// <summary>
+    /// The memory this process holds that counts towards what its container or host has in use: its anonymous memory
+    /// plus its shared memory (which the .NET garbage collector uses for its heap), from <c>/proc/self/status</c>.
+    /// Not its file pages: those are the runtime's own libraries, shared and reclaimable, and memory in use leaves them
+    /// out, so counting them made the process's share larger than the whole. Null when the status carries neither.
+    /// </summary>
+    internal static long? ProcessBytesFromStatus(string? status)
+    {
+        var anonymousKb = MeminfoKb(status, "RssAnon");
+        var sharedKb = MeminfoKb(status, "RssShmem");
+        return anonymousKb == null && sharedKb == null ? null : ((anonymousKb ?? 0) + (sharedKb ?? 0)) * 1024;
+    }
 
     private static long? ParseLong(string? text) => long.TryParse(text?.Trim(), out var value) ? value : null;
 

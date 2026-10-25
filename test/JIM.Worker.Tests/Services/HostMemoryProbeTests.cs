@@ -168,6 +168,26 @@ public class HostMemoryProbeTests
         Assert.That(probe.Read().UsedFraction, Is.EqualTo(0.75).Within(1e-9));
     }
 
+    [Test]
+    public void ProcessBytesFromStatus_CountsAnonymousAndSharedMemoryButNotFilePages()
+    {
+        // File pages (the runtime's own libraries) are shared and reclaimable, and a container's memory in use leaves
+        // them out; counting them made the Worker's share larger than the whole ("326 MB of 244 MB").
+        const string status = "Name:\tdotnet\nVmRSS:\t  275864 kB\nRssAnon:\t  105156 kB\nRssFile:\t   87428 kB\nRssShmem:\t   83280 kB\n";
+
+        Assert.That(HostMemoryProbe.ProcessBytesFromStatus(status), Is.EqualTo((105156L + 83280L) * 1024));
+    }
+
+    [Test]
+    public void ProcessBytesFromStatus_StatusWithoutTheBreakdown_IsUnknown()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(HostMemoryProbe.ProcessBytesFromStatus(null), Is.Null);
+            Assert.That(HostMemoryProbe.ProcessBytesFromStatus("Name:\tdotnet\nVmRSS:\t1000 kB\n"), Is.Null);
+        }
+    }
+
     private static HostMemoryProbe Probe(Dictionary<string, string> files) =>
         new(path => files.GetValueOrDefault(path), () => 3 * Gb, () => (0, 0));
 }

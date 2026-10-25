@@ -85,6 +85,12 @@ public class Worker : BackgroundService
     private readonly HostMemoryProbe _memoryProbe = new();
     private readonly WorkerMemoryGuard _memoryGuard = new();
 
+    /// <summary>
+    /// The synchronisation loop's heartbeat writer; the memory guard also writes through it, out of turn, when it stops
+    /// work. Set before the guard's loop starts.
+    /// </summary>
+    private ServiceHeartbeatWriter? _heartbeat;
+
     public Worker(IJimApplicationFactory jimFactory, IConnectorFactory connectorFactory, IDbContextFactory<JIM.PostgresData.JimDbContext> dbContextFactory)
     {
         _jimFactory = jimFactory;
@@ -152,6 +158,7 @@ public class Worker : BackgroundService
         // version. Written wherever the file is touched; the writer throttles itself and never lets a failed write
         // into this loop.
         var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.WorkerSync);
+        _heartbeat = heartbeat;
 
         // The memory guard runs on its own loop rather than this one: under memory pressure this loop's database round
         // trips slow down just when the guard most needs to act, and a run that is growing fast is seconds from being
@@ -965,6 +972,7 @@ public class Worker : BackgroundService
                     {
                         var reason = WorkerMemoryOutcome.StopText(reading);
                         Log.Error("GuardMemoryAsync: Stopping {Count} running task(s). {Reason}", tasks.Count, reason);
+                        await RecordMemoryEvidenceAsync(tasks, reading, "Stopping running work: memory nearly exhausted");
                         foreach (var task in tasks)
                         {
                             task.MemoryNotes.RecordStop(reason);
@@ -973,6 +981,7 @@ public class Worker : BackgroundService
                         break;
                     }
                     case MemoryGuardAction.Abort:
+                        await RecordMemoryEvidenceAsync(tasks, reading, "Restarting: memory nearly exhausted and running work did not stop");
                         await AbortForMemoryAsync(tasks, WorkerMemoryOutcome.AbortText(reading));
                         break;
                 }
@@ -987,6 +996,29 @@ public class Worker : BackgroundService
                 // fails once must not end the guarding. It tries again on the next interval.
                 Log.Error(ex, "GuardMemoryAsync: The memory guard failed to act on a reading; it tries again in {Interval}.", MemoryGuardInterval);
             }
+        }
+    }
+
+    /// <summary>
+    /// Writes the heartbeat now, with the reading that made the guard act. The operating system can kill the process
+    /// within the second, before the task records anything, and the regular heartbeat may be several seconds old; this
+    /// is what lets startup recovery say the Worker most likely ran out of memory, with the figures, if it is.
+    /// </summary>
+    private async Task RecordMemoryEvidenceAsync(List<TaskTask> tasks, MemoryReading reading, string detail)
+    {
+        if (_heartbeat == null)
+            return;
+
+        try
+        {
+            using var evidenceJim = _jimFactory.Create();
+            var (currentWork, currentWorkStartedAt) = WorkerCurrentWork.Describe(tasks);
+            await _heartbeat.WriteNowAsync(evidenceJim, currentWork, currentWorkStartedAt, detail, reading, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Evidence, not action: the stop goes ahead whether or not it could be written.
+            Log.Error(ex, "RecordMemoryEvidenceAsync: Could not write the memory reading to the heartbeat.");
         }
     }
 

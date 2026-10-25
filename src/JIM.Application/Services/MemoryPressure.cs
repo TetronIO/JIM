@@ -53,6 +53,21 @@ public static class MemoryPressure
             ? $"{Bytes(used)} of {Bytes(total)} in use, {Bytes(reading.ProcessBytes)} of it by {processName}"
             : string.Empty;
 
+    /// <summary>
+    /// What a run that failed for want of memory says on its Activity: that it ran out, the figures as they stand now (the
+    /// run's own memory has been released by the time it is recorded, so the figures say what was left beside it), and
+    /// the remedy.
+    /// </summary>
+    public static string OutOfMemoryText(MemoryReading reading)
+    {
+        var figures = Describe(reading, "this service");
+        return "This run ran out of memory and stopped" + (figures.Length > 0 ? $" (now {figures})" : string.Empty) +
+               ". In a container with a memory limit, .NET stops at about 75% of the limit. Give JIM more memory, or run less at once, then run it again.";
+    }
+
+    /// <summary>A share as a whole percentage: "92%".</summary>
+    public static string Percent(double share) => $"{(int)Math.Round(share * 100)}%";
+
     /// <summary>A size in decimal units, as people read memory: "57 GB", "4.2 GB", "850 MB".</summary>
     public static string Bytes(long bytes)
     {

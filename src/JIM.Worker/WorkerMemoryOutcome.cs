@@ -14,7 +14,7 @@ namespace JIM.Worker;
 internal static class WorkerMemoryOutcome
 {
     private static string Remedy =>
-        $"At {Percent(MemoryPressure.StopShare)} the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.";
+        $"At {MemoryPressure.Percent(MemoryPressure.StopShare)} the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.";
 
     /// <summary>What a run's Activity says when memory was low while it ran.</summary>
     internal static string WarningText(MemoryReading reading) =>
@@ -43,6 +43,4 @@ internal static class WorkerMemoryOutcome
 
         await jim.Activities.UpdateActivityAsync(activity);
     }
-
-    private static string Percent(double share) => $"{(int)Math.Round(share * 100)}%";
 }

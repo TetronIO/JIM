@@ -345,7 +345,7 @@ public class SystemHealthServerTests
         {
             Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Degraded));
             Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.MemoryLow));
-            Assert.That(health.Reason, Is.EqualTo("Memory low: 57 GB of 62 GB in use, 41 GB of it by this service"));
+            Assert.That(health.Reason, Is.EqualTo("Memory low: 92% of 62 GB in use"));
         }
     }
 
