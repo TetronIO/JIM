@@ -109,8 +109,8 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | Property | Type | Description |
 |----------|------|-------------|
 | `Service` | `string` | Which service this is: WorkerSync (the Worker's synchronisation loop), WorkerDelivery (the Worker's password delivery loop) or Scheduler. One of `WorkerSync`, `WorkerDelivery` or `Scheduler`. |
-| `Status` | `string` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue or its current work has stalled) or Unhealthy (no heartbeat long enough to presume it down, or never started). One of `Healthy`, `Degraded` or `Unhealthy`. |
-| `Condition` | `string` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. One of `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat` or `NeverStarted`. |
+| `Status` | `string` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue, its current work has stalled, or its memory is low) or Unhealthy (no heartbeat long enough to presume it down, or never started). One of `Healthy`, `Degraded` or `Unhealthy`. |
+| `Condition` | `string` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, MemoryLow (85% or more of the memory it can draw on is in use), NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. One of `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat`, `NeverStarted` or `MemoryLow`. |
 | `Reason` | `string` | The condition in plain words with the figures that matter, for example "No heartbeat for 4 minutes". |
 | `InstanceId` | `string` | The reporting instance (host name plus a per-process id), or empty when the service has never reported. |
 | `HostName` | `string` | The host the reporting instance runs on, or empty when the service has never reported. |
@@ -121,6 +121,9 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | `CurrentWorkStartedAt` | `datetime` | When (UTC) the current work began, or empty when idle or never seen. |
 | `LastProgressAt` | `datetime` | When (UTC) the current work last moved forward, or empty when idle, never seen, or when the service cannot tell progress apart from liveness. |
 | `Detail` | `string` | Free text the service left beside its state (queue counts, why it is waiting), or empty. |
+| `ProcessMemoryBytes` | `long` | The memory the service's process held at its last heartbeat, in bytes, or empty when it did not report it. |
+| `MemoryTotalBytes` | `long` | The memory the service's process can draw on in all, in bytes: its container's memory limit when one is set, otherwise the host's memory. Empty when not reported. |
+| `MemoryAvailableBytes` | `long` | How much of the total memory was still available at the last heartbeat, in bytes, counting file cache the system can reclaim. Empty when not reported. |
 
 **With `-Summary`**:
 
@@ -129,7 +132,7 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | `Overall` | `string` | The worst status among Services: Healthy, Degraded or Unhealthy. A monitoring script that alerts on anything other than Healthy needs to read nothing else. One of `Healthy`, `Degraded` or `Unhealthy`. |
 | `WebVersion` | `string` | The version of the web tier that answered, for comparison with each service's own version; a mismatch means a partial upgrade. |
 | `GeneratedAt` | `datetime` | When (UTC) the verdicts were derived. Every "last seen n seconds ago" reason is relative to this moment. |
-| `Services` | `object[]` | One entry per service, always present and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. Each has `Service`, `Status`, `Condition`, `Reason`, `InstanceId`, `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork`, `CurrentWorkStartedAt`, `LastProgressAt` and `Detail`. |
+| `Services` | `object[]` | One entry per service, always present and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. Each has `Service`, `Status`, `Condition`, `Reason`, `InstanceId`, `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork`, `CurrentWorkStartedAt`, `LastProgressAt`, `Detail`, `ProcessMemoryBytes`, `MemoryTotalBytes` and `MemoryAvailableBytes`. |
 <!-- END GENERATED: Get-JIMServiceHealth -->
 
 ### Examples

@@ -4302,6 +4302,16 @@ finally {
         Write-Host "${RED}✗ Post-scenario log scan failed: $_${NC}"
         $scenarioExitCode = 1
     }
+
+    # A service the kernel killed for lack of memory logs nothing on its way out, so neither scan above can see it;
+    # its restart can, and the failure then names the cause.
+    try {
+        Assert-JimServicesNotRestarted -Since $step5Start
+    }
+    catch {
+        Write-Host "${RED}✗ Post-scenario restart check failed: $_${NC}"
+        $scenarioExitCode = 1
+    }
     Remove-Item Env:JIM_EXPECTED_ERRORS_PATH -ErrorAction SilentlyContinue
 
     # Invariant sweep across EVERY Connected System, not just the ones the scenario asserts on: a defect is

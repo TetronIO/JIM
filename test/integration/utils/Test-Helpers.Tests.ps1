@@ -1431,6 +1431,34 @@ Describe 'Expected error declarations' {
         }
     }
 
+    Context 'Assert-JimServicesNotRestarted' {
+        BeforeEach {
+            Mock Write-Host {}
+            $script:since = [datetime]::new(2026, 10, 25, 2, 0, 0, [DateTimeKind]::Utc)
+            $script:oomLine = '[Sun Oct 25 02:45:37 2026] Out of memory: Killed process 2180341 (dotnet) total-vm:320971320kB, anon-rss:45479208kB, file-rss:8kB'
+        }
+
+        It 'passes when every service started before the scenario did' {
+            Mock docker { '2026-10-24T22:00:00.000000000Z|0' }
+
+            { Assert-JimServicesNotRestarted -Since $script:since -Containers 'jim.worker' -KernelLog { @() } } | Should -Not -Throw
+        }
+
+        It 'fails naming the service that restarted during the scenario' {
+            Mock docker { '2026-10-25T02:45:42.472854661Z|1' }
+
+            { Assert-JimServicesNotRestarted -Since $script:since -Containers 'jim.worker' -KernelLog { @() } } |
+                Should -Throw '*jim.worker restarted during the scenario*'
+        }
+
+        It 'quotes the kernel''s out-of-memory record when it killed a JIM process' {
+            Mock docker { '2026-10-25T02:45:42.472854661Z|1' }
+
+            { Assert-JimServicesNotRestarted -Since $script:since -Containers 'jim.worker' -KernelLog { @('[Sun Oct 25 02:00:01 2026] usb 1-1: new device', $script:oomLine) } } |
+                Should -Throw '*killed by the kernel for lack of memory*Killed process 2180341 (dotnet)*'
+        }
+    }
+
     Context 'Start-JimErrorWatcher' {
         BeforeAll {
             # A stand-in docker, so the watcher's background jobs (separate processes, out of Mock's reach) read known

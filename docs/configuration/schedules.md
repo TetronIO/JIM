@@ -49,7 +49,7 @@ The portal also lists **PowerShell Script**, **Executable** and **SQL Script** s
 
 What happens when a step fails is set once for the whole Schedule, with exceptions per step.
 
-A step fails when its Activity ends **Failed With Error**, **Complete With Error** or **Cancelled**. Warnings do not count, including object-level data errors reported as warnings. A step whose Worker stopped part-way through fails too, because JIM marks its Activity **Failed With Error** (see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md#task-was-abandoned-due-to-worker-crash-or-restart)).
+A step fails when its Activity ends **Failed With Error**, **Complete With Error** or **Cancelled**. Warnings do not count, including object-level data errors reported as warnings. A step whose Worker stopped part-way through fails too, because JIM marks its Activity **Failed With Error** (see [Troubleshooting Worker Restarts and Memory](../administration/troubleshooting-worker.md#task-was-abandoned-due-to-worker-crash-or-restart)).
 
 **The Schedule's setting.** On the Steps tab of the Schedule editor, above the step list, **When a step fails** is one of:
 

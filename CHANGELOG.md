@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ JIM tells administrators when it is running short of memory, before it fails rather than after: the Worker stops its running work when memory is nearly exhausted, instead of being killed part-way through with nothing recorded, and its Activity says why and what to do. The Operations page shows each service's memory and a **Memory low** condition, with a banner on every page. Also via REST and `Get-JIMServiceHealth`. (#2487)
 - ✨ JIM accepts an API token from the `access_token_issuer` the identity provider's discovery document publishes, as well as from its `issuer`, so AD FS, which issues access tokens under its federation service identifier, no longer needs `JIM_SSO_VALID_ISSUERS`. A token from any other issuer is still refused. (#2440)
 - ✨ Signing in keeps **Email** current from the identity provider, as it does the other profile values: the portal now asks every provider for the `email` scope. (#2439)
 - ✨ Administrators JIM does not synchronise, such as the initial administrator, keep their profile current from the identity provider: each sign-in refreshes Display Name, First Name, Last Name and User Principal Name from the token, while values a Synchronisation Rule supplies are never touched. (#2383)

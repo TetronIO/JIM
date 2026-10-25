@@ -2301,6 +2301,15 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("LastSeenAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<long?>("MemoryAvailableBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("MemoryTotalBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ProcessMemoryBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<int>("Service")
                         .HasColumnType("integer");
 

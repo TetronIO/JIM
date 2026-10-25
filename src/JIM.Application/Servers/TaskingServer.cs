@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Operations;
 using JIM.Models.Preview;
 using JIM.Models.Scheduling;
 using JIM.Models.Security;
@@ -748,20 +750,23 @@ namespace JIM.Application.Servers
             if (staleTasks.Count == 0)
                 return 0;
 
+            var outOfMemory = await DescribeLikelyOutOfMemoryAsync();
+            var errorMessage = "Task was abandoned due to worker crash or restart. The task was in progress when the worker stopped responding. " +
+                               (outOfMemory == null ? string.Empty : $"{outOfMemory} ") +
+                               "This does not indicate a data integrity issue - the next sync run will process from the current state.";
+
             foreach (var staleTask in staleTasks)
             {
-                Log.Warning("RecoverStaleWorkerTasksAsync: Recovering stale worker task {TaskId} (last heartbeat: {LastHeartbeat})",
-                    staleTask.Id, staleTask.LastHeartbeat?.ToString("o") ?? "never");
+                // An Error, not a Warning: a run was lost, and an administrator reading the logs needs to see it.
+                Log.Error("RecoverStaleWorkerTasksAsync: Recovering stale worker task {TaskId} (last heartbeat: {LastHeartbeat}). {OutOfMemory}",
+                    staleTask.Id, staleTask.LastHeartbeat?.ToString("o") ?? "never", outOfMemory ?? string.Empty);
 
                 // Fail the associated activity so it appears correctly in history
                 if (staleTask.Activity is { Status: ActivityStatus.InProgress })
                 {
                     try
                     {
-                        await Application.Activities.FailActivityWithErrorAsync(
-                            staleTask.Activity,
-                            "Task was abandoned due to worker crash or restart. The task was in progress when the worker stopped responding. " +
-                            "This does not indicate a data integrity issue - the next sync run will process from the current state.");
+                        await Application.Activities.FailActivityWithErrorAsync(staleTask.Activity, errorMessage);
                     }
                     catch (Exception ex)
                     {
@@ -775,6 +780,24 @@ namespace JIM.Application.Servers
             }
 
             return staleTasks.Count;
+        }
+
+        /// <summary>
+        /// Says the Worker most likely ran out of memory when its last heartbeat showed memory low, or null when it did
+        /// not or there is none. The operating system kills a process that exhausts memory without a word, so the
+        /// last reading the Worker left is the only evidence JIM has after the fact.
+        /// </summary>
+        private async Task<string?> DescribeLikelyOutOfMemoryAsync()
+        {
+            var heartbeats = await Application.Repository.System.GetLatestServiceHeartbeatsAsync();
+            var worker = heartbeats.FirstOrDefault(h => h.Service == JimService.WorkerSync);
+            if (worker is not { ProcessMemoryBytes: { } process, MemoryTotalBytes: { } total, MemoryAvailableBytes: { } available })
+                return null;
+
+            var reading = new MemoryReading { ProcessBytes = process, TotalBytes = total, AvailableBytes = available };
+            return MemoryPressure.IsLow(reading)
+                ? $"The Worker most likely ran out of memory: when it last reported, {MemoryPressure.Describe(reading, "the Worker")}. Give JIM more memory, or run less at once, then run it again."
+                : null;
         }
 
         #endregion

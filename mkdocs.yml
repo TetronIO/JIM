@@ -188,6 +188,7 @@ nav:
       - Logs: administration/logs.md
       - Troubleshooting: administration/troubleshooting.md
       - Troubleshooting Synchronisation: administration/troubleshooting-synchronisation.md
+      - Troubleshooting Worker Restarts and Memory: administration/troubleshooting-worker.md
       - Troubleshooting Podman: administration/troubleshooting-podman.md
   - Connectors:
       - connectors/index.md
