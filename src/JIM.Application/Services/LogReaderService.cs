@@ -45,6 +45,18 @@ public class LogReaderService
         ["PANIC"] = "Fatal"
     };
 
+    /// <summary>
+    /// Entries whose PostgreSQL severity misrepresents them, matched on SQLSTATE and message, with the level to show
+    /// instead. Checked before <see cref="PostgresSeverityMap"/>. Messages assume the bundled database's English locale.
+    /// </summary>
+    private static readonly (string StateCode, string MessageContains, string Level)[] PostgresSeverityOverrides =
+    [
+        // A client-cancelled statement (57014) is logged at ERROR, but JIM cancels queries deliberately, e.g. when a
+        // page is left mid-load; where a cancellation matters (a cancelled run), JIM logs it itself with its reason,
+        // so this line only echoes it. Statement timeouts share the state code and are real errors, hence the message.
+        ("57014", "due to user request", "Debug")
+    ];
+
     private readonly string _logPath;
 
     /// <summary>
@@ -464,6 +476,12 @@ public class LogReaderService
             var message = root.TryGetProperty("message", out var m)
                 ? m.GetString() ?? string.Empty
                 : string.Empty;
+
+            var stateCode = root.TryGetProperty("state_code", out var sc) ? sc.GetString() : null;
+            var severityOverride = PostgresSeverityOverrides.FirstOrDefault(o =>
+                o.StateCode == stateCode && message.Contains(o.MessageContains, StringComparison.OrdinalIgnoreCase));
+            if (severityOverride.Level != null)
+                level = severityOverride.Level;
 
             // Extract useful PostgreSQL metadata as properties
             var properties = new Dictionary<string, object>();
