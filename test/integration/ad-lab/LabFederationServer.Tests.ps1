@@ -244,3 +244,137 @@ Describe 'Test-LabFederationKeySet' {
         @(Test-LabFederationKeySet -Document $keys) | Should -Match 'no signing key'
     }
 }
+
+Describe 'Test-LabModuleFile' {
+    It 'counts <Path> as part of the module' -TestCases @(
+        @{ Path = 'JIM.psd1' }, @{ Path = 'JIM.psm1' },
+        @{ Path = 'Public/Connection/Connect-JIM.ps1' }, @{ Path = 'Private/AdfsRegistration.ps1' },
+        @{ Path = 'Public\IdentityProviders\Register-JIMIdentityProvider.ps1' }
+    ) {
+        Test-LabModuleFile -RelativePath $Path | Should -BeTrue
+    }
+
+    It 'leaves out <Path>' -TestCases @(
+        @{ Path = 'Tests/IdentityProviderRegistration.Tests.ps1' }, @{ Path = 'CLAUDE.md' },
+        @{ Path = 'Public/notes.md' }, @{ Path = 'public/Connect-JIM.ps1' }, @{ Path = 'Other/Thing.ps1' },
+        @{ Path = 'Public/../Tests/Escape.ps1' }, @{ Path = 'jim.psd1' }
+    ) {
+        Test-LabModuleFile -RelativePath $Path | Should -BeFalse
+    }
+}
+
+Describe 'Get-LabModuleDigest' {
+    BeforeAll {
+        $script:Files = @(
+            [pscustomobject]@{ Path = 'JIM.psd1'; Text = "@{`n    RootModule = 'JIM.psm1'`n}`n" },
+            [pscustomobject]@{ Path = 'Public/Connect-JIM.ps1'; Text = "function Connect-JIM {`n}`n" }
+        )
+        $script:Digest = Get-LabModuleDigest -Entry $script:Files
+    }
+
+    It 'is 64 lower-case hex characters' {
+        $script:Digest | Should -Match '^[0-9a-f]{64}$'
+    }
+
+    It 'is the same with CRLF line endings, as a Windows checkout has them' {
+        $crlf = $script:Files | ForEach-Object { [pscustomobject]@{ Path = $_.Path; Text = $_.Text.Replace("`n", "`r`n") } }
+        Get-LabModuleDigest -Entry $crlf | Should -Be $script:Digest
+    }
+
+    It 'is the same with backslashes in the paths, and in any order' {
+        $other = @(
+            [pscustomobject]@{ Path = 'Public\Connect-JIM.ps1'; Text = $script:Files[1].Text },
+            $script:Files[0]
+        )
+        Get-LabModuleDigest -Entry $other | Should -Be $script:Digest
+    }
+
+    It 'changes when a file is edited' {
+        $edited = @($script:Files[0], [pscustomobject]@{ Path = 'Public/Connect-JIM.ps1'; Text = "function Connect-JIM {`n    'changed'`n}`n" })
+        Get-LabModuleDigest -Entry $edited | Should -Not -Be $script:Digest
+    }
+
+    It 'changes when a file is added, removed or renamed' {
+        $added = $script:Files + @([pscustomobject]@{ Path = 'Private/New.ps1'; Text = '' })
+        Get-LabModuleDigest -Entry $added | Should -Not -Be $script:Digest
+        Get-LabModuleDigest -Entry @($script:Files[0]) | Should -Not -Be $script:Digest
+        $renamed = @($script:Files[0], [pscustomobject]@{ Path = 'Public/Connect-JIM2.ps1'; Text = $script:Files[1].Text })
+        Get-LabModuleDigest -Entry $renamed | Should -Not -Be $script:Digest
+    }
+
+    It 'gives a digest for no files at all' {
+        Get-LabModuleDigest -Entry @() | Should -Match '^[0-9a-f]{64}$'
+    }
+}
+
+Describe 'ConvertTo-LabIdentityProviderRegistration' {
+    BeforeAll {
+        function New-TestRegistration {
+            param([securestring]$Secret = (ConvertTo-SecureString 'generated-secret' -AsPlainText -Force))
+            [pscustomobject]@{
+                Provider = 'ADFS'; Authority = 'https://adfs.panoply.local/adfs'
+                ClientId = '11111111-1111-1111-1111-111111111111'; ClientSecret = $Secret
+                PublicClientId = '22222222-2222-2222-2222-222222222222'; ApiScope = 'api://11111111-1111-1111-1111-111111111111'
+                ClaimType = 'oid'; MvAttribute = 'Object GUID'; Changes = @('Create the Application Group', 'Add the portal')
+            }
+        }
+    }
+
+    It 'gives the runner what JIM needs, with the client secret in plain text for it to mask' {
+        $result = ConvertTo-LabIdentityProviderRegistration -Registration (New-TestRegistration) -ModuleDigest ('a' * 64)
+        $result.authority | Should -Be 'https://adfs.panoply.local/adfs'
+        $result.clientId | Should -Be '11111111-1111-1111-1111-111111111111'
+        $result.clientSecret | Should -Be 'generated-secret'
+        $result.publicClientId | Should -Be '22222222-2222-2222-2222-222222222222'
+        $result.apiScope | Should -Be 'api://11111111-1111-1111-1111-111111111111'
+        $result.claimType | Should -Be 'oid'
+        $result.mvAttribute | Should -Be 'Object GUID'
+        @($result.changes) | Should -HaveCount 2
+        $result.moduleDigest | Should -Be ('a' * 64)
+    }
+
+    It 'refuses a registration that returned no client secret, which JIM cannot sign anyone in without' {
+        $registration = New-TestRegistration
+        $registration.ClientSecret = $null
+        { ConvertTo-LabIdentityProviderRegistration -Registration $registration -ModuleDigest ('a' * 64) } | Should -Throw '*no client secret*'
+    }
+
+    It 'refuses a registration with no client ID' {
+        $registration = New-TestRegistration
+        $registration.ClientId = ''
+        { ConvertTo-LabIdentityProviderRegistration -Registration $registration -ModuleDigest ('a' * 64) } | Should -Throw '*ClientId*'
+    }
+}
+
+Describe 'Read-LabModuleFile' {
+    BeforeAll {
+        $script:Root = Join-Path ([System.IO.Path]::GetTempPath()) "jim-lab-module-$([guid]::NewGuid().ToString('N'))"
+        foreach ($relative in 'JIM.psd1', 'Public/Connection/Connect-JIM.ps1', 'Tests/Connect.Tests.ps1', 'CLAUDE.md') {
+            $path = Join-Path $script:Root $relative
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force
+            [System.IO.File]::WriteAllText($path, "# $relative`r`n")
+        }
+    }
+
+    AfterAll {
+        Remove-Item -LiteralPath $script:Root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'reads the module files under the folder, with forward-slash paths, and nothing else' {
+        $entries = @(Read-LabModuleFile -Root $script:Root | Sort-Object Path)
+        @($entries.Path) | Should -Be @('JIM.psd1', 'Public/Connection/Connect-JIM.ps1')
+        $entries[0].Text | Should -Be "# JIM.psd1`r`n"
+    }
+
+    It 'reads the real module, whose digest is that of the checkout' {
+        $module = Join-Path $PSScriptRoot '..' '..' '..' 'src' 'JIM.PowerShell'
+        $entries = @(Read-LabModuleFile -Root $module)
+        @($entries.Path) | Should -Contain 'Public/IdentityProviders/Register-JIMIdentityProvider.ps1'
+        @($entries.Path | Where-Object { $_ -like 'Tests/*' }) | Should -BeNullOrEmpty
+        Get-LabModuleDigest -Entry $entries | Should -Match '^[0-9a-f]{64}$'
+    }
+
+    It 'fails for a folder that does not exist' {
+        { Read-LabModuleFile -Root (Join-Path $script:Root 'missing') } | Should -Throw '*does not exist*'
+    }
+}

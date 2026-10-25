@@ -3473,6 +3473,32 @@ elseif ($isActiveDirectoryRun) {
         exit 1
     }
     Write-Success "Active Directory domain controllers are ready"
+
+    # A scenario that signs in through the lab's AD FS server needs JIM registered there, as customers register it
+    # (Register-JIMIdentityProvider, from a host copy of the module checked to be this commit's; #2441). The AD FS
+    # server was reverted to a baseline with no registration and has just answered, so this is a fresh one with a new
+    # client secret. jim.web is recreated to pick it up from this process's environment; the JIM API wait below then
+    # covers its restart.
+    if ($script:AdLabContext.Configs.ContainsKey("AdfsPrimary")) {
+        Write-Step "Registering JIM on the AD FS server..."
+        try {
+            $adfsRegistration = Register-ActiveDirectoryLabIdentityProvider -FederationConfig $script:AdLabContext.Configs["AdfsPrimary"] `
+                -Url (Get-ActiveDirectoryLabJimUrl) -ModuleDigest (Get-ActiveDirectoryLabModuleDigest -RepositoryRoot $repoRoot)
+        }
+        catch {
+            Write-Failure "Could not register JIM on the AD FS server ($($script:AdLabContext.Configs["AdfsPrimary"].VmName))"
+            Write-Host "${GRAY}  $($_.Exception.Message)${NC}"
+            exit 1
+        }
+        Set-ActiveDirectoryLabSsoEnvironment -Registration $adfsRegistration
+        $webResult = docker compose @script:JimComposeArgs --profile with-db up -d jim.web 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Failed to restart jim.web with the AD FS registration"
+            Write-Host "${GRAY}$webResult${NC}"
+            exit 1
+        }
+        Write-Success "JIM is registered on AD FS (portal client $($adfsRegistration.ClientId)) and jim.web restarted with it"
+    }
 }
 else {
     # Wait for Samba AD Primary

@@ -313,7 +313,10 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
           JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
         run: |
-          $secrets = @($env:ADMIN_PASSWORD, $env:JIM_PASSWORD) | Where-Object { $_ }
+          # Plus each client secret the run's AD FS registrations made (#2441), which the runner hands over through
+          # GITHUB_ENV as JIM_AD_LAB_SCRUB_<id> (Register-ActiveDirectoryLabIdentityProvider).
+          $made = @(Get-ChildItem -Path Env: | Where-Object Name -like 'JIM_AD_LAB_SCRUB_*' | ForEach-Object Value)
+          $secrets = @($env:ADMIN_PASSWORD, $env:JIM_PASSWORD) + $made | Where-Object { $_ }
           $files = @(Get-ChildItem -LiteralPath 'test/integration/results', 'test/integration/ad-lab-certs' -Recurse -File -ErrorAction SilentlyContinue)
           foreach ($file in $files) {
             foreach ($secret in $secrets) {

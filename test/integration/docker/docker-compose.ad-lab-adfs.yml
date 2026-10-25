@@ -15,13 +15,33 @@
 #
 # The authority's certificate is self-signed and nothing in the container trusts it: that is deliberate. The AD FS
 # scenarios start with JIM reporting it Untrusted and trust it as an administrator would
-# (Add-JIMCertificate -FromIdentityProvider). Nobody can sign in yet: JIM's registration on AD FS comes with the
-# registration command (#2364), and until then JIM_SSO_CLIENT_ID names no client there.
+# (Add-JIMCertificate -FromIdentityProvider).
+#
+# JIM's registration on AD FS is made on every run, after the AD FS server is reverted and answers, by JIM's own
+# Register-JIMIdentityProvider (Register-ActiveDirectoryLabIdentityProvider in the runner, #2441). The runner puts
+# what it returns in its own process environment (JIM_AD_LAB_ADFS_*, never a file) and recreates jim.web, so these
+# are interpolated from there. Until then they read "unregistered", which names no client on AD FS. The client claim
+# and Metaverse attribute are the ones the registration issues and returns: oid, matched to Object GUID.
+#
+# jim.web's HTTPS port is published on the runner's loopback, as https://localhost:5243 (Get-ActiveDirectoryLabJimUrl),
+# the address the registration's redirect URIs are made from and the sign-in checks use. Its certificate names
+# localhost.
 
 services:
   jim.web:
     environment:
       - JIM_SSO_AUTHORITY=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs
       - JIM_SSO_PUBLIC_AUTHORITY=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs
+      - JIM_SSO_CLIENT_ID=${JIM_AD_LAB_ADFS_CLIENT_ID:-unregistered}
+      - JIM_SSO_SECRET=${JIM_AD_LAB_ADFS_CLIENT_SECRET:-unregistered}
+      - JIM_SSO_API_SCOPE=${JIM_AD_LAB_ADFS_API_SCOPE:-unregistered}
+      - JIM_SSO_PUBLIC_CLIENT_ID=${JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID:-unregistered}
+      - JIM_SSO_CLAIM_TYPE=oid
+      - JIM_SSO_MV_ATTRIBUTE=Object GUID
+      # Empty, so docker-compose.override.yml's Keycloak issuers are not trusted here: JIM accepts the issuers AD FS's
+      # discovery document names (#2440).
+      - JIM_SSO_VALID_ISSUERS=
+    ports:
+      - "127.0.0.1:5243:8443"
     extra_hosts:
       - "${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}:${JIM_AD_LAB_ADFS_PRIMARY_ADDRESS:-0.0.0.0}"
