@@ -178,12 +178,6 @@ public class ActivityRunProfileExecutionStats
     public int TotalUnchanged => Math.Max(0, TotalObjectsProcessed - TotalObjectChangeCount);
 
     /// <summary>
-    /// Count of objects where no changes were needed.
-    /// </summary>
-    [Obsolete("Use TotalUnchanged instead")]
-    public int TotalNoChanges { get; set; }
-
-    /// <summary>
     /// Count of objects that encountered errors during processing.
     /// </summary>
     public int TotalObjectErrors { get; set; }
