@@ -272,6 +272,32 @@ internal static class ChangeValueRowsSql
         return (window, total);
     }
 
+    /// <summary>
+    /// Reads, for one change, how many of each attribute's normalised rows are Sets, Adds and Removes.
+    /// </summary>
+    internal static async Task<List<ChangeValueAttributeSummary>> ReadAttributeSummariesAsync(DbConnection connection, Side side, Guid changeId)
+    {
+        var query = new ChangeValueRowQuery { ChangeIds = [changeId], Count = 1 };
+        await using var command = connection.CreateCommand();
+        command.CommandText = RowsSql(side, query, needsValueText: false) + """
+            SELECT n.attribute_name,
+                   count(*) FILTER (WHERE n.operation = @op_set),
+                   count(*) FILTER (WHERE n.operation = @op_add),
+                   count(*) FILTER (WHERE n.operation = @op_remove),
+                   count(*) FILTER (WHERE n.previous_value_id IS NOT NULL)
+            FROM normalised n
+            GROUP BY n.attribute_name
+            ORDER BY n.attribute_name
+            """;
+        AddQueryParameters(command, side, query);
+
+        var summaries = new List<ChangeValueAttributeSummary>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            summaries.Add(new ChangeValueAttributeSummary(reader.GetString(0), (int)reader.GetInt64(1), (int)reader.GetInt64(2), (int)reader.GetInt64(3), (int)reader.GetInt64(4)));
+        return summaries;
+    }
+
     /// <summary>Reads a summary of each change's normalised rows; a change with no values has none.</summary>
     internal static async Task<List<ChangeValueSummary>> ReadSummariesAsync(
         DbConnection connection, Side side, IReadOnlyCollection<Guid> changeIds)
@@ -308,6 +334,8 @@ internal static class ChangeValueRowsSql
         var conditions = new List<string>();
         if (query.Operation.HasValue)
             conditions.Add("n.operation = @operation");
+        if (query.HasPreviousValue is { } hasPreviousValue)
+            conditions.Add(hasPreviousValue ? "n.previous_value_id IS NOT NULL" : "n.previous_value_id IS NULL");
         if (HasSearch(query))
             conditions.Add("(n.attribute_name ILIKE @search OR n.value_text ILIKE @search)");
         return conditions.Count == 0 ? string.Empty : "WHERE " + string.Join(" AND ", conditions);

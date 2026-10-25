@@ -54,6 +54,12 @@ public class CsoChangeHistoryDto
     public string? RunProfileName { get; set; }
 
     /// <summary>
+    /// The kind of run that recorded the change (an import, a synchronisation or an export); empty when it was not
+    /// recorded by a run, or the run's Activity has since been removed.
+    /// </summary>
+    public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
+
+    /// <summary>
     /// The attributes the change touched, each with the values it added and removed.
     /// </summary>
     public List<CsoAttributeChangeDto> AttributeChanges { get; set; } = new();

@@ -26,6 +26,12 @@ public sealed record ChangeValueRowQuery
     /// <summary>Only rows of this operation; every operation when null.</summary>
     public ChangeValueOperation? Operation { get; init; }
 
+    /// <summary>
+    /// Only rows that carry the value they replaced (true), or only rows that do not (false); no filter when null. Lets a
+    /// reader tell a single-valued attribute's replacement apart from its first value.
+    /// </summary>
+    public bool? HasPreviousValue { get; init; }
+
     /// <summary>Text the attribute name or the value must contain, case-insensitively; no filter when null or blank.</summary>
     public string? SearchText { get; init; }
 

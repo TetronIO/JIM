@@ -413,11 +413,6 @@ public enum PartitionValidationMode
 public enum MvoAttributeLoadStrategy
 {
     /// <summary>
-    /// Loads all attribute values with references.
-    /// Used by the worker for sync processing.
-    /// </summary>
-    All = 0,
-    /// <summary>
     /// Loads all SVA values normally. For MVA attributes, loads first N values (capped)
     /// and returns total count per attribute. Used by the web detail page and API.
     /// </summary>

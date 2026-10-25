@@ -148,8 +148,6 @@ public interface IMetaverseRepository
     /// </summary>
     public Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
 
-    public Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id);
-
     /// <summary>
     /// Loads a Metaverse Object with attribute loading controlled by the specified strategy.
     /// <see cref="MvoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
@@ -194,6 +192,11 @@ public interface IMetaverseRepository
     /// one Synchronisation Rule they agree on. A change with no values is omitted.
     /// </summary>
     public Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
+
+    /// <summary>
+    /// How many of each attribute's normalised value rows on one change are Sets, Adds and Removes (#2498).
+    /// </summary>
+    public Task<List<ChangeValueAttributeSummary>> GetMvoChangeAttributeValueSummariesAsync(Guid changeId);
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
@@ -714,7 +717,7 @@ public interface IMetaverseRepository
     /// </summary>
     /// <param name="changeId">The ID of the MVO change record.</param>
     /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
-    Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId);
+    Task<List<MvoChangeHistoryDto>> GetDeletedMvoChangeHistoryAsync(Guid changeId);
 
     /// <summary>
     /// Gets the deletion record for a Metaverse Object that no longer exists, keyed on the object's own id.

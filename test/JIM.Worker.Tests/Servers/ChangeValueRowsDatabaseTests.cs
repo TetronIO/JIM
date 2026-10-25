@@ -251,6 +251,20 @@ public class ChangeValueRowsDatabaseTests
     }
 
     [Test]
+    public async Task GetCsoChangeValueRowsAsync_HasPreviousValue_TellsAReplacementFromAFirstValueAsync()
+    {
+        var change = await SeedCsoChangeAsync(memberAdds: 2, descriptionReplacement: ("old", "new"));
+        var jim = NewJim();
+
+        var replacements = (await jim.ConnectedSystems.GetCsoChangeValueRowsAsync(Query(change.ChangeId, 0, 10) with { HasPreviousValue = true })).Results;
+        var others = (await jim.ConnectedSystems.GetCsoChangeValueRowsAsync(Query(change.ChangeId, 0, 10) with { HasPreviousValue = false })).Results;
+
+        Assert.That(replacements.Single().AttributeName, Is.EqualTo("description"));
+        Assert.That(others, Has.Count.EqualTo(2));
+        Assert.That(others, Has.All.Matches<CsoChangeValueRow>(r => r.AttributeName == "member"));
+    }
+
+    [Test]
     public async Task GetCsoChangeValueRowsAsync_AttributeName_ReadsOnlyThatAttributeCaseInsensitivelyAsync()
     {
         var change = await SeedCsoChangeAsync(memberAdds: 3, descriptionAdd: "Finance team");
@@ -305,6 +319,34 @@ public class ChangeValueRowsDatabaseTests
 
         Assert.That(summary.AgreedSyncRuleId, Is.Null);
         Assert.That(summary.AgreedSyncRuleName, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCsoChangeAttributeValueSummariesAsync_SummarisesEachAttributeOfTheChangeAsync()
+    {
+        var change = await SeedCsoChangeAsync(memberAdds: 4, memberRemoves: 2, descriptionReplacement: ("old", "new"));
+
+        var summaries = await NewJim().ConnectedSystems.GetCsoChangeAttributeValueSummariesAsync(change.ChangeId);
+
+        Assert.That(summaries, Is.EquivalentTo(new[]
+        {
+            new ChangeValueAttributeSummary("member", SetCount: 0, AddCount: 4, RemoveCount: 2),
+            new ChangeValueAttributeSummary("description", SetCount: 1, AddCount: 0, RemoveCount: 0, ReplacementCount: 1)
+        }));
+    }
+
+    [Test]
+    public async Task GetMvoChangeAttributeValueSummariesAsync_SummarisesEachAttributeOfTheChangeAsync()
+    {
+        var change = await SeedMvoChangeAsync(proxyAddressAdds: 3, managerNames: ["Alice Smith"]);
+
+        var summaries = await NewJim().Metaverse.GetMvoChangeAttributeValueSummariesAsync(change.ChangeId);
+
+        Assert.That(summaries, Is.EquivalentTo(new[]
+        {
+            new ChangeValueAttributeSummary("proxyAddresses", SetCount: 0, AddCount: 3, RemoveCount: 0),
+            new ChangeValueAttributeSummary("manager", SetCount: 1, AddCount: 0, RemoveCount: 0)
+        }));
     }
 
     // ─── Metaverse Object changes ───

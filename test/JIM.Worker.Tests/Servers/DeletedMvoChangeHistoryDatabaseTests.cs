@@ -140,10 +140,9 @@ public class DeletedMvoChangeHistoryDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(referenceValue.Id, Is.EqualTo(manager.Id));
-            Assert.That(referenceValue.Type, Is.Not.Null,
+            Assert.That(referenceValue.TypePluralName, Is.EqualTo("People"),
                 "the referenced Metaverse Object's Type must be loaded: the Deleted Objects page builds its link from it (#2146)");
         }
-        Assert.That(referenceValue.Type!.PluralName, Is.EqualTo("People"));
     }
 
     /// <summary>
@@ -186,9 +185,8 @@ public class DeletedMvoChangeHistoryDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(referenceValue.Id, Is.EqualTo(manager.Id));
-            Assert.That(referenceValue.Type, Is.Not.Null,
+            Assert.That(referenceValue.TypePluralName, Is.EqualTo("People"),
                 "the referenced Metaverse Object's Type must be loaded on the fallback branch too (#2146)");
         }
-        Assert.That(referenceValue.Type!.PluralName, Is.EqualTo("People"));
     }
 }

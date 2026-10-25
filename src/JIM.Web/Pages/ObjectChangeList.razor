@@ -93,7 +93,8 @@
            Variant="DrawerVariant.Temporary" Overlay="false" Width="560px" Elevation="4" Class="jim-object-change-drawer">
     @if (_selected is { } selected)
     {
-        <ObjectChangeDetail Result="@selected" OnClose="CloseDetail" />
+        <ObjectChangeDetail Result="@selected" OnClose="CloseDetail"
+                            ValueReader="@(new MvoChangeHistoryValueReader(JimFactory, selected.MetaverseObjectId ?? Guid.Empty, selected.MetaverseObjectDeleted ? null : selected.MetaverseObjectTypePluralName))" />
     }
 </MudDrawer>
 
