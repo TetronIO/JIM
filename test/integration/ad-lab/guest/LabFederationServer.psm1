@@ -7,7 +7,8 @@
     federation service works.
 
 .DESCRIPTION
-    Pure functions only, tested on any platform by LabFederationServer.Tests.ps1. The host (New-LabFederationServer.ps1)
+    Pure functions only (but Read-LabModuleFile, which reads the module files the digest covers), tested on any
+    platform by LabFederationServer.Tests.ps1. The host (New-LabFederationServer.ps1)
     and the guest (Initialize-LabFederationServer.ps1, under Windows PowerShell 5.1) both import it, so it keeps to
     syntax 5.1 understands. Everything the domain controllers share with the AD FS server (VM creation, PowerShell
     Direct, checkpoints) stays in LabDomainController.psm1.
@@ -271,7 +272,148 @@ function Test-LabFederationKeySet {
     return @()
 }
 
+function Test-LabModuleFile {
+    <#
+    .SYNOPSIS
+        Whether a path, relative to src/JIM.PowerShell, is part of the JIM PowerShell module as it is loaded: the
+        manifest, the root module, and the scripts under Public and Private. Not the tests, nor the notes beside them.
+
+    .DESCRIPTION
+        JIM is registered on the AD FS server by the module's own Register-JIMIdentityProvider, run on the host from
+        the copy Install-LabScripts.ps1 deploys (#2441). These are the files that copy holds, and the files
+        Get-LabModuleDigest covers. Either separator is accepted.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$RelativePath
+    )
+
+    $path = $RelativePath.Replace('\', '/')
+    if ($path -ceq 'JIM.psd1' -or $path -ceq 'JIM.psm1') { return $true }
+    return ($path -cmatch '^(Public|Private)/' -and $path -match '\.ps1$' -and $path -notmatch '(^|/)\.\.?(/|$)')
+}
+
+function Get-LabModuleDigest {
+    <#
+    .SYNOPSIS
+        One SHA-256 digest, in lower-case hex, over the JIM PowerShell module's files: each file's path and content.
+
+    .DESCRIPTION
+        The runner computes it over the commit under test, and the host over the copy it holds, so the AD FS
+        registration refuses to run from a copy that is not the commit's (#2441). Pure: the callers read the files.
+        It is the same whatever the line endings (a Windows checkout has CRLF where Linux has LF), the path separator
+        or the order the entries arrive in, and changes when any file is added, removed, renamed or edited.
+
+    .PARAMETER Entry
+        One object per file, with Path (relative to src/JIM.PowerShell) and Text (its content).
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Entry
+    )
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $lines = [System.Collections.Generic.List[string]]::new()
+        foreach ($file in $Entry) {
+            $text = ([string]$file.Text).Replace("`r`n", "`n")
+            $hash = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($text))
+            $lines.Add(('{0} {1}' -f ([string]$file.Path).Replace('\', '/'), (($hash | ForEach-Object { $_.ToString('x2') }) -join '')))
+        }
+        $sorted = $lines.ToArray()
+        [Array]::Sort($sorted, [StringComparer]::Ordinal)
+        $digest = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes(($sorted -join "`n")))
+        return (($digest | ForEach-Object { $_.ToString('x2') }) -join '')
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
+function ConvertTo-LabIdentityProviderRegistration {
+    <#
+    .SYNOPSIS
+        Turns what Register-JIMIdentityProvider returned into the object Register-LabIdentityProvider.ps1 prints for
+        the runner: camel-case members, the client secret as plain text, and the digest of the module that made it.
+
+    .DESCRIPTION
+        The client secret leaves the host as text on SSH standard output, the only way to the runner; the runner masks
+        it before it does anything else, and gives it to JIM through the environment, never a file (#2441). It is
+        made new on each run, after the AD FS server is reverted, and dies with the next revert. Throws when a value
+        JIM needs is missing, rather than letting the run start JIM without it.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Registration,
+
+        [Parameter(Mandatory)]
+        [string]$ModuleDigest
+    )
+
+    foreach ($name in 'Authority', 'ClientId', 'PublicClientId', 'ApiScope', 'ClaimType', 'MvAttribute') {
+        if (-not $Registration.PSObject.Properties[$name] -or [string]::IsNullOrEmpty([string]$Registration.$name)) {
+            throw "Register-JIMIdentityProvider returned no $name."
+        }
+    }
+    $secret = $null
+    if ($Registration.PSObject.Properties['ClientSecret'] -and $Registration.ClientSecret -is [securestring]) {
+        $secret = (New-Object System.Net.NetworkCredential('', $Registration.ClientSecret)).Password
+    }
+    if ([string]::IsNullOrEmpty($secret)) {
+        throw 'Register-JIMIdentityProvider returned no client secret, so JIM could not sign anyone in. Was the AD FS server reverted first?'
+    }
+
+    return [pscustomobject][ordered]@{
+        authority      = [string]$Registration.Authority
+        clientId       = [string]$Registration.ClientId
+        clientSecret   = $secret
+        publicClientId = [string]$Registration.PublicClientId
+        apiScope       = [string]$Registration.ApiScope
+        claimType      = [string]$Registration.ClaimType
+        mvAttribute    = [string]$Registration.MvAttribute
+        changes        = @($Registration.Changes)
+        moduleDigest   = $ModuleDigest
+    }
+}
+
+function Read-LabModuleFile {
+    <#
+    .SYNOPSIS
+        Reads the JIM PowerShell module's files under a folder (src/JIM.PowerShell, or the host's deployed copy), as
+        the entries Get-LabModuleDigest takes: Path, relative with forward slashes, and Text.
+
+    .DESCRIPTION
+        The one function here that touches the file system, so the runner and the host read the module the same way.
+        Only the files Test-LabModuleFile counts are read. Fails when the folder does not exist.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject[]])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Root
+    )
+
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+        throw "The module folder '$Root' does not exist."
+    }
+    $full = (Resolve-Path -LiteralPath $Root).ProviderPath.TrimEnd('\', '/')
+    foreach ($file in (Get-ChildItem -LiteralPath $full -File -Recurse)) {
+        $relative = $file.FullName.Substring($full.Length + 1).Replace('\', '/')
+        if (Test-LabModuleFile -RelativePath $relative) {
+            [pscustomobject]@{ Path = $relative; Text = [System.IO.File]::ReadAllText($file.FullName) }
+        }
+    }
+}
+
 Export-ModuleMember -Function @(
     'Get-LabFederationInfo', 'Get-LabFederationCertificateName', 'ConvertFrom-LabFederationSetting',
-    'Get-LabFederationPhaseArgument', 'Test-LabFederationDiscovery', 'Test-LabFederationKeySet'
+    'Get-LabFederationPhaseArgument', 'Test-LabFederationDiscovery', 'Test-LabFederationKeySet',
+    'Test-LabModuleFile', 'Get-LabModuleDigest', 'ConvertTo-LabIdentityProviderRegistration', 'Read-LabModuleFile'
 )

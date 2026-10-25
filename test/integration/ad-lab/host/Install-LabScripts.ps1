@@ -13,11 +13,14 @@
         <Destination>\*.ps1                            the host scripts, flat
         <Destination>\guest\*                          the guest scripts, module and autounattend.xml
         <Destination>\delegation\jim-ad-delegation.acl the delegation file, the same one the Samba image uses
+        <Destination>\module\JIM\*                     the JIM PowerShell module, which registers JIM on the AD FS
+                                                       server (Register-LabIdentityProvider.ps1)
         <Destination>\settings.example.json            a starting point for settings.json
 
     Run it from a clone of the repository, in an elevated PowerShell 7 session on the host. It is idempotent: a file
     already identical to its source is left alone, a changed one is replaced, and the output says which. Nothing in
-    the destination is ever deleted.
+    the destination is ever deleted, except a file under module\JIM that the checkout's module no longer has: the
+    registration refuses a module copy that is not exactly the commit's, so a stale file there would keep it refusing.
 
     settings.json (read by Invoke-LabRebuild.ps1) is the operator's own file. It is never written unless
     -CreateSettings is given, and then only when it does not exist yet; an existing settings.json makes the run
@@ -55,6 +58,8 @@ param(
     [switch]$CreateSettings
 )
 
+Import-Module (Join-Path $PSScriptRoot '..' 'guest' 'LabFederationServer.psm1') -Force
+
 function Get-LabDeploymentMap {
     <#
     .SYNOPSIS
@@ -62,9 +67,10 @@ function Get-LabDeploymentMap {
 
     .DESCRIPTION
         HostScript holds file names from test/integration/ad-lab/host; GuestFile holds paths relative to
-        test/integration/ad-lab/guest. Only scripts and modules (.ps1, .psm1, .psd1) are host scripts, and this
-        deployment script is not one of them: it runs from the checkout, not from the host's script root. The
-        delegation file is always mapped. Returns one object per file with Area, Source and Destination.
+        test/integration/ad-lab/guest; ModuleFile holds paths relative to src/JIM.PowerShell, of which only the
+        module's own files (Test-LabModuleFile) are mapped. Only scripts and modules (.ps1, .psm1, .psd1) are host
+        scripts, and this deployment script is not one of them: it runs from the checkout, not from the host's script
+        root. The delegation file is always mapped. Returns one object per file with Area, Source and Destination.
     #>
     [CmdletBinding()]
     [OutputType([pscustomobject[]])]
@@ -79,7 +85,10 @@ function Get-LabDeploymentMap {
         [string[]]$HostScript = @(),
 
         [AllowEmptyCollection()]
-        [string[]]$GuestFile = @()
+        [string[]]$GuestFile = @(),
+
+        [AllowEmptyCollection()]
+        [string[]]$ModuleFile = @()
     )
 
     $labRoot = Join-Path $RepositoryRoot 'test' 'integration' 'ad-lab'
@@ -100,6 +109,15 @@ function Get-LabDeploymentMap {
             Area        = 'guest'
             Source      = Join-Path $labRoot 'guest' $relative
             Destination = Join-Path (Join-Path $Destination 'guest') $relative
+        })
+    }
+
+    foreach ($relative in ($ModuleFile | Sort-Object)) {
+        if (-not (Test-LabModuleFile -RelativePath $relative)) { continue }
+        $map.Add([pscustomobject]@{
+            Area        = 'module'
+            Source      = Join-Path $RepositoryRoot 'src' 'JIM.PowerShell' $relative
+            Destination = Join-Path $Destination 'module' 'JIM' $relative
         })
     }
 
@@ -179,7 +197,14 @@ $hostScripts = @(Get-ChildItem -LiteralPath $hostDirectory -File | ForEach-Objec
 $guestFiles = @(Get-ChildItem -LiteralPath $guestDirectory -File -Recurse | ForEach-Object {
         [System.IO.Path]::GetRelativePath($guestDirectory, $_.FullName)
     })
-$map = Get-LabDeploymentMap -RepositoryRoot $RepositoryRoot -Destination $Destination -HostScript $hostScripts -GuestFile $guestFiles
+$moduleDirectory = Join-Path $RepositoryRoot 'src' 'JIM.PowerShell'
+if (-not (Test-Path -LiteralPath $moduleDirectory -PathType Container)) {
+    throw "'$RepositoryRoot' is not a JIM checkout: expected $moduleDirectory. Pass -RepositoryRoot."
+}
+$moduleFiles = @(Get-ChildItem -LiteralPath $moduleDirectory -File -Recurse | ForEach-Object {
+        [System.IO.Path]::GetRelativePath($moduleDirectory, $_.FullName)
+    })
+$map = Get-LabDeploymentMap -RepositoryRoot $RepositoryRoot -Destination $Destination -HostScript $hostScripts -GuestFile $guestFiles -ModuleFile $moduleFiles
 
 $missing = @($map | Where-Object { -not (Test-Path -LiteralPath $_.Source -PathType Leaf) })
 if ($missing.Count -gt 0) {
@@ -212,6 +237,21 @@ foreach ($entry in $map) {
     Write-Host ('  {0,-9} {1}' -f $outcome, [System.IO.Path]::GetRelativePath($Destination, $entry.Destination))
 }
 
+# The module is the one place files are removed: the AD FS registration refuses a copy whose digest is not the
+# commit's, so a file the checkout no longer has would hold every run red until someone deleted it by hand.
+$counts['removed'] = 0
+$deployedModule = Join-Path $Destination 'module' 'JIM'
+if (Test-Path -LiteralPath $deployedModule) {
+    $wanted = [System.Collections.Generic.HashSet[string]]::new([string[]]@($map | Where-Object Area -eq 'module' | ForEach-Object { $_.Destination }), [StringComparer]::OrdinalIgnoreCase)
+    foreach ($file in @(Get-ChildItem -LiteralPath $deployedModule -File -Recurse)) {
+        if (-not $wanted.Contains($file.FullName)) {
+            Remove-Item -LiteralPath $file.FullName -Force
+            $counts['removed']++
+            Write-Host ('  {0,-9} {1}' -f 'removed', [System.IO.Path]::GetRelativePath($Destination, $file.FullName))
+        }
+    }
+}
+
 Write-Heading 'Settings'
 $exampleText = Get-LabSettingsExample
 Set-Content -LiteralPath $examplePath -Value $exampleText -Encoding utf8
@@ -229,5 +269,5 @@ else {
 }
 
 Write-Heading 'Done'
-Write-Host ("  {0} new, {1} updated, {2} unchanged, in {3}" -f $counts['new'], $counts['updated'], $counts['unchanged'], $Destination)
+Write-Host ("  {0} new, {1} updated, {2} unchanged, {3} removed, in {4}" -f $counts['new'], $counts['updated'], $counts['unchanged'], $counts['removed'], $Destination)
 Write-Host "  The runner reaches these through JIM_AD_LAB_SCRIPT_ROOT=$Destination"

@@ -65,6 +65,17 @@ Describe 'Get-LabDeploymentMap' {
         $entry.Destination | Should -Be (Join-Path '/lab' 'delegation' 'jim-ad-delegation.acl')
     }
 
+    It 'places the PowerShell module under module/JIM, leaving out its tests and notes' {
+        $map = @(Get-LabDeploymentMap -RepositoryRoot '/repo' -Destination '/lab' `
+                -ModuleFile @('JIM.psd1', 'Public/IdentityProviders/Register-JIMIdentityProvider.ps1', 'Tests/X.Tests.ps1', 'CLAUDE.md'))
+        $module = @($map | Where-Object Area -eq 'module')
+        @($module.Destination | Sort-Object) | Should -Be @(
+            (Join-Path '/lab' 'module' 'JIM' 'JIM.psd1'),
+            (Join-Path '/lab' 'module' 'JIM' 'Public' 'IdentityProviders' 'Register-JIMIdentityProvider.ps1')
+        )
+        ($module | Where-Object { $_.Destination -like '*JIM.psd1' }).Source | Should -Be (Join-Path '/repo' 'src' 'JIM.PowerShell' 'JIM.psd1')
+    }
+
     It 'still maps the delegation file when there is nothing else' {
         $map = @(Get-LabDeploymentMap -RepositoryRoot '/repo' -Destination '/lab')
         $map.Count | Should -Be 1
@@ -189,6 +200,29 @@ Describe 'Install-LabScripts.ps1 end to end' {
         $result = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
         $result.Text | Should -Match 'updated\s+New-LabDomainController.ps1'
         (Get-FileHash -LiteralPath $target).Hash | Should -Be (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'host' 'New-LabDomainController.ps1')).Hash
+    }
+
+    It 'deploys the PowerShell module, whose digest is the checkout''s' {
+        Import-Module (Join-Path $PSScriptRoot 'guest' 'LabFederationServer.psm1') -Force
+        $result = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
+        $result.ExitCode | Should -Be 0
+        (Test-Path -LiteralPath (Join-Path $script:Destination 'module' 'JIM' 'JIM.psd1')) | Should -BeTrue
+        (Test-Path -LiteralPath (Join-Path $script:Destination 'module' 'JIM' 'Tests')) | Should -BeFalse
+        $checkout = Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $script:RepositoryRoot 'src' 'JIM.PowerShell'))
+        Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $script:Destination 'module' 'JIM')) | Should -Be $checkout
+    }
+
+    It 'removes a module file the checkout no longer has, and says so, and nothing outside the module' {
+        $null = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
+        $stale = Join-Path $script:Destination 'module' 'JIM' 'Public' 'Removed-JIMThing.ps1'
+        $outside = Join-Path $script:Destination 'operator-notes.txt'
+        Set-Content -LiteralPath $stale -Value '# gone from the checkout'
+        Set-Content -LiteralPath $outside -Value 'mine'
+        $result = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
+        $result.ExitCode | Should -Be 0
+        $result.Text | Should -Match 'removed\s+module[\\/]JIM[\\/]Public[\\/]Removed-JIMThing.ps1'
+        (Test-Path -LiteralPath $stale) | Should -BeFalse
+        (Test-Path -LiteralPath $outside) | Should -BeTrue
     }
 
     It 'never creates settings.json unless asked' {
