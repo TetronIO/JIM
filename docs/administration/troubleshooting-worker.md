@@ -25,7 +25,7 @@ When the Worker's last heartbeat showed memory low, the message adds `The Worker
 
 **How to fix.** Give JIM more memory (the host's, or the Worker container's limit if you set one), or run less at once: a smaller page size on the Run Profile, or fewer Run Profiles in parallel. Then start the Run Profile again.
 
-A run can also fail with `This run ran out of memory and stopped`. In a container with a memory limit, .NET stops its heap at about 75% of the limit, before the Worker's own threshold is reached, and the run fails with that message and the memory figures; the remedy is the same.
+A run can also fail with `This run ran out of memory and stopped`, with the memory figures. In a container with a memory limit, the Worker can run out at about 75% of that limit, before it reaches the 92% at which it would stop the run itself; the remedy is the same.
 
 **Check.** The new run's Activity ends **Complete**, and the Worker's card on the [Operations](../configuration/operations.md) page no longer reports **Memory low**.
 

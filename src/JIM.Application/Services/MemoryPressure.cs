@@ -62,7 +62,7 @@ public static class MemoryPressure
     {
         var figures = Describe(reading, "this service");
         return "This run ran out of memory and stopped" + (figures.Length > 0 ? $" (now {figures})" : string.Empty) +
-               ". In a container with a memory limit, .NET stops at about 75% of the limit. Give JIM more memory, or run less at once, then run it again.";
+               ". In a container with a memory limit, JIM can run out at about 75% of that limit. Give JIM more memory, or run less at once, then run it again.";
     }
 
     /// <summary>A share as a whole percentage: "92%".</summary>
