@@ -1,0 +1,82 @@
+@using JIM.Models.Utility
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Searchable, virtualised table of one attribute's value changes on one change record (#2498), nested where a change
+   was loaded with only the first of them: a change to a large group records one value change per member. Embedded, as
+   the attribute tables' nested value tables are (see AttributeValuesCell): one sits in a row, and none may claim the
+   address bar or repeat the portal-wide density toggle. The host's reader supplies each window. *@
+<div class="jim-mva-table">
+    <VirtualisedDataGrid T="ChangeHistoryTimeline.AttributeChangeDisplay"
+                         ContainerId="@($"change-values-{_instanceId}")"
+                         StateKey="@AttributeName"
+                         Embedded="true"
+                         MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@Total"
+                         DefaultSortBy="order"
+                         LoadWindow="LoadValueWindowAsync"
+                         SearchPlaceholder="Search values..."
+                         SingularName="Value Change"
+                         PluralName="Value Changes">
+        <Columns>
+            <TemplateColumn Title="Change" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Change</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <span class="mud-text-secondary">@context.Item.DisplayChangeType</span>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Value</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <ChangeValueCell Change="@context.Item" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </VirtualisedDataGrid>
+</div>
+
+@code {
+    /// <summary>Reads the windows, for the change's side.</summary>
+    [Parameter, EditorRequired]
+    public IChangeHistoryValueReader Reader { get; set; } = null!;
+
+    /// <summary>The change whose values are listed.</summary>
+    [Parameter, EditorRequired]
+    public ChangeHistoryTimeline.ChangeGroup Change { get; set; } = null!;
+
+    /// <summary>The attribute whose value changes are listed.</summary>
+    [Parameter, EditorRequired]
+    public string AttributeName { get; set; } = string.Empty;
+
+    /// <summary>How many value changes the attribute has, so the table sizes itself before the first window arrives.</summary>
+    [Parameter]
+    public int Total { get; set; }
+
+    private static int _instanceCounter;
+
+    private readonly string _instanceId = Interlocked.Increment(ref _instanceCounter).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private async Task<VirtualisedWindow<ChangeHistoryTimeline.AttributeChangeDisplay>> LoadValueWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken _)
+    {
+        if (Change.ChangeId is not { } changeId)
+            return new VirtualisedWindow<ChangeHistoryTimeline.AttributeChangeDisplay>([], request.IncludeTotalCount ? 0 : null);
+
+        var result = await Reader.ReadValuesAsync(Change, new ChangeValueRowQuery
+        {
+            ChangeIds = [changeId],
+            AttributeName = AttributeName,
+            SearchText = string.IsNullOrWhiteSpace(request.SearchText) ? null : request.SearchText.Trim(),
+            Offset = request.StartIndex,
+            Count = request.Count,
+            IncludeTotalCount = request.IncludeTotalCount
+        });
+        return new VirtualisedWindow<ChangeHistoryTimeline.AttributeChangeDisplay>(result.Results, result.TotalResults);
+    }
+}

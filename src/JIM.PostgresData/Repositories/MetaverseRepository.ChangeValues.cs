@@ -60,6 +60,15 @@ public partial class MetaverseRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<ChangeValueAttributeSummary>> GetMvoChangeAttributeValueSummariesAsync(Guid changeId)
+    {
+        using var span = ActivitySource.StartActivity("Mvo.LoadChangeAttributeValueSummaries");
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        return await ChangeValueRowsSql.ReadAttributeSummariesAsync(connection, ChangeValueRowsSql.MetaverseObject, changeId);
+    }
+
+    /// <inheritdoc />
     public async Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
         using var span = ActivitySource.StartActivity("Mvo.LoadChangeValueSummaries");

@@ -1244,11 +1244,6 @@ public partial class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectWithProvenanceAsync(id);
     }
 
-    public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
-    {
-        return await Application.Repository.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(id);
-    }
-
     /// <summary>
     /// Loads a Metaverse Object with attribute loading controlled by the specified strategy.
     /// <see cref="MvoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
@@ -1323,6 +1318,15 @@ public partial class MetaverseServer
     public async Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
         return await Application.Repository.Metaverse.GetMvoChangeValueSummariesAsync(changeIds);
+    }
+
+    /// <summary>
+    /// How many of each attribute's value rows on one Metaverse Object change are Sets, Adds and Removes (#2498), as
+    /// <see cref="GetMvoChangeValueRowsAsync"/> reads them.
+    /// </summary>
+    public async Task<List<ChangeValueAttributeSummary>> GetMvoChangeAttributeValueSummariesAsync(Guid changeId)
+    {
+        return await Application.Repository.Metaverse.GetMvoChangeAttributeValueSummariesAsync(changeId);
     }
 
     /// <summary>
@@ -2450,7 +2454,7 @@ public partial class MetaverseServer
     /// </summary>
     /// <param name="changeId">The ID of the MVO change record.</param>
     /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
-    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
+    public async Task<List<MvoChangeHistoryDto>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(changeId);
     }

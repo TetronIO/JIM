@@ -9429,20 +9429,6 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Retrieves the change history for a Connected System Object.
-    /// </summary>
-    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
-    /// <param name="limit">Maximum number of changes to return. Defaults to 100.</param>
-    /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
-    public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
-    {
-        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetChanges")
-            .SetTag("csoId", connectedSystemObjectId)
-            .SetTag("limit", limit);
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId, limit);
-    }
-
-    /// <summary>
     /// Returns a page of change-history rows for a Connected System Object, projected into a flat DTO.
     /// Ordered by change time descending. <paramref name="pageSize"/> is clamped to [1, 100].
     /// </summary>
@@ -9496,6 +9482,15 @@ public partial class ConnectedSystemServer
     public async Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
         return await Application.Repository.ConnectedSystems.GetCsoChangeValueSummariesAsync(changeIds);
+    }
+
+    /// <summary>
+    /// How many of each attribute's value rows on one Connected System Object change are Sets, Adds and Removes (#2498), as
+    /// <see cref="GetCsoChangeValueRowsAsync"/> reads them.
+    /// </summary>
+    public async Task<List<ChangeValueAttributeSummary>> GetCsoChangeAttributeValueSummariesAsync(Guid changeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetCsoChangeAttributeValueSummariesAsync(changeId);
     }
 
     /// <summary>
@@ -9555,7 +9550,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="changeId">The ID of the CSO change record.</param>
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
-    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
+    public async Task<List<CsoChangeHistoryDto>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(changeId);
     }

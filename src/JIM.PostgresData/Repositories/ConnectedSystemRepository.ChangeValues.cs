@@ -52,6 +52,15 @@ public partial class ConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<ChangeValueAttributeSummary>> GetCsoChangeAttributeValueSummariesAsync(Guid changeId)
+    {
+        using var span = ActivitySource.StartActivity("Cso.LoadChangeAttributeValueSummaries");
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        return await ChangeValueRowsSql.ReadAttributeSummariesAsync(connection, ChangeValueRowsSql.ConnectedSystemObject, changeId);
+    }
+
+    /// <inheritdoc />
     public async Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
     {
         using var span = ActivitySource.StartActivity("Cso.LoadChangeValueSummaries");
