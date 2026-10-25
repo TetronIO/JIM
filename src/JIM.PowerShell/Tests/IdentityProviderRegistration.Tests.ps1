@@ -284,7 +284,7 @@ Describe 'Register-JIMIdentityProvider -Provider ADFS' {
             $result.PSObject.TypeNames | Should -Contain 'JIM.IdentityProviderRegistration'
             $result.Provider | Should -Be 'ADFS'
             $result.Authority | Should -Be 'https://adfs.example.com/adfs'
-            $result.ValidIssuers | Should -Be @('https://adfs.example.com/adfs', 'http://adfs.example.com/adfs/services/trust')
+            $result.PSObject.Properties.Name | Should -Not -Contain 'ValidIssuers'
             $result.ApiScope | Should -Be "api://$($result.ClientId)"
             $result.ClaimType | Should -Be 'oid'
             $result.MvAttribute | Should -Be 'Object GUID'
