@@ -606,11 +606,9 @@ public class LdapAccesslogDeltaSourceTests
     [Test]
     public async Task ReadChangesAsync_AddThenDeleteOfOneDn_StillYieldsTheDelete()
     {
-        const string uuid = "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d";
-        var executor = ExecutorReading(LdapTestResponses.SearchResponseWithEntries(
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
             AccesslogEntry("20260921090000.000001Z", ("reqType", "add"), ("reqDN", "uid=carol," + PeopleDn)),
-            LoggedDelete("20260921090000.000002Z", "uid=carol," + PeopleDn, uuid)),
-            DeleteEntry("20260921090000.000002Z", "uid=carol," + PeopleDn, uuid));
+            LoggedDelete("20260921090000.000002Z", "uid=carol," + PeopleDn, "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d")), out _);
         var host = HostReturningObjects();
         var result = new ConnectedSystemImportResult();
 
@@ -625,12 +623,14 @@ public class LdapAccesslogDeltaSourceTests
     #region Reading changes: deletions
 
     [Test]
-    public async Task ReadChangesAsync_DeleteWithReqOldClassAndEntryUuid_YieldsADeletedImportObjectWithExternalIdAndDn()
+    public async Task ReadChangesAsync_Delete_YieldsAnUntypedDeletionCarryingTheEntryUuidAndDn()
     {
+        // The accesslog records a deletion's entryUUID (reqEntryUUID) whatever logold says, but its object classes only
+        // in reqOld, which logold costs a large group's whole member list on every membership change (#1066). The
+        // deletion is reported without an Object Type, and JIM types it from the object it holds.
         const string uuid = "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d";
-        var executor = ExecutorReading(LdapTestResponses.SearchResponseWithEntries(
-            LoggedDelete("20260921090000.000001Z", "uid=carol," + PeopleDn, uuid)),
-            DeleteEntry("20260921090000.000001Z", "uid=carol," + PeopleDn, uuid));
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
+            LoggedDelete("20260921090000.000001Z", "uid=carol," + PeopleDn, uuid)), out _);
         var host = new Mock<ILdapDeltaImportHost>();
         var result = new ConnectedSystemImportResult();
 
@@ -640,49 +640,38 @@ public class LdapAccesslogDeltaSourceTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(deleted.ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
-            Assert.That(deleted.ObjectType, Is.EqualTo("inetOrgPerson"), "resolved from the objectClass values in reqOld, as a live entry's would be");
-            Assert.That(deleted.Attributes.Single(a => a.Name == "entryUUID").StringValues, Is.EqualTo(new[] { uuid }));
+            Assert.That(deleted.ObjectType, Is.Null);
+            Assert.That(deleted.Attributes.Single(a => a.Name == "entryUUID").StringValues, Is.EqualTo(new[] { uuid }), "the external id the import matches the deletion on");
             Assert.That(deleted.Attributes.Single(a => a.Name == "distinguishedName").StringValues, Is.EqualTo(new[] { "uid=carol," + PeopleDn }));
             host.Verify(h => h.GetObjectByDn(It.IsAny<string>(), It.IsAny<ObjectChangeType>()), Times.Never, "a deleted object cannot be fetched");
         }
     }
 
     [Test]
-    public async Task ReadChangesAsync_Delete_ReadsReqOldFromItsOwnLogEntryAndForNothingElse()
+    public async Task ReadChangesAsync_Delete_ReadsNothingMoreFromTheLog()
     {
-        const string uuid = "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d";
-        var executor = ExecutorReading(LdapTestResponses.SearchResponseWithEntries(
-            ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn),
-            LoggedDelete("20260921090000.000002Z", "uid=carol," + PeopleDn, uuid)),
-            DeleteEntry("20260921090000.000002Z", "uid=carol," + PeopleDn, uuid));
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
+            LoggedDelete("20260921090000.000001Z", "uid=carol," + PeopleDn, "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d")), out _);
 
-        await Source(executor).ReadChangesAsync(Context(HostReturningObjects()), new ConnectedSystemImportResult(), CancellationToken.None);
+        await Source(executor).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), new ConnectedSystemImportResult(), CancellationToken.None);
 
-        using (Assert.EnterMultipleScope())
-        {
-            executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => r is SearchRequest
-                && ((SearchRequest)r).Scope == SearchScope.Base
-                && ((SearchRequest)r).DistinguishedName == "reqStart=20260921090000.000002Z,cn=accesslog"
-                && ((SearchRequest)r).Attributes.Contains("reqOld")), Timeout), Times.Once);
-            executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => r is SearchRequest && ((SearchRequest)r).Scope == SearchScope.Base), Timeout), Times.Once,
-                "the modify needs no reqOld");
-        }
+        executor.Verify(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout), Times.Once, "the change read carries everything a deletion needs");
     }
 
     [Test]
-    public async Task ReadChangesAsync_DeleteWithoutReqOld_IsSkippedWithAWarning()
+    public async Task ReadChangesAsync_DeleteWithoutReqEntryUuid_IsNotStagedAndIsNotedOnTheRun()
     {
-        var logged = AccesslogEntry("20260921090000.000001Z", ("reqType", "delete"), ("reqDN", "uid=carol," + PeopleDn), ("reqEntryUUID", "3c1f6f0e-4d1a-4b2b-9c3e-1e2f3a4b5c6d"));
-        var executor = ExecutorReading(LdapTestResponses.SearchResponseWithEntries(logged), logged);
-        var log = new CapturingSink();
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
+            AccesslogEntry("20260921090000.000001Z", ("reqType", "delete"), ("reqDN", "uid=carol," + PeopleDn))), out _);
+        var notes = new LdapDeltaSourceNotes();
         var result = new ConnectedSystemImportResult();
 
-        await Source(executor, log).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), result, CancellationToken.None);
+        await Source(executor).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>(), notes: notes), result, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.ImportObjects, Is.Empty, "without reqOld there is no objectClass to resolve an Object Type from");
-            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("Could not determine object type for deleted object")), Is.True);
+            Assert.That(result.ImportObjects, Is.Empty, "a deletion that names no object would be discarded by the import anyway");
+            Assert.That(notes.Warning, Does.Contain("uid=carol," + PeopleDn).And.Contain("reqEntryUUID").And.Contain("Full Import"));
         }
     }
 
@@ -882,7 +871,7 @@ public class LdapAccesslogDeltaSourceTests
         new(executor.Object, sink == null ? Log.Logger : new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger());
 
     private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, string previousTimestamp = Watermark, string partitionDn = PartitionDn,
-        IReadOnlyList<ConnectedSystemPaginationToken>? paginationTokens = null)
+        IReadOnlyList<ConnectedSystemPaginationToken>? paginationTokens = null, LdapDeltaSourceNotes? notes = null)
     {
         var partition = new ConnectedSystemPartition { Id = 1, ExternalId = partitionDn, Name = partitionDn, Selected = true };
         var container = new ConnectedSystemContainer { Id = 1, ExternalId = partitionDn == PartitionDn ? PeopleDn : partitionDn, Name = "people", Selected = true, Scope = ConnectedSystemContainerScope.Subtree };
@@ -896,7 +885,7 @@ public class LdapAccesslogDeltaSourceTests
             PaginationTokens = paginationTokens ?? [],
             PageSize = 500,
             SearchTimeout = Timeout,
-            Notes = new LdapDeltaSourceNotes(),
+            Notes = notes ?? new LdapDeltaSourceNotes(),
             Host = host.Object
         };
     }
@@ -933,21 +922,6 @@ public class LdapAccesslogDeltaSourceTests
             .Callback<DirectoryRequest, TimeSpan>((request, _) => captured.Value = (SearchRequest)request)
             .Returns(response);
         sent = captured;
-        return executor;
-    }
-
-    /// <summary>
-    /// An executor answering the change read with the given page, and a read of one log entry by its own name with
-    /// that entry as the directory holds it: how a deletion's reqOld is read.
-    /// </summary>
-    private static Mock<ILdapOperationExecutor> ExecutorReading(SearchResponse changes, params SearchResultEntry[] loggedEntries)
-    {
-        var executor = new Mock<ILdapOperationExecutor>();
-        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => r is SearchRequest && ((SearchRequest)r).Scope == SearchScope.OneLevel), Timeout))
-            .Returns(changes);
-        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => r is SearchRequest && ((SearchRequest)r).Scope == SearchScope.Base), Timeout))
-            .Returns((DirectoryRequest request, TimeSpan _) => LdapTestResponses.SearchResponseWithEntries(
-                loggedEntries.Where(e => e.DistinguishedName == ((SearchRequest)request).DistinguishedName).ToArray()));
         return executor;
     }
 
@@ -988,29 +962,9 @@ public class LdapAccesslogDeltaSourceTests
     private static SearchResultEntry ModifyEntry(string reqStart, string reqDn) =>
         AccesslogEntry(reqStart, ("reqType", "modify"), ("reqDN", reqDn));
 
-    /// <summary>An auditDelete entry as the change read returns it: without reqOld, which only the entry's own read asks for.</summary>
+    /// <summary>An auditDelete entry as the change read returns it: its DN and entryUUID, and no reqOld.</summary>
     private static SearchResultEntry LoggedDelete(string reqStart, string reqDn, string entryUuid) =>
         AccesslogEntry(reqStart, ("reqType", "delete"), ("reqDN", reqDn), ("reqEntryUUID", entryUuid));
-
-    /// <summary>
-    /// An auditDelete entry as slapo-accesslog writes it: reqOld holds the deleted entry's attributes as
-    /// "name: value" lines, several of them, so it is built with a multi-valued attribute.
-    /// </summary>
-    private static SearchResultEntry DeleteEntry(string reqStart, string reqDn, string entryUuid)
-    {
-        const BindingFlags nonPublicInstance = BindingFlags.NonPublic | BindingFlags.Instance;
-        var attributeCollection = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
-        var add = typeof(SearchResultAttributeCollection).GetMethod("Add", nonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!;
-
-        add.Invoke(attributeCollection, ["reqStart", new DirectoryAttribute("reqStart", reqStart)]);
-        add.Invoke(attributeCollection, ["reqType", new DirectoryAttribute("reqType", "delete")]);
-        add.Invoke(attributeCollection, ["reqDN", new DirectoryAttribute("reqDN", reqDn)]);
-        add.Invoke(attributeCollection, ["reqEntryUUID", new DirectoryAttribute("reqEntryUUID", entryUuid)]);
-        add.Invoke(attributeCollection, ["reqOld", new DirectoryAttribute("reqOld", "objectClass: top", "objectClass: person", "objectClass: inetOrgPerson", "uid: carol", $"entryUUID: {entryUuid}")]);
-
-        return (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), nonPublicInstance, binder: null,
-            args: [$"reqStart={reqStart},cn=accesslog", attributeCollection], culture: null)!;
-    }
 
     private static DateTime ParseGeneralisedTime(string value)
     {
