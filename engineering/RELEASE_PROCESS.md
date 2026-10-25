@@ -6,7 +6,7 @@ This document describes how to create releases of JIM, including support for air
 
 JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
 
-1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below), a green `jim-pre-release` commit status (the pre-release integration gate, below) and a green `jim-deploy-lab` commit status (the deployment lab gate, below)
+1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below), a green `jim-ad-lab-adfs` commit status (its AD FS gate, below), a green `jim-pre-release` commit status (the pre-release integration gate, below) and a green `jim-deploy-lab` commit status (the deployment lab gate, below)
 2. Validates the build and runs all tests
 3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
 4. Publishes the PowerShell module to PSGallery
@@ -24,6 +24,13 @@ A release is refused unless the exact commit being tagged has a `success` commit
 - **Reading a result:** `pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`; otherwise it exits 1 and prints the state (or "not reported"), the run link and the remedy. The commit status's description carries the scenario count and the domain controller operating system build, and each run uploads the regression report and `dc-builds.json` as artefacts.
 - **The lab is patched by rebuild** (`ad-lab-rebuild.yml`, after each Patch Tuesday), so a red night after a rebuild is attributable to the Windows update or to JIM: the build is in every run's record.
 - **The lab runner is in its own runner group.** It is the only runner in a dedicated `jim-ad-lab` runner group (repository access `TetronIO/JIM` only; workflow allowlist exactly `ad-lab.yml` and `ad-lab-rebuild.yml` at `refs/heads/main`), not in `tetron-trusted`: a runner carrying the default labels there would be offered ordinary `ci.yml` push jobs, which need `sudo pwsh` and a larger machine. It also means the gate itself never needs the lab: the `jim-ad-lab-gate` job runs on the ordinary release runners and only reads a commit status. Dispatching `ad-lab.yml` from a branch other than `main` is refused by that allowlist unless the branch ref has been added to it (as a release tag is added to `tetron-trusted` in the steps below), which is one more reason to dispatch the release commit on `main`.
+
+### Its AD FS gate
+
+The same `ad-lab.yml` run also signs people in to JIM through the lab's real AD FS server (portal sign-in, the initial administrator, `/api`, `Connect-JIM`, and an account renamed in Active Directory; #2441) and posts the result as a commit status of its own, `jim-ad-lab-adfs`, so a sign-in failure never turns the LDAP result red or the reverse. A release is refused unless the commit being tagged has a `success` `jim-ad-lab-adfs` status as well. The checks are being added to the run (#2441); until they post their first green status, no commit carries it, which is why the gate starts switched off.
+
+- **One run answers both gates.** The dispatched lab run on the release commit posts both statuses; there is nothing more to dispatch.
+- **It is enforced twice, behind its own switch:** the `/release` skill runs `scripts/Test-AdLabFederationReleaseGate.ps1` before it tags, and the `jim-ad-lab-adfs-gate` job in `release.yml` runs the same script, which `validate` needs. Both run only while the repository variable `JIM_AD_LAB_ADFS_GATE_ENFORCED` is `true`; set it after the checks' first green run (`gh variable set JIM_AD_LAB_ADFS_GATE_ENFORCED --body true`). Once set there is no override.
 
 ## The Pre-Release Integration Gate
 
@@ -132,6 +139,8 @@ git push origin main --tags
    gh workflow run ad-lab.yml --ref main        # runs on the head of main: it must be the release commit
    gh run watch "$(gh run list --workflow ad-lab.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
    pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
+   # only while JIM_AD_LAB_ADFS_GATE_ENFORCED is true: the same run's AD FS sign-in checks
+   pwsh -File ./scripts/Test-AdLabFederationReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
    ```
    If either script exits 1 it names the state and the run; fix the cause, run that workflow again and re-check. Once enforced, there is no override.
 
