@@ -35,5 +35,11 @@ public enum ServiceHealthCondition
     /// <summary>
     /// The service has never written a heartbeat at all. Unhealthy.
     /// </summary>
-    NeverStarted
+    NeverStarted,
+
+    /// <summary>
+    /// The heartbeat is arriving, but most of the memory the service can draw on is in use. A service that runs out
+    /// is stopped by the operating system part-way through its work, so this is the warning that comes first. Degraded.
+    /// </summary>
+    MemoryLow
 }

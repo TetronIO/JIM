@@ -359,6 +359,61 @@ public class ServiceHealthDisplayTests
         Assert.That(banner!.Sentence, Is.EqualTo("The Worker has made no progress on Full Import: Corporate Directory for 12 minutes."));
     }
 
+    private const long Gb = 1_000_000_000;
+
+    [Test]
+    public void Banner_WorkerMemoryLow_WarnsOnceWithTheFiguresAndTheRemedy()
+    {
+        // Both Worker services share one process, so both report the same figures; the Worker is named once.
+        var report = Report(
+            Derive(JimService.WorkerSync, 2, memory: (62, 5, 41)),
+            Derive(JimService.WorkerDelivery, 2, memory: (62, 5, 41)),
+            Derive(JimService.Scheduler, 2, memory: (62, 30, 1)));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(banner!.Severity, Is.EqualTo(Severity.Warning));
+            Assert.That(banner.Sentence, Is.EqualTo(
+                "Memory is low for the Worker: 57 GB of 62 GB in use, 41 GB of it by the Worker. " +
+                "At 92% the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once."));
+        }
+    }
+
+    [Test]
+    public void Banner_SchedulerAloneMemoryLow_NamesTheSchedulerWithoutTheWorkersRemedy()
+    {
+        var report = Report(
+            Derive(JimService.WorkerSync, 2, memory: (62, 30, 4)),
+            Derive(JimService.Scheduler, 2, memory: (2, 0, 1)));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        Assert.That(banner!.Sentence, Is.EqualTo("Memory is low for the Scheduler: 2 GB of 2 GB in use, 1 GB of it by the Scheduler. Give JIM more memory."));
+    }
+
+    [Test]
+    public void Banner_StalledOutranksMemoryLow()
+    {
+        var report = Report(
+            Derive(JimService.WorkerSync, 2, currentWork: "Full Import: Corporate Directory", progressAgeSeconds: 12 * 60, memory: (62, 5, 41)));
+
+        Assert.That(ServiceHealthDisplay.Banner(report)!.Sentence, Does.StartWith("The Worker has made no progress"));
+    }
+
+    [Test]
+    public void Memory_Reported_SaysWhatTheProcessHoldsAndHowFullItsMemoryIs()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.Memory(Derive(JimService.WorkerSync, 2, memory: (62, 21, 41))), Is.EqualTo("41 GB held · 66% of 62 GB in use"));
+            Assert.That(ServiceHealthDisplay.Memory(Derive(JimService.WorkerSync, 2)), Is.Null, "a service that did not report memory has no row");
+        }
+    }
+
     [Test]
     public void Banner_NoHeartbeatOutranksStalled()
     {
@@ -461,7 +516,8 @@ public class ServiceHealthDisplayTests
         string? currentWork = null,
         int? progressAgeSeconds = null,
         string version = "0.15.0",
-        DateTime? asOf = null)
+        DateTime? asOf = null,
+        (long TotalGb, long AvailableGb, long ProcessGb)? memory = null)
     {
         var at = asOf ?? AsOf;
         var heartbeat = new ServiceHeartbeat
@@ -474,7 +530,10 @@ public class ServiceHealthDisplayTests
             LastSeenAt = at.AddSeconds(-ageSeconds),
             CurrentWork = currentWork,
             CurrentWorkStartedAt = currentWork == null ? null : at.AddMinutes(-12),
-            LastProgressAt = progressAgeSeconds.HasValue ? at.AddSeconds(-progressAgeSeconds.Value) : null
+            LastProgressAt = progressAgeSeconds.HasValue ? at.AddSeconds(-progressAgeSeconds.Value) : null,
+            MemoryTotalBytes = memory?.TotalGb * Gb,
+            MemoryAvailableBytes = memory?.AvailableGb * Gb,
+            ProcessMemoryBytes = memory?.ProcessGb * Gb
         };
         return SystemHealthServer.Derive(service, heartbeat, at);
     }

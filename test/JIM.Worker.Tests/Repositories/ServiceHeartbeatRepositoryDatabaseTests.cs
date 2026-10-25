@@ -68,7 +68,10 @@ public class ServiceHeartbeatRepositoryDatabaseTests
         CurrentWork = "Full Import: Corporate Directory",
         CurrentWorkStartedAt = T0.AddMinutes(-3),
         LastProgressAt = T0.AddMinutes(-1),
-        Detail = "1 task in flight"
+        Detail = "1 task in flight",
+        ProcessMemoryBytes = 41_000_000_000,
+        MemoryTotalBytes = 62_000_000_000,
+        MemoryAvailableBytes = 4_000_000_000
     };
 
     [Test]
@@ -93,6 +96,9 @@ public class ServiceHeartbeatRepositoryDatabaseTests
             Assert.That(stored.CurrentWorkStartedAt, Is.EqualTo(T0.AddMinutes(-3)));
             Assert.That(stored.LastProgressAt, Is.EqualTo(T0.AddMinutes(-1)));
             Assert.That(stored.Detail, Is.EqualTo("1 task in flight"));
+            Assert.That(stored.ProcessMemoryBytes, Is.EqualTo(41_000_000_000));
+            Assert.That(stored.MemoryTotalBytes, Is.EqualTo(62_000_000_000));
+            Assert.That(stored.MemoryAvailableBytes, Is.EqualTo(4_000_000_000));
         }
     }
 
@@ -105,6 +111,9 @@ public class ServiceHeartbeatRepositoryDatabaseTests
         heartbeat.CurrentWorkStartedAt = null;
         heartbeat.LastProgressAt = null;
         heartbeat.Detail = null;
+        heartbeat.ProcessMemoryBytes = null;
+        heartbeat.MemoryTotalBytes = null;
+        heartbeat.MemoryAvailableBytes = null;
 
         await repository.System.UpsertServiceHeartbeatAsync(heartbeat);
 
@@ -116,6 +125,9 @@ public class ServiceHeartbeatRepositoryDatabaseTests
             Assert.That(stored.CurrentWorkStartedAt, Is.Null);
             Assert.That(stored.LastProgressAt, Is.Null);
             Assert.That(stored.Detail, Is.Null);
+            Assert.That(stored.ProcessMemoryBytes, Is.Null);
+            Assert.That(stored.MemoryTotalBytes, Is.Null);
+            Assert.That(stored.MemoryAvailableBytes, Is.Null);
         }
     }
 
@@ -130,6 +142,7 @@ public class ServiceHeartbeatRepositoryDatabaseTests
         later.CurrentWorkStartedAt = null;
         later.LastProgressAt = null;
         later.Detail = "idle";
+        later.MemoryAvailableBytes = 1_500_000_000;
         await repository.System.UpsertServiceHeartbeatAsync(later);
 
         await using var read = NewContext();
@@ -140,6 +153,7 @@ public class ServiceHeartbeatRepositoryDatabaseTests
             Assert.That(rows[0].LastSeenAt, Is.EqualTo(T0.AddSeconds(5)));
             Assert.That(rows[0].CurrentWork, Is.Null);
             Assert.That(rows[0].Detail, Is.EqualTo("idle"));
+            Assert.That(rows[0].MemoryAvailableBytes, Is.EqualTo(1_500_000_000), "memory is a reading, so each heartbeat replaces the last");
         }
     }
 

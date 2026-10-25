@@ -51,8 +51,10 @@ public class ServiceHeartbeatWriterTests
         _logger.Dispose();
     }
 
+    private static readonly MemoryReading Reading = new() { ProcessBytes = 41_000_000_000, TotalBytes = 62_000_000_000, AvailableBytes = 4_000_000_000 };
+
     private ServiceHeartbeatWriter NewWriter(JimService service = JimService.WorkerSync) =>
-        new(service, "host-a1b2c3", "host", "0.15.0", StartedAt, () => _now, _logger);
+        new(service, "host-a1b2c3", "host", "0.15.0", StartedAt, () => _now, _logger, () => Reading);
 
     private Task WriteAsync(ServiceHeartbeatWriter writer, string? currentWork = null, DateTime? currentWorkStartedAt = null, string? detail = null) =>
         writer.WriteAsync(_jim, currentWork, currentWorkStartedAt, detail, CancellationToken.None);
@@ -81,6 +83,33 @@ public class ServiceHeartbeatWriterTests
             Assert.That(written.CurrentWorkStartedAt, Is.EqualTo(StartedAt.AddMinutes(-2)));
             Assert.That(written.LastProgressAt, Is.Null, "no service can yet tell progress from liveness; see the writer");
             Assert.That(written.Detail, Is.EqualTo("1 task in flight"));
+            Assert.That(written.ProcessMemoryBytes, Is.EqualTo(41_000_000_000));
+            Assert.That(written.MemoryTotalBytes, Is.EqualTo(62_000_000_000));
+            Assert.That(written.MemoryAvailableBytes, Is.EqualTo(4_000_000_000));
+        }
+    }
+
+    [Test]
+    public async Task WriteNowAsync_WithinTheInterval_WritesAtOnceWithTheReadingItIsGiven()
+    {
+        // The Worker's memory guard writes the reading that made it stop work straight away: the process may be killed
+        // within the second, and the regular heartbeat could be up to an interval old by then.
+        var writer = NewWriter();
+        await WriteAsync(writer);
+        ServiceHeartbeat? written = null;
+        _mockSystemRepository.Setup(r => r.UpsertServiceHeartbeatAsync(It.IsAny<ServiceHeartbeat>()))
+            .Callback<ServiceHeartbeat>(h => written = h)
+            .Returns(Task.CompletedTask);
+        var stopping = new MemoryReading { ProcessBytes = 58_000_000_000, TotalBytes = 62_000_000_000, AvailableBytes = 1_000_000_000 };
+
+        await writer.WriteNowAsync(_jim, "Delta Import: Yellowstone APAC", StartedAt, "Stopping running work: memory nearly exhausted", stopping, CancellationToken.None);
+
+        Assert.That(written, Is.Not.Null, "the interval does not hold this write back");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written!.MemoryAvailableBytes, Is.EqualTo(1_000_000_000));
+            Assert.That(written.ProcessMemoryBytes, Is.EqualTo(58_000_000_000));
+            Assert.That(written.Detail, Is.EqualTo("Stopping running work: memory nearly exhausted"));
         }
     }
 

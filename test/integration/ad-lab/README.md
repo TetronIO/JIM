@@ -337,8 +337,9 @@ It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB o
    the host, and refuses to run unless that copy's digest is the commit's (`Get-LabModuleDigest`): **after any change
    to `src/JIM.PowerShell`, run `Install-LabScripts.ps1` on the host again before the next run**, or the AD FS
    scenarios fail, saying so;
-5. recreates `jim.web` with what the registration returned (client IDs, the API scope, `oid` matched to
-   `Object GUID`), passed through its own process environment. The portal's client secret is new on every run and
+5. recreates `jim.web` with what the registration returned (the client IDs and the API scope; the sign-in
+   identifier stays `sub` and `Subject Identifier` until a check creates the `Object GUID` attribute, since JIM refuses
+   to start naming an attribute that does not exist), passed through its own process environment. The portal's client secret is new on every run and
    dies at the next revert. It comes back over SSH standard output, is masked in the log at once, and is handed to
    the workflow's scrub step through `GITHUB_ENV`, which removes it from every artefact; it is written to no other
    file.

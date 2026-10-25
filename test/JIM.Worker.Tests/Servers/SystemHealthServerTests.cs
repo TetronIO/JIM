@@ -324,10 +324,70 @@ public class SystemHealthServerTests
         }
     }
 
+    private const long Gb = 1_000_000_000;
+
+    private static ServiceHeartbeat WithMemory(ServiceHeartbeat heartbeat, long totalBytes, long availableBytes, long processBytes)
+    {
+        heartbeat.MemoryTotalBytes = totalBytes;
+        heartbeat.MemoryAvailableBytes = availableBytes;
+        heartbeat.ProcessMemoryBytes = processBytes;
+        return heartbeat;
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_MemoryInUseAtTheWarningShare_DegradedByMemoryLowNamingTheFigures()
+    {
+        GivenHeartbeats(WithMemory(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2)), totalBytes: 62 * Gb, availableBytes: 5 * Gb, processBytes: 41 * Gb));
+
+        var health = await HealthOfAsync(JimService.WorkerSync);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(health.Status, Is.EqualTo(ServiceHealthStatus.Degraded));
+            Assert.That(health.Condition, Is.EqualTo(ServiceHealthCondition.MemoryLow));
+            Assert.That(health.Reason, Is.EqualTo("Memory low: 92% of 62 GB in use"));
+        }
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_MemoryInUseBelowTheWarningShare_Healthy()
+    {
+        GivenHeartbeats(WithMemory(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2)), totalBytes: 62 * Gb, availableBytes: 10 * Gb, processBytes: 41 * Gb));
+
+        Assert.That((await HealthOfAsync(JimService.WorkerSync)).Condition, Is.EqualTo(ServiceHealthCondition.Heartbeating));
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_MemoryNotReported_NeverMemoryLow()
+    {
+        GivenHeartbeats(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2)));
+
+        Assert.That((await HealthOfAsync(JimService.WorkerSync)).Condition, Is.EqualTo(ServiceHealthCondition.Heartbeating));
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_NoHeartbeatAndMemoryLow_NoHeartbeatWins()
+    {
+        // The memory a dead process last reported is history; that it is dead is the news.
+        GivenHeartbeats(WithMemory(Heartbeat(JimService.WorkerSync, TimeSpan.FromMinutes(5)), totalBytes: 62 * Gb, availableBytes: Gb, processBytes: 45 * Gb));
+
+        Assert.That((await HealthOfAsync(JimService.WorkerSync)).Condition, Is.EqualTo(ServiceHealthCondition.NoHeartbeat));
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_HeartbeatOverdueAndMemoryLow_MemoryLowWins()
+    {
+        // A process short of memory pauses, which is the likelier reason its heartbeats are late, and the one to act on.
+        GivenHeartbeats(WithMemory(Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(30)), totalBytes: 62 * Gb, availableBytes: Gb, processBytes: 45 * Gb));
+
+        Assert.That((await HealthOfAsync(JimService.WorkerSync)).Condition, Is.EqualTo(ServiceHealthCondition.MemoryLow));
+    }
+
     [Test]
     public async Task GetServiceHealthAsync_Always_CopiesHeartbeatFieldsAndStampsTheReport()
     {
-        var heartbeat = Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(4), currentWork: "Advancing schedules");
+        var heartbeat = WithMemory(Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(4), currentWork: "Advancing schedules"),
+            totalBytes: 62 * Gb, availableBytes: 30 * Gb, processBytes: Gb);
         GivenHeartbeats(heartbeat);
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
@@ -345,9 +405,13 @@ public class SystemHealthServerTests
             Assert.That(health.CurrentWork, Is.EqualTo(heartbeat.CurrentWork));
             Assert.That(health.CurrentWorkStartedAt, Is.EqualTo(heartbeat.CurrentWorkStartedAt));
             Assert.That(health.Detail, Is.EqualTo(heartbeat.Detail));
+            Assert.That(health.ProcessMemoryBytes, Is.EqualTo(Gb));
+            Assert.That(health.MemoryTotalBytes, Is.EqualTo(62 * Gb));
+            Assert.That(health.MemoryAvailableBytes, Is.EqualTo(30 * Gb));
         }
     }
 
+    [TestCase(ServiceHealthCondition.MemoryLow, ServiceHealthStatus.Degraded)]
     [TestCase(ServiceHealthCondition.Heartbeating, ServiceHealthStatus.Healthy)]
     [TestCase(ServiceHealthCondition.HeartbeatOverdue, ServiceHealthStatus.Degraded)]
     [TestCase(ServiceHealthCondition.Stalled, ServiceHealthStatus.Degraded)]

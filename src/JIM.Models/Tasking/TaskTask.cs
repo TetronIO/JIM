@@ -33,6 +33,12 @@ public class TaskTask
     /// </summary>
     public DateTime StartedAt { get; }
 
+    /// <summary>
+    /// What the Worker's memory guard has said about the task: a warning to record on its Activity, or the reason
+    /// it stopped the task. Shared with the task itself, which records them when it ends.
+    /// </summary>
+    public TaskMemoryNotes MemoryNotes { get; init; } = new();
+
     public TaskTask(Guid taskId, Task task, CancellationTokenSource cancellationTokenSource)
         : this(taskId, task, cancellationTokenSource, null, DateTime.UtcNow)
     {

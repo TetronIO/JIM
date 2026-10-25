@@ -64,14 +64,15 @@ public class ServiceHealthEntryResponse
     public JimService Service { get; set; }
 
     /// <summary>
-    /// The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue or its
-    /// current work has stalled) or Unhealthy (no heartbeat long enough to presume it down, or never started).
+    /// The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue, its
+    /// current work has stalled, or its memory is low) or Unhealthy (no heartbeat long enough to presume it down, or
+    /// never started).
     /// </summary>
     public ServiceHealthStatus Status { get; set; }
 
     /// <summary>
-    /// Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, NoHeartbeat or NeverStarted. Each
-    /// condition belongs to exactly one status.
+    /// Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, MemoryLow (85% or more of the
+    /// memory it can draw on is in use), NoHeartbeat or NeverStarted. Each condition belongs to exactly one status.
     /// </summary>
     public ServiceHealthCondition Condition { get; set; }
 
@@ -127,6 +128,23 @@ public class ServiceHealthEntryResponse
     public string? Detail { get; set; }
 
     /// <summary>
+    /// The memory the service's process held at its last heartbeat, in bytes, or null when it did not report it.
+    /// </summary>
+    public long? ProcessMemoryBytes { get; set; }
+
+    /// <summary>
+    /// The memory the service's process can draw on in all, in bytes: its container's memory limit when one is set,
+    /// otherwise the host's memory. Null when not reported.
+    /// </summary>
+    public long? MemoryTotalBytes { get; set; }
+
+    /// <summary>
+    /// How much of the total memory was still available at the last heartbeat, in bytes, counting file cache the
+    /// system can reclaim. Null when not reported.
+    /// </summary>
+    public long? MemoryAvailableBytes { get; set; }
+
+    /// <summary>
     /// Projects one service's verdict for the API.
     /// </summary>
     public static ServiceHealthEntryResponse FromHealth(ServiceHealth health)
@@ -147,7 +165,10 @@ public class ServiceHealthEntryResponse
             CurrentWork = health.CurrentWork,
             CurrentWorkStartedAt = health.CurrentWorkStartedAt,
             LastProgressAt = health.LastProgressAt,
-            Detail = health.Detail
+            Detail = health.Detail,
+            ProcessMemoryBytes = health.ProcessMemoryBytes,
+            MemoryTotalBytes = health.MemoryTotalBytes,
+            MemoryAvailableBytes = health.MemoryAvailableBytes
         };
     }
 }
