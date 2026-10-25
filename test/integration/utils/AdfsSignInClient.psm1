@@ -172,10 +172,14 @@ function Invoke-SignInRequest {
     # With -MaximumRedirection 0 a redirect comes back as the response and also as a "maximum redirection count has
     # been exceeded" error, whose exception is a bare InvalidOperationException; -ErrorAction Stop would make every
     # redirect throw. So the error is captured instead: a response is used whatever its status, and a request that got
-    # none (no connection, a refused certificate) throws what went wrong.
+    # none (no connection, a refused certificate) throws what went wrong. -AllowInsecureRedirect, because AD FS's last
+    # redirect for Connect-JIM goes from HTTPS to the module's http://localhost loopback callback, and without it
+    # PowerShell refuses even to return that redirect (again a bare InvalidOperationException). Nothing is followed
+    # automatically: Invoke-SignInRedirects decides each hop.
     $parameters = @{
         Uri = $Uri; Method = $Method; WebSession = $Session; Headers = $Headers
-        MaximumRedirection = 0; SkipHttpErrorCheck = $true; ErrorAction = 'SilentlyContinue'; ErrorVariable = 'requestErrors'
+        MaximumRedirection = 0; SkipHttpErrorCheck = $true; AllowInsecureRedirect = $true
+        ErrorAction = 'SilentlyContinue'; ErrorVariable = 'requestErrors'
     }
     if ($Body) { $parameters.Body = $Body; $parameters.ContentType = 'application/x-www-form-urlencoded' }
     $requestErrors = $null
