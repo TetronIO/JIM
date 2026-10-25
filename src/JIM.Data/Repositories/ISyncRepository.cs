@@ -1512,6 +1512,42 @@ public interface ISyncRepository
     Task DeletePendingExportAsync(PendingExport pendingExport);
 
     /// <summary>
+    /// Opens a Pending Export batch (#2492): until <see cref="FlushPendingExportBatchAsync"/> or
+    /// <see cref="AbandonPendingExportBatch"/>, <see cref="DeletePendingExportForMergeAsync"/> queues its delete rather
+    /// than executing it, so the cross-page reference step deletes the Pending Exports its re-evaluation replaces in
+    /// one statement per batch. The queue is invisible to every caller: a queued Pending Export reads as already
+    /// deleted, anything inserted for the same Connected System Object first executes that object's queued delete,
+    /// and a write naming a queued Pending Export throws. Only one batch may be open at a time.
+    /// </summary>
+    void BeginPendingExportBatch();
+
+    /// <summary>
+    /// Deletes the Pending Export a merge is replacing: queued while a Pending Export batch is open (see
+    /// <see cref="BeginPendingExportBatch"/>), otherwise at once, exactly as <see cref="DeletePendingExportAsync"/>.
+    /// </summary>
+    Task DeletePendingExportForMergeAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Loads, in one query, the Pending Exports of Connected System Objects the open Pending Export batch is about to
+    /// evaluate, so <see cref="GetPendingExportLightweightByConnectedSystemObjectIdAsync"/> answers them without a round
+    /// trip each (#2492). They are the same tracked instances that method's own query returns, and any write touching
+    /// one of them drops it, so a later read goes back to the database. Requires an open batch.
+    /// </summary>
+    Task PrefetchPendingExportsForBatchAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Executes the open Pending Export batch's queued deletes in one statement and closes the batch. Call it before
+    /// the replacements are inserted.
+    /// </summary>
+    Task FlushPendingExportBatchAsync();
+
+    /// <summary>
+    /// Closes the open Pending Export batch without executing its queued deletes, for a batch that failed before
+    /// staging its replacements: executing them would lose the queued changes outright.
+    /// </summary>
+    void AbandonPendingExportBatch();
+
+    /// <summary>
     /// Updates a single Pending Export. Convenience wrapper around <see cref="UpdatePendingExportsAsync"/>.
     /// </summary>
     Task UpdatePendingExportAsync(PendingExport pendingExport);

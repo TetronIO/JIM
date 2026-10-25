@@ -2028,7 +2028,17 @@ public abstract class SyncTaskProcessorBase
     {
         _syncRepo.ClearChangeTracker();
         _mvoIdentityMap.Clear();
+        _snapshotReferenceCsos.Clear();
     }
+
+    /// <summary>
+    /// The target Connected System Object each referenced Metaverse Object resolved to in this page's (or cross-page
+    /// batch's) export change snapshots, or null where the database held none. Every report of one manager, and every
+    /// group sharing a member, used to query the same object again (#2492: about 6 ms of each object's export
+    /// evaluation on Scenario 031). Cleared with the change tracker, because the objects it holds are tracked ones, and
+    /// once the page's provisioning objects are written, so a lookup that found none is asked again.
+    /// </summary>
+    private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), ConnectedSystemObject?> _snapshotReferenceCsos = [];
 
     /// <summary>
     /// Queues a Metaverse Object for the page-flush batch update (<see cref="_pendingMvoUpdates"/>), keyed
@@ -4802,7 +4812,26 @@ public abstract class SyncTaskProcessorBase
 
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
                 await EvaluateQueuedDriftAsync();
-                await EvaluatePendingExportsAsync();
+
+                // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
+                // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
+                // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
+                // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
+                // batch instead, since deleting rows whose replacements were never staged would lose their changes.
+                var pendingExportBatchFlushed = false;
+                _syncRepo.BeginPendingExportBatch();
+                try
+                {
+                    await EvaluatePendingExportsAsync(prefetchPendingExports: true);
+                    await _syncRepo.FlushPendingExportBatchAsync();
+                    pendingExportBatchFlushed = true;
+                }
+                finally
+                {
+                    if (!pendingExportBatchFlushed)
+                        _syncRepo.AbandonPendingExportBatch();
+                }
+
                 await FlushPendingExportOperationsAsync();
 
                 // Flush any RPEIs generated during the flush sequence
@@ -4875,7 +4904,10 @@ public abstract class SyncTaskProcessorBase
     /// Creating Update exports for recalled attributes on a doomed MVO is spurious and can produce
     /// invalid attribute values (e.g., empty DN from expression evaluation against recalled attributes).
     /// </summary>
-    protected async Task EvaluatePendingExportsAsync()
+    /// <param name="prefetchPendingExports">The caller has opened a Pending Export batch (the cross-page reference step,
+    /// #2492): load the Pending Exports of every target object this evaluation will look up in one query, rather than
+    /// one round trip per object (twice for an object still being provisioned).</param>
+    protected async Task EvaluatePendingExportsAsync(bool prefetchPendingExports = false)
     {
         if (_pendingExportEvaluations.Count == 0)
             return;
@@ -4894,6 +4926,23 @@ public abstract class SyncTaskProcessorBase
                 .Where(id => id != Guid.Empty)
                 .Distinct();
             await _syncServer.RefreshExportEvaluationCacheForPageAsync(_exportEvaluationCache, mvoIdsForExport);
+
+            if (prefetchPendingExports)
+            {
+                var targetCsoIds = _pendingExportEvaluations
+                    .Select(x => x.Mvo.Id)
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .SelectMany(mvoId => _exportEvaluationCache.TargetSystemIds
+                        .Select(systemId => _exportEvaluationCache.CsoLookup.GetValueOrDefault((mvoId, systemId))))
+                    .Where(cso => cso != null && cso.Id != Guid.Empty)
+                    .Select(cso => cso!.Id)
+                    .ToList();
+                using (Diagnostics.Sync.StartSpan("PrefetchPendingExportsForBatch").SetTag("csoCount", targetCsoIds.Count))
+                {
+                    await _syncRepo.PrefetchPendingExportsForBatchAsync(targetCsoIds);
+                }
+            }
         }
 
         // Build a set of MVO IDs pending immediate deletion.
@@ -5052,6 +5101,10 @@ public abstract class SyncTaskProcessorBase
 
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} provisioning CSOs in batch", _provisioningCsosToCreate.Count);
             _provisioningCsosToCreate.Clear();
+
+            // A snapshot lookup that found no target object may have been for one just written here; the snapshots
+            // the rest of the page flush takes (deletion cascades, reference recall) must see it.
+            _snapshotReferenceCsos.Clear();
         }
 
         // Unique Value Generation (#242, Phase 2 work package H): commit this page's export-mode
@@ -6808,12 +6861,26 @@ public abstract class SyncTaskProcessorBase
                 .Where(g => !resolvedReferences.ContainsKey(g))
                 .ToList();
 
-            if (unresolvedMvoGuids.Count > 0)
+            // Answered from this page's earlier lookups first; only Metaverse Objects not looked up yet reach the database.
+            var connectedSystemId = pendingExport.ConnectedSystemId;
+            var notYetLookedUp = new List<Guid>();
+            foreach (var mvoGuid in unresolvedMvoGuids)
             {
-                var dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(unresolvedMvoGuids, pendingExport.ConnectedSystemId);
-                foreach (var kvp in dbResolved)
+                if (!_snapshotReferenceCsos.TryGetValue((mvoGuid, connectedSystemId), out var known))
+                    notYetLookedUp.Add(mvoGuid);
+                else if (known != null)
+                    resolvedReferences.TryAdd(mvoGuid, known);
+            }
+
+            if (notYetLookedUp.Count > 0)
+            {
+                var dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
+                foreach (var mvoGuid in notYetLookedUp)
                 {
-                    resolvedReferences.TryAdd(kvp.Key, kvp.Value);
+                    var found = dbResolved.GetValueOrDefault(mvoGuid);
+                    _snapshotReferenceCsos[(mvoGuid, connectedSystemId)] = found;
+                    if (found != null)
+                        resolvedReferences.TryAdd(mvoGuid, found);
                 }
 
                 // Some references may remain unresolved if the referenced objects haven't been

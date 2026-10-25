@@ -239,6 +239,8 @@ public partial class SyncRepository
         if (connectedSystemObjectIds.Count == 0)
             return 0;
 
+        // A write addressed by object lands after the object's queued delete (the Pending Export batch scope, #2492).
+        await ExecuteQueuedDeletesForAsync(connectedSystemObjectIds.Select(id => (Guid?)id));
         var ids = connectedSystemObjectIds.ToArray();
         var released = await _context.Database.ExecuteSqlRawAsync(
             @"UPDATE ""PendingExports"" SET ""Status"" = {0}

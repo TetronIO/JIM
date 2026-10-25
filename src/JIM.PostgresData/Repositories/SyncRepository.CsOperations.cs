@@ -723,6 +723,9 @@ public partial class SyncRepository
         if (pendingExportsList.Count == 0)
             return;
 
+        // Inserted after any queued delete for the same objects (the Pending Export batch scope, #2492).
+        await ExecuteQueuedDeletesForAsync(pendingExportsList.Select(pe => pe.ConnectedSystemObjectId));
+
         // Pre-generate IDs for all Pending Exports and their attribute value changes
         foreach (var pe in pendingExportsList)
         {
@@ -761,6 +764,8 @@ public partial class SyncRepository
         var csoIds = connectedSystemObjectIds.ToArray();
         if (csoIds.Length == 0)
             return 0;
+
+        ForgetQueuedForCsoIds(csoIds);
 
         // Instances of the rows this method is about to delete may be tracked on the worker's
         // long-lived context (reconciliation and navigation fix-up both track Pending Exports).
@@ -869,6 +874,7 @@ public partial class SyncRepository
         if (exportList.Count == 0)
             return;
 
+        ForgetQueued(exportList);
         var pendingExportIds = exportList.Select(pe => pe.Id).ToList();
 
         // Delete children first, then parents. Must delete ALL children from the database,
@@ -917,6 +923,8 @@ public partial class SyncRepository
         var exportList = untrackedPendingExports.ToList();
         if (exportList.Count == 0)
             return;
+
+        ThrowIfAnyQueued(exportList.Select(pe => pe.Id), nameof(UpdateUntrackedPendingExportsAsync));
 
         if (!_context.Database.IsRelational())
         {
@@ -1105,6 +1113,9 @@ public partial class SyncRepository
         if (changeList.Count == 0)
             return;
 
+        ThrowIfAnyQueued(changeList.Where(c => c.PendingExportId.HasValue).Select(c => c.PendingExportId!.Value),
+            nameof(DeleteUntrackedPendingExportAttributeValueChangesAsync));
+
         var changeIds = changeList.Select(c => c.Id).ToList();
 
         // Detach any tracked instances to prevent change tracker conflicts
@@ -1143,6 +1154,7 @@ public partial class SyncRepository
         if (stamps.Count == 0)
             return;
 
+        ThrowIfAnyQueued(stamps.Select(stamp => stamp.PendingExportId), nameof(SetPendingExportQueueingItemsAsync));
         var pendingExportIds = stamps.Select(stamp => stamp.PendingExportId).ToArray();
         var queueingItemIds = stamps.Select(stamp => stamp.QueuedByRunProfileExecutionItemId).ToArray();
 
