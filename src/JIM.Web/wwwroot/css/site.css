@@ -4500,6 +4500,14 @@ html[lang] .jim-kv-table td:first-child {
     padding-inline: 0.25rem;
 }
 
+/* MudBlazor pads a step 24px all round, which is what puts the connector 1.5rem below the top
+   (see the connector's margin-top). Nothing hangs beneath the labels, so the bottom padding is
+   dead space inside the panel; only the top is kept. Repeats MudBlazor's selector with the wrapper
+   in front, as the clickable rule below does, to win on specificity. */
+.jim-phase-stepper-h .mud-stepper .mud-stepper-nav .mud-step {
+    padding-block-end: 0;
+}
+
 /* MudBlazor renders each step as a clickable button, and this stepper cancels every click. Take the
    affordance away too, or a step offers a click that does nothing: no hover fill, no pointer, no
    ripple. Hovering still works, because the marker's tooltip is what a hover is for here.
