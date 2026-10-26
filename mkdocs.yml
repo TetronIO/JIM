@@ -6,10 +6,19 @@ repo_name: TetronIO/JIM
 # overrides/ is the theme's custom_dir, not content: without this it is also
 # published as a static file at /overrides/home.html. requirements.txt pins the
 # site's own toolchain and would otherwise be published at /requirements.txt.
+# hooks/ is build code, not content.
 exclude_docs: |
   CLAUDE.md
+  hooks/
   overrides/
   requirements.txt
+
+# The changelog page publishes released versions only; see docs/hooks/changelog.py.
+hooks:
+  - docs/hooks/changelog.py
+
+watch:
+  - CHANGELOG.md
 
 # Link validation (#1454). Under --strict, which changelog-lint runs on every
 # pull request that touches the docs, a warning fails the build:

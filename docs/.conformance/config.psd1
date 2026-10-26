@@ -8,8 +8,8 @@
 # This folder starts with a dot, so MkDocs never publishes it.
 @{
     # Pages the checks skip, as globs relative to docs/. Contributor pages leave the public site in
-    # Phase 5 of the plan, and the changelog page is a one-line include of CHANGELOG.md.
-    Exclude                 = @('CLAUDE.md', 'reference/changelog.md')
+    # Phase 5 of the plan.
+    Exclude                 = @('CLAUDE.md')
 
     # Block: every finding fails. Ratchet: findings beyond the baseline fail, and the baseline only
     # shrinks. Warn: reported, never fails. Promote a Warn rule to Ratchet or Block once it has run
