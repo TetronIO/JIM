@@ -414,6 +414,7 @@ public interface IConnectedSystemRepository
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
+    /// <param name="changeTypeFilters">Optional filter by one or more change types.</param>
     public Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
         int connectedSystemId,
         int page,
@@ -422,7 +423,8 @@ public interface IConnectedSystemRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool failingOnly = false);
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null);
 
     /// <summary>
     /// Retrieves a window of Pending Export headers addressed by absolute offset and count, for virtualised
@@ -440,6 +442,7 @@ public interface IConnectedSystemRepository
     /// <param name="sortDescending">Whether to sort in descending order.</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
     /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
+    /// <param name="changeTypeFilters">Optional filter by one or more change types.</param>
     public Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
         int connectedSystemId,
         int offset,
@@ -449,7 +452,8 @@ public interface IConnectedSystemRepository
         string? sortBy = null,
         bool sortDescending = true,
         bool includeTotalCount = true,
-        bool failingOnly = false);
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null);
 
     /// <summary>
     /// Retrieves a single Pending Export by ID.

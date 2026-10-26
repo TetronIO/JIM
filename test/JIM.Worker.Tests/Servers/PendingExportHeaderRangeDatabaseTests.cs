@@ -297,6 +297,45 @@ public class PendingExportHeaderRangeDatabaseTests
         }
     }
 
+    [Test]
+    public async Task Range_ChangeTypeFilter_RestrictsWindowAndTotalAsync()
+    {
+        var systemId = await SeedMixedStatusesAsync();
+        var jim = NewJim();
+
+        var result = await jim.ConnectedSystems.GetPendingExportHeadersRangeAsync(
+            systemId, offset: 0, count: 10, sortBy: CreatedSortKey, sortDescending: false,
+            changeTypeFilters: [PendingExportChangeType.Update]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.TotalResults, Is.EqualTo(2));
+            Assert.That(result.Results.Select(r => r.LastErrorMessage), Is.EqualTo(new[] { "Export B", "Export C" }));
+        }
+    }
+
+    [Test]
+    public async Task Paged_ChangeTypeAndStatusFilters_MustBothMatchAsync()
+    {
+        var systemId = await SeedMixedStatusesAsync();
+        var jim = NewJim();
+
+        var updateParked = await jim.ConnectedSystems.GetPendingExportHeadersAsync(
+            systemId, page: 1, pageSize: 10, statusFilters: [PendingExportStatus.Parked],
+            changeTypeFilters: [PendingExportChangeType.Update]);
+        var createParked = await jim.ConnectedSystems.GetPendingExportHeadersAsync(
+            systemId, page: 1, pageSize: 10, statusFilters: [PendingExportStatus.Parked],
+            changeTypeFilters: [PendingExportChangeType.Create]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updateParked.TotalResults, Is.EqualTo(1));
+            Assert.That(updateParked.Results.Select(r => r.LastErrorMessage), Is.EqualTo(new[] { "Export B" }));
+            Assert.That(createParked.TotalResults, Is.Zero);
+            Assert.That(createParked.Results, Is.Empty);
+        }
+    }
+
     /// <summary>
     /// A failing Pending Export stays Pending (#2119), so the failing filter is its own predicate rather than a status.
     /// </summary>

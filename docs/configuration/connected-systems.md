@@ -52,7 +52,7 @@ Of the built-in Connectors, only the [LDAP Connector](../connectors/jim-ldap-con
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
 
-Each Pending Export has a status, which the list shows and filters by:
+The list filters by change type (**Create**, **Update** or **Delete**) and by status. Each Pending Export has a status:
 
 | Status | What it means |
 |---|---|
