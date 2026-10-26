@@ -67,7 +67,7 @@ else if (_syncRule != null)
        rebuilds the component, so registration order becomes markup order again. *@
     @* mt-6 after the identity strip, which is a plain block with no padding of its own; mt-2 when the tabs follow
        the breadcrumbs directly (a new rule), whose own 16px padding makes up the rest of the 24px. *@
-    <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-5" Class="@(ShowIdentityStrip ? "mt-6" : "mt-2")" @bind-ActivePanelIndex="_activeTabIndex">
+    <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-6" Class="@(ShowIdentityStrip ? "mt-6" : "mt-2")" @bind-ActivePanelIndex="_activeTabIndex">
 
         <MudTabPanel Text="Details">
             <SyncRuleDetailsTab SyncRule="_syncRule"
