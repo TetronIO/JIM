@@ -1,0 +1,23 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Keeps an open inline MudDialog's options in step with its Options parameter. An inline MudDialog reads Options only
+   when it opens, so a dialog whose width depends on a choice made inside it (the Attribute Flow dialog: Medium for an
+   Attribute source, ExtraLarge once there is something to try) otherwise stays at the width it opened with. Place it
+   inside DialogContent, passing the same options as the MudDialog; it renders nothing. *@
+
+@code {
+    /// <summary>The open dialog, cascaded by MudBlazor to the dialog's content; null outside a dialog.</summary>
+    [CascadingParameter]
+    private IMudDialogInstance? DialogInstance { get; set; }
+
+    /// <summary>The options the dialog should be showing.</summary>
+    [Parameter, EditorRequired]
+    public DialogOptions Options { get; set; } = null!;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (DialogInstance != null && !ReferenceEquals(DialogInstance.Options, Options))
+            await DialogInstance.SetOptionsAsync(Options);
+    }
+}
