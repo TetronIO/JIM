@@ -446,9 +446,23 @@ public partial class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemsAsync();
     }
 
+    /// <summary>
+    /// Every Connected System as a header, with its object, joined-object and Pending Export counts. The counts read
+    /// every Connected System Object, so a caller that only needs to name or pick a system should use
+    /// <see cref="GetConnectedSystemNamesAsync"/> instead.
+    /// </summary>
     public async Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemHeadersAsync();
+    }
+
+    /// <summary>
+    /// The name of every Connected System, keyed by id: the lookup for naming or picking a system without paying for
+    /// the counts a header carries.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync();
     }
 
     public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)

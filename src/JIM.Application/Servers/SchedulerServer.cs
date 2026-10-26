@@ -566,8 +566,7 @@ public class SchedulerServer
         if (connectedSystemIds.Count == 0)
             return names;
 
-        var headers = await Application.ConnectedSystems.GetConnectedSystemHeadersAsync();
-        var headersById = headers.ToDictionary(h => h.Id, h => h.Name);
+        var namesById = await Application.ConnectedSystems.GetConnectedSystemNamesAsync();
 
         // Only the Connected Systems that actually have a Run Profile step need their Run Profiles listing; a
         // PowerShell or executable step names a Connected System without referencing a Run Profile at all.
@@ -586,7 +585,7 @@ public class SchedulerServer
                 runProfileNames = runProfiles.ToDictionary(rp => rp.Id, rp => rp.Name);
             }
 
-            names[connectedSystemId] = (headersById.GetValueOrDefault(connectedSystemId), runProfileNames);
+            names[connectedSystemId] = (namesById.GetValueOrDefault(connectedSystemId), runProfileNames);
         }
 
         return names;
