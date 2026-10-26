@@ -41,7 +41,8 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Target:</MudText>
                 @* Anything with an object chip wears it; the switch is the fallback for settings and the like. *@
-                <MudText>
+                @* mt-1: a chip's edge is its pill, not a line of text with leading above it, so it needs the extra 4px to sit as far from its label as the Status chip does. *@
+                <MudText Class="mt-1">
                     <ActivityTargetChip Activity="@_activity" ConnectedSystemName="@_connectedSystemHeader?.Name" MetaverseObject="@_metaverseObjectHeader">
                     @switch (_activity.TargetType)
                     {
@@ -94,7 +95,7 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText>
-                <MudText>
+                <MudText Class="mt-1">
                     <InitiatorChip InitiatedByType="@_activity.InitiatedByType"
                                        InitiatedById="@_activity.InitiatedById"
                                        InitiatedByName="@_activity.InitiatedByName"
