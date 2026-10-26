@@ -7,7 +7,7 @@ audience: implementer
 
 # SSO Setup: AD FS
 
-Use this guide to let people sign in to JIM with their Active Directory accounts through AD FS (Active Directory Federation Services), both in the portal and in the PowerShell module with `Connect-JIM`. One command registers JIM on AD FS, and you give JIM the values it returns. JIM identifies each person by their Active Directory `objectGUID`, so they sign in as the Metaverse Object that synchronisation from Active Directory created for them, and stay that person when they are renamed.
+Use this guide to let people sign in to JIM with their Active Directory accounts through AD FS (Active Directory Federation Services), both in the portal and in the PowerShell module with `Connect-JIM`. One command registers JIM on AD FS, and you give JIM the values it returns. JIM identifies each person by their Active Directory `objectGUID`, so they sign in as the Metaverse Object that synchronisation from Active Directory created for them, and stay that person when they are renamed. This configuration is verified against AD FS on Windows Server 2025 before every JIM release.
 
 !!! info "Read the overview first"
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the [confidential and public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, [how JIM recognises people](../sso-setup.md#how-jim-recognises-people), and the [testing steps](../sso-setup.md#testing-your-configuration) you can run once configuration is complete.
