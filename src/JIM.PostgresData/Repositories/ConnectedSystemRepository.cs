@@ -5495,7 +5495,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool failingOnly = false)
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -5509,7 +5510,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
         var offset = (page - 1) * pageSize;
         var (headers, grossCount) = await QueryPendingExportHeadersByRangeAsync(
-            connectedSystemId, offset, pageSize, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount: true, failingOnly);
+            connectedSystemId, offset, pageSize, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount: true, failingOnly, changeTypeFilters);
 
         return new PagedResultSet<PendingExportHeader>
         {
@@ -5534,7 +5535,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         string? sortBy = null,
         bool sortDescending = true,
         bool includeTotalCount = true,
-        bool failingOnly = false)
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null)
     {
         if (count < 1)
             throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
@@ -5548,7 +5550,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             count = MaxHeaderWindowSize;
 
         var (headers, grossCount) = await QueryPendingExportHeadersByRangeAsync(
-            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount, failingOnly);
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount, failingOnly, changeTypeFilters);
 
         return new RangeResultSet<PendingExportHeader>
         {
@@ -5572,7 +5574,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         string? sortBy,
         bool sortDescending,
         bool includeTotalCount,
-        bool failingOnly)
+        bool failingOnly,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters)
     {
         var query = Repository.Database.PendingExports
             .AsSplitQuery()
@@ -5591,6 +5594,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         var statusList = statusFilters?.ToList();
         if (statusList != null && statusList.Count > 0)
             query = query.Where(pe => statusList.Contains(pe.Status));
+
+        var changeTypeList = changeTypeFilters?.ToList();
+        if (changeTypeList != null && changeTypeList.Count > 0)
+            query = query.Where(pe => changeTypeList.Contains(pe.ChangeType));
 
         // A failing Pending Export is one whose last attempt failed (#2119); it is attempted again at every export run.
         if (failingOnly)

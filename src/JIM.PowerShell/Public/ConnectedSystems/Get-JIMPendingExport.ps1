@@ -56,11 +56,11 @@ function Get-JIMPendingExport {
         every export run until it succeeds; its FailingSince says since when it has been failing.
 
     .PARAMETER ChangeType
-        With -Count, counts only the Pending Exports that make this kind of change.
+        Returns, or with -Count counts, only the Pending Exports that make this kind of change.
 
     .PARAMETER Status
-        With -Count, counts only the Pending Exports with this status. A failing Pending Export is Pending; use
-        -Failing to count those.
+        Returns, or with -Count counts, only the Pending Exports with this status. A failing Pending Export is
+        Pending; use -Failing to find those.
 
     .OUTPUTS
         The Pending Exports, the one Pending Export, its value changes for -AttributeName, or with -Count how many
@@ -118,6 +118,11 @@ function Get-JIMPendingExport {
         Get-JIMPendingExport -ConnectedSystemId 2 -Count -ChangeType Create
 
         Gets the count of pending Create exports for Connected System 2.
+
+    .EXAMPLE
+        Get-JIMPendingExport -ConnectedSystemId 2 -ChangeType Delete -Status Pending -All
+
+        Gets every Delete waiting to export to Connected System 2, without paging through the rest of the backlog.
 
     .EXAMPLE
         Get-JIMPendingExport -ConnectedSystemId 2 -Count -Failing
@@ -194,10 +199,14 @@ function Get-JIMPendingExport {
         [Parameter(ParameterSetName = 'Count')]
         [switch]$Failing,
 
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [Parameter(ParameterSetName = 'Count')]
         [ValidateSet('Create', 'Update', 'Delete')]
         [string]$ChangeType,
 
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [Parameter(ParameterSetName = 'Count')]
         [ValidateSet('Pending', 'ExportNotConfirmed', 'Executing', 'Exported', 'Parked')]
         [string]$Status
@@ -271,6 +280,12 @@ function Get-JIMPendingExport {
                 if ($Failing) {
                     $endpoint += "&failing=true"
                 }
+                if ($ChangeType) {
+                    $endpoint += "&changeType=$ChangeType"
+                }
+                if ($Status) {
+                    $endpoint += "&status=$Status"
+                }
 
                 $response = Invoke-JIMApi -Endpoint $endpoint
                 foreach ($item in $response.items) {
@@ -289,11 +304,17 @@ function Get-JIMPendingExport {
                     if ($Failing) {
                         $endpoint += "&failing=true"
                     }
+                    if ($ChangeType) {
+                        $endpoint += "&changeType=$ChangeType"
+                    }
+                    if ($Status) {
+                        $endpoint += "&status=$Status"
+                    }
                     Invoke-JIMApi -Endpoint $endpoint
                 }
 
                 Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMPendingExport' -PageSize $PageSize -Force:$Force `
-                    -ItemNoun 'pending exports' -NarrowHint 'filter with -Search'
+                    -ItemNoun 'pending exports' -NarrowHint 'filter with -Search, -ChangeType or -Status'
             }
 
             'AttributeChanges' {
@@ -323,7 +344,7 @@ function Get-JIMPendingExport {
                 }
 
                 Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMPendingExport' -PageSize $PageSize -Force:$Force `
-                    -ItemNoun 'attribute changes' -NarrowHint 'filter with -Search'
+                    -ItemNoun 'attribute changes' -NarrowHint 'filter with -Search, -ChangeType or -Status'
             }
         }
     }

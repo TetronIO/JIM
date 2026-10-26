@@ -209,6 +209,37 @@ public class AuthControllerTests
     }
 
     [Test]
+    public void GetConfig_WhenAdfsApiIdentifierConfigured_AdvertisesItAsTheResourceOfAScope()
+    {
+        // AD FS reads a resource in the scope parameter as [resource]/[scope], so a bare identifier is split at its
+        // own last slash and refused (MSIS9602); the module's sign-in has to ask for the identifier's openid scope.
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://adfs.panoply.local/adfs");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+        Environment.SetEnvironmentVariable("JIM_SSO_API_SCOPE", "api://test-client-id");
+
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.Scopes, Is.EqualTo(new[] { "openid", "profile", "offline_access", "api://test-client-id/openid" }));
+    }
+
+    [Test]
+    public void GetConfig_WhenBareApiIdentifierConfiguredForAnotherProvider_AdvertisesItUnchanged()
+    {
+        // Okta's api://default is a scope in its own right.
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://panoply.okta.com/oauth2/default");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+        Environment.SetEnvironmentVariable("JIM_SSO_API_SCOPE", "api://default");
+
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.Scopes, Contains.Item("api://default"));
+    }
+
+    [Test]
     public void GetConfig_WhenSsoConfigured_ReturnsCodeResponseType()
     {
         // Arrange
