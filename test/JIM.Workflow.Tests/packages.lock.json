@@ -765,7 +765,7 @@
           "Microsoft.Data.SqlClient": "[7.1.1, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.400, )",
           "System.DirectoryServices.Protocols": "[10.0.14, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.13, )"
+          "System.Security.Cryptography.Pkcs": "[10.0.14, )"
         }
       },
       "jim.data": {
