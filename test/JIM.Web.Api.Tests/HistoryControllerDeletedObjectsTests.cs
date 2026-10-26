@@ -51,7 +51,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_ReturnsOkResultAsync()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         var result = await _controller.GetDeletedCsosAsync();
 
@@ -62,7 +62,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_WithNoResults_ReturnsEmptyListAsync()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         var result = await _controller.GetDeletedCsosAsync() as OkObjectResult;
         var response = result?.Value as DeletedObjectsPagedResponse<DeletedCsoResponse>;
@@ -100,11 +100,8 @@ public class HistoryControllerDeletedObjectsTests
                 It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync((changes, 1));
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemHeadersAsync())
-            .ReturnsAsync(new List<ConnectedSystemHeader>
-            {
-                new() { Id = 1, Name = "HR CSV", ConnectorName = "CSV" }
-            });
+        _mockCsRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [1] = "HR CSV" });
 
         var result = await _controller.GetDeletedCsosAsync() as OkObjectResult;
         var response = result?.Value as DeletedObjectsPagedResponse<DeletedCsoResponse>;
@@ -129,7 +126,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_WithConnectedSystemFilter_PassesFilterToRepositoryAsync()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         await _controller.GetDeletedCsosAsync(connectedSystemId: 42);
 
@@ -142,7 +139,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_WithExternalIdSearch_PassesSearchToRepositoryAsync()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         await _controller.GetDeletedCsosAsync(externalIdSearch: "EMP001");
 
@@ -155,7 +152,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_WithWhitespaceSearch_PassesNullToRepositoryAsync()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         await _controller.GetDeletedCsosAsync(externalIdSearch: "   ");
 
@@ -168,7 +165,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_WithDateRange_PassesDatesToRepositoryAsync()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         var fromDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var toDate = new DateTime(2026, 1, 31, 0, 0, 0, DateTimeKind.Utc);
@@ -184,7 +181,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_WithPagination_RespectsPageAndPageSizeAsync()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         await _controller.GetDeletedCsosAsync(page: 3, pageSize: 25);
 
@@ -197,7 +194,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_WithExcessivePageSize_ClampsTo1000Async()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         await _controller.GetDeletedCsosAsync(pageSize: 5000);
 
@@ -210,7 +207,7 @@ public class HistoryControllerDeletedObjectsTests
     public async Task GetDeletedCsosAsync_WithZeroPage_ClampsTo1Async()
     {
         SetupEmptyCsoDeletedChanges();
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         await _controller.GetDeletedCsosAsync(page: 0);
 
@@ -240,12 +237,8 @@ public class HistoryControllerDeletedObjectsTests
                 It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync((changes, 1));
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemHeadersAsync())
-            .ReturnsAsync(new List<ConnectedSystemHeader>
-            {
-                new() { Id = 1, Name = "HR CSV", ConnectorName = "CSV" },
-                new() { Id = 2, Name = "LDAP Directory", ConnectorName = "LDAP" }
-            });
+        _mockCsRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [1] = "HR CSV", [2] = "LDAP Directory" });
 
         var result = await _controller.GetDeletedCsosAsync() as OkObjectResult;
         var response = result?.Value as DeletedObjectsPagedResponse<DeletedCsoResponse>;
@@ -273,7 +266,7 @@ public class HistoryControllerDeletedObjectsTests
                 It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync((changes, 1));
 
-        SetupEmptyConnectedSystemHeaders();
+        SetupEmptyConnectedSystemNames();
 
         var result = await _controller.GetDeletedCsosAsync() as OkObjectResult;
         var response = result?.Value as DeletedObjectsPagedResponse<DeletedCsoResponse>;
@@ -503,10 +496,10 @@ public class HistoryControllerDeletedObjectsTests
             .ReturnsAsync((new List<ConnectedSystemObjectChange>(), 0));
     }
 
-    private void SetupEmptyConnectedSystemHeaders()
+    private void SetupEmptyConnectedSystemNames()
     {
-        _mockCsRepo.Setup(r => r.GetConnectedSystemHeadersAsync())
-            .ReturnsAsync(new List<ConnectedSystemHeader>());
+        _mockCsRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string>());
     }
 
     private void SetupEmptyMvoDeletedChanges()

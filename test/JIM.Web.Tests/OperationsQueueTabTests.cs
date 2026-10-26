@@ -67,7 +67,7 @@ public class OperationsQueueTabTests : JimComponentTestContext
         _taskingRepository.Reset();
         _activityRepository.Reset();
         _connectedSystemRepository.Reset();
-        _connectedSystemRepository.Setup(r => r.GetConnectedSystemHeadersAsync()).ReturnsAsync([]);
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(new Dictionary<int, string>());
         _activityRepository
             .Setup(r => r.GetScheduleStepOutcomesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
             .ReturnsAsync(new Dictionary<Guid, List<ScheduleStepObservation>>());
@@ -113,6 +113,26 @@ public class OperationsQueueTabTests : JimComponentTestContext
     {
         for (var attempt = 0; attempt < 200 && !condition(); attempt++)
             await System.Threading.Tasks.Task.Delay(50);
+    }
+
+    /// <summary>
+    /// The Run Profile picker offers every Connected System by name, read from the names lookup rather than from the
+    /// headers, whose counts read every Connected System Object only to fill a dropdown.
+    /// </summary>
+    [Test]
+    public void OperationsQueueTab_ConnectedSystemsExist_OffersEachByNameForARunProfile()
+    {
+        ArrangeQueue([]);
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [5] = "HR", [6] = "Directory" });
+
+        var cut = Render<OperationsQueueTab>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var options = cut.FindComponents<MudBlazor.MudSelectItem<int?>>().Select(i => i.Instance.Value);
+            Assert.That(options, Is.EqualTo(new int?[] { 6, 5 }));
+        });
     }
 
     [Test]

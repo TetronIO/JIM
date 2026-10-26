@@ -281,4 +281,15 @@ public class GeneratedValueFormHelpersTests
         // mapping contributes nothing this run rather than generating from a partial input.
         Assert.That(GeneratedValueFormHelpers.DefaultMissingInputBehaviourForGeneratedMapping, Is.EqualTo(MissingInputBehaviour.ContributeNoValue));
     }
+
+    [TestCase(false, false, GeneratedValueTokenKind.Sequence)]
+    [TestCase(true, false, GeneratedValueTokenKind.OnlyIfTaken)]
+    [TestCase(false, true, GeneratedValueTokenKind.Sequence)]
+    [TestCase(true, true, GeneratedValueTokenKind.Sequence)]
+    public void DefaultTokenKind_FollowsWhetherOnlyIfTakenCanBeUsed(bool hasBaseExpression, bool isNumberTarget, GeneratedValueTokenKind expected)
+    {
+        // "Only if taken" needs a base expression and is never valid for a Number target; anywhere it cannot be used,
+        // a sequence number is the default.
+        Assert.That(GeneratedValueFormHelpers.DefaultTokenKind(hasBaseExpression, isNumberTarget), Is.EqualTo(expected));
+    }
 }

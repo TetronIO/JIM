@@ -66,6 +66,21 @@ public class SyncRuleDetailsTabTests : JimComponentTestContext
         Assert.That(cut.Markup, Does.Contain("Provision users to the Connected System?"));
     }
 
+    /// <summary>
+    /// A new rule picks its Connected System from the names lookup, ordered by name. The picker used to be filled from
+    /// the Connected System headers, whose counts read every Connected System Object only to show a name.
+    /// </summary>
+    [Test]
+    public void SyncRuleDetailsTab_NewRule_OffersEveryConnectedSystemByName()
+    {
+        var cut = Render<SyncRuleDetailsTab>(p => p
+            .Add(c => c.SyncRule, new SyncRule())
+            .Add(c => c.ConnectedSystemNames, new Dictionary<int, string> { [1] = "HR", [2] = "Directory" }));
+
+        var options = cut.FindComponents<MudBlazor.MudSelectItem<string>>().Select(i => i.Instance.Value);
+        Assert.That(options, Is.EqualTo(new[] { "2", "1" }));
+    }
+
     private static SyncRule ProvisioningRule() => new()
     {
         Id = 3,

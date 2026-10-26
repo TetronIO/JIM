@@ -138,7 +138,8 @@
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3" data-testid="jim-generated-value-existing-count">
             @if (_ioLoading && _existingObjectCountText == null)
             {
-                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" Style="vertical-align: middle;" />
+                <span>Counting existing Metaverse Objects</span>
             }
             else
             {
@@ -245,6 +246,9 @@
     private string? _existingObjectCountText;
     private bool _ioLoading;
 
+    /// <summary>Whether the server reads still have to run for the inputs as they now stand.</summary>
+    private bool _ioRefreshOwed;
+
     private string? _lastPreviewKey;
     private string? _lastIoKey;
     private CancellationTokenSource? _debounceCts;
@@ -270,14 +274,16 @@
             return;
 
         _lastPreviewKey = previewKey;
-        var ioKeyChanged = ioKey != _lastIoKey;
+        // Owed until a refresh finishes the reads: a settings change can cancel one in flight, and the refresh that
+        // replaces it must read again or the count's spinner stays on screen.
+        _ioRefreshOwed |= ioKey != _lastIoKey;
         _lastIoKey = ioKey;
 
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();
         var cts = new CancellationTokenSource();
         _debounceCts = cts;
-        _ = DebounceAndRefreshAsync(cts.Token, ioKeyChanged);
+        _ = DebounceAndRefreshAsync(cts.Token, _ioRefreshOwed);
     }
 
     private async Task DebounceAndRefreshAsync(CancellationToken token, bool refreshIo)
@@ -304,6 +310,7 @@
             if (token.IsCancellationRequested)
                 return;
             _ioLoading = false;
+            _ioRefreshOwed = false;
         }
 
         await InvokeAsync(StateHasChanged);

@@ -24,17 +24,17 @@
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Add a Synchronisation Run to the queue. If it's empty,
     it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
 
-    @if (_connectedSystemHeaders is { Count: > 0 })
+    @if (_connectedSystemNames is { Count: > 0 })
     {
         <MudForm>
             <MudGrid>
                 <MudItem xs="12" sm="5">
-                    <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync"
+                    <MudSelect T="int?" ValueChanged="HandleConnectedSystemChangedAsync"
                                Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true"
                                RequiredError="Please select a Connected System">
-                        @foreach (var connectedSystem in _connectedSystemHeaders)
+                        @foreach (var (id, name) in _connectedSystemNames.OrderBy(n => n.Value))
                         {
-                            <MudSelectItem Value="@connectedSystem" />
+                            <MudSelectItem T="int?" Value="@id">@name</MudSelectItem>
                         }
                     </MudSelect>
                 </MudItem>
@@ -54,7 +54,7 @@
                 <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync"
                                DropShadow="false" FullWidth="true" Style="height: 39px; margin-top: 6px;"
-                               Disabled="@(_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)">
+                               Disabled="@(_selectedConnectedSystemId == null || _selectedConnectedSystemRunProfile == null)">
                         Execute</MudButton>
                     </MudItem>
                 </MudGrid>
@@ -281,9 +281,9 @@ rather than appearing and disappearing with the processing state *@
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
-    private List<ConnectedSystemHeader>? _connectedSystemHeaders;
+    private Dictionary<int, string>? _connectedSystemNames;
     private List<ConnectedSystemRunProfile>? _connectedSystemRunProfiles;
-    private ConnectedSystemHeader? _selectedConnectedSystemHeader;
+    private int? _selectedConnectedSystemId;
     private ConnectedSystemRunProfile? _selectedConnectedSystemRunProfile;
     private List<WorkerTaskHeader> _workerTaskHeaders = new();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
@@ -348,7 +348,7 @@ request)
     protected override async Task OnInitializedAsync()
     {
         using var jim = JimFactory.Create();
-        _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        _connectedSystemNames = await jim.ConnectedSystems.GetConnectedSystemNamesAsync();
 
         // In development, ?d=true query string activates demo mode with mock data
         if (Environment.IsDevelopment())
@@ -522,21 +522,28 @@ sth.Id)).ToList();
         _pollingCancellationTokenSource.Cancel();
     }
 
-    private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
+    private async Task HandleConnectedSystemChangedAsync(int? connectedSystemId)
     {
-        _selectedConnectedSystemHeader = connectedSystemHeader;
+        _selectedConnectedSystemId = connectedSystemId;
+        _selectedConnectedSystemRunProfile = null;
+        if (connectedSystemId is not { } id)
+        {
+            _connectedSystemRunProfiles = null;
+            return;
+        }
+
         using var jim = JimFactory.Create();
-        _connectedSystemRunProfiles = await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
+        _connectedSystemRunProfiles = await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(id);
     }
 
     private async Task HandleExecuteRunProfileSubmitAsync()
     {
-        if (_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)
+        if (_selectedConnectedSystemId is not { } connectedSystemId || _selectedConnectedSystemRunProfile == null)
             return;
 
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        var task = SynchronisationWorkerTask.ForUser(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id,
+        var task = SynchronisationWorkerTask.ForUser(connectedSystemId, _selectedConnectedSystemRunProfile.Id,
 user.Id, user.NameOrId);
         var result = await jim.Tasking.CreateWorkerTaskAsync(task);
 

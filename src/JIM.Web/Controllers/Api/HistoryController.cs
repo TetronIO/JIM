@@ -193,8 +193,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             pageSize: pageSize);
 
         // Resolve Connected System names
-        var csHeaders = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();
-        var csLookup = csHeaders.ToDictionary(h => h.Id, h => h.Name);
+        var csLookup = await _application.ConnectedSystems.GetConnectedSystemNamesAsync();
 
         var response = new DeletedObjectsPagedResponse<DeletedCsoResponse>
         {

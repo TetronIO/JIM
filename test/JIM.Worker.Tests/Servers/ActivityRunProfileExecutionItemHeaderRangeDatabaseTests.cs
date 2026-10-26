@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Data.Common;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -38,14 +39,15 @@ public class ActivityRunProfileExecutionItemHeaderRangeDatabaseTests
 
     private string _connectionString = null!;
 
-    private JimDbContext NewContext()
+    private JimDbContext NewContext(IInterceptor? interceptor = null)
     {
-        var options = new DbContextOptionsBuilder<JimDbContext>()
+        var builder = new DbContextOptionsBuilder<JimDbContext>()
             .UseNpgsql(_connectionString)
             .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-        return new JimDbContext(options);
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+        if (interceptor != null)
+            builder.AddInterceptors(interceptor);
+        return new JimDbContext(builder.Options);
     }
 
     [OneTimeSetUp]
@@ -71,7 +73,7 @@ public class ActivityRunProfileExecutionItemHeaderRangeDatabaseTests
         await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
-    private JimApplication NewJim() => new(new PostgresDataRepository(NewContext()));
+    private JimApplication NewJim(IInterceptor? interceptor = null) => new(new PostgresDataRepository(NewContext(interceptor)));
 
     [Test]
     public async Task Range_FirstWindow_ReturnsLeadingSliceAndFullTotalAsync()
@@ -194,6 +196,29 @@ public class ActivityRunProfileExecutionItemHeaderRangeDatabaseTests
 
         Assert.That(result.Results.Select(h => h.DisplayName),
             Is.EqualTo(new[] { "Alan Alpha", "Mia Mu", "Zoe Zeta" }));
+    }
+
+    [Test]
+    public async Task Range_SortAndSearchByDisplayName_MatchesNameAttributesByIdNotByPerRowNameLookupAsync()
+    {
+        // Matching the name candidates by attribute name inside the window read made PostgreSQL re-scan the whole
+        // Connected System Attribute table once per item per naming tier: a display-name sort over 40,000 group
+        // items took 48 seconds and exceeded the command timeout. The candidates must be resolved to attribute ids
+        // before the read, so the read itself never touches that table.
+        var activityId = await SeedNamedAsync(["Zoe Zeta", "Alan Alpha", "Mia Mu"]);
+        var interceptor = new CommandCapturingInterceptor();
+        var jim = NewJim(interceptor);
+
+        var result = await jim.Activities.GetActivityRunProfileExecutionItemHeadersRangeAsync(
+            activityId, offset: 0, count: 10, searchQuery: "a", sortBy: DisplayNameSortKey);
+
+        var windowReads = interceptor.CommandTexts.Where(t => t.Contains("\"ActivityRunProfileExecutionItems\"")).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Results.Select(h => h.DisplayName), Is.EqualTo(new[] { "Alan Alpha", "Mia Mu", "Zoe Zeta" }));
+            Assert.That(windowReads, Is.Not.Empty);
+            Assert.That(windowReads, Has.None.Contains("\"ConnectedSystemAttributes\""));
+        }
     }
 
     [Test]
@@ -386,5 +411,36 @@ public class ActivityRunProfileExecutionItemHeaderRangeDatabaseTests
 
         await ctx.SaveChangesAsync();
         return activity.Id;
+    }
+
+    /// <summary>
+    /// Records the text of every command the provider executes, so a test can assert on the shape of the SQL a read
+    /// generates.
+    /// </summary>
+    private sealed class CommandCapturingInterceptor : DbCommandInterceptor
+    {
+        private readonly List<string> _commandTexts = new();
+
+        public IReadOnlyList<string> CommandTexts => _commandTexts;
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            _commandTexts.Add(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<object> result,
+            CancellationToken cancellationToken = default)
+        {
+            _commandTexts.Add(command.CommandText);
+            return base.ScalarExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 }
