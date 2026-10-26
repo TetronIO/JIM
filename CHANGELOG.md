@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Filter the Pending Exports list by change type as well as status, in the portal and in REST and `Get-JIMPendingExport -ChangeType -Status`, so a script can fetch just the deletions waiting to export without paging through the whole backlog.
 - ✨ JIM tells administrators when it is running short of memory, before it fails rather than after: the Worker stops its running work when memory is nearly exhausted, instead of being killed part-way through with nothing recorded, and its Activity says why and what to do. The Operations page shows each service's memory and a **Memory low** condition, with a banner on every page. Also via REST and `Get-JIMServiceHealth`. (#2487)
 - ✨ JIM accepts an API token from the `access_token_issuer` the identity provider's discovery document publishes, as well as from its `issuer`, so AD FS, which issues access tokens under its federation service identifier, no longer needs `JIM_SSO_VALID_ISSUERS`. A token from any other issuer is still refused. (#2440)
 - ✨ Signing in keeps **Email** current from the identity provider, as it does the other profile values: the portal now asks every provider for the `email` scope. (#2439)
