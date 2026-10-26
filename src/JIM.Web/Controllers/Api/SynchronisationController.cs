@@ -73,7 +73,7 @@ public class SynchronisationController(
     public async Task<IActionResult> GetConnectedSystemsAsync([FromQuery] PaginationRequest pagination)
     {
         _logger.LogTrace("Requested Connected Systems (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        // Use GetConnectedSystemHeadersAsync which correctly computes PendingExportObjectsCount via SQL COUNT subquery.
+        // Use GetConnectedSystemHeadersAsync, which counts each system's objects and Pending Exports in the database.
         // The previous implementation used GetConnectedSystemsAsync().Select(FromEntity) which didn't load
         // the PendingExports navigation property, resulting in PendingExportObjectsCount always being 0.
         var headers = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();

@@ -71,7 +71,7 @@ else if (_syncRule != null)
 
         <MudTabPanel Text="Details">
             <SyncRuleDetailsTab SyncRule="_syncRule"
-                                ConnectedSystemHeaders="_connectedSystemHeaders"
+                                ConnectedSystemNames="_connectedSystemNames"
                                 MetaverseObjectTypes="_metaverseObjectTypes"
                                 OnChanged="OnChildChanged" />
         </MudTabPanel>
@@ -311,7 +311,7 @@ else if (_syncRule != null)
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private SyncRule? _syncRule;
     private bool _isLoading = true;
-    private List<ConnectedSystemHeader>? _connectedSystemHeaders;
+    private Dictionary<int, string>? _connectedSystemNames;
     private List<MetaverseObjectType>? _metaverseObjectTypes;
     private bool _loaded;
     private int? _loadedId;
@@ -454,7 +454,7 @@ else if (_syncRule != null)
             _syncRuleNameOrCreate = "New";
             _previewBaseline = null;
             _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
-            _connectedSystemHeaders = await _jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+            _connectedSystemNames = await _jim.ConnectedSystems.GetConnectedSystemNamesAsync();
             _metaverseObjectTypes = await _jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
     }

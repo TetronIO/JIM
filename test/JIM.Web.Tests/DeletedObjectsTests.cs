@@ -49,11 +49,8 @@ public class DeletedObjectsTests : JimComponentTestContext
         repository.Setup(r => r.Metaverse).Returns(_metaverse.Object);
 
         _connectedSystems
-            .Setup(r => r.GetConnectedSystemHeadersAsync())
-            .ReturnsAsync(new List<ConnectedSystemHeader>
-            {
-                new() { Id = ConnectedSystemId, Name = "Panoply AD" }
-            });
+            .Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [ConnectedSystemId] = "Panoply AD" });
         _metaverse
             .Setup(r => r.GetMetaverseObjectTypeHeadersAsync())
             .ReturnsAsync(new List<MetaverseObjectTypeHeader>());

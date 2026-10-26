@@ -57,11 +57,8 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
     {
         _syncRepository.Reset();
         _connectedSystemRepository.Reset();
-        _connectedSystemRepository.Setup(r => r.GetConnectedSystemHeadersAsync()).ReturnsAsync(
-        [
-            new ConnectedSystemHeader { Id = 3, Name = "Corporate Directory" },
-            new ConnectedSystemHeader { Id = 4, Name = "Contractor LDAP" }
-        ]);
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(
+            new Dictionary<int, string> { [3] = "Corporate Directory", [4] = "Contractor LDAP" });
         _syncRepository.Setup(r => r.GetPasswordQueueSummaryAsync(It.IsAny<DateTime>())).ReturnsAsync(new PasswordQueueSummary());
         ArrangeWindow([]);
 
