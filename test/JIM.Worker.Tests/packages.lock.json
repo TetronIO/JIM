@@ -796,8 +796,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
+        "resolved": "10.0.14",
+        "contentHash": "Wz+IgL2xpg8KJ4i2VWj6uz1PmZNu4Q0Ljlwd73P9Vze5NcOBtctLii3itV0PB2MpOqwqDEGfB6RCdv94A4E5yQ=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
@@ -844,7 +844,7 @@
           "Microsoft.Data.SqlClient": "[7.1.1, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.400, )",
           "System.DirectoryServices.Protocols": "[10.0.13, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.13, )"
+          "System.Security.Cryptography.Pkcs": "[10.0.14, )"
         }
       },
       "jim.data": {
