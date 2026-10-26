@@ -3254,13 +3254,16 @@ public partial class MetaverseRepository : IMetaverseRepository
             _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
         };
 
+        // The type is checked against each matched value's own object, by primary key, in a correlated subquery the
+        // planner cannot turn into a join (#2492). As a join, a type the statistics believe rare (every group of a
+        // first Full Synchronisation, projected after the analyse that counted the people) led the plan: it walked
+        // every object of the type and probed each one's values, so each lookup cost more than the last.
         return $"""
             FROM "MetaverseObjectAttributeValues" AS av
-            JOIN "MetaverseObjects" AS mo ON mo."Id" = av."MetaverseObjectId"
             {soughtJoin}
             WHERE av."AttributeId" = @attributeId
-              AND mo."TypeId" = @typeId
               AND {comparison}
+              AND (SELECT mo."TypeId" FROM "MetaverseObjects" AS mo WHERE mo."Id" = av."MetaverseObjectId") = @typeId
             """;
     }
 
