@@ -9175,6 +9175,7 @@ public partial class ConnectedSystemServer
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
+    /// <param name="changeTypeFilters">Optional filter by one or more change types.</param>
     public async Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
         int connectedSystemId,
         int page,
@@ -9183,10 +9184,11 @@ public partial class ConnectedSystemServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool failingOnly = false)
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportHeadersAsync(
-            connectedSystemId, page, pageSize, statusFilters, searchQuery, sortBy, sortDescending, failingOnly);
+            connectedSystemId, page, pageSize, statusFilters, searchQuery, sortBy, sortDescending, failingOnly, changeTypeFilters);
     }
 
     /// <summary>
@@ -9205,10 +9207,11 @@ public partial class ConnectedSystemServer
         string? sortBy = null,
         bool sortDescending = true,
         bool includeTotalCount = true,
-        bool failingOnly = false)
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportHeadersRangeAsync(
-            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount, failingOnly);
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount, failingOnly, changeTypeFilters);
     }
 
     /// <summary>

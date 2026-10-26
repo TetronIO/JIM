@@ -20,13 +20,13 @@ Gets the Pending Exports queued for a Connected System, and pages through the va
 
 ```powershell
 # List (default)
-Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] [-Page <int>] [-PageSize <int>] [-Failing]
+Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] [-Page <int>] [-PageSize <int>] [-Failing] [-ChangeType <string>] [-Status <string>]
 
 # Count
 Get-JIMPendingExport -ConnectedSystemId <int> -Count [-Failing] [-ChangeType <string>] [-Status <string>]
 
 # ListAll
-Get-JIMPendingExport -ConnectedSystemId <int> -All [-Search <string>] [-PageSize <int>] [-Force] [-Failing]
+Get-JIMPendingExport -ConnectedSystemId <int> -All [-Search <string>] [-PageSize <int>] [-Force] [-Failing] [-ChangeType <string>] [-Status <string>]
 
 # QueuedBy
 Get-JIMPendingExport -Id <guid> -QueuedBy
@@ -56,8 +56,8 @@ Get-JIMPendingExport -Id <guid>
 | `Force` | `switch` | No (ListAll, AttributeChangesAll) |  | With `-All`, fetches every page, past the 1000-page limit. |
 | `Count` | `switch` | Yes (Count) |  | Returns how many Pending Exports there are, rather than the Pending Exports. |
 | `Failing` | `switch` | No (List, Count, ListAll) |  | Returns, or with `-Count` counts, only the Pending Exports whose last attempt failed. JIM attempts each again at every export run until it succeeds; its FailingSince says since when it has been failing. |
-| `ChangeType` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports that make this kind of change. One of `Create`, `Update` or `Delete`. |
-| `Status` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports with this status. A failing Pending Export is Pending; use `-Failing` to count those. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
+| `ChangeType` | `string` | No (List, Count, ListAll) |  | Returns, or with `-Count` counts, only the Pending Exports that make this kind of change. One of `Create`, `Update` or `Delete`. |
+| `Status` | `string` | No (List, Count, ListAll) |  | Returns, or with `-Count` counts, only the Pending Exports with this status. A failing Pending Export is Pending; use `-Failing` to find those. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
 
 ### Output
 
@@ -173,6 +173,10 @@ Get-JIMPendingExport -ConnectedSystemId 3 -Search "jsmith" -PageSize 25
 
 ```powershell title="Get all Pending Exports"
 Get-JIMPendingExport -ConnectedSystemId 3 -All
+```
+
+```powershell title="Get only the deletions waiting to export"
+Get-JIMPendingExport -ConnectedSystemId 3 -ChangeType Delete -Status Pending -All
 ```
 
 ```powershell title="View details of a specific Pending Export"
