@@ -170,6 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 When JIM refuses a PowerShell command with 403, the error no longer tells someone JIM knows that their identity has not been provisioned. It names the status and both causes (none of their roles allows the operation, or they are not provisioned), and for an API key, the key's roles. (#2441)
 - 🐛 An SSO user's request to the REST API carries each of their JIM roles once, where `GET /api/v1/userinfo` listed them twice, and a role removed since they signed in to the portal no longer applies to the API calls the portal makes. (#2441)
 - 🐛 `Connect-JIM` signs in with AD FS. JIM advertised the Web API's bare identifier (`api://{id}`) as a scope, which AD FS splits at its last slash and refuses with MSIS9602, so the sign-in in the browser ended in an error. With an AD FS authority, JIM now asks for the identifier's `openid` scope (`api://{id}/openid`), the form AD FS reads as the resource. (#2441)
 - 🐛 The Logs page no longer shows a database query JIM cancelled on purpose, such as when someone leaves a page before it finishes loading, as an error: PostgreSQL's "canceling statement due to user request" now shows at Debug. A query stopped by the statement timeout is still an error.
