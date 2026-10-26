@@ -181,6 +181,7 @@
 
 @code {
     private VirtualisedDataGrid<ConnectedSystemHeader>? _grid;
+    private Task? _loading;
     private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
     private Dictionary<int, ConfigurationDriftStatus>? _drift;
     private Dictionary<int, PasswordSynchronisationState>? _passwordSynchronisationStates;
@@ -220,13 +221,14 @@
 
     /// <summary>
     /// Loads the Connected System list and its per-row indicator data once. The grid's window loader also calls
-    /// this because the grid can request its first window before this page's initialisation has completed.
+    /// this because the grid can request its first window before this page's initialisation has completed, so a
+    /// caller arriving mid-load waits on the load already running rather than starting another: the header query
+    /// counts every Connected System Object, and running it once per caller tripled the page's load time at scale.
     /// </summary>
-    private async Task EnsureLoadedAsync()
-    {
-        if (_connectedSystemHeaders != null)
-            return;
+    private Task EnsureLoadedAsync() => _loading ??= LoadAsync();
 
+    private async Task LoadAsync()
+    {
         using var jim = JimFactory.Create();
         _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 

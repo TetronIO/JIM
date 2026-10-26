@@ -382,6 +382,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ The Connected Systems list opens in a fraction of the time on large deployments: it now counts each system's objects once, in a single pass, where before it counted every Connected System Object up to six times per visit. With 1.5 million objects, the counting fell from about 2.5 seconds to about 80 ms.
 - ⚡ Synchronisation processes the Object Types groups refer to before the groups themselves, so group membership resolves as each group is processed instead of being worked through a second time in **Resolving cross-page references**. On a directory of 750,000 people and 40,000 groups that step took 29 minutes. For LDAP attributes that do not declare what they point at, such as `member` and `manager`, a Full Synchronisation reads which types their values point at. (#2492)
 - ⚡ Large exports no longer slow down as they progress: reading each batch of Pending Exports now costs the same at any queue size, where before every batch scanned rows already exported or still waiting. At 790,000 Pending Exports a batch read fell from about 137 ms to about 5 ms. (#2496)
 - ⚡ **Resolving cross-page references** is about four times faster per reference value, for references within one Object Type, such as managers and nested groups, which still need it. (#2492)
