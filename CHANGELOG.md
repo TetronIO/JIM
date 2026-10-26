@@ -169,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 `Connect-JIM` signs in with AD FS. JIM advertised the Web API's bare identifier (`api://{id}`) as a scope, which AD FS splits at its last slash and refuses with MSIS9602, so the sign-in in the browser ended in an error. With an AD FS authority, JIM now asks for the identifier's `openid` scope (`api://{id}/openid`), the form AD FS reads as the resource. (#2441)
 - 🐛 The Logs page no longer shows a database query JIM cancelled on purpose, such as when someone leaves a page before it finishes loading, as an error: PostgreSQL's "canceling statement due to user request" now shows at Debug. A query stopped by the statement timeout is still an error.
 - 🐛 A Delta Import from OpenLDAP or 389 Directory Server no longer reads the whole change log into memory at once, which could exhaust the server's memory after a large export to the same directory server. It reads a page at a time, OpenLDAP asks for the selected partitions' changes only, and 389 Directory Server reads a deleted entry's copy only for deletions. On OpenLDAP, a Delta Import stopped part-way by a size limit now fails, naming the limit, where it could miss changes. (#2486)
 - 🐛 An import no longer fails with a foreign key error when change tracking is on and an object references another object of the same import that is written in a later batch, such as a manager or a nested group, in an import of more than 2,000 new objects. (#2492)
