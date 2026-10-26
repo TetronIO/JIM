@@ -109,11 +109,21 @@
                 <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Execution Time:</MudText>
+                <MudTooltip Arrow="true" Placement="Placement.Top">
+                    <TooltipContent><TooltipText Text="How long the Worker spent running this Activity. It starts when the Worker picks the Activity up." /></TooltipContent>
+                    <ChildContent>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Execution Time:</MudText>
+                    </ChildContent>
+                </MudTooltip>
                 <MudText>@(_activity.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Total Activity Time:</MudText>
+                <MudTooltip Arrow="true" Placement="Placement.Top">
+                    <TooltipContent><TooltipText Text="How long this Activity took from creation to completion. It includes any time spent queued before the Worker picked it up." /></TooltipContent>
+                    <ChildContent>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Total Activity Time:</MudText>
+                    </ChildContent>
+                </MudTooltip>
                 <MudText>@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
 
