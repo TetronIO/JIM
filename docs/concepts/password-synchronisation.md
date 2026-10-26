@@ -54,7 +54,7 @@ Over REST it is one endpoint, `POST /api/v1/metaverse/objects/{id}/password`, wi
 
 Either way the change is recorded and delivered separately (the next section says why): the call answers once the change is durable, and the first delivery attempt follows within about a second. The endpoint takes an optional `wait`, in seconds from 0 to 30 (`-Wait` in PowerShell), which overrides either default and holds the request until every target has settled or the time runs out. It answers `200` when everything settled and `202` when something was still on its way, with the same body either way: `origin` (`Explicit` or `Propagated`), `settled`, and one entry per Connected System carrying its `state` (`Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Held`, `Expired` or `Cancelled`), the target's own `message`, its `attemptCount`, and `nextAttemptAt` for a target that is retrying. A target that is retrying counts as settled: its next attempt is minutes away, and nobody at a screen should be held for it. A target that was parked is settled too, and is the one that needs you: the system refused the password, in the words the `message` carries, and sending the same one again would be refused the same way.
 
-## 📬 How a password change reaches a system
+## How a password change reaches a system
 
 A password change is recorded first and delivered afterwards, never in the same breath. The person changing their password must not be held waiting on a directory, and their new password must not fail to take because one of the systems they have a Connected System Object in happens to be down. So JIM writes one queued change per target system, encrypted, and returns; the **Password Delivery Service** takes it from there.
 
@@ -71,7 +71,7 @@ A change for someone who changes their password again before the first one is de
 
 An [initial password](passwords.md#giving-new-connected-system-objects-their-first-password) queued by an export travels the same way, with one difference: the queued change carries no password value at all, because it never leaves the Connected System Object's Synchronisation Rule. JIM resolves what to send from that rule's Initial Password settings at each attempt, so a later change to those settings is picked up by the very next attempt rather than only by the Connected System Object's next export.
 
-## ⚡ The Password Delivery Service
+## The Password Delivery Service
 
 Delivery is not a synchronisation task and never waits behind one. The Worker runs a separate Password Delivery Service alongside its synchronisation loop, and the two share nothing but the process: a change queued while a Full Import is running is attempted within about a second of being queued, and a retry is attempted when it falls due rather than when the Worker next has nothing to do. That is what "on its own clock" means: the service's clock, not the synchronisation engine's.
 
@@ -83,7 +83,7 @@ A change the service has picked up is marked **Delivering** for as long as the w
 
 The service reports its own health. Its **Worker · Passwords** card on the [Service Health](../configuration/operations.md#service-health) strip says whether it is running, which systems it is delivering to, and what the queue holds ahead of it: how many changes are due now, how many are waiting out a retry, and when the next attempt is.
 
-## 🔎 Watching the queue
+## Watching the queue
 
 Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Passwords** tab of **Administration > Operations** lists every change on its way to a Connected System, one row per Metaverse Object per system, with what the target said about it. It sits beside the Queue, History and Schedules tabs because it answers the same question they do: what JIM is doing, and what it has stopped doing. The tab is badged with how many changes are waiting on a person (parked plus expired), so a backlog is visible from anywhere on the Operations page.
 
@@ -129,7 +129,7 @@ Resume-JIMPendingPasswordChange -ConnectedSystemId 3
 
 See [PowerShell: Password Synchronisation](../powershell/password-synchronisation.md) for the full set, and the [API reference](../api/index.md) for `GET /api/v1/password-synchronisation/queue` and its `retry` and `cancel` counterparts.
 
-## 🧹 How long any of it is kept
+## How long any of it is kept
 
 A finished password change is not kept for ever. The built-in **History Retention Cleanup** [Schedule](../configuration/schedules.md#built-in-schedules) runs daily and removes two things once they have had the `History.PasswordEventRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings), which defaults to a year:
 

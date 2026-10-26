@@ -30,14 +30,14 @@ Keycloak's built-in SCIM API needs a particular setup, which [Connect the SCIM C
 
 | Capability | Supported | Notes |
 |---|---|---|
-| Full Import | ✅ | Walks every resource type you have selected, page by page. A provider that returns an empty page while its `totalResults` says more remain fails the run, rather than having the resources it did not return treated as deleted. |
-| Delta Import | ✅ | Asks the provider for what changed since the last completed import. See [Change Detection](#change-detection). |
-| Export | ✅ | Creates, updates and deletes resources, including group membership. |
-| Paging | ✅ | The Run Profile's Page Size becomes the requested page size. |
-| Partitions and Containers | ❌ | SCIM has no partition concept; resource types are Connected System Object Types. |
-| Parallel Export | ✅ | Bounded by the provider's own rate limits, which the connector honours. |
-| Bulk Operations | ✅ | Optional. Sends exports a batch at a time where the provider advertises `/Bulk`. See [Bulk Operations](#bulk-operations). |
-| Probe | ✅ | Asks the provider whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](#probing-for-values-already-in-use). |
+| Full Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Walks every resource type you have selected, page by page. A provider that returns an empty page while its `totalResults` says more remain fails the run, rather than having the resources it did not return treated as deleted. |
+| Delta Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Asks the provider for what changed since the last completed import. See [Change Detection](#change-detection). |
+| Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Creates, updates and deletes resources, including group membership. |
+| Paging | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | The Run Profile's Page Size becomes the requested page size. |
+| Partitions and Containers | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | SCIM has no partition concept; resource types are Connected System Object Types. |
+| Parallel Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Bounded by the provider's own rate limits, which the connector honours. |
+| Bulk Operations | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Optional. Sends exports a batch at a time where the provider advertises `/Bulk`. See [Bulk Operations](#bulk-operations). |
+| Probe | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Asks the provider whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](#probing-for-values-already-in-use). |
 
 ### Schema Discovery
 

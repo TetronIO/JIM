@@ -16,7 +16,7 @@ It can also set a password on demand: on the Connected System Objects you name, 
 
 This page covers what JIM does with passwords and why. To actually configure it, follow the links in [Where to go next](#where-to-go-next).
 
-## 🔑 Giving new Connected System Objects their first password
+## Giving new Connected System Objects their first password
 
 Most directories will not let a newly created object be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every Connected System Object that rule creates, typically within seconds of the object existing, so it is complete and enabled without waiting on somebody to do it by hand.
 
@@ -93,7 +93,7 @@ If you use it, three things are worth knowing:
 
 Delivering a generated password to somebody who should have it, by email, is the answer that replaces this one; it is not built yet.
 
-## 🧭 Knowing what each system will accept
+## Knowing what each system will accept
 
 A password JIM generates has to satisfy rules JIM did not write, so JIM reads them from the system itself.
 
@@ -105,12 +105,12 @@ What JIM can read depends on the directory, because each one keeps its policy in
 
 | Rule | Active Directory and Samba AD | OpenLDAP (`ppolicy` overlay) | 389 Directory Server |
 |------|-------------------------------|------------------------------|----------------------|
-| Minimum length | ✅ | ✅ | ✅ When syntax checking is on |
-| Password history | ✅ | ✅ | ✅ When history is on |
-| Maximum age | ✅ | ✅ | ✅ When expiry is on |
-| Minimum age | ✅ | ✅ | ✅ |
-| Character classes | ✅ Complexity means three of five | ❌ Not published | ✅ A count of its five, when syntax checking is on |
-| Further checks | ❌ A password filter is invisible | ✅ JIM sees that a check module is configured | ✅ JIM sees that dictionary, palindrome, repetition, sequence or per-class checks are on |
+| Minimum length | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } When syntax checking is on |
+| Password history | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } When history is on |
+| Maximum age | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } When expiry is on |
+| Minimum age | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } |
+| Character classes | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Complexity means three of five | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } Not published | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } A count of its five, when syntax checking is on |
+| Further checks | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } A password filter is invisible | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } JIM sees that a check module is configured | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } JIM sees that dictionary, palindrome, repetition, sequence or per-class checks are on |
 
 A blank figure on the panel means that directory does not publish the rule, or has it switched off. It never means "no rule".
 
@@ -134,7 +134,7 @@ So treat what JIM discovered as a **floor, not a guarantee**, and read a blank v
 
     It cannot prove the whole chain, and JIM deliberately offers nothing that does, because the only way to prove it end to end is to reset a real Connected System Object's password.
 
-## 🔐 Setting a password on demand
+## Setting a password on demand
 
 Alongside provisioning, you can set a password whenever you need to: the new starter about to sign in for the first time, the Connected System Object whose provisioning password was refused, the reset that has to happen now.
 
@@ -158,7 +158,7 @@ This is the case where letting JIM generate the password matters most. You canno
 
     Where JIM could read no policy from a selected system, it says so rather than assuming that system will accept anything. Where no single password could satisfy them all, it refuses before queueing anything, rather than handing you one that the first Connected System Object accepts and the second rejects after the first has already changed.
 
-## 🛡️ How JIM handles passwords safely
+## How JIM handles passwords safely
 
 **A password is held, encrypted, only until it is delivered.** A password you set or propagate is encrypted the moment JIM receives it and sits on the queue only as long as it takes the Password Delivery Service to hand it to each Connected System; the moment a system has it, JIM's copy for that system is gone. A copy a system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with, until the change [expires or retention removes it](password-synchronisation.md#how-long-any-of-it-is-kept). Nothing else holds one: not JIM's logs, its Activities, its configuration history, its previews or its search, and no page, REST response or cmdlet will show you a queued password. An initial password JIM generates during provisioning is produced at the moment it is delivered and never queued at all.
 
@@ -184,7 +184,7 @@ There are two ways to give somebody something they can actually sign in with:
 
     That service account needs the **Reset Password** right on those containers and nothing more; in Active Directory this is separate from write access to attributes. **It does not need to be a Domain Admin, and should not be.** See [Service Account Permissions](../connectors/jim-ldap-connector-permissions.md).
 
-## ⚙️ Why passwords do not behave like other data
+## Why passwords do not behave like other data
 
 Everything else JIM manages flows through the Metaverse: imported from a source system, held centrally, evaluated by your Synchronisation Rules, queued as a Pending Export, and written out. That machinery remembers values, compares them, shows them to you, and retries them. All four are the wrong thing to do with a credential.
 
@@ -192,17 +192,17 @@ Passwords therefore travel their own path, which never touches any of it.
 
 | | Ordinary attributes | Passwords |
 |---|---|---|
-| Held centrally in the Metaverse | ✅ | ❌ |
-| Queued as a Pending Export | ✅ | ❌ queued on their own encrypted queue, held only until delivered |
-| Kept in configuration and object history | ✅ | ❌ a shared initial password is recorded as a keyed hash, never a value |
-| Read back when JIM imports | ✅ | ❌ |
-| Retried automatically | ✅ | ✅ on their own clock, and parked rather than retried into the same refusal |
+| Held centrally in the Metaverse | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } |
+| Queued as a Pending Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } queued on their own encrypted queue, held only until delivered |
+| Kept in configuration and object history | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } a shared initial password is recorded as a keyed hash, never a value |
+| Read back when JIM imports | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } |
+| Retried automatically | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } on their own clock, and parked rather than retried into the same refusal |
 
 The practical consequence is that **attributes holding credentials cannot be managed as attributes at all.** `unicodePwd`, `userPassword`, SCIM's `password` and their relatives cannot be imported and cannot be chosen in an Attribute Flow; JIM does not offer them. If an earlier version of your deployment had selected one, the next schema refresh deselects and locks it rather than deleting it, so any Synchronisation Rule referring to it stays intact. See [Credential attributes are never managed](../configuration/connected-system-attributes.md#credential-attributes-are-never-managed).
 
 It also means JIM writes passwords the way each directory expects rather than writing an attribute: for Active Directory it sets `unicodePwd` with the correct encoding, and elsewhere it uses the standard LDAP Password Modify operation. It never writes a password attribute directly, because directories store a directly written value exactly as supplied, which would leave the password readable in the directory.
 
-## 🔁 Password Synchronisation
+## Password Synchronisation
 
 Everything above sets a password on one Connected System Object, at the moment you ask. Password Synchronisation is the other half: one password change reaching every system a Metaverse Object has a Connected System Object in, durably, without you standing over it. See [Password Synchronisation](password-synchronisation.md).
 
