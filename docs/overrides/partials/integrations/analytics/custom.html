@@ -1,0 +1,9 @@
+{#-
+  Visitor analytics for docs.junctional.io. Material includes this partial
+  when extra.analytics.provider is "custom" (see mkdocs.yml, which holds the values).
+  data-domains limits tracking to the published site, so mkdocs serve and local
+  previews of a build send nothing.
+-#}
+{% set analytics = config.extra.analytics %}
+<script defer src="{{ analytics.host }}/stats.js" data-website-id="{{ analytics.website_id }}" data-domains="{{ analytics.domains }}"></script>
+<script defer src="{{ analytics.host }}/recorder.js" data-website-id="{{ analytics.website_id }}" data-domains="{{ analytics.domains }}"></script>
