@@ -1588,9 +1588,13 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             csoScalarQuery = afterId.HasValue
                 ? csoScalarQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
                 : csoScalarQuery.Skip(offset);
-            var allCsos = await csoScalarQuery
-                .Take(pageSize)
-                .ToListAsync();
+            List<ConnectedSystemObject> allCsos;
+            using (ActivitySource.StartActivity("Cso.Page.LoadScalars"))
+            {
+                allCsos = await csoScalarQuery
+                    .Take(pageSize)
+                    .ToListAsync();
+            }
 
             // Step 2: Partition into changed and unchanged CSOs
             var changedCsoIds = new List<Guid>();
@@ -1616,6 +1620,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             // Step 3: Load attribute values ONLY for changed CSOs
             if (changedCsoIds.Count > 0)
             {
+                using var loadValuesSpan = ActivitySource.StartActivity("Cso.Page.LoadChangedAttributeValues");
                 var attributeValues = await Repository.Database.ConnectedSystemObjectAttributeValues
                     .Include(av => av.Attribute)
                     .Where(av => changedCsoIds.Contains(av.ConnectedSystemObject.Id))
@@ -1653,7 +1658,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             csoQuery = afterId.HasValue
                 ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
                 : csoQuery.Skip(offset);
-            results = await csoQuery.Take(pageSize).ToListAsync();
+            using (var loadSpan = ActivitySource.StartActivity("Cso.Page.LoadWithAttributeValues"))
+            {
+                results = await csoQuery.Take(pageSize).ToListAsync();
+                loadSpan?.SetTag("attributeValueCount", results.Sum(cso => cso.AttributeValues.Count));
+            }
 
             // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
             await PopulateReferenceValuesAsync(results);
@@ -1923,6 +1932,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task PopulateReferenceValuesAsync(List<ConnectedSystemObject> csos)
     {
+        using var span = ActivitySource.StartActivity("Cso.PopulateReferenceValues");
         var allAttributeValues = csos.SelectMany(cso => cso.AttributeValues).ToList();
         var referencedCsoIds = allAttributeValues
             .Where(av => av.ReferenceValueId.HasValue)
@@ -1982,6 +1992,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task LoadMetaverseObjectsForCsosAsync(List<ConnectedSystemObject> csos)
     {
+        using var span = ActivitySource.StartActivity("Cso.LoadMetaverseObjects");
         var mvoIds = csos
             .Where(cso => cso.MetaverseObjectId != null)
             .Select(cso => cso.MetaverseObjectId!.Value)
