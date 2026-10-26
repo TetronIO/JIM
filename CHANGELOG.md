@@ -170,6 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Sorting a large Activity's Run Profile Execution Items by Display Name no longer times out with an error page: sorting 40,000 filtered items took 48 seconds and now takes under a second, and sorting all 790,000 items of a large sync takes about 2.5 seconds. Searching the items by name is faster for the same reason.
 - 🐛 The Logs page no longer shows a database query JIM cancelled on purpose, such as when someone leaves a page before it finishes loading, as an error: PostgreSQL's "canceling statement due to user request" now shows at Debug. A query stopped by the statement timeout is still an error.
 - 🐛 A Delta Import from OpenLDAP or 389 Directory Server no longer reads the whole change log into memory at once, which could exhaust the server's memory after a large export to the same directory server. It reads a page at a time, OpenLDAP asks for the selected partitions' changes only, and 389 Directory Server reads a deleted entry's copy only for deletions. On OpenLDAP, a Delta Import stopped part-way by a size limit now fails, naming the limit, where it could miss changes. (#2486)
 - 🐛 An import no longer fails with a foreign key error when change tracking is on and an object references another object of the same import that is written in a later batch, such as a manager or a nested group, in an import of more than 2,000 new objects. (#2492)
