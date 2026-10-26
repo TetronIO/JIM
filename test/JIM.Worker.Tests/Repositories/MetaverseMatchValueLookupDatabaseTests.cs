@@ -294,74 +294,25 @@ public class MetaverseMatchValueLookupDatabaseTests
                     plan.Add(reader.GetString(0));
             }
 
-            // The lookup is a prepared statement, so after a few executions PostgreSQL may switch to a generic plan,
-            // made without seeing the values. That plan must keep to the value's index too.
-            var genericPlan = new List<string>();
-            var parameterised = MetaverseRepository.BuildMatchValueLookupSql(AttributeDataType.Text, caseSensitive)
-                .Replace("@attributeId", "$1").Replace("@typeId", "$2").Replace("@take", "$3").Replace("@values", "$4");
-            await using (var prepare = new NpgsqlCommand(
-                $"SET plan_cache_mode = force_generic_plan; PREPARE lookup(integer, integer, integer, text[]) AS {parameterised};", connection))
-            {
-                await prepare.ExecuteNonQueryAsync();
-            }
-            await using (var explainGeneric = new NpgsqlCommand(
-                $"EXPLAIN EXECUTE lookup({seeded.EmployeeId.Id}, {seeded.Group.Id}, 2, ARRAY['G100'])", connection))
-            await using (var reader = await explainGeneric.ExecuteReaderAsync())
-            {
-                while (await reader.ReadAsync())
-                    genericPlan.Add(reader.GetString(0));
-            }
-
             var planText = string.Join("\n", plan);
-            var genericPlanText = string.Join("\n", genericPlan);
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(plan.Any(line => line.Contains("IX_MetaverseObjects_TypeId")), Is.False,
                     "The lookup reads every object of the type through the type index.\n" + planText);
                 Assert.That(plan.Any(line => line.Contains("Seq Scan on \"MetaverseObjects\"")), Is.False,
                     "The lookup scans every Metaverse Object.\n" + planText);
-                Assert.That(genericPlan.Any(line => line.Contains("IX_MetaverseObjects_TypeId") || line.Contains("Seq Scan on \"MetaverseObjects\"")), Is.False,
-                    "The generic plan reads every object of the type.\n" + genericPlanText);
                 Assert.That(await FindAsync(seeded.Group, seeded.EmployeeId, AttributeDataType.Text, ["G100"], caseSensitive),
                     Is.EqualTo(new[] { group.Id }), "The rewritten lookup must still find the group.");
             }
         }
         finally
         {
-            // The connection goes back to the pool, and once it holds the lookup's own prepared statements its reset
-            // keeps every prepared statement, so this test's must be removed by hand, along with its setting.
             await using var restore = new NpgsqlCommand("""
-                DEALLOCATE lookup;
-                RESET plan_cache_mode;
                 ALTER TABLE "MetaverseObjects" RESET (autovacuum_enabled);
                 ALTER TABLE "MetaverseObjectAttributeValues" RESET (autovacuum_enabled);
                 """, connection);
             await restore.ExecuteNonQueryAsync();
         }
-    }
-
-    [Test]
-    public async Task FindAndCountMetaverseObjectsByMatchValuesAsync_RepeatedOnOneConnection_ArePlannedOnceEachAsync()
-    {
-        // The lookup runs once per object on a Full Synchronisation's join path, and planning it costs about six
-        // times executing it (#2492: 0.37 ms against 0.06 ms per lookup), so each form is prepared once per connection.
-        var seeded = await SeedAsync();
-        await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "E100");
-
-        await using var ctx = NewContext();
-        await ctx.Database.OpenConnectionAsync();
-        var repository = new PostgresDataRepository(ctx);
-        for (var i = 0; i < 3; i++)
-        {
-            await repository.Metaverse.FindMetaverseObjectIdsByMatchValuesAsync(seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, [$"E10{i}"], false, 2);
-            await repository.Metaverse.CountMetaverseObjectsByMatchValuesAsync(seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, [$"E10{i}"], false);
-        }
-
-        var connection = (NpgsqlConnection)ctx.Database.GetDbConnection();
-        await using var prepared = new NpgsqlCommand(
-            "SELECT count(*) FROM pg_prepared_statements WHERE statement LIKE '%FROM \"MetaverseObjectAttributeValues\" AS av%'", connection);
-        Assert.That(Convert.ToInt32(await prepared.ExecuteScalarAsync()), Is.EqualTo(2),
-            "The lookup and the count are each prepared once on the connection, not planned on every call.");
     }
 
     private async Task<IReadOnlyList<Guid>> FindAsync(MetaverseObjectType type, MetaverseAttribute attribute, AttributeDataType valueType,

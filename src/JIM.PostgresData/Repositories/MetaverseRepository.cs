@@ -3196,10 +3196,6 @@ public partial class MetaverseRepository : IMetaverseRepository
             (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
         AddMatchValueLookupParameters(command, metaverseObjectTypeId, metaverseAttributeId, valueType, values, take);
 
-        // Prepared once per physical connection, and reused by every later lookup of the same form: planning the
-        // lookup costs about six times running it, and a Full Synchronisation runs it once per object (#2492).
-        await command.PrepareAsync();
-
         var ids = new List<Guid>();
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -3283,7 +3279,6 @@ public partial class MetaverseRepository : IMetaverseRepository
         await using var command = new NpgsqlCommand(BuildMatchValueCountSql(valueType, caseSensitive), connection,
             (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
         AddMatchValueLookupParameters(command, metaverseObjectTypeId, metaverseAttributeId, valueType, values, take: 0);
-        await command.PrepareAsync();
         return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
