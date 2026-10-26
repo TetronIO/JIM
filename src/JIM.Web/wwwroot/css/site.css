@@ -7114,3 +7114,9 @@ html[lang] .mud-table tbody tr.jim-row-selected > td:first-child {
 .jim-flow-editor-try .mud-simple-table .mud-table-container {
     overflow-x: auto;
 }
+
+/* A row of list filters (selects beside a switch) packs from the left. MudSelect's outer div grows to fill a flex
+   row, so two selects otherwise share the whole width and the controls spread across the page. */
+.jim-filter-row > .mud-select {
+    flex: 0 1 300px;
+}

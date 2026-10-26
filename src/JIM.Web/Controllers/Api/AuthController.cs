@@ -67,7 +67,12 @@ public class AuthController : ControllerBase
         var scopes = new List<string> { "openid", "profile", "offline_access" };
         if (!string.IsNullOrEmpty(apiScope))
         {
-            scopes.Add(apiScope);
+            // AD FS takes a resource in the scope parameter only as [resource]/[scope], and a bare identifier such as
+            // api://{id} would be split at its own last slash and refused (MSIS9602), so the module asks for the Web
+            // API's openid scope. The portal passes AD FS the resource directly (PortalSignInRequest).
+            scopes.Add(PortalSignInRequest.IsAdfsAuthority(authority)
+                ? $"{ApiAudienceResolver.Resolve(apiScope, clientId)}/openid"
+                : apiScope);
         }
 
         // Prefer the public/client-facing authority when the deployment exposes Keycloak on a

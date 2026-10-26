@@ -24,11 +24,11 @@
 @if (_connectedSystemHeader != null)
 {
     <MudPaper Elevation="0" Class="pa-4 mt-2" Outlined="true">
-        <MudStack Row AlignItems="AlignItems.Center" Spacing="4" Wrap="Wrap.Wrap">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="4" Wrap="Wrap.Wrap" Class="jim-filter-row">
             <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
                        SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
                        MultiSelectionTextFunc="@GetFilterText"
-                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
+                       Variant="Variant.Outlined" Clearable="true" Dense="true">
                 <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
                 <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
                 <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
@@ -38,7 +38,7 @@
             <MudSelect T="PendingExportChangeType" Label="Filter by Change Type" MultiSelection="true"
                        SelectedValues="_changeTypeFilters" SelectedValuesChanged="OnChangeTypeFiltersChanged"
                        MultiSelectionTextFunc="@GetFilterText"
-                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
+                       Variant="Variant.Outlined" Clearable="true" Dense="true">
                 <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Create">Create</MudSelectItem>
                 <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Update">Update</MudSelectItem>
                 <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Delete">Delete</MudSelectItem>

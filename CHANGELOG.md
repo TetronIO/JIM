@@ -170,8 +170,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Sorting or searching an Activity's execution items by name no longer times out on large runs; a 40,000-item Display Name sort took 48 seconds and showed an error page.
+- 🐛 The Add Attribute Flow dialog widens when an Expression or Generated Value is chosen, so **Try it** sits beside the settings rather than beneath them.
 - 🐛 A new Generated Value no longer opens with "Add a number only if the value is already taken" selected but unavailable and a save error showing: it starts on a sequence number and moves to "only if taken" once a base expression is typed, unless you have chosen a token yourself.
 - 🐛 Sorting or searching a large Activity's Run Profile Execution Items by name no longer times out with an error page: 40,000 filtered items sort in under a second rather than 48, and all 790,000 items of a large sync in about 2.5 seconds.
+- 🐛 When JIM refuses a PowerShell command with 403, the error no longer tells someone JIM knows that their identity has not been provisioned. It names the status and both causes (none of their roles allows the operation, or they are not provisioned), and for an API key, the key's roles. (#2441)
+- 🐛 An SSO user's request to the REST API carries each of their JIM roles once, where `GET /api/v1/userinfo` listed them twice, and a role removed since they signed in to the portal no longer applies to the API calls the portal makes. (#2441)
+- 🐛 `Connect-JIM` signs in with AD FS. JIM advertised the Web API's bare identifier (`api://{id}`) as a scope, which AD FS splits at its last slash and refuses with MSIS9602, so the sign-in in the browser ended in an error. With an AD FS authority, JIM now asks for the identifier's `openid` scope (`api://{id}/openid`), the form AD FS reads as the resource. (#2441)
 - 🐛 The Logs page no longer shows a database query JIM cancelled on purpose, such as when someone leaves a page before it finishes loading, as an error: PostgreSQL's "canceling statement due to user request" now shows at Debug. A query stopped by the statement timeout is still an error.
 - 🐛 A Delta Import from OpenLDAP or 389 Directory Server no longer reads the whole change log into memory at once, which could exhaust the server's memory after a large export to the same directory server. It reads a page at a time, OpenLDAP asks for the selected partitions' changes only, and 389 Directory Server reads a deleted entry's copy only for deletions. On OpenLDAP, a Delta Import stopped part-way by a size limit now fails, naming the limit, where it could miss changes. (#2486)
 - 🐛 An import no longer fails with a foreign key error when change tracking is on and an object references another object of the same import that is written in a later batch, such as a manager or a nested group, in an import of more than 2,000 new objects. (#2492)
@@ -383,6 +388,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ The Connectors and Synchronisation Rules lists load once per visit instead of three times, and pages that only name Connected Systems (pickers, Schedules, Deleted Objects) no longer count every Connected System Object to do it.
 - ⚡ The Connected Systems list opens in a fraction of the time on large deployments: it now counts each system's objects once, in a single pass, where before it counted every Connected System Object up to six times per visit. With 1.5 million objects, the counting fell from about 2.5 seconds to about 80 ms.
 - ⚡ Synchronisation processes the Object Types groups refer to before the groups themselves, so group membership resolves as each group is processed instead of being worked through a second time in **Resolving cross-page references**. On a directory of 750,000 people and 40,000 groups that step took 29 minutes. For LDAP attributes that do not declare what they point at, such as `member` and `manager`, a Full Synchronisation reads which types their values point at. (#2492)
 - ⚡ Large exports no longer slow down as they progress: reading each batch of Pending Exports now costs the same at any queue size, where before every batch scanned rows already exported or still waiting. At 790,000 Pending Exports a batch read fell from about 137 ms to about 5 ms. (#2496)
