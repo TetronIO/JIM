@@ -34,12 +34,17 @@ public class GeneratedValuePreviewPanelTests : JimComponentTestContext
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.ConnectedSystems).Returns(new Mock<IConnectedSystemRepository>().Object);
         repository.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
-        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
+        // The existing-object count takes a while against a large Metaverse; long enough here for a settings change to
+        // land while it is still running.
+        var syncRepository = new Mock<ISyncRepository>();
+        syncRepository.Setup(r => r.CountMetaverseObjectsAwaitingGeneratedValueAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()))
+            .Returns(async () => { await Task.Delay(600); return 42; });
+        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object, syncRepository.Object));
     }
 
-    private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
+    private sealed class FakeJimApplicationFactory(IRepository repository, ISyncRepository syncRepository) : IJimApplicationFactory
     {
-        public JimApplication Create() => new(repository);
+        public JimApplication Create() => new(repository, syncRepository: syncRepository);
     }
 
     private IRenderedComponent<GeneratedValuePreviewPanel> RenderPreview(GeneratedBaseEvaluation? triedBase)
@@ -89,5 +94,30 @@ public class GeneratedValuePreviewPanelTests : JimComponentTestContext
             Assert.That(cut.FindAll("[data-testid=jim-generated-value-nothing-generated]"), Has.Count.EqualTo(1));
             Assert.That(cut.Markup, Does.Not.Contain("firstname.lastname"));
         }
+    }
+
+    [Test]
+    public async Task GeneratedValuePreviewPanel_SettingChangedWhileCounting_StillShowsTheCountAsync()
+    {
+        // A settings change cancelled the count in flight and the refresh it started did not count again, so the count's
+        // spinner was left on screen for good.
+        var mapping = new SyncRuleMapping { Generation = new SyncRuleMappingGeneration() };
+        var cut = Render<GeneratedValuePreviewPanel>(p => p
+            .Add(c => c.Mapping, mapping)
+            .Add(c => c.BaseSource, new SyncRuleMappingSource { Expression = BaseExpression })
+            .Add(c => c.TargetType, AttributeDataType.Text)
+            .Add(c => c.TargetName, "Common Name")
+            .Add(c => c.Direction, SyncRuleDirection.Import)
+            .Add(c => c.SyncRuleId, 4)
+            .Add(c => c.ConnectedSystemId, 2)
+            .Add(c => c.MetaverseObjectTypeId, 1)
+            .Add(c => c.TargetMetaverseAttributeId, 7));
+
+        await Task.Delay(450);
+        mapping.Generation.SuffixStart = 2;
+        cut.Render();
+
+        cut.WaitForState(() => cut.Markup.Contains("42 existing"), TimeSpan.FromSeconds(5));
+        Assert.That(cut.Markup, Does.Contain("42 existing"));
     }
 }
