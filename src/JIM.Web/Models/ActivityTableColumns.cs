@@ -19,7 +19,7 @@ public static class ActivityTableColumns
     public const string RunProfile = "width: 14%;";
     public const string Detail = "";
     public const string InitiatedBy = "width: 15%;";
-    public const string FirstTime = "width: 130px;";
+    public const string FirstTime = "width: 150px;";
     public const string SecondTime = "width: 120px;";
     public const string Actions = "width: 64px;";
 }

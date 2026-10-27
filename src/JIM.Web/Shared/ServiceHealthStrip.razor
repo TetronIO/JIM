@@ -103,7 +103,7 @@
                             · @if (NextSchedule is { } next)
                             {
                                 <text>Next: </text><MudLink Href="/admin/operations?t=schedules">@next.Name</MudLink>
-                                <text> @ServiceHealthDisplay.NextScheduleWhen(next.NextRunTime, asOf, TimeZoneInfo.Local) (@ServiceHealthDisplay.NextScheduleCountdown(next.NextRunTime, asOf))</text>
+                                @($" {ServiceHealthDisplay.NextScheduleWhen(next.NextRunTime, asOf, TimeZoneInfo.Local)} ({ServiceHealthDisplay.NextScheduleCountdown(next.NextRunTime, asOf)})")
                             }
                             else
                             {

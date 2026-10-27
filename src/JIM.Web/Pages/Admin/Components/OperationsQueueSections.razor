@@ -299,6 +299,7 @@
     private List<QueueDisplayRow> _runningRows = [];
     private int _queuedCount;
     private int _runningCount;
+    private (int Queued, int Running)? _reportedCounts;
     private int _hiddenQueuedCount;
     private bool _showAllQueued;
     private int _queuedRowBudget = QueueRowBudget.ProvisionalRows;
@@ -376,7 +377,6 @@
         if (_appliedFilters != null && _appliedFilters != Filters)
         {
             RebuildRows();
-            await ReportCountsAsync();
         }
 
         _appliedFilters = Filters;
@@ -384,8 +384,9 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-            await ReportCountsAsync();
+        // Every render, not just the first: the first happens while the queue read is still in flight, and every
+        // later change to the counts arrives through a render too. Unchanged counts are not reported again.
+        await ReportCountsAsync();
 
         // The Queued table exists only while something is queued, so observation starts the first time it does.
         if (!_observingQueue && ShowQueued && _queuedRows.Count > 0)
@@ -470,11 +471,7 @@
                 await RefreshDerivedDataAsync(refreshJim);
 
             RebuildRows();
-            await InvokeAsync(async () =>
-            {
-                StateHasChanged();
-                await ReportCountsAsync();
-            });
+            await InvokeAsync(StateHasChanged);
         }
         finally
         {
@@ -594,26 +591,30 @@
 
     private async Task ReportCountsAsync()
     {
-        if (CountsChanged.HasDelegate)
-            await CountsChanged.InvokeAsync((_queuedCount, _runningCount));
+        var counts = (_queuedCount, _runningCount);
+        if (!CountsChanged.HasDelegate || _reportedCounts == counts)
+            return;
+
+        _reportedCounts = counts;
+        await CountsChanged.InvokeAsync(counts);
     }
 
     private ScheduleExecutionProgress? ProgressFor(Guid? scheduleExecutionId) =>
         scheduleExecutionId is { } id ? _scheduleProgress.GetValueOrDefault(id) : null;
 
-    /// <summary>What a Schedule Execution's header says about where it has got to.</summary>
+    /// <summary>
+    /// What a Schedule Execution's header says about where it has got to. How many of its tasks run in parallel is the
+    /// step rail's to say, beside it.
+    /// </summary>
     private string ScheduleSummary(Guid? scheduleExecutionId)
     {
         var tasks = _workerTaskHeaders.Where(t => t.ScheduleExecutionId == scheduleExecutionId).ToList();
         var progress = ProgressFor(scheduleExecutionId);
-        var position = progress == null
+        return progress == null
             ? $"{tasks.Count} tasks"
             : progress.CurrentStepNumber.HasValue
                 ? $"Step {progress.CurrentStepNumber} of {progress.TotalSteps}"
                 : $"{tasks.Count} tasks across {progress.TotalSteps} steps";
-
-        var processing = tasks.Count(t => t.Status == WorkerTaskStatus.Processing);
-        return processing > 1 ? $"{position}, {processing} tasks running in parallel" : position;
     }
 
     private static RenderFragment InitiatorCell(WorkerTaskHeader task) =>

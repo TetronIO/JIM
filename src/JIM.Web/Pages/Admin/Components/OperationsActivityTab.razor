@@ -82,7 +82,7 @@
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
-        <MudSelect T="ActivityStatus" Label="Result" Variant="Variant.Outlined" HelperText="Completed only"
+        <MudSelect T="ActivityStatus" Label="Result" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true" Disabled="@(!_sections.Completed)"
                    SelectedValues="_filters.Results"
                    SelectedValuesChanged="@(values => SetFilters(_filters with { Results = values.ToList() }))"

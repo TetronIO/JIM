@@ -278,7 +278,7 @@
                                    ScheduleExecutionId="@context.Item.ScheduleExecutionId" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Executed" Sortable="false" HeaderStyle="@ActivityTableColumns.FirstTime">
+        <TemplateColumn T="Activity" Title="Executed" Sortable="false" HeaderStyle="@ActivityTableColumns.FirstTime" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Executed" Name="created" />
             </HeaderTemplate>
@@ -289,7 +289,7 @@
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Duration" Sortable="false" HeaderStyle="@ActivityTableColumns.SecondTime">
+        <TemplateColumn T="Activity" Title="Duration" Sortable="false" HeaderStyle="@ActivityTableColumns.SecondTime" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Duration" Name="executiontime" />
             </HeaderTemplate>

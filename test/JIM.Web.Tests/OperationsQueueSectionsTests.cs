@@ -177,7 +177,6 @@ public class OperationsQueueSectionsTests : JimComponentTestContext
                 Assert.That(section.QuerySelectorAll("tr.jim-activity-row"), Has.Length.EqualTo(2));
                 Assert.That(cut.FindComponents<WorkerTaskProgress>(), Has.Count.EqualTo(2),
                     "every running task shows its own full progress, not just the first");
-                Assert.That(section.TextContent, Does.Contain("2 tasks running in parallel"));
             }
         });
     }
@@ -351,6 +350,24 @@ public class OperationsQueueSectionsTests : JimComponentTestContext
         (int Queued, int Running)? reported = null;
 
         Render<OperationsQueueSections>(p => p.Add(c => c.CountsChanged, counts => reported = counts));
+
+        Assert.That(reported, Is.EqualTo((2, 1)));
+    }
+
+    [Test]
+    public async Task OperationsQueueSections_QueueReadTakesTime_StillReportsTheCountsOnceLoadedAsync()
+    {
+        // The first render happens while the queue read is still in flight; counts reported then are zeros, and the
+        // toggles above the tab would keep saying "Queued 0" beside a section holding work.
+        _taskingRepository.Setup(r => r.GetWorkerTaskHeadersAsync()).Returns(async () =>
+        {
+            await System.Threading.Tasks.Task.Delay(100);
+            return [Task("HR System", status: WorkerTaskStatus.Processing), Task("LDAP Directory"), Task("AD")];
+        });
+        (int Queued, int Running)? reported = null;
+
+        Render<OperationsQueueSections>(p => p.Add(c => c.CountsChanged, counts => reported = counts));
+        await WaitUntilAsync(() => reported == (2, 1));
 
         Assert.That(reported, Is.EqualTo((2, 1)));
     }
