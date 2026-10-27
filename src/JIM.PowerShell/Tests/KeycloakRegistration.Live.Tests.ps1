@@ -85,16 +85,20 @@ BeforeAll {
         }
         $queryString = ($query.GetEnumerator() | ForEach-Object { "$($_.Key)=$([uri]::EscapeDataString($_.Value))" }) -join '&'
 
-        $login = Invoke-WebRequest -Uri "$($script:Authority)/protocol/openid-connect/auth?$queryString" -SessionVariable browser -MaximumRedirection 0 -SkipHttpErrorCheck
+        $login = Invoke-WebRequest -Uri "$($script:Authority)/protocol/openid-connect/auth?$queryString" -MaximumRedirection 0 -SkipHttpErrorCheck
         $login.StatusCode | Should -Be 200 -Because "Keycloak shows its login form, not $($login.Headers.Location) $($login.Content)"
         $action = [System.Net.WebUtility]::HtmlDecode([regex]::Match($login.Content, 'id="kc-form-login"[^>]*action="([^"]+)"').Groups[1].Value)
         if (-not $action) { $action = [System.Net.WebUtility]::HtmlDecode([regex]::Match($login.Content, '<form[^>]*action="([^"]+)"').Groups[1].Value) }
         $action | Should -Not -BeNullOrEmpty -Because 'Keycloak shows its login form'
 
-        $redirect = Invoke-WebRequest -Method Post -Uri $action -WebSession $browser -MaximumRedirection 0 -SkipHttpErrorCheck -Body @{
+        # Keycloak marks its login cookies Secure, which a browser still sends to http://localhost but .NET does not
+        # send over plain HTTP, so carry them to the form by hand.
+        $cookies = @($login.Headers['Set-Cookie'] | ForEach-Object { ($_ -split ';')[0] }) -join '; '
+        $redirect = Invoke-WebRequest -Method Post -Uri $action -Headers @{ Cookie = $cookies } -MaximumRedirection 0 -SkipHttpErrorCheck -Body @{
             username = $script:PersonName; password = $script:PersonPassword; credentialId = ''
         }
-        $redirect.StatusCode | Should -Be 302 -Because "Keycloak accepts the sign-in and returns to $RedirectUri, not: $([regex]::Match($redirect.Content, "kc-feedback-text[^>]*>([^<]+)").Groups[1].Value)"
+        $page = ([regex]::Replace([string]$redirect.Content, '<[^>]+>', ' ') -replace '\s+', ' ').Trim()
+        $redirect.StatusCode | Should -Be 302 -Because "Keycloak accepts the sign-in and returns to $RedirectUri, not: $($page.Substring(0, [Math]::Min(600, $page.Length)))"
         $location = [string]$redirect.Headers.Location[0]
         $location | Should -BeLike "$RedirectUri*"
         $code = [regex]::Match($location, '[?&]code=([^&]+)').Groups[1].Value
