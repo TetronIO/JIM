@@ -130,6 +130,63 @@ public class TaskingRepositoryQueueReadTests
     }
 
     [Test]
+    public async Task GetWorkerTaskHeadersAsync_SynchronisationTask_CarriesItsRunProfileAndExecutionModeAsync()
+    {
+        // The Operations Activity tab (#2549) shows the Connected System and Run Profile in their own columns,
+        // estimates start times from the Run Profile's recent durations, and groups tasks the worker will start
+        // together; all three need more than the combined display name.
+        var connectedSystem = new ConnectedSystem { Id = 7, Name = "HR Database" };
+        var runProfile = new ConnectedSystemRunProfile { Id = 12, Name = "Full Import", ConnectedSystemId = connectedSystem.Id };
+        var workerTasks = new List<WorkerTask>
+        {
+            new SynchronisationWorkerTask(connectedSystem.Id, runProfile.Id)
+            {
+                Id = Guid.NewGuid(),
+                InitiatedByType = ActivityInitiatorType.System,
+                ExecutionMode = WorkerTaskExecutionMode.Parallel,
+                Activity = NewActivity()
+            }
+        };
+
+        using var jim = BuildApplication(workerTasks, [connectedSystem], [runProfile]);
+
+        var header = (await jim.Tasking.GetWorkerTaskHeadersAsync()).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.ConnectedSystemRunProfileId, Is.EqualTo(12));
+            Assert.That(header.ConnectedSystemName, Is.EqualTo("HR Database"));
+            Assert.That(header.RunProfileName, Is.EqualTo("Full Import"));
+            Assert.That(header.ExecutionMode, Is.EqualTo(WorkerTaskExecutionMode.Parallel));
+        }
+    }
+
+    [Test]
+    public async Task GetWorkerTaskHeadersAsync_SynchronisationTaskWhoseRunProfileHasGone_KeepsTheIdWithoutNamesAsync()
+    {
+        var workerTasks = new List<WorkerTask>
+        {
+            new SynchronisationWorkerTask(7, 404)
+            {
+                Id = Guid.NewGuid(),
+                InitiatedByType = ActivityInitiatorType.System,
+                Activity = NewActivity()
+            }
+        };
+
+        using var jim = BuildApplication(workerTasks);
+
+        var header = (await jim.Tasking.GetWorkerTaskHeadersAsync()).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.ConnectedSystemRunProfileId, Is.EqualTo(404));
+            Assert.That(header.ConnectedSystemName, Is.Null);
+            Assert.That(header.RunProfileName, Is.Null);
+        }
+    }
+
+    [Test]
     public async Task GetWorkerTaskHeadersAsync_ExampleDataTaskWhoseTemplateHasGone_NamesItLikeTheOthersAsync()
     {
         var workerTasks = new List<WorkerTask>

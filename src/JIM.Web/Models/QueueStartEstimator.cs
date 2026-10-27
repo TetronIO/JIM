@@ -1,0 +1,56 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Web.Models;
+
+/// <summary>
+/// Estimates when each queued task will start (#2549), for the Activity tab's Queued section.
+/// </summary>
+/// <remarks>
+/// Each slot starts when the one before it is expected to finish, and lasts as long as its slowest task's typical
+/// (median) duration. An estimate is given only while every input behind it is known: an unknown remaining time for
+/// the work running now, a task that is not a Run Profile execution, or a Run Profile with no successful history
+/// leaves that slot's own start intact where it can be known, and every later one blank. A blank is honest; a time
+/// built on a guess reads as a forecast.
+/// </remarks>
+public static class QueueStartEstimator
+{
+    /// <param name="slots">The queue as the worker will start it, from <see cref="QueueRunSlot.Plan"/>.</param>
+    /// <param name="runningRemaining">How long the work running now is expected to take to finish: zero when nothing
+    /// is running, null when something is running and its remaining time is not known.</param>
+    /// <param name="medianDurations">Each Run Profile's typical duration, by Run Profile id.</param>
+    /// <param name="now">The current time (UTC).</param>
+    /// <returns>The estimated start (UTC) of every task in <paramref name="slots"/>, or null where none can be given.</returns>
+    public static Dictionary<Guid, DateTime?> Estimate(IReadOnlyList<QueueRunSlot> slots, TimeSpan? runningRemaining,
+        IReadOnlyDictionary<int, TimeSpan> medianDurations, DateTime now)
+    {
+        var starts = new Dictionary<Guid, DateTime?>();
+        DateTime? cursor = runningRemaining.HasValue ? now + runningRemaining.Value : null;
+
+        foreach (var slot in slots)
+        {
+            foreach (var task in slot.Tasks)
+                starts[task.Id] = cursor;
+
+            cursor = cursor + SlotDuration(slot, medianDurations);
+        }
+
+        return starts;
+    }
+
+    /// <summary>The slot's slowest task's typical duration, or null if any of its tasks has none.</summary>
+    private static TimeSpan? SlotDuration(QueueRunSlot slot, IReadOnlyDictionary<int, TimeSpan> medianDurations)
+    {
+        var longest = TimeSpan.Zero;
+        foreach (var runProfileId in slot.Tasks.Select(t => t.ConnectedSystemRunProfileId))
+        {
+            if (runProfileId is not { } id || !medianDurations.TryGetValue(id, out var duration))
+                return null;
+
+            if (duration > longest)
+                longest = duration;
+        }
+
+        return longest;
+    }
+}

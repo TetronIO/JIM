@@ -59,6 +59,28 @@ public class WorkerTaskHeader
     /// </summary>
     public RunPhaseSummary? Steps { get; set; }
 
+    /// <summary>
+    /// Whether the worker runs this task on its own or together with the tasks queued alongside it.
+    /// </summary>
+    public WorkerTaskExecutionMode ExecutionMode { get; set; } = WorkerTaskExecutionMode.Sequential;
+
+    /// <summary>
+    /// The Run Profile this task executes, or null where the task is not a Run Profile execution.
+    /// </summary>
+    public int? ConnectedSystemRunProfileId { get; set; }
+
+    /// <summary>
+    /// The name of the Connected System whose Run Profile this task executes, or null where the task is not a Run
+    /// Profile execution or the Run Profile no longer exists.
+    /// </summary>
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
+    /// The name of the Run Profile this task executes, or null where the task is not a Run Profile execution or the
+    /// Run Profile no longer exists.
+    /// </summary>
+    public string? RunProfileName { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Schedule execution context - for grouping tasks by schedule in the queue UI
     // -----------------------------------------------------------------------------------------------------------------
@@ -121,6 +143,10 @@ public class WorkerTaskHeader
             ObjectsProcessed != latest.ObjectsProcessed ||
             ProgressMessage != latest.ProgressMessage ||
             !StepsEqual(Steps, latest.Steps) ||
+            ExecutionMode != latest.ExecutionMode ||
+            ConnectedSystemRunProfileId != latest.ConnectedSystemRunProfileId ||
+            ConnectedSystemName != latest.ConnectedSystemName ||
+            RunProfileName != latest.RunProfileName ||
             ScheduleExecutionId != latest.ScheduleExecutionId ||
             ScheduleExecutionName != latest.ScheduleExecutionName ||
             ScheduleStepIndex != latest.ScheduleStepIndex ||
@@ -139,6 +165,10 @@ public class WorkerTaskHeader
         ObjectsProcessed = latest.ObjectsProcessed;
         ProgressMessage = latest.ProgressMessage;
         Steps = latest.Steps;
+        ExecutionMode = latest.ExecutionMode;
+        ConnectedSystemRunProfileId = latest.ConnectedSystemRunProfileId;
+        ConnectedSystemName = latest.ConnectedSystemName;
+        RunProfileName = latest.RunProfileName;
         ScheduleExecutionId = latest.ScheduleExecutionId;
         ScheduleExecutionName = latest.ScheduleExecutionName;
         ScheduleStepIndex = latest.ScheduleStepIndex;
