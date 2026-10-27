@@ -11,7 +11,7 @@ Activity cmdlets retrieve and inspect the execution history of operations within
 
 ---
 
-## Get-JIMActivity
+## :material-history: Get-JIMActivity
 
 Retrieves activity history from JIM. Activities are created automatically whenever an operation runs, providing a full audit trail of synchronisation runs, data generation tasks, certificate management operations, and other administrative actions.
 
@@ -258,7 +258,7 @@ Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
 
 ---
 
-## Get-JIMActivityStats
+## :material-chart-box-outline: Get-JIMActivityStats
 
 Retrieves execution statistics for a Run Profile activity, including counts of processed items, errors, and timing information. This is useful for monitoring synchronisation health and identifying performance trends.
 
@@ -345,7 +345,7 @@ if ($stats.TotalObjectErrors -gt 0) {
 
 ---
 
-## Get-JIMActivityChildren
+## :material-file-tree-outline: Get-JIMActivityChildren
 
 Retrieves child activities spawned by a parent activity. For example, a schedule execution activity creates child activities for each individual Run Profile step within that schedule. This cmdlet is useful for drilling into multi-step operations to inspect each step independently.
 
@@ -413,7 +413,7 @@ Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](../configuration/activities.md): what activities are, lifecycle, summary statistics, and parent/child execution model
 - [Execution Items](execution-items.md): cmdlets for what happened to each object in a Run Profile execution, and what caused it

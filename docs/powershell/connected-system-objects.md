@@ -11,7 +11,7 @@ The Connected System Object cmdlets read what JIM holds in a Connected System's 
 
 ---
 
-## Get-JIMConnectedSystemObject
+## :material-cube-outline: Get-JIMConnectedSystemObject
 
 Gets the Connected System Objects in a Connected System's Connector Space, a page at a time, and pages through the values of a large multi-valued attribute.
 
@@ -181,7 +181,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Id "a1b2c3d4-..." -AttributeN
 
 ---
 
-## Get-JIMConnectedSystemObjectChangeHistory
+## :material-history: Get-JIMConnectedSystemObjectChangeHistory
 
 Gets the changes made to a Connected System Object, most recent first, each with who or what made it and the values it changed.
 
@@ -241,7 +241,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId 3 -Id "a1b2c3d4-...
 
 ---
 
-## Get-JIMConnectedSystemObjectAttributeValue
+## :material-list-box-outline: Get-JIMConnectedSystemObjectAttributeValue
 
 Pages through the values of one multi-valued attribute on a Connected System Object, for an attribute such as member too large to read whole.
 
@@ -296,7 +296,7 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId 3 `
 
 ---
 
-## Set-JIMConnectedSystemObjectPassword
+## :material-form-textbox-password: Set-JIMConnectedSystemObjectPassword
 
 Sets the password on one Connected System Object.
 
@@ -382,7 +382,7 @@ ConvertFrom-SecureString -SecureString $result.GeneratedPassword -AsPlainText
 
 ---
 
-## Get-JIMConnectedSystemUnresolvedReferenceCount
+## :material-link-off: Get-JIMConnectedSystemUnresolvedReferenceCount
 
 Counts the unresolved references in a Connected System's Connector Space.
 
@@ -428,7 +428,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
-## Get-JIMConnectedSystemUnresolvedReferenceSummary
+## :material-format-list-numbered: Get-JIMConnectedSystemUnresolvedReferenceSummary
 
 Summarises every unresolved reference across a Connected System's Connector Space: how many there are and on how many objects, how they split by likely cause, and every distinct next step with how many references and objects it addresses. It is what the portal shows as **Where they point** above the Connector Space filtered to unresolved references. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/unresolved-references.md#finding-out-why-a-reference-is-unresolved) describes each one.
 
@@ -476,7 +476,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
-## Get-JIMConnectedSystemObjectUnresolvedReference
+## :material-vector-polyline: Get-JIMConnectedSystemObjectUnresolvedReference
 
 Lists the reference values on a Connected System Object that could not be linked to another Connected System Object, each with its likely cause, where the fix lies, what is wrong and what to do, or summarises them with `-Summary`. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/unresolved-references.md#finding-out-why-a-reference-is-unresolved) describes each one.
 
@@ -559,7 +559,7 @@ Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](connected-systems.md): create, change and delete the Connected Systems whose Connector Space these cmdlets read
 - [Run Profiles](run-profiles.md): run the imports that fill the Connector Space

@@ -11,7 +11,7 @@ The Attribute Mapping cmdlets list, create, change and delete the Attribute Flow
 
 ---
 
-## Get-JIMSyncRuleMapping
+## :material-swap-vertical: Get-JIMSyncRuleMapping
 
 Retrieves Attribute Flow mappings for a Synchronisation Rule. Returns all mappings for the rule, or a specific mapping by ID.
 
@@ -88,7 +88,7 @@ Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
 
 ---
 
-## New-JIMSyncRuleMapping
+## :material-plus-circle-outline: New-JIMSyncRuleMapping
 
 Creates a new Attribute Flow mapping on a Synchronisation Rule. Mappings can be direct Attribute Flows (one or more source attributes to a target) or expression-based transformations.
 
@@ -213,7 +213,7 @@ New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 `
 
 ---
 
-## Set-JIMSyncRuleMapping
+## :material-pencil-outline: Set-JIMSyncRuleMapping
 
 Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
 
@@ -324,7 +324,7 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 14 -KeepUnique $false
 
 ---
 
-## Remove-JIMSyncRuleMapping
+## :material-delete-outline: Remove-JIMSyncRuleMapping
 
 Deletes an Attribute Flow mapping from a Synchronisation Rule.
 
@@ -379,7 +379,7 @@ This deletes every mapping on the rule. Run it with `-WhatIf` in place of `-Forc
 
 ---
 
-## Derived Attribute Flow warnings
+## :material-alert-octagon-outline: Derived Attribute Flow warnings
 
 Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/derived-attributes.md) reads. The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
 
@@ -393,7 +393,7 @@ Each `DependentDerivedFlows` entry has `MappingId`, `TargetMetaverseAttributeNam
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Attribute Mappings](../configuration/attribute-mappings.md): sources, expressions, value processing and Attribute Priority
 - [Deriving Metaverse Attributes](../configuration/derived-attributes.md): Attribute Flows that build a Metaverse attribute from others

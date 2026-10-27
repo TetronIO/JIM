@@ -21,7 +21,7 @@ not a page of rows to click through.
 
 ---
 
-## Get-JIMPendingPasswordChange
+## :material-tray-full: Get-JIMPendingPasswordChange
 
 Gets queued password changes, or the queue's counts by state.
 
@@ -130,7 +130,7 @@ Get-JIMPendingPasswordChange -Status Pending -All |
 
 ---
 
-## Resume-JIMPendingPasswordChange
+## :material-play-circle-outline: Resume-JIMPendingPasswordChange
 
 Makes matching changes due immediately. The Password Delivery Service is woken by the change and attempts them within about a second, whatever the synchronisation engine is doing.
 
@@ -192,7 +192,7 @@ $result = Resume-JIMPendingPasswordChange -ConnectedSystemId 3 -Force
 
 ---
 
-## Stop-JIMPendingPasswordChange
+## :material-stop-circle-outline: Stop-JIMPendingPasswordChange
 
 Stops JIM delivering matching changes.
 
@@ -247,7 +247,7 @@ Stop-JIMPendingPasswordChange -MetaverseObjectId 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Password Synchronisation](password-synchronisation.md): set a Metaverse Object's password, and configure which Connected Systems receive passwords
 - [Password Synchronisation concepts](../concepts/password-synchronisation.md): how a password change reaches a system, and how long it is kept

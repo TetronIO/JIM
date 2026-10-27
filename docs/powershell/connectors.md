@@ -13,7 +13,7 @@ to find the Connector ID that `New-JIMConnectedSystem` needs.
 
 ---
 
-## Get-JIMConnectorDefinition
+## :material-power-plug-outline: Get-JIMConnectorDefinition
 
 Retrieves available connector definitions, including their settings and capabilities.
 
@@ -116,7 +116,7 @@ Get-JIMConnectorDefinition |
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](connected-systems.md): create a Connected System from a Connector, and configure it
 - [Connectors](../connectors/index.md): what each Connector connects to, and its settings

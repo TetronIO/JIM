@@ -13,7 +13,7 @@ Every Schedule Execution these cmdlets return carries `StepDisplay`, the step gr
 
 ---
 
-## Start-JIMSchedule
+## :material-calendar-clock-outline: Start-JIMSchedule
 
 Runs a Schedule now, whatever its trigger type and whether or not it is enabled: useful for testing a Schedule, or for running one on demand.
 
@@ -81,7 +81,7 @@ Get-JIMSchedule -Name "On-Demand Full Sync" | Start-JIMSchedule -Wait
 
 ---
 
-## Get-JIMScheduleExecution
+## :material-history: Get-JIMScheduleExecution
 
 Retrieves Schedule Executions: to follow one that is running, review past runs, or check how a particular one went.
 
@@ -188,7 +188,7 @@ Get-JIMSchedule -Name "Weekday Sync" | Get-JIMScheduleExecution -Active
 
 ---
 
-## Stop-JIMScheduleExecution
+## :material-stop-circle-outline: Stop-JIMScheduleExecution
 
 Cancels a Schedule Execution that is queued or running.
 
@@ -233,7 +233,7 @@ Get-JIMScheduleExecution -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Act
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Schedules](schedules.md): create, change and remove Schedules and their steps
 - [Schedules](../configuration/schedules.md): what a step failing means, and how a Schedule Execution appears in the portal

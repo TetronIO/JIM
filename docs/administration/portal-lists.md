@@ -9,7 +9,7 @@ audience: administrator
 
 Most of what you look at in the JIM portal is a list: Metaverse Objects, the Connector Space, Pending Exports, Activities, Synchronisation Rules, Connected Systems, and the rest. They all behave the same way, so what you learn on one applies to every other.
 
-## Scrolling, not paging
+## :material-arrow-expand-vertical: Scrolling, not paging
 
 Lists have no page size and no page controls. Rows load as you scroll towards them, so a list of eight objects and a list of eight hundred thousand are read the same way: scroll until you find what you want, or narrow the list first.
 
@@ -17,7 +17,7 @@ Only the rows you can see (and a screen or so beyond them) are ever fetched, so 
 
 A list also takes only the space it needs. A short list collapses to its rows and reads as an ordinary table; a long one fills the page down to the footer.
 
-## How many objects am I looking at
+## :material-counter: How many objects am I looking at
 
 Every list states its size beside its search box:
 
@@ -26,7 +26,7 @@ Every list states its size beside its search box:
 
 The count is the true total for the whole list, not the number of rows currently rendered.
 
-## Narrowing a list
+## :material-filter-outline: Narrowing a list
 
 Type in the search box at the top right of any list to narrow it. Search runs on the server against the whole list, not against the rows on screen, and the count updates to tell you how much your search matched. Every character you type is matched as itself, including `%`, `_` and `\`, so searching for `svc_` does not also find `svcX`.
 
@@ -38,17 +38,17 @@ Lists open with dense rows, so more of them fit on screen. The compact-rows togg
 
 The Connector Space list has a **Columns** menu beside that toggle, for showing or hiding its two identifier columns, External ID and Secondary External ID. Which one you read depends on the Connector (for an LDAP directory it is usually the distinguished name held as the Secondary External ID), so the choice is remembered separately for each Connected System. Hiding a column does not change what the search box matches: it still searches both identifiers. Like row density, the choice is kept in your browser, so another browser or computer starts with both columns shown.
 
-## Sharing where you are
+## :material-link-variant: Sharing where you are
 
 A list keeps its search, its sort and your position in the address bar. Copy the URL and send it to a colleague, or bookmark it, and it opens where you left it rather than at the top of an unsorted list.
 
 Note that the browser's back button does not step backwards through searches and sorts within a single list; those are ways of looking at one page, not separate pages.
 
-## Empty lists
+## :material-tray-remove: Empty lists
 
 A list with nothing in it says which of the two reasons applies. If your search matched nothing, it says so and offers to clear the search. If the list is genuinely empty, it says what would put objects in it and, where there is one obvious next step (creating your first Connected System, for instance), offers it.
 
-## Tables inside a page
+## :material-table-large: Tables inside a page
 
 The same behaviour applies to the tables that live inside a page, not just the lists you navigate to. Nothing in the portal pages any more:
 
@@ -65,7 +65,7 @@ This matters most for group membership: a group with half a million members is r
 
 Two things moved rather than converted, because a scrolling table could not hold them. A Metaverse Attribute's contributors reorder by dragging, which needs a row that grows, so they now open in a dialog from the contributor count. A Schedule's recent executions likewise open from its **History** action, where they show the Schedule's whole history rather than its last five.
 
-## One line per row
+## :material-format-list-bulleted: One line per row
 
 Every row of a scrolling table is one line tall, which is what lets the table place a row without having drawn the rows above it. Three things follow from that, and none of them loses you anything.
 
@@ -75,7 +75,7 @@ Every row of a scrolling table is one line tall, which is what lets the table pl
 
 **Secondary text reads after the value rather than under it.** A setting's description, an attribute's data type and plurality, and the pattern behind a previewed change now follow what they qualify on the same line, low-lighted. Hovering shows both in full.
 
-## Attribute tables
+## :material-table-eye: Attribute tables
 
 The table of one object's attributes is the exception to one line per row: a Connected System Object's **Attributes** tab, a Pending Export's **Attribute Changes**, and a Metaverse Object's **Table** view. An object has only as many attributes as its schema gives it, so these tables draw every row, and a row grows to hold a multi-valued attribute's values:
 
@@ -84,12 +84,12 @@ The table of one object's attributes is the exception to one line per row: a Con
 
 All three tables have a search box, which matches an attribute's name or any of its values shown on the page, and column headers you can click to sort. The search and sort are kept in the page address, so a refresh or a shared link shows the same view.
 
-## The Operations queue
+## :material-tray-full: The Operations queue
 
 The queue is a table per block rather than one long table: each Schedule Execution's steps scroll within their own, underneath the header that names the Schedule, draws its rail and carries **View execution** and the option to cancel it. Everything running outside a Schedule scrolls in a table of its own at the end. Each table states how many Worker Tasks it holds, and is bounded in height, so a Schedule with twenty steps in it cannot push the rest of the queue off the screen; click a Schedule's header to put its steps away entirely.
 
 There is no search box on these, because a search over one Schedule's handful of steps says nothing a glance does not.
 
-## Automation
+## :material-cog-play-outline: Automation
 
 Continuous scrolling is a portal behaviour only. The REST API and the PowerShell module are paged, and are unchanged: see [Rate Limiting](../api/rate-limiting.md) for the API's retrieval limits, and use `-All` on the paginated `Get-JIM*` cmdlets to page through a full result set.

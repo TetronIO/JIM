@@ -9,7 +9,7 @@ audience: administrator
 
 Two complete configurations for the [SQL Connector](jim-sql-connector.md), each with the Object Types document that describes its tables. Start from the one closest to your database.
 
-## Microsoft SQL Server: an HR application
+## :material-microsoft: Microsoft SQL Server: an HR application
 
 `dbo.Employees` has an `IDENTITY` key, a `ManagerId` pointing at another employee and a `DepartmentId` pointing at `dbo.Departments`; phone numbers are in `dbo.EmployeePhones`.
 
@@ -47,7 +47,7 @@ Two complete configurations for the [SQL Connector](jim-sql-connector.md), each 
 
 After the schema import: `EmployeeId` (`int`) is the External ID and is set only when a row is created; `ManagerId` and `DepartmentId` are references; `PhoneNumbers` is a multi-valued Text attribute; `HireDate` (`datetime2`) is read in the Database Time Zone; `IsActive` (`bit`) is a Boolean. Exporting a new `Person` inserts the row, reads the identity value back as the External ID, then inserts the phone numbers.
 
-## Oracle Database: an HR schema with groups
+## :material-database-outline: Oracle Database: an HR schema with groups
 
 `HR.EMPLOYEES` has a sequence-backed `EMPLOYEE_ID NUMBER(10)` key and a `MANAGER_ID`; `HR.GROUPS` has members in `HR.GROUP_MEMBERS`.
 
@@ -88,6 +88,6 @@ After the schema import: `EMPLOYEE_ID` is a Long Number (change it to Number on 
 !!! tip "Reading through a view and writing to a table"
     If the application publishes a view for readers but takes writes on the underlying table, either point one Connected System at the table for both directions, or use two Connected Systems: one on the view for import, one on the table for export. A single Object Type reads and writes the same source.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [JIM SQL Connector](jim-sql-connector.md): describing your tables, and every setting.

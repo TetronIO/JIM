@@ -11,7 +11,7 @@ Cmdlets for generating sample identity data for testing and evaluation purposes.
 
 ---
 
-## Get-JIMExampleDataSet
+## :material-database-outline: Get-JIMExampleDataSet
 
 Retrieves available example data sets. Each data set is a named pool of string values (e.g. a list of cities, or first names) that Data Generation Templates can draw from.
 
@@ -84,7 +84,7 @@ Get-JIMExampleDataSet | Select-Object Name, Culture, ValueCount
 
 ---
 
-## New-JIMExampleDataSet
+## :material-database-plus-outline: New-JIMExampleDataSet
 
 Creates a new Example Data Set.
 
@@ -120,7 +120,7 @@ New-JIMExampleDataSet -Name "UK Cities" -Culture "en-GB" -Values "London", "Manc
 
 ---
 
-## Set-JIMExampleDataSet
+## :material-database-edit-outline: Set-JIMExampleDataSet
 
 Updates an existing Example Data Set. Built-in data sets cannot be updated.
 
@@ -161,7 +161,7 @@ Set-JIMExampleDataSet -Id 5 -Values "London", "Manchester", "Bristol", "Leeds" -
 
 ---
 
-## Remove-JIMExampleDataSet
+## :material-database-remove-outline: Remove-JIMExampleDataSet
 
 Deletes an Example Data Set. Built-in data sets cannot be removed. This action cannot be undone.
 
@@ -199,7 +199,7 @@ Remove-JIMExampleDataSet -Id 5 -Force
 
 ---
 
-## Get-JIMExampleDataTemplate
+## :material-file-document-outline: Get-JIMExampleDataTemplate
 
 Retrieves data generation templates that define how test data should be generated. Templates specify object types, attribute patterns, and generation rules used when creating sample identity data.
 
@@ -275,7 +275,7 @@ Get-JIMExampleDataTemplate -Page 1 -PageSize 10
 
 ---
 
-## New-JIMExampleDataTemplate
+## :material-file-plus-outline: New-JIMExampleDataTemplate
 
 Creates a Data Generation Template: a definition of which Metaverse Object Types to generate test objects for, how many of each, and how each attribute's values are generated.
 
@@ -356,7 +356,7 @@ New-JIMExampleDataTemplate -Name "Demo Organisation" -ObjectType @(
 
 ---
 
-## Set-JIMExampleDataTemplate
+## :material-file-edit-outline: Set-JIMExampleDataTemplate
 
 Renames a Data Generation Template and/or replaces its Object Type configuration. Built-in templates cannot be updated.
 
@@ -414,7 +414,7 @@ Set-JIMExampleDataTemplate -Id 7 -NewName "Demo Users v2" -WhatIf
 
 ---
 
-## Copy-JIMExampleDataTemplate
+## :material-content-copy: Copy-JIMExampleDataTemplate
 
 Creates a new Data Generation Template with the same Object Types and generation rules as an existing one. Built-in templates can be copied, which is how to customise one: the copy is never built in, so it can be changed and removed.
 
@@ -459,7 +459,7 @@ Set-JIMExampleDataTemplate -Id $copy.Id -NewName "Contoso Demo (2k staff)"
 
 ---
 
-## Remove-JIMExampleDataTemplate
+## :material-file-remove-outline: Remove-JIMExampleDataTemplate
 
 Deletes a Data Generation Template, including its whole per-Object-Type attribute configuration. Built-in templates cannot be removed. This action cannot be undone; objects the template has already generated are unaffected.
 
@@ -508,7 +508,7 @@ Get-JIMExampleDataTemplate | Where-Object { $_.Name -like "Demo*" -and -not $_.B
 
 ---
 
-## Add-JIMExampleDataTemplateAttribute
+## :material-tag-outline: Add-JIMExampleDataTemplateAttribute
 
 Adds one attribute's generation configuration to an Object Type within an existing Data Generation Template, without restating the rest of the template: the cmdlet reads the template, appends the new attribute, and writes the whole configuration back with every existing setting preserved.
 
@@ -580,7 +580,7 @@ Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType "User" -MetaverseA
 
 ---
 
-## Invoke-JIMExampleDataTemplate
+## :material-play-circle-outline: Invoke-JIMExampleDataTemplate
 
 Executes a Data Generation Template to create objects in the Metaverse. Execution is queued to the JIM worker service and tracked by an Activity: the cmdlet returns as soon as the server has queued the request. Monitor progress and completion via Activities ([`Get-JIMActivity`](activities.md)), or use `-Wait` to block until generation completes with a live progress display.
 
@@ -657,7 +657,7 @@ Get-JIMActivity -Id $result.ActivityId
 
 ---
 
-## Test-JIMExampleDataExpression
+## :material-function-variant: Test-JIMExampleDataExpression
 
 Tests the expression an Example Data Template attribute generates its value with, against sample values for the attributes it reads, by the same evaluation generating objects runs. Nothing is generated. Each sample is read as the type of the template attribute that generates it on the same object; `Outcome` says whether the attribute would be generated as a value, without one, or whether generating objects from the template would fail. Give `-Expression` to try an edit before saving it. Find a template attribute's ID with [`Get-JIMExampleDataTemplate`](#get-jimexampledatatemplate).
 
@@ -712,7 +712,7 @@ Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Expression 
 
 ---
 
-## Building a template end to end
+## :material-hammer-wrench: Building a template end to end
 
 Create a Data Generation Template with one attribute inline, add a second attribute to it, then generate the data:
 
@@ -739,7 +739,7 @@ Invoke-JIMExampleDataTemplate -Id $template.Id -Wait
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Metaverse](metaverse.md): cmdlets for querying Metaverse Objects; the schema has [Metaverse Object Types](metaverse-object-types.md) and [Metaverse Attributes](metaverse-attributes.md)
 - [Activities](activities.md): cmdlets for reviewing activity history and execution results

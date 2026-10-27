@@ -12,7 +12,7 @@ Example Data fills the Metaverse with realistic people and groups, so you can ex
 !!! warning "Generated objects stay"
     Generated objects are added to the Metaverse permanently. JIM never deletes them automatically, whatever the Object Type's Deletion Rule, and no command removes them one by one; a [Factory Reset](../administration/factory-reset.md) is the only way to clear them. Generate data on a system you can reset, never on one already synchronising real identities.
 
-## Templates
+## :material-file-document-outline: Templates
 
 A template names one or more Metaverse Object Types, how many objects of each to create, and how to make each attribute's values. The **Templates** page lists them; opening one shows, for each Object Type, every attribute with its **Population %** and the **Rules** that make its values.
 
@@ -53,17 +53,17 @@ Each attribute's rules decide its values:
 
 Cancelling the Worker Task stops generation, but objects already written stay in the Metaverse.
 
-## Example Data Sets
+## :material-database-cog-outline: Example Data Sets
 
 An Example Data Set is a named list of values that templates draw on. JIM ships thirteen, all in English: **Firstnames Male**, **Firstnames Female**, **Lastnames**, **Companies**, **Departments**, **Teams**, **Job Titles**, **User Statuses**, **Group Statuses**, **Adjectives**, **Colours**, **Words** and **Group Name Endings**. The **Data Sets** page lists them with how many values each holds, and opening one shows its values.
 
 A built-in set cannot be changed or deleted. Add your own, such as your organisation's real department names, with `New-JIMExampleDataSet`.
 
-## Who can use it
+## :material-account-lock-outline: Who can use it
 
 Only administrators can open the Example Data pages, and the REST API behind them requires the Administrator role too.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Metaverse](metaverse.md): the Object Types and attributes a template fills
 - [Factory Reset](../administration/factory-reset.md): the way to remove generated objects

@@ -14,7 +14,7 @@ JIM is configured through environment variables set in the `.env` file alongside
 
 ---
 
-## Podman
+## :material-package-variant-closed: Podman
 
 On Podman, JIM reads its settings from `/opt/jim/jim-config.yaml`, a Kubernetes-style ConfigMap holding the same settings, with the same names, as `.env`; each one is on this page. Write each as `NAME: value`, indented under `data:`, and quote a value that is a number, `true` or `false`, or contains `: ` or ` #`:
 
@@ -37,7 +37,7 @@ These settings differ on Podman:
 
 ---
 
-## Locale
+## :material-translate: Locale
 
 | Variable | Description                                                                                   | Default            |
 |----------|-----------------------------------------------------------------------------------------------|--------------------|
@@ -47,7 +47,7 @@ The bundled PostgreSQL container ignores `LANG` and always initialises its datab
 
 ---
 
-## Docker
+## :material-docker: Docker
 
 These variables control how Docker Compose resolves and pulls JIM container images, and where it publishes the web UI.
 
@@ -59,7 +59,7 @@ These variables control how Docker Compose resolves and pulls JIM container imag
 
 ---
 
-## HTTPS Certificate
+## :material-certificate-outline: HTTPS Certificate
 
 JIM's certificate is not set in `.env`. The production compose file reads it from two PEM files in the `tls` folder next to the compose files, which `setup.sh` creates:
 
@@ -72,7 +72,7 @@ To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URL
 
 ---
 
-## Database
+## :material-database-outline: Database
 
 | Variable                   | Description                                                                                                         | Default     | Example                    |
 |----------------------------|---------------------------------------------------------------------------------------------------------------------|-------------|----------------------------|
@@ -126,7 +126,7 @@ Without these settings, PostgreSQL holds such a connection open for about two ho
 
 ---
 
-## SSO / Authentication
+## :material-shield-key-outline: SSO / Authentication
 
 These variables configure JIM's OIDC-based single sign-on. For provider-specific setup instructions, see the [SSO Setup Guide](sso-setup.md).
 
@@ -150,7 +150,7 @@ These variables configure JIM's OIDC-based single sign-on. For provider-specific
 
 ---
 
-## User Identity Mapping
+## :material-account-arrow-right-outline: User Identity Mapping
 
 These variables control how JIM maps authenticated users to Metaverse Objects, enabling role-based access control.
 
@@ -176,7 +176,7 @@ When `JIM_SSO_MV_ATTRIBUTE` names a Guid attribute, such as `Object GUID`, JIM r
 
 ---
 
-## Service Settings
+## :material-tune-variant: Service Settings
 
 Service settings are stored in the database and managed through the admin UI at **Admin > Service Settings** (`/admin/settings`). They can be changed at runtime by users with the Administrator role; most take effect immediately, without restarting the JIM containers.
 
@@ -223,7 +223,7 @@ Every Service Setting that changes how JIM behaves is listed below. The Preview 
 
 ---
 
-## Logging
+## :material-text-box-search-outline: Logging
 
 | Variable           | Description                                                                        | Default         | Example          |
 |--------------------|------------------------------------------------------------------------------------|-----------------|------------------|
@@ -233,7 +233,7 @@ Every Service Setting that changes how JIM behaves is listed below. The Preview 
 
 ---
 
-## Encryption Keys
+## :material-key-outline: Encryption Keys
 
 JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Schedule SQL-step connection strings) with keys stored on the filesystem. All three services (`jim.web`, `jim.worker`, `jim.scheduler`) must resolve to the same key location so they can decrypt each other's data.
 
@@ -246,7 +246,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 ---
 
-## UI Theme
+## :material-palette-outline: UI Theme
 
 | Variable    | Description                                                                                                    | Default    |
 |-------------|----------------------------------------------------------------------------------------------------------------|------------|
@@ -254,7 +254,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 ---
 
-## Reverse Proxy
+## :material-swap-horizontal: Reverse Proxy
 
 | Variable              | Description                                                                                                                                                                                                                     | Default              |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|
@@ -265,7 +265,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 ---
 
-## Infrastructure API Key
+## :material-key-chain: Infrastructure API Key
 
 | Variable                    | Description                                                                                                                                                                                      | Default  |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
@@ -281,7 +281,7 @@ To have the installer set it, give it in the installer's environment: it writes 
 
 ---
 
-## Installer
+## :material-download-outline: Installer
 
 `setup.sh` asks a question only when its answer is not already in its environment, so an installation can run unattended. Set the variables below, the identity provider's settings under [SSO / Authentication](#sso-authentication), and any database, port, proxy or API key settings from the sections above, and the installer asks nothing it already knows. Where a description names a flag, the flag does the same as the variable.
 
@@ -303,7 +303,7 @@ To have the installer set it, give it in the installer's environment: it writes 
 
 ---
 
-## Performance Tuning
+## :material-speedometer: Performance Tuning
 
 | Variable               | Description                                                                                                                                                              | Default         |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------|

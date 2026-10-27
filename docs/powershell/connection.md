@@ -20,7 +20,7 @@ The connection cmdlets manage authentication and session state with a JIM instan
 
 ---
 
-## Connect-JIM
+## :material-login: Connect-JIM
 
 Establishes a connection to a JIM instance. This must be called before using any other JIM cmdlets.
 
@@ -106,7 +106,7 @@ Connect-JIM "https://jim.example.com" "jim_ak_7f3e..."
 
 ---
 
-## Disconnect-JIM
+## :material-logout: Disconnect-JIM
 
 Disconnects from a JIM instance and forgets its persisted credentials.
 
@@ -157,7 +157,7 @@ Disconnect-JIM -All
 
 ---
 
-## Test-JIMConnection
+## :material-lan-connect: Test-JIMConnection
 
 Tests whether the current connection to a JIM instance is active and healthy.
 
@@ -223,6 +223,6 @@ if ($status.TokenExpiresAt -and $status.TokenExpiresAt -lt (Get-Date).AddMinutes
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [API Authentication](../api/authentication.md): configuring API keys and SSO for the JIM server

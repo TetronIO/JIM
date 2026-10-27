@@ -13,7 +13,7 @@ A case's inputs take the shape `Test-JIMExpression`, `Test-JIMScope` and `Test-J
 
 ---
 
-## Get-JIMConfigurationTestCase
+## :material-flask-outline: Get-JIMConfigurationTestCase
 
 Gets saved configuration test cases, each with its inputs: every case, those covering a Synchronisation Rule, those under a Connected System, or one by ID.
 
@@ -79,7 +79,7 @@ Get-JIMConfigurationTestCase -ConnectedSystemId 3 -Name 'Hire date*' | Select-Ob
 
 ---
 
-## New-JIMConfigurationTestCase
+## :material-plus-circle-outline: New-JIMConfigurationTestCase
 
 Saves a test case covering one Attribute Flow (`-SyncRuleMappingId`, with `-Kind GeneratedValue` for a Generated Value's base), one Synchronisation Rule's Scope (`-SyncRuleId`) or one Object Matching Rule (`-ObjectMatchingRuleId`). Give every attribute the configuration reads, with `$null` for one that should have no value.
 
@@ -142,7 +142,7 @@ New-JIMConfigurationTestCase -Name 'Matches on employee number' -ObjectMatchingR
 
 ---
 
-## Set-JIMConfigurationTestCase
+## :material-pencil-outline: Set-JIMConfigurationTestCase
 
 Changes a test case's name, description, inputs, run-as-of time or expectation; anything not given stays as it is. What the case covers and what it tests cannot change.
 
@@ -193,7 +193,7 @@ Set-JIMConfigurationTestCase -Id 4 -Description $null
 
 ---
 
-## Remove-JIMConfigurationTestCase
+## :material-delete-outline: Remove-JIMConfigurationTestCase
 
 Deletes a test case. Nothing it covered changes.
 
@@ -232,7 +232,7 @@ Get-JIMConfigurationTestCase -SyncRuleId 12 -Name 'Draft*' | Remove-JIMConfigura
 
 ---
 
-## Invoke-JIMConfigurationTest
+## :material-play-circle-outline: Invoke-JIMConfigurationTest
 
 Runs the test cases covering a Synchronisation Rule, those under a Connected System, or those piped in, and returns each result. `-FailOnUnsuccessful` also writes an error for each case that did not pass, so a script can stop on it.
 

@@ -11,7 +11,7 @@ Cmdlets for managing certificates in JIM's trusted certificate store. Each certi
 
 ---
 
-## Get-JIMCertificate
+## :material-certificate-outline: Get-JIMCertificate
 
 Retrieves certificates from the trusted store.
 
@@ -113,7 +113,7 @@ Get-JIMCertificate -Page 2 -PageSize 50
 
 ---
 
-## Add-JIMCertificate
+## :material-plus-circle-outline: Add-JIMCertificate
 
 Adds a certificate to the trusted store.
 
@@ -209,7 +209,7 @@ Add-JIMCertificate -FromIdentityProvider
 
 ---
 
-## Set-JIMCertificate
+## :material-pencil-outline: Set-JIMCertificate
 
 Updates a certificate's editable properties (name, notes, enabled status, what it is trusted for). Certificate data cannot be changed; to replace a certificate, remove the existing one and add a new one.
 
@@ -271,7 +271,7 @@ Set-JIMCertificate -Id "a1b2c3d4-..." -TrustedFor SignIn, Connectors
 
 ---
 
-## Remove-JIMCertificate
+## :material-delete-outline: Remove-JIMCertificate
 
 Permanently deletes a certificate from the trusted store.
 
@@ -330,7 +330,7 @@ Get-JIMCertificate | Where-Object { -not $_.IsEnabled } | Remove-JIMCertificate 
 
 ---
 
-## Test-JIMCertificate
+## :material-clipboard-check-outline: Test-JIMCertificate
 
 Validates a certificate, checking expiry, chain trust, and other properties.
 
@@ -390,7 +390,7 @@ Get-JIMCertificate | ForEach-Object {
 
 ---
 
-## Export-JIMCertificate
+## :material-export: Export-JIMCertificate
 
 Downloads certificate data in DER format, either to a file or as a byte array.
 
@@ -446,7 +446,7 @@ Get-JIMCertificate -EnabledOnly | ForEach-Object {
 
 ---
 
-## Get-JIMIdentityProviderTrust
+## :material-shield-key-outline: Get-JIMIdentityProviderTrust
 
 Shows whether JIM trusts its identity provider's TLS certificate, by what, and the chain the identity provider presents.
 
@@ -497,7 +497,7 @@ Get-JIMIdentityProviderTrust
 
 ---
 
-## Get-JIMConnectedSystemServerCertificate
+## :material-server-network-outline: Get-JIMConnectedSystemServerCertificate
 
 Reads the certificate the Connected System's server is presenting, without storing anything.
 
@@ -555,7 +555,7 @@ Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -SettingValues @{ 
 
 ---
 
-## Approve-JIMConnectedSystemServerCertificate
+## :material-check-decagram-outline: Approve-JIMConnectedSystemServerCertificate
 
 Trusts the certificate the Connected System's server is presenting, adding it to the Trusted Certificates store.
 
@@ -624,7 +624,7 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Certificates](../configuration/certificates.md): what certificates are, source types, expiry awareness, and rotation workflows
 - [Connected Systems](connected-systems.md): configure Connected Systems that use trusted certificates

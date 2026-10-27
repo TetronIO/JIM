@@ -18,7 +18,7 @@ JIM requires an OIDC-compliant identity provider for authentication. This page i
 
     JIM serves both the web interface and API from a single application. The API is available at `/api/` on the same host.
 
-## Choose your identity provider
+## :material-shield-key-outline: Choose your identity provider
 
 JIM works with any OIDC-compliant identity provider. Pick the guide that matches yours for exact, click-by-click setup instructions:
 
@@ -56,7 +56,7 @@ Each sign-in also keeps the person's profile in step with their token: **Display
 
 ---
 
-## Confidential vs Public Clients
+## :material-lock-open-outline: Confidential vs Public Clients
 
 JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider they may be the same registration or two separate ones. Understanding which is which makes the per-provider steps easier to follow.
 
@@ -98,7 +98,7 @@ As long as the public and confidential clients belong to the same realm or tenan
 
 ---
 
-## Testing Your Configuration
+## :material-test-tube: Testing Your Configuration
 
 Once you have completed the setup for your provider, use these steps to verify sign-in, claims, sign-out, and API access.
 
@@ -175,7 +175,7 @@ Test-JIMConnection
 
 ---
 
-## Sign-Out Troubleshooting
+## :material-logout: Sign-Out Troubleshooting
 
 Sign-out uses OIDC [RP-initiated logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html): JIM clears its local session cookie, then redirects the browser to the identity provider's `end_session_endpoint` with an `id_token_hint` and a `post_logout_redirect_uri`. The identity provider ends its session and redirects the browser back to JIM.
 
@@ -198,7 +198,7 @@ The most common failure modes and how to fix them:
 
 ---
 
-## Security Considerations
+## :material-shield-lock-outline: Security Considerations
 
 ### Token Lifetimes
 

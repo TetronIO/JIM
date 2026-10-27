@@ -170,6 +170,9 @@ $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'ST
 $script:UnmarkableRules = @('EXC-1', 'MNT-3', 'PRI-1')
 $script:Tiers = @('Block', 'Ratchet', 'Warn')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
+# An icon or emoji shortcode such as :material-format-align-center: or :octicons-arrow-right-24:, which
+# the language rules and the word count skip: its name is markup, not prose.
+$script:IconShortcode = ':[a-z0-9]+(?:-[a-z0-9]+)+:'
 # STY-1. Three kinds of emoji: the pictograph blocks (Misc Symbols, Dingbats, and the
 # supplementary pictographs as UTF-16 pairs); the scattered characters that default to emoji
 # presentation (a play button, a return arrow, an information sign); and any character a
@@ -426,7 +429,8 @@ function Get-WordCount {
             if ($marker[0] -eq $fenceMarker[0] -and $marker.Length -ge $fenceMarker.Length -and $line.Trim() -eq $marker) { $inFence = $false; continue }
         }
         if ($inFence -or $line.TrimStart().StartsWith('<!--')) { continue }
-        $words += ([regex]::Matches($line, '\S+')).Count
+        # An icon shortcode (:material-format-align-center:) is markup, not a word.
+        $words += ([regex]::Matches(($line -replace $script:IconShortcode, ' '), '\S+')).Count
     }
     return $words
 }
@@ -470,8 +474,15 @@ function Get-PageModel {
         }
 
         if ($line -match '^ {0,3}(?<hashes>#{1,6})\s+(?<text>.*?)\s*$') {
+            $headingLevel = $Matches['hashes'].Length
             $headingText = ($Matches['text'] -replace '\s*\{[^}]*\}\s*$', '' -replace '\s+#+\s*$', '').Trim()
-            $headings.Add([pscustomobject]@{ Level = $Matches['hashes'].Length; Text = $headingText; Line = $lineNumber })
+            # A leading icon shortcode (STY-3) is kept apart, so every other rule reads the heading's words.
+            $headingIcon = $null
+            if ($headingText -match '^:(?<icon>[a-z0-9]+(?:-[a-z0-9]+)*):\s*(?<rest>.*)$') {
+                $headingIcon = $Matches['icon']
+                $headingText = $Matches['rest']
+            }
+            $headings.Add([pscustomobject]@{ Level = $headingLevel; Text = $headingText; Icon = $headingIcon; Line = $lineNumber })
         }
 
         if ($line -match '<!--\s*conformance:') {
@@ -603,27 +614,22 @@ function Test-PageName {
     }
 }
 
-# STY-3: a section's index page (index.md, the home page included) opens every H2 with a Material
-# Design icon, which custom.css draws as a tile; no other heading anywhere carries an icon. An icon is
-# an emoji shortcode such as :material-layers-outline:, so any leading shortcode counts.
+# STY-3: every H2 opens with a Material Design icon, which custom.css draws as a tile; no other
+# heading carries one. Get-PageModel separates a heading's leading icon shortcode from its words.
 function Test-HeadingIcons {
     param($Page)
 
-    $isIndex = ($Page.RelativePath -split '/')[-1] -eq 'index.md'
     foreach ($h in $Page.Headings) {
-        $icon = [regex]::Match($h.Text, '^:(?<name>[a-z0-9]+(?:-[a-z0-9]+)*):\s*(?<title>.*)$')
-        $title = if ($icon.Success) { $icon.Groups['title'].Value } else { $h.Text }
-        if ($isIndex -and $h.Level -eq 2) {
-            if (-not $icon.Success) {
-                New-Finding 'STY-3' $h.Line "the H2 '$title' has no icon; on a section's index page every H2 opens with a Material Design icon, such as '## :material-layers-outline: $title'."
+        if ($h.Level -eq 2) {
+            if (-not $h.Icon) {
+                New-Finding 'STY-3' $h.Line "the H2 '$($h.Text)' has no icon; every H2 opens with a Material Design icon, such as '## :material-layers-outline: $($h.Text)'."
             }
-            elseif (-not $icon.Groups['name'].Value.StartsWith('material-')) {
-                New-Finding 'STY-3' $h.Line "the H2 '$title' opens with ':$($icon.Groups['name'].Value):'; use a Material Design icon (:material-...:), preferring an -outline variant."
+            elseif (-not $h.Icon.StartsWith('material-')) {
+                New-Finding 'STY-3' $h.Line "the H2 '$($h.Text)' opens with ':$($h.Icon):'; use a Material Design icon (:material-...:), preferring an -outline variant."
             }
         }
-        elseif ($icon.Success -and $h.Level -gt 1) {
-            $where = if ($isIndex) { 'only H2 headings on a section''s index page carry an icon' } else { 'only a section''s index page carries heading icons; article headings stay plain' }
-            New-Finding 'STY-3' $h.Line "the heading '$title' carries an icon; $where."
+        elseif ($h.Icon) {
+            New-Finding 'STY-3' $h.Line "the heading '$($h.Text)' carries an icon; only H2 headings carry one."
         }
     }
 }
@@ -989,7 +995,7 @@ function Get-ProseLine {
         if ([string]::IsNullOrWhiteSpace($line) -or $line.Contains('--8<--') -or $line -match '^\s*\[[^\]]+\]:\s*\S') { continue }
         if (@($StubPatterns | Where-Object { $_ -and $line.IndexOf($_, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count) { continue }
 
-        $withLinks = [regex]::Replace($line, '(`+).+?\1', ' ')
+        $withLinks = [regex]::Replace($line, '(`+).+?\1', ' ') -replace $script:IconShortcode, ' '
         $text = $withLinks -replace '\]\([^)]*\)', ']' -replace '\]\[[^\]]*\]', ']' -replace '<[^>]+>', ' ' -replace 'https?://\S+', ' ' -replace '\{[^}]*\}', ' ' -replace '&#?\w+;', ' '
         $tableHeader = $text.TrimStart().StartsWith('|') -and ($i + 1 -lt $lines.Count) -and $lines[$i + 1] -match '^\s*\|?\s*:?-{3,}'
 

@@ -9,7 +9,7 @@ audience: security-assessor
 
 JIM records authentication activity, interactive sign-in success and failure, and failed API authentication with an API key or an SSO access token, in the same [Activity](../configuration/activities.md) system used for every other tracked operation, so there is a single audit log rather than a parallel security store. This is the audit-trail leg of OWASP Top 10 A09 (Security Logging and Monitoring Failures); it complements [rate limiting](../api/rate-limiting.md) and [security headers](security-headers.md) from the same assessment.
 
-## What is recorded
+## :material-clipboard-text-clock-outline: What is recorded
 
 | Event | Initiator | Write shape |
 |-------|-----------|-------------|
@@ -21,7 +21,7 @@ JIM records authentication activity, interactive sign-in success and failure, an
 
 Every security audit event carries `Authentication` as its Activity target type, and a client IP address where one was available. Filter the [Activity list](../configuration/activities.md#filtering-the-activity-list) to the **Security** category, or the `Authentication` type, to see these events on their own.
 
-## Aggregation for failures
+## :material-sigma: Aggregation for failures
 
 Failed authentication is the only event class written on behalf of an unauthenticated, attacker-controlled source: a naive one-row-per-failure design would let a key-spraying or credential-stuffing client force database writes at wire speed. To keep the audit log itself from becoming a denial-of-service amplifier, failures are aggregated: **one Activity per (API key prefix, client IP, failure reason) per 15-minute UTC window**, carrying a first-seen timestamp, a last-seen timestamp, and an attempt counter that increments in place as further matching attempts arrive in the same window.
 
@@ -43,17 +43,17 @@ JIM recognises an API key by its `jim_ak_` prefix, so a bearer token without tha
 
 An access token is recorded only when the token itself is at fault. When a valid token's user cannot be resolved, or the identity provider cannot be reached to check signatures, JIM reports a server error instead: these are faults to fix, not refused credentials.
 
-## Retention
+## :material-timer-sand: Retention
 
 Security audit events are governed by their own retention period, the `History.SecurityEventRetentionPeriod` [Service Setting](../configuration/service-settings.md) (default **365 days**, ~1 year), independently of the general history retention period and the (much longer) configuration change retention period. Housekeeping cleanup removes expired security events on its own schedule; the general history cleanup never touches them.
 
-## Client IP capture
+## :material-ip-network-outline: Client IP capture
 
 An IP address is personal data, so capture is scoped to security-relevant Activities (this feature, plus the pre-existing API key usage tracking) and governed by the retention period above.
 
 If JIM sits behind a reverse proxy or load balancer, the recorded IP is only accurate once JIM trusts the proxy's forwarded headers; see [Rate Limiting: Reverse proxies](../api/rate-limiting.md#reverse-proxies) for the `JIM_TRUSTED_PROXIES` configuration this depends on. Without it, every event records the proxy's own address rather than the real client.
 
-## SIEM integration
+## :material-bell-ring-outline: SIEM integration
 
 Security audit events are queryable through the same [Activities REST API](../../api/reference/) as everything else, filterable by target type, so a SIEM or log shipper can poll for them specifically without a bespoke export mechanism.
 
@@ -69,7 +69,7 @@ A failure's Activity keeps counting attempts in place until its 15-minute window
 
 Each returned Activity for a failure carries its aggregation window start, first-seen and last-seen timestamps, attempt count, failure reason, API key prefix (never the key itself), and client IP; a sign-in success carries the signed-in user's identity and client IP. See the [interactive API reference](../../api/reference/) for the full response schema.
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](../configuration/activities.md): the general Activity system this feature is built on
 - [Rate Limiting](../api/rate-limiting.md): throttles API requests once they are authenticated; it does not limit failed attempts

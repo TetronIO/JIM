@@ -52,7 +52,7 @@ An object that leaves an import Synchronisation Rule's scope while the rule's [O
 
 A Deletion Rule that evaluates and decides *not* to delete records nothing, because nothing happened, so the causality views show a **Metaverse Object not deleted** step on the Metaverse Object column with the reason beside it ("an authoritative source is still connected"). The rule that decided it is available underneath as **Deletion Rule in force at the time**, collapsed, and is the rule as it was recorded at the moment of the decision rather than the object type's current configuration.
 
-## Values JIM could not import
+## :material-alert-octagon-outline: Values JIM could not import
 
 A Connector can find a value it cannot read as its attribute's type: a date that does not exist, letters in a number column, a decimal wider than JIM can hold. JIM can also be handed a value it cannot hold: two dates of one attribute less than a microsecond apart (JIM holds a date to the microsecond), or both true and false for a true or false attribute, which holds one value. Neither is treated as no value. The object's execution item lists every such value under **Attribute Values Not Imported**: each value as received, what its attribute expected, whether the Connector or JIM found it (**Found By**), and why it could not be imported. Where the Connector says where the object was read from, the item gives that too, and it also appears as **Source** in the Execution Summary: the File Connector gives the file and row, and the LDAP Connector the entry's distinguished name.
 
@@ -62,6 +62,6 @@ JIM leaves the attribute exactly as it already held it. Nothing is removed from 
 
 When the value is an object's External ID, JIM cannot tell which object it is, so that Full Import does not check the Object Type for deleted objects, and the Activity says so: marking objects deleted on that basis could remove one the Connected System still holds. Checking resumes on the next Full Import that reads every External ID.
 
-## Causes and consequences
+## :material-arrow-decision-outline: Causes and consequences
 
 The Lineage reads beyond the run in both directions: up the chain to what caused the item, and down it to what the item went on to cause in later runs, each on the object it happened to. [Causality](causality.md) explains both, including how each branch says where it ends.

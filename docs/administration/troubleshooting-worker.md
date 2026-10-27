@@ -9,7 +9,7 @@ audience: operator
 
 The Worker runs every Run Profile, so a run ends early when the Worker itself stops, or when it runs short of memory. Open the run's Activity from **Activity** in the portal, or with `Get-JIMActivity`; its message is the title of one of the entries below. The Worker's card on the [Operations](../configuration/operations.md) page shows how much memory it holds and how full the memory it draws on is, and reports **Memory low** from 85% in use. For errors recorded against individual objects, see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
 
-## `Task was abandoned due to worker crash or restart.`
+## :material-alert-octagon-outline: `Task was abandoned due to worker crash or restart.`
 
 **What it means.** The worker stopped while it was running this Activity: it restarted, crashed, or its server went down. JIM marks the Activity **Failed with error** when the worker starts again, or when the worker has not reported progress for the [Stale task timeout](configuration.md#service-settings) Service Setting (five minutes by default). Whatever the run had already saved stays saved, and nothing is left half-written: the next run carries on from the state JIM's data is in.
 
@@ -19,7 +19,7 @@ When the Worker's last heartbeat showed memory low, the message adds `The Worker
 
 **Check.** The new run's Activity ends **Complete**.
 
-## `The Worker stopped this run because its memory was nearly exhausted`
+## :material-memory: `The Worker stopped this run because its memory was nearly exhausted`
 
 **What it means.** While the run was going, 92% or more of the memory the Worker can draw on was in use, most of it by the Worker, so the Worker stopped the run rather than be stopped by the operating system part-way through. The Activity is **Failed with error**, and the message gives the figures. What the run had already saved stays saved, as for any failed run. If the run did not stop when asked, the message says the Worker `restarted itself`: it recorded why and restarted, which is what the operating system would otherwise have done without a word. A run that finished while memory was above 85% is **Complete with warning** instead, saying `Memory was low while this ran`.
 
@@ -29,7 +29,7 @@ A run can also fail with `This run ran out of memory and stopped`, with the memo
 
 **Check.** The new run's Activity ends **Complete**, and the Worker's card on the [Operations](../configuration/operations.md) page no longer reports **Memory low**.
 
-## Still stuck?
+## :material-lifebuoy: Still stuck?
 
 Collect these before asking for help:
 

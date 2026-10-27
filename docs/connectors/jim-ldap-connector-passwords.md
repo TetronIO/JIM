@@ -9,7 +9,7 @@ audience: administrator
 
 Where you configure it, the LDAP Connector sets passwords on the accounts JIM manages, over JIM's password channel. This page covers setting passwords on each directory type, and the password policy JIM discovers from the directory.
 
-## Setting Passwords
+## :material-form-textbox-password: Setting Passwords
 
 Credential attributes such as `unicodePwd` and `userPassword` are never imported and can never be used in an Attribute Flow; see [Credential attributes are never managed](../configuration/connected-system-attributes.md#credential-attributes-are-never-managed) for the full list and the reasoning. The LDAP Connector writes passwords itself, on a separate channel ([Passwords](../concepts/passwords.md) covers that channel across all Connectors), with two rules specific to directories.
 
@@ -75,7 +75,7 @@ The same goes for an account a later export disables while its password is still
 
 An administrator who [sets a password on one account](../configuration/connected-system-passwords.md#setting-the-password-on-one-connected-system-object) is the one exception to all of this: an enable they choose is applied, and so is their choice under **After the password is set**, which sets "Password never expires" for **Never expires** and clears it for the other two. Where your flow disagrees and its Synchronisation Rule has [Enforce State](../configuration/synchronisation-rules.md#export-outbound) on, the next synchronisation puts the flow's value back, and the delivery's Activity completes with a warning saying so, because a change at the next sign-in may then stop being asked for.
 
-## Password policy discovery
+## :material-shield-search: Password policy discovery
 
 Whenever JIM retrieves or refreshes the schema, and again when the Password Channel preflight runs, the Connector reads the directory's password policy so a generated password satisfies it. [Passwords](../concepts/passwords.md#discovering-the-targets-rules) explains what the figures mean and how to read a blank one; this section says where each directory type keeps its policy, what JIM reads from it, and how it decides that some objects may be governed by a different policy. Discovery never fails a schema refresh: where a search is refused or returns nothing, the Connector records why and the panel says so.
 

@@ -11,7 +11,7 @@ Worker Task cmdlets let you monitor and cancel queued and in-progress background
 
 ---
 
-## Get-JIMWorkerTask
+## :material-cog-outline: Get-JIMWorkerTask
 
 Gets currently queued, processing, or cancellation-requested Worker Tasks.
 
@@ -81,7 +81,7 @@ Get-JIMWorkerTask | Where-Object { $_.Steps -and $_.Steps.CurrentStepNumber -eq 
 
 ---
 
-## Stop-JIMWorkerTask
+## :material-stop-circle-outline: Stop-JIMWorkerTask
 
 Cancels a queued or in-progress Worker Task. Cancellation completes asynchronously: JIM returns as soon as the request has been accepted.
 
@@ -118,7 +118,7 @@ Get-JIMWorkerTask | Stop-JIMWorkerTask -Force
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](activities.md): cmdlets for reviewing the durable audit record a Worker Task leaves behind
 - [Schedules](schedules.md): cmdlets for configuring the automated workflows that queue Worker Tasks

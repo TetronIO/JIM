@@ -13,7 +13,7 @@ The **Data Flow** view answers it in one place. It lists every attribute data fl
 
 Find it at **Administration → Schema → Data Flow**.
 
-## What a flow is
+## :material-swap-vertical: What a flow is
 
 One row is one Attribute Flow on one Synchronisation Rule. The direction determines which side of the Metaverse each column refers to:
 
@@ -22,7 +22,7 @@ One row is one Attribute Flow on one Synchronisation Rule. The direction determi
 
 The target is therefore always a single attribute, while the source side may be one attribute, several, or an [expression](../concepts/expressions.md).
 
-## Reading the columns
+## :material-table-column: Reading the columns
 
 The columns are grouped into two bands, one per side of the Metaverse. The **Connected System** band is always on the left and the **Metaverse** band always on the right, whichever way the value travels; only the arrow between them changes. So a row reads as a sentence: this system, this object type, this attribute, flowing into (or out of) this Metaverse Object Type's attribute.
 
@@ -48,7 +48,7 @@ An inbound flow's priority is emphasised when its target Metaverse Attribute has
 
 A flow that has never been ordered reads as **Unranked**. New inbound Attribute Flows are created that way deliberately, so adding one cannot start winning resolution the moment it is saved; an unranked contribution ranks below every ranked one. Hover the cell for what the number means for that particular flow.
 
-## Narrowing the list
+## :material-filter-outline: Narrowing the list
 
 Every filter is optional and they combine, so you can go from "everything" to "the one flow I am looking for" in a couple of clicks:
 
@@ -63,7 +63,7 @@ Every filter is optional and they combine, so you can go from "everything" to "t
 
     An expression's attribute references live in its text and are not modelled, so the **Metaverse Attribute** filter cannot match a flow whose relevant side is an expression. Use **Search** to find those: it looks inside expression text.
 
-## Via the REST API and PowerShell
+## :material-api: Via the REST API and PowerShell
 
 The same view is available for automation, with the same filters:
 
@@ -80,7 +80,7 @@ Get-JIMDataFlow -ConnectedSystemName "Contoso AD"
 
 Over REST, `GET /api/v1/synchronisation/data-flows` takes the same filters as query-string parameters and pages like every other collection endpoint. See the [API reference](../api/index.md) for the response shape.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Attribute Priority](../concepts/attribute-priority.md): how JIM decides which contribution wins when several systems supply the same Metaverse Attribute.
 - [Synchronisation Rules](synchronisation-rules.md): where Attribute Flows are created and edited.

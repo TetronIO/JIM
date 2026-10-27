@@ -11,12 +11,12 @@ JIM runs on Podman as well as Docker, from the same images, with the same settin
 
 The [installer](deployment.md#what-the-installer-does) sets everything on this page up for you. Read on to understand what it sets up, or to operate JIM day to day. To install without the installer, see [Installing on Podman by Hand](podman-by-hand.md).
 
-## Requirements
+## :material-clipboard-list-outline: Requirements
 
 - **Podman 4.4 or later, with systemd.** RHEL 9 and 10 ship Podman 5. systemd starts JIM at boot through Podman's Quadlet, which arrived in Podman 4.4. Without systemd JIM still runs, but does not start by itself after a reboot (see [Without systemd](podman-by-hand.md#without-systemd)).
 - Everything else in the [Deployment Guide's prerequisites](deployment.md#prerequisites): hardware, OpenSSL, an OIDC identity provider.
 
-## How JIM Runs on Podman
+## :material-layers-outline: How JIM Runs on Podman
 
 JIM runs as two pods on a network named `jim`:
 
@@ -43,7 +43,7 @@ JIM's secrets are not in any of these files. The database password, your identit
 
 JIM's data is in named volumes with the same names as on Docker: `jim-db-volume`, `jim-logs-volume`, `jim-keys-volume` and `jim-connector-files-volume`. You also see a volume named `jim-tls`, which Podman fills from the secret of the same name each time JIM starts.
 
-## Rootful or Rootless
+## :material-account-lock-outline: Rootful or Rootless
 
 By default the installer runs JIM **rootful**: Podman runs as root, as Docker does. JIM's containers still run as a non-root user, with every capability dropped and a read-only root file system, exactly as on Docker.
 
@@ -64,7 +64,7 @@ Choose on these differences:
 
 The choice is made at installation. A reinstall keeps it, since JIM's images, secrets and data are in the Podman storage of the account that runs it; moving an installation between rootful and rootless means installing afresh and restoring a [backup](backup-recovery.md).
 
-## Operating JIM
+## :material-tune-variant: Operating JIM
 
 ```bash
 # Status, restart, stop and start
@@ -114,7 +114,7 @@ Each container has a health check, which `podman ps` shows. Podman 5 restarts a 
 
 None of these checks starts until its service has finished starting, however long a first start or an upgrade's database changes take, so Podman never restarts a service part-way through starting.
 
-## Firewall, SELinux, AppArmor and NetworkManager {#firewall-selinux-and-apparmor}
+## :material-shield-lock-outline: Firewall, SELinux, AppArmor and NetworkManager {#firewall-selinux-and-apparmor}
 
 - **firewalld**<br /> Blocks JIM's port by default on RHEL. The installer offers to open it; by hand: `firewall-cmd --add-service=https && firewall-cmd --permanent --add-service=https` (or `--add-port=<port>/tcp` for another port), which opens it now and for good without reloading firewalld.
 
@@ -150,7 +150,7 @@ None of these checks starts until its service has finished starting, however lon
 !!! note "With Docker on the same server"
     Docker's firewall rules drop traffic forwarded to other container engines, so other machines cannot reach a rootful Podman JIM, the default, on a server that also runs Docker. Run JIM on one engine per server.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Deployment Guide](deployment.md): installing, certificates, reverse proxies.
 - [Installing on Podman by Hand](podman-by-hand.md): what the installer does, step by step.

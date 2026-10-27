@@ -9,14 +9,14 @@ audience: operator
 
 **Administration > Operations** is where an administrator finds out what JIM is doing, what it has done, what it will do next, and whether the services that do it are alive. It is one page with four tabs and a Service Health strip above them.
 
-## The tabs
+## :material-view-list-outline: The tabs
 
 - **Queue**<br /> The work in flight and the work waiting behind it: Run Profile executions, schema imports, deletions and the other background tasks, with live progress per row. Running Schedules are grouped under a header drawn as a rail of their steps. See [The Operations queue](../administration/portal-lists.md#the-operations-queue) and [Live progress](activity-progress.md).
 - **History**<br /> The [Activities](activities.md) record of everything JIM has done, filterable by outcome, type and Schedule, with a side panel for each one.
 - **Schedules**<br /> The [Schedules](schedules.md) that run work automatically, each with its last run and how that run ended.
 - **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. An [initial password](../concepts/passwords.md#giving-new-connected-system-objects-their-first-password) on a newly provisioned Connected System Object travels the same queue, labelled with origin **Initial**. See [Watching the queue](../concepts/password-synchronisation.md#watching-the-queue).
 
-## Service Health
+## :material-heart-pulse: Service Health
 
 JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service), and the **Scheduler**, which starts Schedules when they fall due. Each service writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it, so a Worker that has stopped shows as stopped rather than looking like a Worker with nothing to do. The container health check alone is invisible from the portal.
 
@@ -61,7 +61,7 @@ Every service writes its heartbeat every 5 seconds. Both Worker services are pre
 
 The strip refreshes every 10 seconds, so a change of status appears within roughly one refresh of it happening.
 
-## Watching from outside the portal
+## :material-monitor-dashboard: Watching from outside the portal
 
 The same report is available to monitoring and scripts, and comes from the same rules, so a script and an administrator at the portal always agree.
 
@@ -78,7 +78,7 @@ if ($health.Overall -ne 'Healthy') {
 
 The unauthenticated `/api/v1/health` endpoints ([Health Monitoring](../administration/deployment.md#health-monitoring)) answer for the web tier only and say nothing about the Worker, the Password Delivery Service or the Scheduler. Use them for load balancers and orchestrators; use `system/health` for anything that needs to know whether JIM's work is actually being done.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Activities](activities.md): the record of every operation, and how to watch one run
 - [Schedules](schedules.md): automated, ordered sequences of operations

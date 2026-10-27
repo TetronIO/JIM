@@ -12,7 +12,7 @@ A **Run Profile** defines a synchronisation operation that can be executed again
 
 Run Profiles are the building blocks of [Schedules](schedules.md): each step of a Schedule runs a Run Profile. A Run Profile can also be run directly, for a one-off operation.
 
-## Run types
+## :material-play-circle-outline: Run types
 
 A Run Profile is one of:
 
@@ -24,11 +24,11 @@ A Run Profile is one of:
 
 A synchronisation works through the Connected System's Object Types in dependency order, so people come before the groups they belong to, and membership resolves as each group is processed. Where the schema does not say which type an attribute points at (LDAP `member` and `manager`), a Full Synchronisation reads which types its values point at; a Delta Synchronisation assumes any type. References within one type (managers, nested groups) can still need the **Resolving cross-page references** step. The worker's service log records the order in a line starting `Full Synchronisation type order:` or `Delta Synchronisation type order:`.
 
-## Page size
+## :material-file-document-outline: Page size
 
 How many objects an import asks the Connected System for at a time: the page of an LDAP paged search, a SQL query or a SCIM request. The default is 100. A larger page means fewer round trips to the Connected System and more memory held at once. The File Connector reads its file whole, so the setting does nothing there, and synchronisation is paged by the `Sync.PageSize` [Service Setting](../administration/configuration.md#service-settings) instead.
 
-## Partition and file path
+## :material-folder-outline: Partition and file path
 
 For a Connector that exposes partitions (the LDAP Connector) or reads files (the File Connector), the Run Profile pins the operation to one partition or file. A Connected System can have several Run Profiles of the same run type, each scoped to a different partition or file.
 
@@ -48,13 +48,13 @@ To resolve it, either select the partition again, or edit the Run Profile to tar
 
     A Full Import treats any object it does not find as deleted from the Connected System, which marks the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls their contributed attribute values. Narrowing import scope therefore has consequences well beyond "JIM stops reading these objects". Review the scope change before saving it.
 
-## Verification Mode (Full Import)
+## :material-eye-check-outline: Verification Mode (Full Import)
 
 Full Import automatically skips loading and comparing objects whose content has not changed since the last import, using a stored content hash (see [how Full Import detects unchanged objects](../concepts/synchronisation-pipeline.md#how-full-import-detects-unchanged-objects)). This is transparent and needs no configuration.
 
 **Verification Mode** is an optional toggle on a Full Import Run Profile that temporarily disables this optimisation: every object is fully compared regardless of its stored hash, and JIM reports an error if a stored hash matched but the comparison still found a change. Use it to validate the optimisation after an upgrade, or to investigate a suspected discrepancy; leave it off for everyday imports, since it forgoes the performance benefit. The toggle only applies to Full Import Run Profiles; enabling it on any other run type is rejected.
 
-## Allow Object Type Changes (Full Import)
+## :material-swap-horizontal: Allow Object Type Changes (Full Import)
 
 JIM recognises a Connected System Object by its External ID within one Object Type. When an object JIM already holds starts arriving under a different Object Type (an Object Type selection change, a schema refresh, or an edit in the directory), the import does not treat it as a new object: it **refuses the change**. The object's Run Profile execution item records an **Object Type Changed** error naming both Object Types, nothing is created, and the existing Connected System Object is kept exactly as it is, including through deletion detection, so nothing is disconnected or deprovisioned (unless an earlier import had already marked it obsolete, in which case the next synchronisation disconnects it as it would have anyway). The Activity completes with a warning, even when the refused objects are all it recorded. This applies to Full and Delta Imports alike, for every Connector that can tell an Object Type change from a new object: of the built-in Connectors, the [LDAP Connector](../connectors/jim-ldap-connector.md), whose External IDs are unique across the whole directory.
 
@@ -62,7 +62,7 @@ JIM recognises a Connected System Object by its External ID within one Object Ty
 
 Leave it off on the Run Profiles your Schedules run. As with a [mass change past a limit](#letting-a-legitimate-mass-change-through), the safer pattern is a **second Full Import Run Profile with the setting on, run by hand** once you have prepared for the change. [When an object changes Object Type](connected-system-schema.md#when-an-object-changes-object-type) explains what causes a change and the order to do things in.
 
-## Safeguards
+## :material-shield-lock-outline: Safeguards
 
 ### Export
 
@@ -110,11 +110,11 @@ Each Delta Import re-reads everything since that position until the deletions ar
 
 **Recommended values:** set a limit on a Delta Import Run Profile that runs on a frequent Schedule against a Connected System that can delete objects in bulk, such as a directory where a whole OU can be deleted by mistake. A count of what a normal interval's leavers look like, with headroom, is usually easier to reason about than a percentage.
 
-## Asynchronous execution
+## :material-timer-sand: Asynchronous execution
 
 Starting a Run Profile returns an Activity ID straight away. The work runs on the Worker, and its [Activity](activities.md) shows the run's progress as it goes, in the portal or with `Get-JIMActivity -Follow`; afterwards, its execution items give each object's outcome.
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Setting up Run Profiles for a new Connected System:**
 
@@ -128,13 +128,13 @@ Starting a Run Profile returns an Activity ID straight away. The work runs on th
 2. Run it, and note the Activity ID it returns
 3. Watch the Activity to follow its progress and inspect the result
 
-## Manage Run Profiles
+## :material-cog-outline: Manage Run Profiles
 
 - **JIM portal**<br /> Run Profiles tab on a Connected System in the admin UI
 - **PowerShell**<br /> [Run Profile cmdlets](../powershell/run-profiles.md) (`Get-JIMRunProfile`, `New-JIMRunProfile`, `Start-JIMRunProfile`, etc.)
 - **REST API**<br /> Run Profile endpoints in the [interactive API reference](../../api/reference/)
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Connected Systems](connected-systems.md): Run Profiles belong to a Connected System
 - [Schedules](schedules.md): automated execution of Run Profiles
