@@ -324,6 +324,19 @@ class CodeSpanTests(unittest.TestCase):
         self.assertIn('<tspan class="jimdg-dg-code">Get-Thing</tspan>', out)
         self.assertNotIn("`", out)
 
+    def test_wrapping_keeps_punctuation_on_its_code_span(self):
+        text = "a page, `-All` or `-Count`; filter by change type or status"
+        lines = diagrams.wrap(text, "note", self.m.measure(text, "note") * 0.6, self.m)
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(" ".join(lines), text)
+
+    def test_a_property_chip_renders_code_spans(self):
+        spec = copy.deepcopy(ANATOMY_VALUE)
+        spec["properties"][0]["value"] = "`$null` when unset"
+        html = render(spec)
+        self.assertIn('<tspan class="jimdg-dg-code">$null</tspan>', html)
+        self.assertNotIn("`", html)
+
     def test_wrapping_never_splits_a_code_span(self):
         lines = diagrams.wrap("check first with `Get-JIMConnectedSystemDeletionPreview`", "note", 300, self.m)
         self.assertEqual(lines[-1], "`Get-JIMConnectedSystemDeletionPreview`")
@@ -396,6 +409,16 @@ class LifecycleTests(unittest.TestCase):
         label_y = float(re.search(r'<text class="jimdg-dg-edge[^"]*" x="[\d.]+" y="([\d.]+)">'
                                   r'<tspan class="jimdg-dg-code">Remove-JIMConnectedSystem', narrow).group(1))
         self.assertLess(label_y, term_y)
+
+    def test_an_end_from_a_framed_state_puts_its_label_below_the_frame(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["end"]["from"] = "holding"
+        spec["end"]["label"] = "it ends"
+        for svg in svgs(render(spec)):
+            hub = re.search(r'class="jimdg-hub" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"', svg)
+            frame_bottom = float(hub.group(1)) + float(hub.group(2))
+            label_y = float(re.search(r'y="([\d.]+)">it ends<', svg).group(1))
+            self.assertGreater(label_y - 10, frame_bottom, "the end label's text must clear the frame's border")
 
     def test_an_end_from_a_state_with_a_later_state_is_an_error(self):
         spec = copy.deepcopy(LIFECYCLE)

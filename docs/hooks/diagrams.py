@@ -131,7 +131,9 @@ def wrap(text, role, max_width, metrics):
     """Fit text into at most two lines no wider than max_width, or fail."""
     if metrics.measure(text, role) <= max_width:
         return [text]
-    words = re.findall(r"`[^`]*`|\S+", text)
+    # A word is a run of non-space text, where a code span may hold spaces and keeps
+    # the punctuation that follows it ("`-Count`;").
+    words = re.findall(r"(?:`[^`]*`|[^\s`])+", text)
     fits = []
     for cut in range(1, len(words)):
         first, second = " ".join(words[:cut]), " ".join(words[cut:])
@@ -145,6 +147,12 @@ def wrap(text, role, max_width, metrics):
 
 def esc(text):
     return html.escape(str(text), quote=False)
+
+
+def rich(text):
+    """Escaped text with each `code` span as a mono tspan, without its backticks."""
+    return "".join(f'<tspan class="jimdg-dg-code">{esc(seg)}</tspan>' if code else esc(seg)
+                   for seg, code in spans(str(text)))
 
 
 def num(value):
@@ -162,9 +170,7 @@ class Canvas:
 
     def text(self, x, y, value, role, anchor="middle"):
         cls = STYLES[role][0] + ("" if anchor == "middle" else f" jimdg-anchor-{anchor}")
-        body = "".join(f'<tspan class="jimdg-dg-code">{esc(seg)}</tspan>' if code else esc(seg)
-                       for seg, code in spans(str(value)))
-        return f'<text class="{cls}" x="{num(x)}" y="{num(y)}">{body}</text>'
+        return f'<text class="{cls}" x="{num(x)}" y="{num(y)}">{rich(value)}</text>'
 
     def arrow(self, points):
         """A polyline ending in an arrowhead, along axis-aligned segments."""
@@ -666,13 +672,14 @@ def lifecycle_wide(spec, metrics):
         else:
             src = states[ids.index(end["from"])]
             fx, fy = src.cx, src.bottom
-        term.x, term.y = fx - term.w / 2, fy + 44
+        ly = box_bottom if container else fy  # the label sits below any frame, never on its border
+        term.x, term.y = fx - term.w / 2, ly + 44
         canvas.arrow([(fx, fy), (fx, term.y)])
-        canvas.add(canvas.text(fx + 10, fy + 26, end["label"], "edge", "start"))
+        canvas.add(canvas.text(fx + 10, ly + 26, end["label"], "edge", "start"))
         if end.get("note"):
             if fx - 10 - metrics.measure(end["note"], "note") < 4:
                 raise DiagramError("the end's note is too wide to sit beside its arrow; shorten it")
-            canvas.add(canvas.text(fx - 10, fy + 26, end["note"], "note", "end"))
+            canvas.add(canvas.text(fx - 10, ly + 26, end["note"], "note", "end"))
         if fx + 10 + metrics.measure(end["label"], "edge") > WIDE - 4:
             raise DiagramError("the end's label is too wide to sit beside its arrow; shorten it")
         term.draw(canvas)
@@ -761,10 +768,10 @@ def lifecycle_narrow(spec, metrics):
                 rows += [(line, "note", None) for line in wrap(end["note"], "note", room, metrics)]
             except DiagramError:
                 below = wrap(end["note"], "note", NARROW - 16, metrics)
-        term.x, term.y = left, fy + max(34, 18 * len(rows) + 18)
+        term.x, term.y = left, box_bottom + max(34, 18 * len(rows) + 18)  # labels below any frame
         canvas.arrow([(left + 18, fy), (left + 18, term.y)])
         for r, (text, role, mark) in enumerate(rows):
-            ty = fy + 22 + 18 * r
+            ty = box_bottom + 22 + 18 * r
             if mark:
                 canvas.add(f'<polygon class="jimdg-flow-arrow" points="{num(label_x + 4)},{num(ty - 1)} '
                            f'{num(label_x)},{num(ty - 9)} {num(label_x + 8)},{num(ty - 9)}"/>')
@@ -845,9 +852,9 @@ def draw_chips(canvas, props, metrics, width, top, per_row):
             text_w = metrics.measure(prop["name"], "chip-name") + metrics.measure("  " + (prop.get("value") or ""), "chip")
             if text_w > chip_w - 16:
                 raise DiagramError(f'the property "{prop["name"]}: {prop.get("value", "")}" is too long for its chip; shorten it')
-            body = f'<tspan class="jimdg-dg-chip-name">{esc(prop["name"])}</tspan>'
+            body = f'<tspan class="jimdg-dg-chip-name">{rich(prop["name"])}</tspan>'
             if prop.get("value"):
-                body += "  " + esc(prop["value"])
+                body += "  " + rich(prop["value"])
             canvas.add('<g class="jimdg-dg-node">'
                        f'<rect class="jimdg-chip" x="{num(x)}" y="{num(y)}" width="{num(chip_w)}" height="34" rx="17"/>'
                        f'<text class="jimdg-dg-chip" x="{num(x + chip_w / 2)}" y="{num(y + 21.5)}">{body}</text></g>')
