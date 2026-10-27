@@ -36,7 +36,6 @@ VIS-1	concepts/object-naming.md	1
 VIS-1	configuration/activities.md	1
 VIS-1	configuration/activity-execution-items.md	1
 VIS-1	configuration/activity-progress.md	1
-VIS-1	configuration/api-keys.md	1
 VIS-1	configuration/attribute-mappings.md	1
 VIS-1	configuration/causality.md	1
 VIS-1	configuration/certificates.md	1
@@ -59,18 +58,15 @@ VIS-1	configuration/index.md	1
 VIS-1	configuration/initial-password.md	1
 VIS-1	configuration/metaverse-objects.md	1
 VIS-1	configuration/object-changes.md	1
-VIS-1	configuration/object-matching-rules.md	1
 VIS-1	configuration/operations.md	1
 VIS-1	configuration/partitions-and-containers.md	1
 VIS-1	configuration/predefined-searches.md	1
 VIS-1	configuration/removing-a-connected-system.md	1
 VIS-1	configuration/roles.md	1
-VIS-1	configuration/run-profiles.md	1
 VIS-1	configuration/schedules.md	1
 VIS-1	configuration/scoping-criteria.md	1
 VIS-1	configuration/service-settings.md	1
 VIS-1	configuration/sync-preview.md	1
-VIS-1	configuration/synchronisation-rules.md	1
 VIS-1	configuration/unresolved-references.md	1
 VIS-1	connectors/jim-file-connector.md	1
 VIS-1	connectors/jim-ldap-connector-auxiliary-classes.md	1
