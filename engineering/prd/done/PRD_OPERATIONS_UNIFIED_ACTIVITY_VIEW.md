@@ -1,6 +1,6 @@
 # Operations: Unified Activity View
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-10-27
 - **Author:** JayVDZ (envisioned and PRD drafted via Claude Code)
 - **Issue:** [#2549](https://github.com/TetronIO/JIM/issues/2549)

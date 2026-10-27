@@ -1,8 +1,8 @@
 # Operations: Unified Activity View
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#2549](https://github.com/TetronIO/JIM/issues/2549)
-- **PRD:** [PRD_OPERATIONS_UNIFIED_ACTIVITY_VIEW.md](../../prd/doing/PRD_OPERATIONS_UNIFIED_ACTIVITY_VIEW.md)
+- **PRD:** [PRD_OPERATIONS_UNIFIED_ACTIVITY_VIEW.md](../../prd/done/PRD_OPERATIONS_UNIFIED_ACTIVITY_VIEW.md)
 
 ## Overview
 
@@ -105,6 +105,7 @@ TDD, plain NUnit in `test/JIM.Web.Tests/`.
   - **Filters:** Connected System, Run Profile, Schedule and search filter all three sections. Queued and In progress filter client-side, since the full task list is already loaded; Completed filters server-side, as today.
   - **Empty states:** a one-line empty state per section, and a prompt when all toggles are off.
   - **Refresh:** a single subscription to `UiNotifications` and a single poll loop. Refreshing worker tasks never reloads Completed's window, and refreshing Completed preserves its scroll position, as `RefreshIfChangedAsync` does today.
+    - *As built:* Queued and In progress share one loop and Completed keeps its own, each carried over from the tab it came from. Merging them bought nothing: they read different things on different triggers, and keeping them apart is what guarantees a queue refresh never reloads Completed's window.
   - **Demo mode:** keep `?d=true`, extending the demo data with a parallel step so the In progress grouping can be previewed.
 - Move the Execute form into `Components/QueueRunProfileDialog.razor`, opened by "Queue a Run Profile". Its logic is unchanged.
 - Viewport sizing: add `jimInterop.observeViewport(dotNetRef, element)` to `wwwroot/js/interop.js`. It reports the viewport height and the Queued section's top offset on first render and on a debounced resize (about 150 ms), and the component calls `QueueRowBudget`. Before the first measurement (prerender), use a provisional budget of 6 rows.
