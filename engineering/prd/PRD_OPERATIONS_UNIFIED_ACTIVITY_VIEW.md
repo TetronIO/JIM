@@ -48,7 +48,7 @@ A third gap: nothing on the page says when the next Schedule will add work to th
 **Tab structure**
 
 1. The Queue and History tabs are replaced by a single **Activity** tab, the first and default tab on the Operations page. Schedules, Passwords and Generated Values are unchanged.
-2. Existing deep links keep working: `?t=queue` and `?t=history` resolve to the Activity tab (with `?t=history` pre-selecting the Completed filter only, if that proves useful; see Open Questions). Every internal link and breadcrumb that targets the old tabs is updated to `?t=activity`.
+2. The old `?t=queue` and `?t=history` tab keys are removed, not redirected (pre-release: no old links to support). Every caller that links to them (today the Operations breadcrumbs in `ActivityDetail.razor` and `ActivityRunProfileExecutionItemDetail.razor`, plus any link added before implementation) is updated to the Activity tab's key, `?t=activity`.
 
 **Sections and order**
 
@@ -170,11 +170,11 @@ Completed 8  EARLIER  Most recent first                     [ ] Has child activi
 **When**: the administrator views Operations
 **Then**: the collapsed header reads "... next Schedule Sun 02:00", and expanding it shows the full Scheduler card text with a link to the Schedule
 
-### Scenario 6: Old links
+### Scenario 6: Returning from an Activity
 
-**Given**: a bookmark to `/admin/operations?t=history`
-**When**: the administrator opens it
-**Then**: the Activity tab opens
+**Given**: the administrator has opened an Activity from the Activity tab
+**When**: they click the Operations breadcrumb
+**Then**: they return to `/admin/operations?t=activity`
 
 ## Constraints
 
@@ -203,9 +203,8 @@ Completed 8  EARLIER  Most recent first                     [ ] Has child activi
 
 ## Open Questions
 
-1. Should `?t=history` open the Activity tab with only Completed selected (preserving the old intent), or with everything shown?
-2. Est. start: is "last successful duration" a good enough estimator, or should it use a median of recent runs to damp outliers?
-3. Should the Queued "Show more" cap be 10, or sized to the viewport?
+1. Est. start: is "last successful duration" a good enough estimator, or should it use a median of recent runs to damp outliers?
+2. Should the Queued "Show more" cap be 10, or sized to the viewport?
 
 ## Acceptance Criteria
 
@@ -218,7 +217,7 @@ Completed 8  EARLIER  Most recent first                     [ ] Has child activi
 - [ ] Connected System, Run Profile, Schedule and search filters apply to all sections
 - [ ] Queue a Run Profile opens the existing form in a dialog
 - [ ] The Scheduler card and collapsed Service Health header show the next Schedule due
-- [ ] Old `?t=queue` and `?t=history` links open the Activity tab; internal links are updated
+- [ ] The `?t=queue` and `?t=history` keys are gone, and every internal link that used them now targets `?t=activity`
 - [ ] Live updates move a finished run from In progress to Completed without resetting other sections
 - [ ] Public docs updated as listed under Documentation Impact
 
