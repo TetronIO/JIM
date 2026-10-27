@@ -375,6 +375,35 @@ public class SynchronisationPendingDatabaseTests
     }
 
     /// <summary>
+    /// The Temporal Scope Reconciler flags an object whose data has not changed but whose scope the clock has moved
+    /// (#892). Delta Synchronisation must select it, count it and load it like any changed object; before, only a Full
+    /// Synchronisation ever reached it.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsModifiedSinceAsync_UnchangedButFlaggedForScopeReview_IsSelectedCountedAndLoadedAsync()
+    {
+        var s = await SeedAsync();
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        await using (var flag = NewContext())
+        {
+            await flag.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystemObjects"" SET ""ScopeReviewPending"" = true WHERE ""Id"" = {0}", s.JoinedCsoId);
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var count = await repository.Sync.GetConnectedSystemObjectModifiedSinceCountAsync(s.SystemId, watermark);
+        var page = await repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(s.SystemId, watermark, 1, 100, count, Guid.Empty);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(count, Is.EqualTo(1), "the flagged object is counted although its timestamps are older than the watermark");
+            Assert.That(page.Results.Select(c => c.Id), Is.EquivalentTo(new[] { s.JoinedCsoId }));
+            Assert.That(page.Results.Single().AttributeValues, Has.Count.EqualTo(1), "a flagged object is loaded with its attribute values");
+        }
+    }
+
+    /// <summary>
     /// Paging is by keyset until a page comes back empty, so a row that entered the selection after the count was
     /// taken must still be returned beyond the page count that count implies.
     /// </summary>

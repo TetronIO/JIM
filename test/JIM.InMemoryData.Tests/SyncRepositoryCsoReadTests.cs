@@ -100,6 +100,27 @@ public class SyncRepositoryCsoReadTests
         Assert.That(count, Is.EqualTo(1));
     }
 
+    [Test]
+    public async Task GetConnectedSystemObjectModifiedSinceCountAsync_UnchangedButFlaggedForScopeReview_CountsItAsync()
+    {
+        // The Temporal Scope Reconciler flags an object whose data has not changed but whose scope the clock has moved
+        // (#892); Delta Synchronisation must select it, as the production query does.
+        var cutoff = DateTime.UtcNow.AddHours(-1);
+        var flagged = CreateCso(created: DateTime.UtcNow.AddHours(-3), lastUpdated: DateTime.UtcNow.AddHours(-2));
+        flagged.ScopeReviewPending = true;
+        _repo.SeedConnectedSystemObject(flagged);
+        _repo.SeedConnectedSystemObject(CreateCso(created: DateTime.UtcNow.AddHours(-3), lastUpdated: DateTime.UtcNow.AddHours(-2)));
+
+        var count = await _repo.GetConnectedSystemObjectModifiedSinceCountAsync(CsId, cutoff);
+        var page = await _repo.GetConnectedSystemObjectsModifiedSinceAsync(CsId, cutoff, 1, 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(count, Is.EqualTo(1));
+            Assert.That(page.Results.Select(c => c.Id), Is.EqualTo(new[] { flagged.Id }));
+        }
+    }
+
     #endregion
 
     #region Paging
