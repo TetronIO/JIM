@@ -25,14 +25,6 @@ VIS-1	administration/troubleshooting-worker.md	1
 VIS-1	administration/troubleshooting.md	1
 VIS-1	administration/upgrading-podman.md	1
 VIS-1	administration/upgrading.md	1
-VIS-1	api/authentication.md	1
-VIS-1	api/index.md	1
-VIS-1	api/rate-limiting.md	1
-VIS-1	concepts/attribute-priority.md	1
-VIS-1	concepts/case-sensitivity.md	1
-VIS-1	concepts/expression-nulls.md	1
-VIS-1	concepts/expressions.md	1
-VIS-1	concepts/object-naming.md	1
 VIS-1	connectors/jim-file-connector.md	1
 VIS-1	connectors/jim-ldap-connector-auxiliary-classes.md	1
 VIS-1	connectors/jim-ldap-connector-certificates.md	1
@@ -54,10 +46,6 @@ VIS-1	connectors/jim-sql-connector-security.md	1
 VIS-1	connectors/jim-sql-connector-troubleshooting.md	1
 VIS-1	connectors/jim-sql-connector-values-in-use.md	1
 VIS-1	connectors/jim-sql-connector.md	1
-VIS-1	getting-started/first-synchronisation.md	1
-VIS-1	getting-started/index.md	1
-VIS-1	getting-started/prerequisites.md	1
-VIS-1	getting-started/quickstart.md	1
 VIS-1	powershell/activities.md	1
 VIS-1	powershell/api-keys.md	1
 VIS-1	powershell/attribute-mappings.md	1
@@ -102,4 +90,3 @@ VIS-1	powershell/sync-preview.md	1
 VIS-1	powershell/synchronisation-rules.md	1
 VIS-1	powershell/system.md	1
 VIS-1	powershell/worker-tasks.md	1
-VIS-1	reference/roadmap.md	1
