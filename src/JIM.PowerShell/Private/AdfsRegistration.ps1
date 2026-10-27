@@ -8,9 +8,6 @@
 # holds is read once, the plan is worked out here (a pure function, tested without AD FS), and each planned change is
 # then applied on its own, so -WhatIf and -Confirm see each change separately.
 
-# JIM's loopback redirect URIs: Invoke-OAuthBrowserFlow listens on the first free port from 8400, trying ten.
-$script:JIMLoopbackPorts = 8400..8409
-
 # What each client may ask the API for. The portal reads the person from its ID token, so it asks for allatclaims to
 # have the API's claim rules (the identifier, name and email) put there too; the PowerShell module reads the access
 # token, which carries them anyway (#2355). AD FS has no offline_access scope, and refuses to grant one: the module's
@@ -52,19 +49,6 @@ function Get-JIMAdfsIssuanceTransformRule {
 c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname", Issuer == "AD AUTHORITY"]
  => issue(store = "Active Directory", types = ("oid", "name", "given_name", "family_name", "email", "preferred_username"), query = ";objectGUID,displayName,givenName,sn,mail,userPrincipalName;{0}", param = c.Value);
 '@
-}
-
-function Test-JIMAdfsSameSet {
-    # Whether two lists hold the same values, in any order.
-    param([AllowNull()][object[]]$Left, [AllowNull()][object[]]$Right)
-
-    $l = @($Left | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_ } | Sort-Object -Unique -CaseSensitive)
-    $r = @($Right | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_ } | Sort-Object -Unique -CaseSensitive)
-    if ($l.Count -ne $r.Count) { return $false }
-    for ($i = 0; $i -lt $l.Count; $i++) {
-        if ($l[$i] -cne $r[$i]) { return $false }
-    }
-    return $true
 }
 
 function Select-JIMAdfsApplication {
@@ -123,7 +107,7 @@ function Get-JIMAdfsRegistrationPlan {
     $nativeName = "$Name - PowerShell"
     $apiName = "$Name - API"
     $serverRedirects = @("$baseUrl/signin-oidc", "$baseUrl/signout-callback-oidc")
-    $nativeRedirects = @($script:JIMLoopbackPorts | ForEach-Object { "http://localhost:$_/callback/" })
+    $nativeRedirects = Get-JIMLoopbackRedirectUri
     $rules = Get-JIMAdfsIssuanceTransformRule
     $changes = [System.Collections.Generic.List[object]]::new()
 
@@ -136,7 +120,7 @@ function Get-JIMAdfsRegistrationPlan {
     $server = Select-JIMAdfsApplication -Applications $Current.ServerApplications -ExpectedName $serverName -Kind 'Server application' -GroupName $Name
     if ($server) {
         $clientId = [string]$server.Identifier
-        if (-not (Test-JIMAdfsSameSet $server.RedirectUri $serverRedirects)) {
+        if (-not (Test-JIMSameSet $server.RedirectUri $serverRedirects)) {
             $changes.Add((New-JIMAdfsChange -Action 'SetServerApplication' -Target $server.Name `
                 -Description "Set the redirect URIs to $($serverRedirects -join ', ')" `
                 -Arguments @{ TargetIdentifier = $clientId; RedirectUri = $serverRedirects }))
@@ -160,7 +144,7 @@ function Get-JIMAdfsRegistrationPlan {
     $native = Select-JIMAdfsApplication -Applications $Current.NativeApplications -ExpectedName $nativeName -Kind 'Native application' -GroupName $Name
     if ($native) {
         $publicClientId = [string]$native.Identifier
-        if (-not (Test-JIMAdfsSameSet $native.RedirectUri $nativeRedirects)) {
+        if (-not (Test-JIMSameSet $native.RedirectUri $nativeRedirects)) {
             $changes.Add((New-JIMAdfsChange -Action 'SetNativeApplication' -Target $native.Name `
                 -Description "Set the redirect URIs to the loopback ports $($script:JIMLoopbackPorts[0]) to $($script:JIMLoopbackPorts[-1])" `
                 -Arguments @{ TargetIdentifier = $publicClientId; RedirectUri = $nativeRedirects }))
@@ -179,7 +163,7 @@ function Get-JIMAdfsRegistrationPlan {
     if ($api) {
         $apiArguments = @{}
         $apiDrift = [System.Collections.Generic.List[string]]::new()
-        if (-not (Test-JIMAdfsSameSet $api.Identifier @($apiIdentifier))) {
+        if (-not (Test-JIMSameSet $api.Identifier @($apiIdentifier))) {
             $apiArguments.Identifier = @($apiIdentifier)
             $apiDrift.Add("set the identifier to $apiIdentifier")
         }
@@ -237,7 +221,7 @@ function Get-JIMAdfsRegistrationPlan {
                 -Description "Permit $($entry.Label) the scopes $($entry.Scopes -join ', ')" `
                 -Arguments @{ ClientRoleIdentifier = $entry.ClientId; ServerRoleIdentifier = $apiIdentifier; ScopeNames = $entry.Scopes }))
         }
-        elseif (-not (Test-JIMAdfsSameSet $existing.ScopeNames $entry.Scopes)) {
+        elseif (-not (Test-JIMSameSet $existing.ScopeNames $entry.Scopes)) {
             $changes.Add((New-JIMAdfsChange -Action 'SetPermission' -Target $apiIdentifier `
                 -Description "Set the scopes of $($entry.Label) to $($entry.Scopes -join ', ')" `
                 -Arguments @{ TargetIdentifier = [string]$existing.ObjectIdentifier; ScopeNames = $entry.Scopes }))

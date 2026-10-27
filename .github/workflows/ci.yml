@@ -275,6 +275,72 @@ jobs:
       if: always()
       run: pwsh -File ./test/scripts/Start-SqlServerTlsTestServer.ps1 -Stop
 
+  keycloak-registration-tests:
+    # Runs Register-JIMIdentityProvider -Provider Keycloak against a real Keycloak (#2364):
+    # KeycloakRegistration.Live.Tests.ps1, which self-skips in build-and-test (JIM_TEST_KEYCLOAK_URL
+    # unset). The unit tests prove the plan; only Keycloak's admin REST API can show that the plan's
+    # calls do what it asks, and only signing a person in, through both clients with PKCE, shows that
+    # the registration works. The tests make a realm of their own and delete it. The container gets a
+    # random host port and an admin password made for this run, since the self-hosted runner used on
+    # push events is shared and not ephemeral. Same image as the development Keycloak.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+    # Pulled up front with a retry, as ldaps-tests does, so a transient registry
+    # refusal fails here with a clear message rather than inside docker run.
+    - name: Pull Keycloak image
+      run: |
+        for attempt in 1 2 3; do
+          docker pull quay.io/keycloak/keycloak:26.8 && exit 0
+          sleep 30
+        done
+        echo "Failed to pull quay.io/keycloak/keycloak:26.8 after 3 attempts."
+        exit 1
+    - name: Start Keycloak
+      shell: pwsh
+      run: |
+        $name = "jim-keycloak-registration-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+        $password = [guid]::NewGuid().ToString('N')
+        Write-Output "::add-mask::$password"
+        docker run -d --name $name -p 127.0.0.1::8080 `
+          -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e "KC_BOOTSTRAP_ADMIN_PASSWORD=$password" `
+          quay.io/keycloak/keycloak:26.8 start-dev
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        "KEYCLOAK_CONTAINER=$name" >> $env:GITHUB_ENV
+        $port = ((docker port $name 8080/tcp) -split "`n" | Select-Object -First 1).Split(':')[-1]
+        $url = "http://localhost:$port"
+        for ($i = 0; $i -lt 60; $i++) {
+          try { $null = Invoke-RestMethod "$url/realms/master/.well-known/openid-configuration"; break } catch { Start-Sleep -Seconds 3 }
+        }
+        if ($i -eq 60) { docker logs $name; throw "Keycloak did not start at $url." }
+        "JIM_TEST_KEYCLOAK_URL=$url" >> $env:GITHUB_ENV
+        "JIM_TEST_KEYCLOAK_ADMIN=admin" >> $env:GITHUB_ENV
+        "JIM_TEST_KEYCLOAK_ADMIN_PASSWORD=$password" >> $env:GITHUB_ENV
+    - name: Install Pester
+      shell: pwsh
+      run: |
+        Set-PSRepository PSGallery -InstallationPolicy Trusted
+        Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
+    - name: Run Keycloak registration tests
+      shell: pwsh
+      run: |
+        $config = New-PesterConfiguration
+        $config.Run.Path = './src/JIM.PowerShell/Tests/KeycloakRegistration.Live.Tests.ps1'
+        $config.Run.Exit = $true
+        $config.Output.Verbosity = 'Detailed'
+        Invoke-Pester -Configuration $config
+    # The self-hosted runner used on push events is not ephemeral; without this the
+    # container outlives the job.
+    - name: Tear down Keycloak
+      if: always()
+      run: |
+        if [ -n "${KEYCLOAK_CONTAINER:-}" ]; then
+          docker rm -f "$KEYCLOAK_CONTAINER" > /dev/null
+        fi
+
   discover-base-images:
     # Discover production Dockerfiles and enforce the digest-pinning policy.
     # Production Dockerfiles are identified by the "# jim-compliance: production-image"
