@@ -53,11 +53,13 @@ An administrator reading about a Synchronisation Rule, a Connected System or an 
    - **Anatomy:** something made of parts, taken apart with callouts (an API key, a Run Profile).
    - **Decision:** a branching diagnosis, for troubleshooting pages.
    - **Comparison:** two or more options side by side, for "which one do I use" pages.
+   - **Relationship map:** how a set of things connect, each node linking to where it is described (the glossary's map of JIM's core terms; concept pages).
 
    The existing concept SVGs and Mermaid diagrams remain valid alongside these.
-2. **Unique content.** Each diagram's labels and structure come from its own page. Where the page has a numbered list or a set of headings the diagram depicts, the diagram uses the same names and numbers, so it works as an index to the text below it.
-3. **Placement.** A page's first diagram sits directly after its opening paragraph (STR-7), unless the page's structure puts it better at a section that introduces the subject.
-4. **Section-level rule.** A section needs a diagram when its text describes any of:
+2. **Authoring: a per-page spec rendered at build time.** A diagram is written as a short spec (its archetype, nodes, labels and edges) beside the page, and a MkDocs build hook (alongside `docs/hooks/changelog.py`) renders it to an inline SVG. The renderer owns layout, the phone layout, theming, label cuts and the `<title>`/`<desc>`, so a label change is a one-word edit. A hand-authored SVG remains allowed for a diagram no archetype can express.
+3. **Unique content.** Each diagram's labels and structure come from its own page. Where the page has a numbered list or a set of headings the diagram depicts, the diagram uses the same names and numbers, so it works as an index to the text below it.
+4. **Placement.** A page's first diagram sits directly after its opening paragraph (STR-7), unless the page's structure puts it better at a section that introduces the subject.
+5. **Section-level rule.** A section needs a diagram when its text describes any of:
    - a flow of three or more steps or components;
    - a lifecycle of states;
    - relationships among three or more things;
@@ -65,16 +67,16 @@ An administrator reading about a Synchronisation Rule, a Connected System or an 
    - precedence or ordering.
 
    It does not need one for a list of settings, a single step, or anything a table already says better.
-5. **Rules in the documentation standard,** as a new `VIS` family in `engineering/DOCUMENTATION_STANDARD.md`:
-   - **VIS-1 (Warn, then Ratchet):** the page has at least one diagram. It is checked by `Test-DocsConformance.ps1`, counting concept SVG includes, inline `svg.jim-diagram` elements and Mermaid fences. A page can be excused with an `allow-page` marker and a reason.
-   - **VIS-2 (Review):** a section that meets the trigger in requirement 4 has a diagram.
+6. **Rules in the documentation standard,** as a new `VIS` family in `engineering/DOCUMENTATION_STANDARD.md`:
+   - **VIS-1 (Ratchet):** the page has at least one diagram. It is checked by `Test-DocsConformance.ps1`, counting diagram specs, concept SVG includes, inline `svg.jim-diagram` elements and Mermaid fences. Existing pages are seeded into the baseline (`-SeedBaseline -Rule VIS-1`), so nothing fails today; a new page without a diagram fails from its first commit, and each batch lowers the baseline. The changelog (`docs/reference/changelog.md`) is excused with an `allow-page` marker: its content is release entries generated from `CHANGELOG.md`. The glossary is not excused; it gets the relationship map.
+   - **VIS-2 (Review):** a section that meets the trigger in requirement 5 has a diagram.
    - **VIS-3 (Review):** a diagram carries information specific to its page; no decorative or generic diagrams.
    - **VIS-4 (Review):** what a diagram shows matches the page's text and the product, like ACC-4 for prose.
-6. **Accessibility.** Every diagram meets A11Y-1 and A11Y-2: a `<title>`, and a `<desc>` that carries the same information as the picture.
-7. **Theming and size.** Diagrams take every colour from the `--jimdg-*` tokens and render text at close to body-caption size in the reading column. They are capped so they do not scale up past their design size at full width.
-8. **Phone layout.** Each archetype has a narrow layout below about 600px wide, so diagram text stays readable on a phone rather than shrinking to a few pixels.
-9. **Lightbox.** New diagrams are click-to-enlarge through `diagram-zoom.js` like the existing ones, with no per-diagram markup.
-10. **Batches.** Diagrams are added section by section, starting with Configuration. Each batch is reviewed as a contact sheet of every diagram in the batch, in light and dark, before it lands.
+7. **Accessibility.** Every diagram meets A11Y-1 and A11Y-2: a `<title>`, and a `<desc>` that carries the same information as the picture.
+8. **Theming and size.** Diagrams take every colour from the `--jimdg-*` tokens and render text at close to body-caption size in the reading column. They are capped so they do not scale up past their design size at full width.
+9. **Phone layout.** Each archetype has a narrow layout below about 600px wide, so diagram text stays readable on a phone rather than shrinking to a few pixels.
+10. **Lightbox.** New diagrams are click-to-enlarge through `diagram-zoom.js` like the existing ones, with no per-diagram markup.
+11. **Batches.** Diagrams are added section by section, starting with Configuration. Each batch is reviewed as a contact sheet of every diagram in the batch, in light and dark, before it lands.
 
 ### Non-Functional Requirements
 
@@ -102,7 +104,7 @@ Mock-ups of three archetypes on real pages, rendered from the built site in both
 
 **Given**: a pull request changes a page that has no diagram
 **When**: `changelog-lint` runs
-**Then**: VIS-1 annotates the page on the diff and the check still passes; once VIS-1 becomes Ratchet, a new page without a diagram fails while existing pages are held to the baseline
+**Then**: if the page is in the baseline, the check passes (its debt is recorded); if it is a new page, VIS-1 fails until the page has a diagram
 
 ### Scenario 4: A section that needs a diagram
 
@@ -137,16 +139,20 @@ Mock-ups of three archetypes on real pages, rendered from the built site in both
 
 - None. Builds on the existing concept diagram tokens, `diagram-zoom.js` and `Update-DiagramLabelCuts.ps1`.
 
-## Open Questions
+## Decisions
 
-1. How are archetype diagrams authored: hand-written SVG following each archetype's template, or a small per-page spec rendered to SVG at build time? The plan should weigh maintainability against the hand-authored diagrams' flexibility.
-2. Should VIS-1 go straight to Ratchet rather than Warn? A Ratchet holds existing pages at their baseline and fails only new pages without a diagram, which may be what "warn first" was meant to achieve.
-3. Which pages, if any, are legitimately exempt from VIS-1 (the changelog, the glossary, the API index)?
+Settled with the product owner on 2026-10-27:
+
+1. **Authoring:** a per-page spec rendered to SVG by a build hook (requirement 2), not hand-written SVG per page.
+2. **Enforcement:** VIS-1 is Ratchet from the start, not Warn: existing pages are baselined, new pages must have a diagram.
+3. **Exemptions:** the changelog only. The glossary gets a relationship map of JIM's core terms, each node linking to its entry.
 
 ## Acceptance Criteria
 
 - [ ] The archetypes exist with light, dark and phone layouts, and are documented in `engineering/DESIGN.md`
-- [ ] VIS-1 to VIS-4 are in the documentation standard; VIS-1 runs in `Test-DocsConformance.ps1` at Warn
+- [ ] VIS-1 to VIS-4 are in the documentation standard; VIS-1 runs in `Test-DocsConformance.ps1` at Ratchet, seeded over existing pages
+- [ ] Diagram specs render to SVG at build time, with the phone layout, through the build hook
+- [ ] The glossary has its relationship map
 - [ ] Every page in the Configuration section has at least one diagram specific to it, reviewed as a contact sheet
 - [ ] Every new diagram passes A11Y-1/A11Y-2 and `Update-DiagramLabelCuts.ps1 -Check`, and causes no horizontal scroll at any width
 - [ ] The remaining sections have a batch plan, ordered by section
