@@ -1742,7 +1742,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
         // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         //
-        // We check the two marks AND Created/LastUpdated because:
+        // We check the three marks AND Created/LastUpdated because:
         // - SynchronisationPending (#2092): set by every writer with the change it announces and cleared only by the
         //   synchronisation that processed the object, under the row version its load read. This is what makes the
         //   selection commit-order safe: a change committed while a run was in flight carries a timestamp below the
@@ -1751,6 +1751,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // - DerivedInputChangePending (#1750): an unchanged CSO whose Metaverse-Derived Attribute Flow input was
         //   changed by another system's synchronisation; without it a delta would never re-derive the value.
         //   Served by the partial index IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending.
+        // - ScopeReviewPending (#892): an unchanged CSO the Temporal Scope Reconciler flagged because the clock carried
+        //   it into or out of a relative-date scope; without it only a Full Synchronisation would ever apply the change.
+        //   Served by the partial index IX_ConnectedSystemObjects_ConnectedSystemId_ScopeReviewPending.
         // - Created/LastUpdated > watermark: belt and braces for any writer that misses the mark, and for objects
         //   written before the mark existed.
         // Order by Id for consistent pagination.
@@ -1764,6 +1767,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.SynchronisationPending ||
                           cso.DerivedInputChangePending ||
+                          cso.ScopeReviewPending ||
                           cso.Created > modifiedSince ||
                           (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince))), objectTypeId, createdOnOrAfter)
             .OrderBy(cso => cso.Id);
@@ -1775,6 +1779,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId &&
                                   (cso.SynchronisationPending ||
                                    cso.DerivedInputChangePending ||
+                                   cso.ScopeReviewPending ||
                                    cso.Created > modifiedSince ||
                                    (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
 
@@ -2086,13 +2091,15 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
     {
         // Count CSOs that are marked pending synchronisation (#2092), marked for re-evaluation because a
-        // Metaverse-Derived Attribute Flow input changed elsewhere (#1750), or created or modified since the watermark.
+        // Metaverse-Derived Attribute Flow input changed elsewhere (#1750), flagged by the Temporal Scope Reconciler
+        // (#892), or created or modified since the watermark.
         // Must match the page query exactly. The count is the run's progress estimate only: the run pages until a page
         // comes back empty, so objects entering the selection mid-run are not cut off by it.
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso =>
             cso.ConnectedSystemId == connectedSystemId &&
             (cso.SynchronisationPending ||
              cso.DerivedInputChangePending ||
+             cso.ScopeReviewPending ||
              cso.Created > modifiedSince ||
              (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
     }

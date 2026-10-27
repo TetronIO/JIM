@@ -8,7 +8,7 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 
 | Aspect | Full Sync | Delta Sync |
 |--------|-----------|------------|
-| CSO Selection | ALL CSOs, every run (#891) | Only CSOs marked `SynchronisationPending` (#2092) or `DerivedInputChangePending` (#1750), or created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
+| CSO Selection | ALL CSOs, every run (#891) | Only CSOs marked `SynchronisationPending` (#2092), `DerivedInputChangePending` (#1750) or `ScopeReviewPending` (#892), or created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
 | Early Exit | Never | Yes, if 0 modified CSOs and no Metaverse Object awaits an export scope review (#892, #1925) |
 | Per-page pipeline | Identical | Identical |
 | Watermark Update | Yes (establishes the baseline for the next Delta Sync) | Yes (even when 0 changes) |

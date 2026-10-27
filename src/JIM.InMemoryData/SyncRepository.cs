@@ -374,14 +374,15 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Delta sync's "modified since" test, exactly the production query's: a CSO counts when it is marked pending
-    /// synchronisation (#2092) or for derived-input re-evaluation (#1750), or was created OR last updated after the
-    /// watermark. Strict, as PostgreSQL's is: an object last written at the instant the watermark records was processed
-    /// by the run that wrote the watermark. A newly imported CSO has no LastUpdated until something changes it, so
+    /// synchronisation (#2092), for derived-input re-evaluation (#1750) or for scope review (#892), or was created OR
+    /// last updated after the watermark. Strict, as PostgreSQL's is: an object last written at the instant the watermark
+    /// records was processed by the run that wrote the watermark. A newly imported CSO has no LastUpdated until something changes it, so
     /// testing LastUpdated alone hid every joiner from delta sync in tests (the production query never did).
     /// </summary>
     private static bool IsModifiedSince(ConnectedSystemObject cso, DateTime modifiedSince) =>
         cso.SynchronisationPending ||
         cso.DerivedInputChangePending ||
+        cso.ScopeReviewPending ||
         cso.Created > modifiedSince ||
         (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince);
 
