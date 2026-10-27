@@ -1,18 +1,9 @@
 # Docs conformance baseline: the existing debt each Ratchet rule allows, per page. Counts only ever fall.
 # Lock in an improvement with: pwsh ./scripts/Test-DocsConformance.ps1 -UpdateBaseline
 # The rules are defined in engineering/DOCUMENTATION_STANDARD.md. Columns: rule <TAB> page (relative to docs/) <TAB> count.
-VIS-1	administration/backup-recovery.md	1
-VIS-1	administration/configuration.md	1
 VIS-1	administration/deploying-with-ansible.md	1
-VIS-1	administration/factory-reset.md	1
-VIS-1	administration/index.md	1
-VIS-1	administration/logs.md	1
 VIS-1	administration/podman-by-hand.md	1
 VIS-1	administration/podman.md	1
-VIS-1	administration/portal-lists.md	1
-VIS-1	administration/preview-features.md	1
-VIS-1	administration/security-audit-events.md	1
-VIS-1	administration/security-headers.md	1
 VIS-1	administration/sso-setup.md	1
 VIS-1	administration/sso-setup/ad-fs.md	1
 VIS-1	administration/sso-setup/keycloak.md	1
@@ -20,22 +11,8 @@ VIS-1	administration/sso-setup/microsoft-entra-id.md	1
 VIS-1	administration/sso-setup/trusting-your-identity-provider.md	1
 VIS-1	administration/tls-and-reverse-proxy.md	1
 VIS-1	administration/troubleshooting-podman.md	1
-VIS-1	administration/troubleshooting-synchronisation.md	1
-VIS-1	administration/troubleshooting-worker.md	1
-VIS-1	administration/troubleshooting.md	1
 VIS-1	administration/upgrading-podman.md	1
-VIS-1	administration/upgrading.md	1
 VIS-1	connectors/jim-file-connector.md	1
-VIS-1	connectors/jim-ldap-connector-auxiliary-classes.md	1
-VIS-1	connectors/jim-ldap-connector-certificates.md	1
-VIS-1	connectors/jim-ldap-connector-delta-import.md	1
-VIS-1	connectors/jim-ldap-connector-operational-attributes.md	1
-VIS-1	connectors/jim-ldap-connector-passwords.md	1
-VIS-1	connectors/jim-ldap-connector-permissions.md	1
-VIS-1	connectors/jim-ldap-connector-topology.md	1
-VIS-1	connectors/jim-ldap-connector-troubleshooting.md	1
-VIS-1	connectors/jim-ldap-connector-values-in-use.md	1
-VIS-1	connectors/jim-ldap-connector.md	1
 VIS-1	connectors/jim-scim-connector-keycloak.md	1
 VIS-1	connectors/jim-scim-connector.md	1
 VIS-1	connectors/jim-scim-service-provider-connector-identity-providers.md	1
