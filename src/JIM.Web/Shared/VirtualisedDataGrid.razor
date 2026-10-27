@@ -689,10 +689,12 @@ else if (ReservesHeight)
     }
 
     /// <summary>
-    /// Calls a JavaScript helper, treating the two failures that mean "there is no browser to talk to" as a plain
-    /// negative result rather than an error: interop before the runtime is ready, and interop after the circuit
-    /// has gone. Both are reachable here, because this component talks to JavaScript from OnAfterRenderAsync, from
-    /// a JavaScript callback, and from disposal.
+    /// Calls a JavaScript helper, treating the three failures that mean "there is no browser to talk to" as a plain
+    /// negative result rather than an error: interop before the runtime is ready, interop after the circuit has
+    /// gone, and interop the browser never answered (a frozen background tab, or a dropped connection the circuit
+    /// has not yet noticed), which ends in the call's timeout cancelling it. All are reachable here, because this
+    /// component talks to JavaScript from OnAfterRenderAsync, from a JavaScript callback, and from disposal; an
+    /// exception escaping disposal is logged at Error as an unhandled circuit exception.
     /// </summary>
     private async Task<TResult?> InvokeInteropAsync<TResult>(string identifier, params object?[] args)
     {
@@ -705,6 +707,10 @@ else if (ReservesHeight)
             return default;
         }
         catch (InvalidOperationException)
+        {
+            return default;
+        }
+        catch (TaskCanceledException)
         {
             return default;
         }

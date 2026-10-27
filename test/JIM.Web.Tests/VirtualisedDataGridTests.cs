@@ -363,6 +363,24 @@ public class VirtualisedDataGridTests : JimComponentTestContext
             "disposal must release the resize listener the fit registered");
     }
 
+    [Test]
+    public async Task VirtualisedDataGrid_WhenDisposedWhileTheBrowserIsUnresponsive_StillReleasesEverythingAsync()
+    {
+        // A circuit torn down while its browser is unresponsive (a frozen background tab, a dropped connection not
+        // yet detected) cancels the interop call rather than reporting a disconnect. That is the same "no browser to
+        // talk to" as JSDisconnectedException, and must not escape disposal: an escaped one is logged at Error as an
+        // unhandled circuit exception, and it skips the rest of the clean-up.
+        JSInterop.Setup<object>("jimVirtualList.stop", _ => true).SetCanceled();
+        var cut = RenderGrid();
+        cut.WaitForAssertion(() =>
+            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.fit"), Is.True));
+
+        await DisposeRenderedComponentsAsync();
+
+        Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.unfit"), Is.True,
+            "a cancelled call must not stop disposal releasing the resize listener");
+    }
+
     // The grid rewrites the URL with history.replaceState, which NavigationManager never sees, so its Uri still
     // holds the query from the last real navigation. A page filter changed in place must survive the grid's next
     // write of its own state, here the scroll reset every filter change is followed by.
