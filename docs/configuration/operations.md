@@ -9,6 +9,21 @@ audience: operator
 
 **Administration > Operations** is where an administrator finds out what JIM is doing, what it has done, what it will do next, and whether the services that do it are alive. It is one page with four tabs and a Service Health strip above them.
 
+```jim-diagram
+archetype: anatomy
+title: What the Operations page holds
+desc: 'Administration > Operations has a Service Health strip, with one card each for Worker · Sync, Worker · Passwords and the Scheduler, above four tabs. Activity shows the work Queued, In Progress and Completed; Schedules shows each Schedule with its last run; Passwords shows the Password Synchronisation queue; and Generated Values shows generated values held for a decision and renames waiting for their export.'
+subject:
+  kind: object
+  label: Operations
+  parts:
+  - {label: Service Health strip, detail: 'Worker · Sync, Worker · Passwords, Scheduler'}
+  - {label: Activity tab, detail: 'Queued, In Progress, Completed'}
+  - {label: Schedules tab, detail: each with its last run}
+  - {label: Passwords tab, detail: the Password Synchronisation queue}
+  - {label: Generated Values tab, detail: 'values held for a decision, waiting renames'}
+```
+
 ## :material-view-list-outline: The tabs
 
 - **Activity**<br /> What the Worker has queued, what it is running and what it has finished, on one page. See [The Activity tab](#the-activity-tab).

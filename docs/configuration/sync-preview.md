@@ -9,6 +9,19 @@ audience: administrator
 
 A **Configuration Change Preview** ([Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it)) answers "what would this proposed *edit* do?" **Sync Preview** answers a narrower, more immediate question about the configuration you already have: **"what would synchronising this object do, right now?"**
 
+```jim-diagram
+archetype: flow
+title: The destructive cascade Sync Preview walks
+desc: 'When an object falls out of scope of every import Synchronisation Rule, Sync Preview walks the same chain a synchronisation would, staging, persisting and exporting nothing. 1: out of scope and joined, the object would disconnect from its Metaverse Object. 2: the Metaverse Object''s type is put to its Deletion Rule, which would delete it immediately, schedule it for deletion after a grace period, or keep it; a scheduled deletion evaluates nothing further. 3: if it would be deleted, every other Connected System Object joined to it is evaluated in turn, and is deprovisioned from its target system or disconnected, per its export rule''s Deprovisioning Action.'
+in: {label: Connected System Object, note: out of import scope}
+out: {label: Target systems, note: deleted or disconnected}
+container: {label: Sync Preview, tag: nothing staged or exported}
+steps:
+- {id: disconnect, label: 'Out of scope, joined', badge: 1, sub: would disconnect}
+- {id: rule, label: Deletion Rule, badge: 2, sub: 'delete, schedule or keep', next: if deleted}
+- {id: down, label: Downstream deprovisioning, badge: 3, sub: each joined object}
+```
+
 Nothing you configure changes to ask it. JIM evaluates the object against the stored Synchronisation Rules exactly as a real synchronisation would, and reports what it finds. Nothing is staged, persisted, or exported.
 
 ## :material-map-marker-outline: Where to find it

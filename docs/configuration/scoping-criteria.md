@@ -9,6 +9,29 @@ audience: administrator
 
 Scoping criteria determine which objects the rule applies to. Only objects that match are processed.
 
+```jim-diagram
+archetype: decision
+title: How Scoping Criteria decide an object's scope
+desc: 'An object is in scope when any one of the rule''s top-level groups is met, or when the rule has no criteria; within a group, All needs every condition and Any at least one. An object a criterion cannot decide is left as it is, with an error recorded against it. An object out of scope leaves the rule: an import rule''s Out-of-Scope Action either disconnects it from the Metaverse or keeps the join and stops Attribute Flow, and an export rule''s Deprovisioning Action decides what happens to its object in the Connected System.'
+start: {label: Object against a rule's criteria}
+questions:
+- {id: groups, label: 'Any top-level group met?', sub: 'All: every condition; Any: one'}
+- {id: leaves, label: 'Which rule does it leave?'}
+outcomes:
+- {id: in, label: In scope, sub: processed by the rule, good: true}
+- {id: undecided, label: Left as it is, sub: an error recorded against it}
+- {id: disconnect, label: Disconnected, sub: from its Metaverse Object}
+- {id: joined, label: 'Left scope, join kept', sub: nothing flows from it}
+- {id: deprov, label: Deprovisioned, sub: per the Deprovisioning Action}
+answers:
+- {from: groups, to: in, label: 'yes, or no criteria'}
+- {from: groups, to: undecided, label: cannot be decided}
+- {from: groups, to: leaves, label: 'no'}
+- {from: leaves, to: disconnect, label: 'import: Disconnect'}
+- {from: leaves, to: joined, label: 'import: Remain joined'}
+- {from: leaves, to: deprov, label: an export rule}
+```
+
 For import rules, criteria evaluate Connected System Object attributes:
 
 ```text

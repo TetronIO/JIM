@@ -9,6 +9,24 @@ audience: administrator
 
 A **predefined search** is a named, reusable search over [Metaverse Objects](metaverse-objects.md). Predefined searches drive the portal's list views and back the fast named-search endpoint that end-user search consumers call.
 
+```jim-diagram
+archetype: anatomy
+title: What a predefined search defines
+desc: "A predefined search ties together a target Metaverse Object Type, whose objects it returns; a set of attributes, shown as the result list's columns in display order; criteria in groups, each group All or Any, with an object matching when it matches any one top-level group; and a stable URI slug such as people, which consumers call it by. Each Metaverse Object Type may have one default search; disabling a search hides it from end users; and a built-in search cannot be deleted."
+subject:
+  kind: object
+  label: Predefined search
+  parts:
+    - { label: Metaverse Object Type, detail: whose objects it returns }
+    - { label: Attributes, detail: "the columns, in display order" }
+    - { label: Criteria, detail: "All or Any groups; any top-level one matches" }
+    - { label: URI slug, detail: "such as `people`: what consumers call" }
+properties:
+  - { name: Default, value: one per Metaverse Object Type }
+  - { name: Enabled, value: off hides it from end users }
+  - { name: Built-in, value: cannot be deleted }
+```
+
 Predefined searches are administrator-managed: end users do not author new searches, they consume the ones that already exist.
 
 ## :material-magnify: What a predefined search defines

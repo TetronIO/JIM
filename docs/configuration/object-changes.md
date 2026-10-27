@@ -9,6 +9,26 @@ audience: administrator
 
 JIM records each change it makes to a Metaverse Object: which attributes changed, the values added and removed, and the Synchronisation Rule, user or API key that made the change. A Metaverse Object's own **Changes** tab shows that history for one object. The **Object Changes** page (Activity, then **Object Changes**) searches it across every object, to answer questions such as "who was disabled this month?" or "who moved out of Finance last week?" without knowing which objects to open.
 
+```jim-diagram
+archetype: anatomy
+title: What one recorded change holds, and what finds it
+desc: "Each recorded change names the Metaverse Object, shown dimmed once deleted; the kind of change, such as Attribute Flow, Created or Deleted; the attributes it touched, with values added and removed; who made it, a Synchronisation Rule, user or API key; and the Activity it was made in. The Object Changes page finds changes by the days they were made between, by Metaverse Object Type, including objects since deleted, by display name, and by attribute conditions that match a value an attribute changed to or from."
+subject:
+  kind: object
+  label: One recorded change
+  parts:
+    - { label: Metaverse Object, detail: dimmed once deleted }
+    - { label: Change, detail: "such as Attribute Flow, Created or Deleted" }
+    - { label: Attributes, detail: values added and removed }
+    - { label: Made by, detail: "Synchronisation Rule, user or API key" }
+    - { label: Activity, detail: the one it was made in }
+properties:
+  - { name: Changed between, value: a range of days }
+  - { name: Metaverse Object Type, value: deleted objects too }
+  - { name: Search box, value: display name contains }
+  - { name: Attribute conditions, value: changed to or from }
+```
+
 ## :material-text-box-search-outline: What you can search by
 
 | Filter | What it matches |

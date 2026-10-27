@@ -9,6 +9,18 @@ audience: operator
 
 Every execution item's Lineage reads beyond the run it records, in both directions: up the chain to why the change happened, and down it to what the change went on to cause in later runs. Together they answer the two questions an administrator investigating an account usually has, "why did this happen?" and "what did it lead to?", from whichever item they opened, without reconstructing the story from several Activities by hand.
 
+```jim-diagram
+archetype: flow
+title: One story across runs, as the Lineage follows it
+desc: 'A typical story runs across four runs. An import brings in a new Connected System Object; the Synchronisation that processes it decides on a change and queues it; an export applies the change to the Connected System; and the next import confirms it with an Export confirmed outcome. From whichever execution item you open, the Lineage reads up this chain to why it happened and down it, under After this run, to what it went on to cause.'
+container: {label: 'The Lineage, from any item', tag: 'up: why it happened; down: After this run'}
+steps:
+- {id: import, label: Import, sub: a new Connected System Object, next: processed by}
+- {id: sync, label: Synchronisation, sub: decides the change, next: queues}
+- {id: export, label: Export, sub: applies the change, next: confirmed by}
+- {id: confirm, label: Import, sub: Export confirmed}
+```
+
 ## :material-help-circle-outline: Why it happened
 
 The Lineage's subdued cards are the item's causal chain: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it, each cause placed on the column of the object it happened to rather than listed separately.

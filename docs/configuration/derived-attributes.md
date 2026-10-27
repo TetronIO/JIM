@@ -9,6 +9,19 @@ audience: administrator
 
 An import Attribute Flow's expression can read the Metaverse Object it flows to with `mv["..."]`, alongside the Connected System Object with `cs["..."]`. The result is held in the Metaverse like any other contributed value, so you define an Email or a User Principal Name once, and every target sees the same value:
 
+```jim-diagram
+archetype: flow
+title: Derived Attribute Flows, evaluated in steps
+desc: 'JIM evaluates an object''s import Attribute Flows in steps. Step 1 is the ordinary Attribute Flow, which settles Account Name from the Connected System Object; step 2 evaluates Email, which reads mv["Account Name"]; step 3 evaluates User Principal Name, which reads mv["Email"]. Each result is held on the Metaverse Object like any other contributed value, so every target sees the same value.'
+in: {label: Connected System Object, note: 'read with `cs["..."]`'}
+out: {label: Metaverse Object, note: every target sees one value}
+container: {label: Evaluation steps, tag: 'later steps read `mv["..."]`'}
+steps:
+- {id: s1, label: Ordinary Attribute Flow, badge: 1, sub: settles Account Name}
+- {id: s2, label: Email, badge: 2, sub: reads Account Name}
+- {id: s3, label: User Principal Name, badge: 3, sub: reads Email}
+```
+
 | Source (import expression) | Target |
 |---|---|
 | `Lower(mv["Account Name"]) + "@corp.local"` | `Email` |
