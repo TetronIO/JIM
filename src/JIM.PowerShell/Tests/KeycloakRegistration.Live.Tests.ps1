@@ -91,19 +91,31 @@ BeforeAll {
         if (-not $action) { $action = [System.Net.WebUtility]::HtmlDecode([regex]::Match($login.Content, '<form[^>]*action="([^"]+)"').Groups[1].Value) }
         $action | Should -Not -BeNullOrEmpty -Because 'Keycloak shows its login form'
 
-        # Keycloak marks its login cookies Secure, which a browser still sends to http://localhost but .NET does not
-        # send over plain HTTP, so give the session the same cookies without the flag.
-        $browser = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
-        foreach ($header in @($login.Headers['Set-Cookie'])) {
-            $name, $value = ($header -split ';')[0] -split '=', 2
-            $browser.Cookies.Add([uri]$action, [System.Net.Cookie]::new($name.Trim(), $value))
+        # Posted with HttpClient: Invoke-WebRequest throws on the redirect even with -MaximumRedirection 0. Keycloak
+        # marks its login cookies Secure, which a browser still sends to http://localhost but .NET's cookie store does
+        # not over plain HTTP, so they go back as a header.
+        $cookies = @($login.Headers['Set-Cookie'] | ForEach-Object { ($_ -split ';')[0] }) -join '; '
+        $handler = [System.Net.Http.HttpClientHandler]::new()
+        $handler.AllowAutoRedirect = $false
+        $handler.UseCookies = $false
+        $client = [System.Net.Http.HttpClient]::new($handler)
+        try {
+            $form = [System.Collections.Generic.Dictionary[string, string]]::new()
+            $form['username'] = $script:PersonName
+            $form['password'] = $script:PersonPassword
+            $form['credentialId'] = ''
+            $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $action)
+            $request.Content = [System.Net.Http.FormUrlEncodedContent]::new($form)
+            $null = $request.Headers.TryAddWithoutValidation('Cookie', $cookies)
+            $response = $client.SendAsync($request).GetAwaiter().GetResult()
+            $content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         }
-        $redirect = Invoke-WebRequest -Method Post -Uri $action -WebSession $browser -MaximumRedirection 0 -SkipHttpErrorCheck -Body @{
-            username = $script:PersonName; password = $script:PersonPassword; credentialId = ''
+        finally {
+            $client.Dispose()
         }
-        $page = ([regex]::Replace([string]$redirect.Content, '<[^>]+>', ' ') -replace '\s+', ' ').Trim()
-        $redirect.StatusCode | Should -Be 302 -Because "Keycloak accepts the sign-in and returns to $RedirectUri, not: $($page.Substring(0, [Math]::Min(600, $page.Length)))"
-        $location = [string]$redirect.Headers.Location[0]
+        $page = ([regex]::Replace($content, '<[^>]+>', ' ') -replace '\s+', ' ').Trim()
+        [int]$response.StatusCode | Should -Be 302 -Because "Keycloak accepts the sign-in and returns to $RedirectUri, not: $($page.Substring(0, [Math]::Min(600, $page.Length)))"
+        $location = $response.Headers.Location.OriginalString
         $location | Should -BeLike "$RedirectUri*"
         $code = [regex]::Match($location, '[?&]code=([^&]+)').Groups[1].Value
 
