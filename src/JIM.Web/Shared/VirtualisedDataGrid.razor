@@ -19,24 +19,18 @@
    component; and an empty state that must not flash over data in flight. Pages supply the columns, the window
    loader and the empty-state copy. See JIM.Web/CLAUDE.md "Virtualised lists". *@
 
-@if (_preferencesLoaded)
-{
-    @* The cascade lets VirtualisedSortHeader (rendered inside column HeaderTemplates, anywhere in the grid's own
-       render tree) reach back to this grid without every page threading it through. *@
-    <CascadingValue Value="(IVirtualisedSortable)this" IsFixed="true">
-    @* The id anchors the scroll-position interop: the virtualiser's scroll container is MudBlazor's own element
-       inside the grid, so it is reached as a descendant of something this component names rather than by a global
-       selector that another table on the page could match. *@
-    <div id="@ContainerId" class="@ContainerClass" style="@ContainerStyle" aria-busy="@(IsLoadingIndicatorShown ? "true" : "false")">
-    @* OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
-       SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
-       Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
-       rather than repeatedly out-running the fetch. *@
-    @* Built as a template rather than inline, so a grid whose toolbar would hold nothing but the count can
-       leave the parameter null and have MudDataGrid draw no toolbar at all. See ShowToolBar. *@
-    @{
-        RenderFragment toolBar =
-            @<text>
+@* Built as a template rather than inline, so a grid whose toolbar would hold nothing but the count can leave
+   MudDataGrid's parameter null and have it draw no toolbar at all (see ShowToolBar), and so the same row can be
+   drawn above the paper instead of inside it (see ToolBarAboveGrid). It is built outside the preferences gate
+   below because, above the paper, it carries the section's heading, which cannot wait for a preference read the
+   way the rows do: it would be missing from the prerendered page and from the first interactive paint. *@
+@{
+    RenderFragment toolBar =
+        @<text>
+        @if (ToolBarLeading != null)
+        {
+            @ToolBarLeading
+        }
         @* The toolbar has two anchored ends and nothing loose in between. Left: how the table is displayed,
            then the page's own actions. Right: how big the list is, then the box that narrows it. A count in
            the left slot pushed the primary action into the middle, where the loudest thing on the page was
@@ -46,7 +40,7 @@
            whole portal, and a control for it once per attribute is the same switch drawn a dozen times. It
            keeps its search box, which is per table by nature and is how a member is found among half a
            million, and its count, which is the one thing each embedded table must say for itself. *@
-        @if (ShowDensityToggle)
+        @if (ShowDensityToggle && _preferencesLoaded)
         {
             <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
         }
@@ -81,32 +75,68 @@
             <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0"
                          Loading="@IsLoadingIndicatorShown" />
         }
+        </text>;
+}
+
+@if (ToolBarAboveGrid && ShowToolBar)
+{
+    <div class="jim-virtualised-list-toolbar">@toolBar</div>
+}
+
+@if (_preferencesLoaded)
+{
+    @* The cascade lets VirtualisedSortHeader (rendered inside column HeaderTemplates, anywhere in the grid's own
+       render tree) reach back to this grid without every page threading it through. *@
+    <CascadingValue Value="(IVirtualisedSortable)this" IsFixed="true">
+    @{
+        RenderFragment grid =
+            @<text>
+        @* The id anchors the scroll-position interop: the virtualiser's scroll container is MudBlazor's own element
+           inside the grid, so it is reached as a descendant of something this component names rather than by a global
+           selector that another table on the page could match. *@
+        <div id="@ContainerId" class="@ContainerClass" style="@ContainerStyle" aria-busy="@(IsLoadingIndicatorShown ? "true" : "false")">
+        @* OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
+           SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
+           Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
+           rather than repeatedly out-running the fetch. *@
+        @* Loading draws MudDataGrid's own progress bar under the column headers. The grid never sets it itself on the
+           virtualised path, so it is driven from the delayed indicator: shown only once a window is slow to arrive. *@
+        <MudDataGrid @ref="_dataGrid" T="T" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
+                     FixedHeader="true" ItemSize="@RowHeight"
+                     Loading="@IsLoadingIndicatorShown" LoadingProgressColor="Color.Primary"
+                     Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
+                     RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClassFunc="@RowClassFunc"
+                     RowClick="HandleRowClick" Class="@GridClass"
+                     ToolBarContent="@(ShowToolBar && !ToolBarAboveGrid ? toolBar : null)">
+            <Columns>
+                @Columns
+            </Columns>
+            <NoRecordsContent>
+                @* Only speak once the match set is known to be empty. MudDataGrid renders this fragment whenever it
+                   holds no rows, and a virtualiser holds none between windows, so an unguarded message flashes over
+                   data that is merely in flight. TotalItems is null until the first counted window returns and zero
+                   only when the filters genuinely matched nothing. *@
+                @if (TotalItems == 0 && EmptyContent != null)
+                {
+                    @EmptyContent(this)
+                }
+            </NoRecordsContent>
+        </MudDataGrid>
+        </div>
             </text>;
     }
-    @* Loading draws MudDataGrid's own progress bar under the column headers. The grid never sets it itself on the
-       virtualised path, so it is driven from the delayed indicator: shown only once a window is slow to arrive. *@
-    <MudDataGrid @ref="_dataGrid" T="T" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
-                 FixedHeader="true" ItemSize="@RowHeight"
-                 Loading="@IsLoadingIndicatorShown" LoadingProgressColor="Color.Primary"
-                 Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
-                 RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClassFunc="@RowClassFunc"
-                 RowClick="HandleRowClick" Class="@GridClass"
-                 ToolBarContent="@(ShowToolBar ? toolBar : null)">
-        <Columns>
-            @Columns
-        </Columns>
-        <NoRecordsContent>
-            @* Only speak once the match set is known to be empty. MudDataGrid renders this fragment whenever it
-               holds no rows, and a virtualiser holds none between windows, so an unguarded message flashes over
-               data that is merely in flight. TotalItems is null until the first counted window returns and zero
-               only when the filters genuinely matched nothing. *@
-            @if (TotalItems == 0 && EmptyContent != null)
-            {
-                @EmptyContent(this)
-            }
-        </NoRecordsContent>
-    </MudDataGrid>
-    </div>
+    @* A collapsed section folds its rows away under a toolbar that keeps standing. The grid stays mounted inside
+       the fold: a grid unmounted and re-created re-reads the URL as it stood on arrival (its own writes go through
+       history.replaceState, which NavigationManager never sees), losing the search, sort and scroll since. The fold
+       is a zero-height grid track with real geometry, so the height fit and the scroll restore keep working inside it. *@
+    @if (ToolBarAboveGrid)
+    {
+        <MudCollapse Expanded="@(!Collapsed)">@grid</MudCollapse>
+    }
+    else
+    {
+        @grid
+    }
     </CascadingValue>
 }
 else if (ReservesHeight)
@@ -114,10 +144,11 @@ else if (ReservesHeight)
     @* Stands in for the grid until the density preference has been read, at the size the grid will open at, so
        the content below a grid that sits among other content does not jump twice: once when the grid appears and
        again when its first rows arrive. Same id, so the height ceiling fits the stand-in exactly as it will fit the
-       grid, and the grid's own outline and margin, so the swap is not visible. *@
+       grid, and the grid's own outline and margin, so the swap is not visible. A toolbar drawn above the grid is
+       already standing, so the stand-in reserves no row for it. *@
     <div id="@ContainerId" class="jim-virtualised-list jim-virtualised-list-reserving" style="@ContainerStyle">
         <div class="@($"mud-table mud-table-outlined jim-virtualised-list-placeholder {GridClass}")">
-            @if (ShowToolBar)
+            @if (ShowToolBar && !ToolBarAboveGrid)
             {
                 <div class="jim-virtualised-list-placeholder-toolbar"></div>
             }
@@ -144,9 +175,30 @@ else if (ReservesHeight)
     [Parameter]
     public RenderFragment<VirtualisedDataGrid<T>>? EmptyContent { get; set; }
 
-    /// <summary>Extra toolbar content, rendered between the spacer and the search box.</summary>
+    /// <summary>The page's own actions, rendered at the left of the toolbar after the density toggle (a separator
+    /// between them), before the spacer that pushes the count and the search box to the right.</summary>
     [Parameter]
     public RenderFragment? ToolBarExtras { get; set; }
+
+    /// <summary>
+    /// Draws the toolbar as a row above the grid's paper rather than inside it, for a grid that is one section of a
+    /// page and whose toolbar is that section's heading (the Operations Activity tab's Completed). The row keeps
+    /// the in-paper order, with <see cref="ToolBarLeading"/> first, and stands even while the rows wait for the
+    /// density preference or sit folded under <see cref="Collapsed"/>.
+    /// </summary>
+    [Parameter]
+    public bool ToolBarAboveGrid { get; set; }
+
+    /// <summary>The section's heading, rendered first in the toolbar: a collapse control, an icon and a title. Meant
+    /// for <see cref="ToolBarAboveGrid"/>; with a title present the count is a bare number, so leave
+    /// <see cref="SingularName"/> and <see cref="PluralName"/> unset.</summary>
+    [Parameter]
+    public RenderFragment? ToolBarLeading { get; set; }
+
+    /// <summary>Folds the grid away under its toolbar, which keeps standing. Only meaningful with
+    /// <see cref="ToolBarAboveGrid"/>; the grid stays mounted, so its search, sort and scroll survive the fold.</summary>
+    [Parameter]
+    public bool Collapsed { get; set; }
 
     /// <summary>Unique element id for this grid on its page; anchors the scroll interop. Two grids on one page
     /// need two ids (and two <see cref="UrlParameterPrefix"/>es).</summary>

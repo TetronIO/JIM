@@ -5821,6 +5821,17 @@ html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-ch
     border-bottom: 1px solid var(--mud-palette-table-lines);
 }
 
+/* The toolbar drawn above the grid's paper rather than inside it (ToolBarAboveGrid): the same row, laid out the
+   same way, standing as the section's heading. The spacer inside needs a flex parent to push against. */
+.jim-virtualised-list-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    min-height: 48px;
+    margin-bottom: 0.5rem;
+}
+
 /* A slow search, sort or refresh: the rows on screen belong to the match set being replaced, so they fade and stop
    taking clicks until the new one arrives. A slow window fetched by scrolling never sets this (ShowsStaleRows in
    VirtualisedDataGrid.razor), because the rows already shown are still the right ones. */
