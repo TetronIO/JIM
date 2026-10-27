@@ -285,11 +285,13 @@ try {
             -Filter $filter `
             -Attributes @($userNameAttr)
         if ($null -eq $result) { return @() }
-        $users = @()
+        # A List, not `$users += ...`: += copies the whole array on every add, which at 750k users took ~5 minutes
+        # of single-core time per call.
+        $users = [System.Collections.Generic.List[string]]::new()
         $lines = $result -split "`n"
         foreach ($line in $lines) {
             if ($line -match "^${userNameAttr}:\s*(.+)$") {
-                $users += $matches[1].Trim()
+                $users.Add($matches[1].Trim())
             }
         }
         return $users
