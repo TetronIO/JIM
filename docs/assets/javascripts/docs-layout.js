@@ -12,10 +12,10 @@
  *   Resizable table columns
  *     A handle on the boundary between two header cells (so on every one but the last). Drag
  *     it, or focus it and use the arrow keys (Shift for bigger steps), to move the boundary;
- *     the table keeps its width, so it never starts to scroll. The column the boundary moves
- *     towards gives way first, and once it is at its minimum the next one beyond it does, so
- *     a column can take the whole table but the other columns' minimums. Dragging back within
- *     the same drag gives the squeezed columns their width back. Double-click to restore the
+ *     the table keeps its width, so it never starts to scroll. The column left of the handle
+ *     grows or shrinks, and every column to its right gives or takes the difference in
+ *     proportion, none going below its minimum; columns to the left stay put. Dragging back
+ *     within the same drag restores the widths it started from. Double-click to restore the
  *     natural layout. Widths are not remembered.
  *
  * No external dependencies. scripts/Test-DocsLayout.ps1 drives both in a browser.
@@ -116,25 +116,31 @@
   }
 
   // Moves the boundary after column `index` by `delta` pixels from the widths in `start` (the
-  // widths freeze() set, not the rendered ones, so repeated moves never drift). The columns on
-  // the side the boundary moves towards give way nearest first, each down to MIN_COLUMN; the
-  // column on the other side takes what they give. The total, and so the table's width, is
-  // unchanged.
+  // widths freeze() set, not the rendered ones, so repeated moves never drift). The column left of
+  // the boundary takes the change and every column to its right absorbs it in proportion: when
+  // they give width, each gives in proportion to what it has above MIN_COLUMN, so none goes below
+  // it; when they take width, each takes in proportion to its width. Columns to the left never
+  // move, so the boundary stays under the pointer, and the total, so the table's width, is fixed.
   function moveBoundary(table, index, start, delta) {
     var widths = start.slice();
-    var amount = Math.round(Math.abs(delta));
-    var step = delta > 0 ? 1 : -1;
-    var from = delta > 0 ? index + 1 : index;      // the first column to give way
-    var to = delta > 0 ? index : index + 1;        // the column that grows
-    var given = 0;
-    for (var i = from; i >= 0 && i < widths.length && given < amount; i += step) {
-      var take = Math.min(Math.max(widths[i] - MIN_COLUMN, 0), amount - given);
-      widths[i] -= take;
-      given += take;
+    var right = widths.slice(index + 1);
+    var change;
+    if (delta > 0) {
+      var spare = 0;
+      for (var i = 0; i < right.length; i++) spare += Math.max(right[i] - MIN_COLUMN, 0);
+      change = Math.min(delta, spare);
+      for (var j = 0; j < right.length; j++) {
+        if (spare > 0) right[j] -= change * Math.max(right[j] - MIN_COLUMN, 0) / spare;
+      }
+    } else {
+      change = -Math.min(-delta, Math.max(widths[index] - MIN_COLUMN, 0));
+      var total = sum(right);
+      for (var k = 0; k < right.length; k++) right[k] -= change * right[k] / total;
     }
-    widths[to] += given;
+    widths[index] += change;
+    for (var m = 0; m < right.length; m++) widths[index + 1 + m] = right[m];
     var cells = table.querySelectorAll("thead th");
-    for (var j = 0; j < cells.length; j++) cells[j].style.width = widths[j] + "px";
+    for (var n = 0; n < cells.length; n++) cells[n].style.width = widths[n] + "px";
   }
 
   function indexOf(cell) {
