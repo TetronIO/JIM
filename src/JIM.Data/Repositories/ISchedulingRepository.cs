@@ -20,6 +20,11 @@ public interface ISchedulingRepository
     Task<List<Schedule>> GetAllSchedulesAsync();
 
     /// <summary>
+    /// Gets the enabled Schedule due to run soonest, or null when no enabled Schedule has a next run time.
+    /// </summary>
+    Task<NextDueSchedule?> GetNextDueScheduleAsync();
+
+    /// <summary>
     /// Gets a page of Schedules projected into lightweight headers, each carrying its step count and the outcome of
     /// its most recent execution. The last-execution fields are projected in the same query, so a page costs one
     /// round trip rather than one query per Schedule.

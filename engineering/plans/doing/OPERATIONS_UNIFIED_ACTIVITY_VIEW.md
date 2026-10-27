@@ -1,8 +1,8 @@
 # Operations: Unified Activity View
 
-- **Status:** Planned
+- **Status:** Doing
 - **Issue:** [#2549](https://github.com/TetronIO/JIM/issues/2549)
-- **PRD:** [PRD_OPERATIONS_UNIFIED_ACTIVITY_VIEW.md](../prd/PRD_OPERATIONS_UNIFIED_ACTIVITY_VIEW.md)
+- **PRD:** [PRD_OPERATIONS_UNIFIED_ACTIVITY_VIEW.md](../../prd/doing/PRD_OPERATIONS_UNIFIED_ACTIVITY_VIEW.md)
 
 ## Overview
 
