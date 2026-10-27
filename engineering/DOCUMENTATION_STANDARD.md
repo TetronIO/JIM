@@ -18,6 +18,7 @@ The standard applies to every page under `docs/` except the released-version ent
 - [Maintaining pages](#maintaining-pages)
 - [Accuracy and links](#accuracy-and-links)
 - [Accessibility](#accessibility)
+- [Visuals](#visuals)
 - [Style conventions](#style-conventions)
 - [Priority pages and tutorials](#priority-pages-and-tutorials)
 - [Coverage](#coverage)
@@ -145,7 +146,7 @@ These rules decide how the sentences read. They are the house voice that `docs/C
 
 **VOI-4. Leave JIM's own workings out of a public page.** No GitHub issue or pull request numbers, no JIM development or test infrastructure (the devcontainer, the integration lab), no design defence ("this is deliberate", "we chose"), and no class, method, property or table name unless the reader types it. These are for engineers, and they belong in `engineering/`.
 
-**VOI-5. Prefer prose and diagrams to screenshots.** The site has none by design, and adding one costs more than it looks: it is invalidated by any change to the control it shows, it cannot be searched, it is invisible to a screen reader unless the alt text repeats it, and it is the thing nobody remembers to update. Name the control and say what it does instead. A concept diagram is different, and is the right answer where the shape of something is the point (`docs/CLAUDE.md` > Concept Diagrams); make its `<desc>` carry the same information as the picture rather than describing the picture.
+**VOI-5. Prefer prose and diagrams to screenshots.** The site has none by design, and adding one costs more than it looks: it is invalidated by any change to the control it shows, it cannot be searched, it is invisible to a screen reader unless the alt text repeats it, and it is the thing nobody remembers to update. Name the control and say what it does instead. A diagram is different: it is the right answer where the shape of something is the point, and every page has one ([Visuals](#visuals)). Make its `<desc>` carry the same information as the picture rather than describing the picture.
 
 **SAFE-1. Answer "is anything lost?" before the reader has to ask.** Any operation that sounds destructive, and every refusal, states what survives it in the same paragraph. "Nothing is discarded when JIM refuses: queued password changes wait, and accounts stay owed their first password" is the shape. An administrator reading about a feature that stops, refuses, expires, cancels or deletes is deciding whether to trust it with production; a page that leaves that unanswered gets read defensively, and the feature gets left switched off.
 
@@ -204,6 +205,17 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 | **A11Y-1** | Block | Every Mermaid diagram carries `accTitle` and `accDescr`, so a screen reader gets what the picture shows. |
 | **A11Y-2** | Block | Every image has alt text, and every included concept diagram has a `<title>` and a `<desc>`. |
 | **A11Y-3** | Review | Link text says where it goes ("see [Run Profiles](...)"), never "click here" or "this page". |
+
+## Visuals
+
+A diagram gives the reader the shape of a subject (what flows where, which state follows which, what holds what) before the detail, and the shape is what they remember. Every page has at least one, specific to it. Most are a short `jim-diagram` spec written in the page, where the diagram appears: the build draws it in the house style, in both themes, with a phone layout and a text alternative, so a diagram is a few lines of text rather than a drawing. How to write one is in `docs/CLAUDE.md` > Generated diagrams; the visual language is in `engineering/DESIGN.md` > Diagrams. Screenshots are not diagrams, and the site has none (VOI-5).
+
+| ID | Tier | Rule |
+|----|------|------|
+| **VIS-1** | Ratchet | The page has at least one diagram: a `jim-diagram` spec, a concept diagram included from `assets/diagrams/` (`--8<-- "assets/diagrams/<name>.svg"`), an inline `<svg class="jim-diagram">`, or a Mermaid diagram. One shown inside another code block, as an example of how to write one, does not count. The Changelog page is excused in place, since its entries are generated from `CHANGELOG.md`. A new page has its diagram from its first commit. |
+| **VIS-2** | Review | A section whose text describes a flow of three or more steps or components, a lifecycle of states, relationships among three or more things, a decision that branches, or a precedence or ordering, has a diagram. A list of settings, a single step, or anything a table already says better, does not need one. |
+| **VIS-3** | Review | A diagram carries information specific to its page: the page's own steps, states, objects and outcomes, named as the page names them. No decorative or generic diagrams; one that would sit as well on any other page of its section is generic. |
+| **VIS-4** | Review | What a diagram shows matches the page's text and the product: the same steps in the same order, the same names, the same outcomes, and nothing the product does not do. This is ACC-4 for pictures: check a diagram against the source as you would a sentence, and change the diagram and the text in the same edit. |
 
 ## Style conventions
 
@@ -309,6 +321,10 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | A11Y-1 | Mermaid diagrams carry accTitle and accDescr | Block | `Test-DocsConformance.ps1` |
 | A11Y-2 | Images and diagrams carry text alternatives | Block | `Test-DocsConformance.ps1` |
 | A11Y-3 | Meaningful link text | Review | |
+| VIS-1 | At least one diagram on every page | Ratchet | `Test-DocsConformance.ps1` |
+| VIS-2 | A diagram where a section describes a shape | Review | |
+| VIS-3 | Diagrams specific to their page, never decorative | Review | |
+| VIS-4 | Diagrams match the text and the product | Review | |
 | STY-1 | No emoji; status marks and icons from Material Design Icons | Block | `Test-DocsConformance.ps1`, `Test-DocsSite.ps1` |
 | STY-2 | Term-and-description bullets | Review | |
 | STY-3 | An icon on every H2 and grid card, and on no other heading | Block (heading placement); Review (the rest) | `Test-DocsConformance.ps1` |
