@@ -110,7 +110,8 @@ detours:                                                              # optional
 
 - **`title` and `desc` are required** (A11Y-2). Write `desc` so it carries everything the picture says.
 - **Badges echo the page.** Where the page has a numbered list the diagram depicts, give each box the same number, so the diagram indexes the text below it.
-- **Every key is checked.** An unknown or misspelt key, a missing label, or a detour between steps that do not exist fails the build with the page and line. So does a label that cannot fit its box on two lines, or a flow too wide for the 800-unit layout: shorten the label or split the diagram; there is no setting to squeeze it. A step a detour leaves or rejoins cannot carry a `note`, because the detour's line would cross it.
+- **Every key is checked.** An unknown or misspelt key, a missing label, or a detour between steps that do not exist fails the build with the page and line. So does a label that cannot fit its box on two lines, or a flow too wide for the 800-unit layout: shorten the label or split the diagram; there is no setting to squeeze it. A step a detour leaves or rejoins cannot carry a `note`, because the detour's line would cross it. A `note` sits under its box and wraps onto a second line within the room up to its neighbours (or the container's edge); one that still does not fit fails the build, so shorten it.
+- **Quote any value with a colon, a comma or a question mark in it.** In a `{ ... }` mapping, `note: input missing: see below` is read as a nested key and `label: Free?` or `sub: trim, collapse` can split; the error then names a key that is not in the spec. Write `note: "input missing: see below"`, or single quotes when the value holds double quotes.
 - **Two layouts are drawn,** wide and narrow, and `custom.css` ("Generated diagrams") shows the narrow one below 600px. The lightbox wraps each, and hides the trigger of the one not showing.
 - **Labels are sized from committed font metrics** (`docs/hooks/diagram_metrics.json`). If the site's fonts change, regenerate them with `pwsh -File ./scripts/Update-DiagramFontMetrics.ps1`.
 - **Code in a label:** wrap a cmdlet, attribute or value in backticks (`` `Get-JIMConnectedSystem` ``) and it is set, and measured, in Plex Mono. A code span is never split across lines.
@@ -129,9 +130,9 @@ states:                                                # two to four, in order
   - { id: holding, label: Holding objects, sub: Connector Space filled }
 transitions:                                           # only between neighbouring states, one each way
   - { from: configured, to: holding, label: imported by a Run Profile }
-  - { from: holding, to: configured, label: "`Clear-JIMConnectedSystem`", note: keeps configuration, schema and rules }
+  - { from: holding, to: configured, label: "`Clear-JIMConnectedSystem`", note: "keeps configuration, schema and rules" }
 end: { from: container, label: "`Remove-JIMConnectedSystem`", note: "check first with `Get-...DeletionPreview`",
-       state: { label: Deleted, sub: with all its data } }   # optional: from a state's id, or the container
+       state: { label: Deleted, sub: with all its data } }   # optional: from the last state's id, or the container
 ```
 ````
 
@@ -162,12 +163,12 @@ title: How an Object Matching Rule decides a join
 desc: ...
 start: { label: Connected System Object }              # optional
 questions:                                             # one to four, top to bottom
-  - { id: rule, label: Next Object Matching Rule, sub: how many Metaverse Objects match? }
-  - { id: more, label: More rules? }
+  - { id: rule, label: Next Object Matching Rule, sub: "how many Metaverse Objects match?" }
+  - { id: more, label: "More rules?" }
 outcomes:                                              # two to six; good: true draws the outcome you want solid
   - { id: joined, label: Joined, sub: the rule and value recorded, good: true }
   - { id: none, label: No match, sub: projection or provisioning may create one }
-answers:                                               # every outcome reached, every later question reached
+answers:                                               # each outcome reached by exactly one answer; every later question reached
   - { from: rule, to: joined, label: exactly one }
   - { from: rule, to: more, label: "none, or no value" }   # to the next question only
   - { from: more, to: rule, label: "yes: try it" }         # back to an earlier one: a loop

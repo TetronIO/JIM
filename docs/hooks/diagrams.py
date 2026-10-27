@@ -186,7 +186,8 @@ class Canvas:
 
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
-PAD_X, PAD_Y, LINE = 12, 12, 16
+PAD_X, PAD_Y, LINE = 12, 12, 17
+NOTE_LINE = 18  # the step between lines of a note set outside a box
 
 
 class Node:
@@ -202,7 +203,7 @@ class Node:
         if spec.get("sub"):
             self.lines += [(line, "sub") for line in wrap(spec["sub"], "sub", max_width - 2 * PAD_X, metrics)]
         if note_inside and self.note:
-            self.lines.append((self.note, "note"))
+            self.lines += [(line, "note") for line in wrap(self.note, "note", max_width - 2 * PAD_X, metrics)]
         widest = max(metrics.measure(text, role) for text, role in self.lines)
         self.w = max(min_width, widest + 2 * PAD_X)
         self.h = 2 * PAD_Y + LINE * len(self.lines) + 4
@@ -341,23 +342,45 @@ def flow_wide(spec, metrics):
         node.y = row_top + (row_h - node.h) / 2
     mid = row_top + row_h / 2
     row_bottom = row_top + row_h
-    has_notes = any(s.get("note") for s in spec["steps"])
+    for node in ends.values():
+        node.y = mid - node.h / 2
 
-    bottom = row_bottom + (30 if has_notes else 14)
+    # Each note is centred under its box and kept within the room up to its neighbours
+    # (or the container's edge), wrapping onto a second line rather than running into them.
+    row = ([ends["in"]] if "in" in ends else []) + steps + ([ends["out"]] if "out" in ends else [])
+    bounds = []
+    for a, b in zip(row, row[1:]):
+        edge = None
+        if container and (a is ends.get("in") or b is ends.get("out")):
+            edge = box_x if a is ends.get("in") else box_x + inner + 2 * pad
+        bounds.append((edge - 4, edge + 4) if edge is not None else ((a.right + b.x) / 2 - 3, (a.right + b.x) / 2 + 3))
+    notes = {}
+    for i, node in enumerate(row):
+        if not node.note:
+            continue
+        left = bounds[i - 1][1] if i else 4
+        right = bounds[i][0] if i < len(bounds) else WIDE - 4
+        room = 2 * min(node.cx - left, right - node.cx)
+        try:
+            notes[node] = wrap(node.note, "note", room, metrics)
+        except DiagramError:
+            raise DiagramError(f'the note "{node.note}" is too long for the room under its box, even on two '
+                               "lines; shorten it") from None
+    note_rows = max((len(notes[n]) for n in steps if n in notes), default=0)
+
+    bottom = row_bottom + (16 + NOTE_LINE * note_rows if note_rows else 14)
     for detour, node in detours:
         a, b = by_id[detour["from"]], by_id[detour["to"]]
         node.x = (a.cx + b.cx) / 2 - node.w / 2
-        node.y = row_bottom + 44
+        node.y = row_bottom + 44 + NOTE_LINE * max(0, note_rows - 1)
         if node.x < a.cx + 16 or node.right > b.cx - 16:
             raise DiagramError(f'the detour step "{detour["step"]["label"]}" does not fit between '
                                f'"{detour["from"]}" and "{detour["to"]}"; shorten its label or move them apart')
         bottom = max(bottom, node.bottom + 16)
-    for node in ends.values():
-        node.y = mid - node.h / 2
     height = bottom + (8 if container else 0)
-    for key, node in ends.items():
-        if spec[key].get("note"):
-            height = max(height, node.bottom + 26)
+    for node in ends.values():
+        if node in notes:
+            height = max(height, node.bottom + 12 + NOTE_LINE * len(notes[node]))
 
     if container:
         canvas.add(f'<rect class="jimdg-hub" x="{num(box_x)}" y="{num(y)}" width="{num(box_w)}" '
@@ -384,12 +407,10 @@ def flow_wide(spec, metrics):
 
     for node in steps + [n for _, n in detours] + list(ends.values()):
         node.draw(canvas)
-    for s, node in zip(spec["steps"], steps):
-        if s.get("note"):
-            canvas.add(canvas.text(node.cx, row_bottom + 18, s["note"], "note"))
-    for key, node in ends.items():
-        if spec[key].get("note"):
-            canvas.add(canvas.text(node.cx, node.bottom + 18, spec[key]["note"], "note"))
+    for node, lines in notes.items():
+        top = (row_bottom if node in steps else node.bottom) + 18
+        for i, line in enumerate(lines):
+            canvas.add(canvas.text(node.cx, top + NOTE_LINE * i, line, "note"))
     return canvas, height
 
 
@@ -543,6 +564,11 @@ def validate_lifecycle(spec):
         if end["from"] not in allowed:
             raise DiagramError(f'the end comes from "{end["from"]}", which is not a state'
                                + (' or "container"' if "container" in spec else ""))
+        if end["from"] in ids[:-1]:
+            # On a phone the states stack, so the end would land on the state after it.
+            raise DiagramError(f'the end comes from "{end["from"]}"; it must come from the last state'
+                               + (' or "container"' if "container" in spec else "")
+                               + ", so reorder the states")
         check_keys(end["state"], {"label", "sub"}, "the end state")
         require(end["state"], "label", "the end state")
 
@@ -573,6 +599,8 @@ def lifecycle_wide(spec, metrics):
                 need = max(need, metrics.measure(tr["note"], "note") + 24)
         widths.append(need)
     pad = 22 if container else 0
+    # A forward note sits under its arrow, or above its label when a back arrow takes that room.
+    raised = any(lanes.get("fwd", {}).get("note") and "back" in lanes for lanes in gaps.values())
     inner = sum(n.w for n in states) + sum(widths)
     note_lines = []
     if container:
@@ -595,7 +623,7 @@ def lifecycle_wide(spec, metrics):
         x += node.w + (widths[i] if i < len(widths) else 0)
     y = 8
     head = (30 + 18 * len(note_lines) + 18) if container else 0
-    row_top = y + head + 6
+    row_top = y + head + 6 + (14 if raised else 0)
     row_h = max(n.h for n in states)
     for node in states:
         node.y = row_top + (row_h - node.h) / 2
@@ -622,6 +650,8 @@ def lifecycle_wide(spec, metrics):
         if "fwd" in lanes:
             canvas.arrow([(a.right, cy - 14), (b.x, cy - 14)])
             canvas.add(canvas.text(mid, cy - 22, lanes["fwd"]["label"], "edge"))
+            if lanes["fwd"].get("note"):
+                canvas.add(canvas.text(mid, cy - 38 if "back" in lanes else cy + 4, lanes["fwd"]["note"], "note"))
         if "back" in lanes:
             canvas.arrow([(b.x, cy + 14), (a.right, cy + 14)])
             canvas.add(canvas.text(mid, cy + 8, lanes["back"]["label"], "edge"))
@@ -667,10 +697,10 @@ def lifecycle_narrow(spec, metrics):
     y = 8
     if "start" in spec:
         # The start dot sits top left with its label beside it; the arrow runs down from it.
-        canvas.add(f'<circle class="jimdg-dg-start" cx="24" cy="17" r="9"/>')
-        if 42 + metrics.measure(spec["start"]["label"], "edge") > NARROW - 4:
+        canvas.add(f'<circle class="jimdg-dg-start" cx="{num(left + 18)}" cy="17" r="9"/>')
+        if left + 36 + metrics.measure(spec["start"]["label"], "edge") > NARROW - 4:
             raise DiagramError("the start's label is too wide for the narrow layout; shorten it")
-        canvas.add(canvas.text(42, 21, spec["start"]["label"], "edge", "start"))
+        canvas.add(canvas.text(left + 36, 21, spec["start"]["label"], "edge", "start"))
         y = 60
     box_y = y
     if container:
@@ -686,6 +716,8 @@ def lifecycle_narrow(spec, metrics):
             lanes = gaps.get(i, {})
             if "fwd" in lanes:
                 rows.append((lanes["fwd"]["label"], "edge", 1))
+                if lanes["fwd"].get("note"):
+                    rows.append((lanes["fwd"]["note"], "note", None))
             if "back" in lanes:
                 rows.append((lanes["back"]["label"], "edge", -1))
                 if lanes["back"].get("note"):
@@ -715,24 +747,32 @@ def lifecycle_narrow(spec, metrics):
             canvas.add(canvas.text(cx, box_y + 46 + 18 * i, line, "tag"))
     canvas.parts.extend(layer.parts)
     if "start" in spec:
-        canvas.arrow([(24, 26), (24, box_y if container else states[0].y)])
+        canvas.arrow([(left + 18, 26), (left + 18, box_y if container else states[0].y)])
     height = box_bottom + 8
     end = spec.get("end")
     if end:
         term = Node(end["state"], 220, 160, metrics, "jimdg-dg-terminal")
-        if end["from"] == "container":
-            fy = box_bottom
-        else:
-            fy = states[ids.index(end["from"])].bottom
-        term.x, term.y = cx - term.w / 2, fy + 34
-        canvas.arrow([(cx, fy), (cx, term.y)])
+        fy = box_bottom if end["from"] == "container" else states[-1].bottom
+        room = NARROW - 8 - label_x - 14
+        rows = [(line, "edge", None if n else 1) for n, line in enumerate(wrap(end["label"], "edge", room, metrics))]
+        below = []  # a note too long to sit beside the arrow goes under the end state instead
+        if end.get("note"):
+            try:
+                rows += [(line, "note", None) for line in wrap(end["note"], "note", room, metrics)]
+            except DiagramError:
+                below = wrap(end["note"], "note", NARROW - 16, metrics)
+        term.x, term.y = left, fy + max(34, 18 * len(rows) + 18)
+        canvas.arrow([(left + 18, fy), (left + 18, term.y)])
+        for r, (text, role, mark) in enumerate(rows):
+            ty = fy + 22 + 18 * r
+            if mark:
+                canvas.add(f'<polygon class="jimdg-flow-arrow" points="{num(label_x + 4)},{num(ty - 1)} '
+                           f'{num(label_x)},{num(ty - 9)} {num(label_x + 8)},{num(ty - 9)}"/>')
+            canvas.add(canvas.text(label_x + 14, ty, text, role, "start"))
         term.draw(canvas)
-        y = term.bottom + 20
-        for text, role in [(end["label"], "edge")] + ([(end["note"], "note")] if end.get("note") else []):
-            for line in wrap(text, role, NARROW - 16, metrics):
-                canvas.add(canvas.text(cx, y, line, role))
-                y += 18
-        height = y - 6
+        for i, line in enumerate(below):
+            canvas.add(canvas.text(cx, term.bottom + 20 + 18 * i, line, "note"))
+        height = term.bottom + 8 + (18 * len(below) + 6 if below else 0)
     for node in states:
         node.draw(canvas)
     return canvas, height
@@ -979,6 +1019,9 @@ def validate_decision(spec):
             raise DiagramError(f'{where} comes from "{ans["from"]}", which is not a question')
         if ans["to"] not in q_ids + o_ids:
             raise DiagramError(f'{where} goes to "{ans["to"]}", which is neither a question nor an outcome')
+        if ans["to"] in o_ids and ans["to"] in reached:
+            raise DiagramError(f'more than one answer reaches the outcome "{ans["to"]}"; their arrows would '
+                               "share a line, so give each answer its own outcome")
         reached.add(ans["to"])
         if ans["to"] in q_ids:
             a, b = q_ids.index(ans["from"]), q_ids.index(ans["to"])

@@ -57,6 +57,18 @@ def svgs(html):
     return re.findall(r"<svg\b.*?</svg>", html, re.S)
 
 
+def note_extents(svg, contains=""):
+    """(left, right, baseline) of each middle-anchored note line, measured with the real metrics."""
+    metrics = diagrams.Metrics.load()
+    out = []
+    for x, y, body in re.findall(r'<text class="jimdg-dg-note" x="([\d.]+)" y="([\d.]+)">(.*?)</text>', svg):
+        text = re.sub(r"<[^>]+>", "", body)
+        if contains in text:
+            w = metrics.measure(text, "note")
+            out.append((float(x) - w / 2, float(x) + w / 2, float(y)))
+    return out
+
+
 class MetricsTests(unittest.TestCase):
     def test_width_sums_glyph_advances_scaled_to_the_font_size(self):
         m = diagrams.Metrics({"sans": {"400": {"default": 1000, "chars": {"a": 500, "b": 250}}}})
@@ -210,6 +222,35 @@ class OutputTests(unittest.TestCase):
             self.assertEqual(node.count("<rect"), 1)
             self.assertGreaterEqual(node.count("<text"), 1)
 
+    def test_a_note_wider_than_its_room_wraps_instead_of_running_into_its_neighbour(self):
+        spec = {"archetype": "flow", "title": "t", "desc": "d", "steps": [
+            {"id": "a", "label": "The first step", "note": "a note too long for one line here"},
+            {"id": "b", "label": "The second step", "note": "and another under its neighbour"}]}
+        wide = svgs(render(spec))[0]
+        notes = note_extents(wide)
+        self.assertGreater(len(notes), 2, "each note should wrap onto two lines")
+        for i, (l1, r1, y1) in enumerate(notes):
+            for l2, r2, y2 in notes[i + 1:]:
+                if y1 == y2:
+                    self.assertTrue(r1 <= l2 or r2 <= l1, f"notes overlap: {notes}")
+
+    def test_a_note_too_long_for_two_lines_is_an_error(self):
+        spec = {"archetype": "flow", "title": "t", "desc": "d", "steps": [
+            {"id": "a", "label": "First", "note": "a note so long that even two lines under a small box "
+                                                  "cannot possibly hold all of it without running away"},
+            {"id": "b", "label": "Second"}]}
+        with self.assertRaisesRegex(diagrams.DiagramError, "note"):
+            render(spec)
+
+    def test_an_end_note_stays_outside_the_container(self):
+        spec = copy.deepcopy(FLOW)
+        spec["out"]["note"] = "every target sees one value"
+        wide = svgs(render(spec))[0]
+        hub = re.search(r'class="jimdg-hub" x="([\d.]+)" y="[\d.]+" width="([\d.]+)"', wide)
+        right = float(hub.group(1)) + float(hub.group(2))
+        for left, _, _ in note_extents(wide, "every target"):
+            self.assertGreaterEqual(left, right)
+
     def test_a_flow_without_a_container_or_ends_still_renders(self):
         spec = {"archetype": "flow", "title": "t", "desc": "d",
                 "steps": [{"id": "a", "label": "First"}, {"id": "b", "label": "Second"}]}
@@ -331,6 +372,35 @@ class LifecycleTests(unittest.TestCase):
         spec = copy.deepcopy(LIFECYCLE)
         spec["end"]["from"] = "nowhere"
         with self.assertRaisesRegex(diagrams.DiagramError, "nowhere"):
+            render(spec)
+
+    def test_a_forward_transition_note_is_drawn(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["transitions"][0]["note"] = "a forward note"
+        for svg in svgs(render(spec)):
+            self.assertIn("a forward note", svg)
+
+    def test_the_narrow_start_arrow_runs_into_the_first_state(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        del spec["container"]
+        del spec["end"]
+        narrow = svgs(render(spec))[1]
+        cx = float(re.search(r'class="jimdg-dg-start" cx="([\d.]+)"', narrow).group(1))
+        x, w = (float(v) for v in re.search(r'class="jimdg-stage" x="([\d.]+)" y="[\d.]+" width="([\d.]+)"',
+                                            narrow).groups())
+        self.assertTrue(x < cx < x + w, f"start dot at {cx}, first state spans {x} to {x + w}")
+
+    def test_the_narrow_end_label_sits_beside_its_arrow_above_the_terminal(self):
+        narrow = svgs(self.html)[1]
+        term_y = float(re.search(r'class="jimdg-dg-terminal" x="[\d.]+" y="([\d.]+)"', narrow).group(1))
+        label_y = float(re.search(r'<text class="jimdg-dg-edge[^"]*" x="[\d.]+" y="([\d.]+)">'
+                                  r'<tspan class="jimdg-dg-code">Remove-JIMConnectedSystem', narrow).group(1))
+        self.assertLess(label_y, term_y)
+
+    def test_an_end_from_a_state_with_a_later_state_is_an_error(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["end"]["from"] = "configured"
+        with self.assertRaisesRegex(diagrams.DiagramError, "last state"):
             render(spec)
 
     def test_it_has_no_colour_literals_or_blank_lines(self):
@@ -469,6 +539,14 @@ class DecisionTests(unittest.TestCase):
         spec = copy.deepcopy(DECISION)
         spec["outcomes"].append({"id": "orphan", "label": "Orphan"})
         with self.assertRaisesRegex(diagrams.DiagramError, "orphan"):
+            render(spec)
+
+
+    def test_two_answers_cannot_share_an_outcome(self):
+        spec = copy.deepcopy(DECISION)
+        first = next(a for a in spec["answers"] if a["to"] in {o["id"] for o in spec["outcomes"]})
+        spec["answers"].append({"from": spec["questions"][-1]["id"], "to": first["to"], "label": "also"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "more than one answer"):
             render(spec)
 
 
