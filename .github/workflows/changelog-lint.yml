@@ -120,11 +120,13 @@ jobs:
           # script itself. Both need a browser download, so the cost is paid on
           # those PRs alone. The reader layout controls (width toggle, resizable
           # table columns) share the browser and depend on the same stylesheet.
+          # Generated diagrams (docs/hooks/diagrams.py) are checked in the same
+          # browser, since their boxes are sized from committed font metrics.
           # The step still runs (and passes) on every PR, so the
           # job keeps reporting and stays safe as a required check.
           CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
-          if ! printf '%s\n' "$CHANGED_FILES" | grep -qE '^docs/assets/(diagrams/.+\.svg|stylesheets/custom\.css|javascripts/(diagram-zoom|docs-layout)\.js)$|^docs/overrides/main\.html$'; then
-            echo "No diagram sources, stylesheet, overlay or layout script changed; skipping the browser checks."
+          if ! printf '%s\n' "$CHANGED_FILES" | grep -qE '^docs/assets/(diagrams/.+\.svg|stylesheets/custom\.css|javascripts/(diagram-zoom|docs-layout)\.js)$|^docs/overrides/main\.html$|^docs/hooks/(diagrams\.py|diagram_metrics\.json|tests/fixtures/.+)$|^scripts/Test-Diagrams\.ps1$'; then
+            echo "No diagram sources, renderer, stylesheet, overlay or layout script changed; skipping the browser checks."
             exit 0
           fi
           # Reuse the @playwright/mcp pin from setup.sh rather than adding a third
@@ -142,6 +144,7 @@ jobs:
           pwsh -File ./scripts/Update-DiagramLabelCuts.ps1 -Check
           pwsh -File ./scripts/Test-DiagramLightbox.ps1
           pwsh -File ./scripts/Test-DocsLayout.ps1
+          pwsh -File ./scripts/Test-Diagrams.ps1
       - name: Detect docs source changes
         id: docs-sources
         run: |
@@ -168,4 +171,6 @@ jobs:
           # The same pinned versions as docs.yml, so the site checked here is the
           # site that deploys.
           pip install -r docs/requirements.txt
+          # The diagram renderer's unit tests; the YAML ones need the toolchain above.
+          python -m unittest discover -s docs/hooks/tests
           pwsh -File ./scripts/Test-DocsSite.ps1
