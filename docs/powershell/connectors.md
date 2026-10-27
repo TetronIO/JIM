@@ -69,7 +69,7 @@ The Connectors, or with `-Id` or `-Name` the one Connector, with its settings an
 | `CreatedByName` | `string` | Who added the Connector. |
 | `LastUpdated` | `datetime` | When the Connector was last changed (UTC); empty if it never has been. |
 | `LastUpdatedByName` | `string` | Who last changed the Connector. |
-| `Settings` | `object[]` | The settings an administrator gives a Connected System that uses the Connector. Each has `Id`, `Name`, `Description`, `Category`, `Type`, `DefaultCheckboxValue`, `DefaultStringValue`, `DefaultIntValue`, `DropDownValues`, `Required`, `RequiredGroup`, `RequiredGroupCardinality`, `RequiredWhenSetting` and `RequiredWhenValue`. |
+| `Settings` | `object[]` | The settings an administrator gives a Connected System that uses the Connector. Each has `Id`, `Name`, `Description`, `Example`, `Category`, `Type`, `DefaultCheckboxValue`, `DefaultStringValue`, `DefaultIntValue`, `DropDownValues`, `Required`, `RequiredGroup`, `RequiredGroupCardinality`, `RequiredWhenSetting` and `RequiredWhenValue`. |
 | `Files` | `object[]` | The files that make up the Connector. Their contents are never returned. Each has `Id`, `Filename`, `Version`, `FileSizeBytes`, `ImplementsIConnector`, `ImplementsICapabilities`, `ImplementsISchema`, `ImplementsISettings`, `ImplementsIExportUsingCalls`, `ImplementsIExportUsingFiles`, `ImplementsIImportUsingCalls` and `ImplementsIImportUsingFiles`. |
 | `SupportsFullImport` | `bool` | Whether the Connector can run a Full Import. |
 | `SupportsDeltaImport` | `bool` | Whether the Connector can run a Delta Import. |
