@@ -19,8 +19,8 @@ namespace JIM.Application.Servers;
 /// which it calls) and runs out of band on a schedule. For each enabled Synchronisation Rule carrying a
 /// relative-date scoping criterion it: computes the candidate value window, fetches candidates via the indexed
 /// pre-filter, evaluates full scope in memory, and flags any object whose fresh scope disagrees with its stored
-/// connection state. Flagging is all it does (flag-and-delegate): the existing engine, let past its
-/// unchanged-skip by the flag, applies the real outcome (project, join, Attribute Flow, disconnect, delete,
+/// connection state. Flagging is all it does (flag-and-delegate): the existing engine, reaching the object because
+/// of the flag, applies the real outcome (project, join, Attribute Flow, disconnect, delete,
 /// provision, deprovision, including matching-rule joins and bidirectional cascades).
 /// </summary>
 public class ScopeReconciliationServer

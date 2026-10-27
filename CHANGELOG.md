@@ -100,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A Full Synchronisation now evaluates every Connected System Object on every run, whether or not it has changed, so it corrects anything a Delta Synchronisation missed and applies JIM upgrades to existing data. It takes longer on a large system; schedule Delta Synchronisation for routine runs. (#891)
 - 🔄 The Operations page's Queue and History tabs are now one **Activity** tab: queued, running and finished work in time order, full progress for every run including parallel Schedule steps, estimated start and finish times, and the next Schedule due. (#2549)
 - 🔄 A Synchronisation's **Resolving cross-page references** step counts its progress in reference values rather than objects, so its rate and time remaining reflect a large group's real cost. The portal, PowerShell and the progress endpoint (`countUnit`) say so, and the message gives the number of objects. (#2492)
 - 🔄 Five built-in Metaverse attributes are named in Proper Case like the rest: **Object GUID** (was `objectGUID`), **Object SID** (`objectSid`), **SID History** (`sIDHistory`), **Street Address** (`StreetAddress`) and **Web Page** (`WebPage`). `Register-JIMIdentityProvider` and the SSO guides already named **Object GUID**, so `JIM_SSO_MV_ATTRIBUTE=Object GUID` now names the built-in attribute; before, JIM refused to start with it. JIM is pre-release, so reinstall an existing installation: upgrading it in place adds the new attributes beside the old ones.

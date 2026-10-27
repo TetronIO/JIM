@@ -181,7 +181,7 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task FullSync_UnchangedButMarkedObject_IsNotSkippedAsync()
+    public async Task FullSync_MarkedObject_ReDerivesAndClearsTheMarkAsync()
     {
         var ctx = await SetUpScenario2Async();
         var hrCso = SeedHr(ctx, "E1", "jbloggs");
@@ -190,9 +190,6 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         await RunFullSyncAsync(ctx.Ad!);
         Assert.That(hrCso.DerivedInputChangePending, Is.True, "precondition: marked");
 
-        // The loader flags an object unchanged since the last synchronisation; the mark must override that skip, as
-        // ScopeReviewPending does (the PostgreSQL loader never flags a marked object; this is the processor's guard).
-        hrCso.IsUnchangedSinceLastSync = true;
         await RunFullSyncAsync(ctx.Hr);
 
         var mvo = SyncRepo.MetaverseObjects.Values.Single();

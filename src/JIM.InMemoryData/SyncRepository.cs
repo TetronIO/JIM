@@ -386,7 +386,7 @@ public class SyncRepository : ISyncRepository
         (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null,
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
         int? objectTypeId = null, DateTime? createdOnOrAfter = null)
     {
         if (afterId.HasValue)
@@ -402,16 +402,13 @@ public class SyncRepository : ISyncRepository
                 .ToList();
             var keysetResult = BuildPagedResult(remaining, 1, pageSize);
             keysetResult.CurrentPage = page;
-            FlagUnchangedObjects(keysetResult.Results, lastSyncTimestamp);
             return Task.FromResult(keysetResult);
         }
 
         var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
-        var result = BuildPagedResult(all, page, pageSize);
-        FlagUnchangedObjects(result.Results, lastSyncTimestamp);
-        return Task.FromResult(result);
+        return Task.FromResult(BuildPagedResult(all, page, pageSize));
     }
 
     /// <summary>
@@ -426,17 +423,6 @@ public class SyncRepository : ISyncRepository
         if (createdOnOrAfter.HasValue)
             csos = csos.Where(c => c.Created >= createdOnOrAfter.Value);
         return csos;
-    }
-
-    /// <summary>
-    /// The Full Synchronisation loader's partition, as the production loader applies it: with a watermark, an object
-    /// <see cref="ConnectedSystemObject.IsUnchangedSince"/> treats as unchanged is flagged, and Pass 2 skips it; without
-    /// one, nothing is. Set on every load, since this provider hands out its stored instances.
-    /// </summary>
-    private static void FlagUnchangedObjects(IEnumerable<ConnectedSystemObject> page, DateTime? lastSyncTimestamp)
-    {
-        foreach (var cso in page)
-            cso.IsUnchangedSinceLastSync = lastSyncTimestamp.HasValue && cso.IsUnchangedSince(lastSyncTimestamp.Value);
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
@@ -2563,26 +2549,9 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(names);
     }
 
-    public Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
-    {
-        var timestamps = _syncRules.Values
-            .Select(r => r.LastUpdated ?? r.Created)
-            .Concat(_syncRules.Values.SelectMany(r => r.AttributeFlowRules).Select(m => m.LastUpdated ?? m.Created))
-            .ToList();
-        return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
-    }
-
     public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
     {
         return Task.FromResult(_connectedSystems.TryGetValue(connectedSystemId, out var cs) ? cs.ObjectMatchingRuleMode : (ObjectMatchingRuleMode?)null);
-    }
-
-    public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
-    {
-        (DateTime?, DateTime?)? watermarks = _connectedSystems.TryGetValue(connectedSystemId, out var cs)
-            ? (cs.LastSyncCompletedAt, cs.ConfigurationLastFullyAppliedAt)
-            : null;
-        return Task.FromResult(watermarks);
     }
 
     /// <summary>

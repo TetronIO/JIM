@@ -876,7 +876,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         // picks up the mutation on this tracked instance (the established pattern; see
         // RemovedMappingRecallWorkflowTests.FullSync_MappingDisabled_SoleContributor_LeavesValueInPlaceAsync).
         directoryOverrideMapping.Enabled = false;
-        RecordSyncRuleConfigurationChange();
 
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
@@ -953,8 +952,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         directoryOverrideMapping.Enabled = false;
 
-        RecordSyncRuleConfigurationChange();
-
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
@@ -1001,7 +998,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         directoryOverrideMapping.Enabled = false;
 
-        RecordSyncRuleConfigurationChange();
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
@@ -1054,7 +1050,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         // 3. Directory's flow is disabled: HR's flow wins again and the export stages the rename.
         directoryOverrideMapping.Enabled = false;
-        RecordSyncRuleConfigurationChange();
         await RunFullSyncReturningActivityAsync(ctx.Hr);
         AssertAccountName(ctx, "percival.ashworth", ctx.HrImportRuleId, "Directory's flow disabled");
         Assert.That(PendingDirectoryAccountNames(ctx, sAMAccountNameAttr.Id), Has.Member("percival.ashworth"),
@@ -1062,13 +1057,11 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         // 4. Directory's flow is re-enabled: it wins again on its next run.
         directoryOverrideMapping.Enabled = true;
-        RecordSyncRuleConfigurationChange();
         await RunFullSyncReturningActivityAsync(ctx.Directory!);
         AssertAccountName(ctx, "pashworth99", directoryImportRule.Id, "Directory's flow re-enabled");
 
         // 5. Directory's flow is deleted, with recall: Directory's next run recalls its value and re-elects HR's.
         DeleteMappingFromRule(directoryImportRule, directoryOverrideMapping);
-        RecordSyncRuleConfigurationChange();
         await RunFullSyncReturningActivityAsync(ctx.Directory!);
         await RunFullSyncReturningActivityAsync(ctx.Hr);
         AssertAccountName(ctx, "percival.ashworth", ctx.HrImportRuleId, "Directory's flow deleted with recall");
@@ -1134,7 +1127,7 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     /// <summary>
     /// Simulates an administrator deleting a mapping with recall (Remove-JIMSyncRuleMapping / the REST delete),
     /// as <c>RemovedMappingRecallWorkflowTests</c> does: detached first so EF's navigation fix-up cannot quietly
-    /// re-attach it, and the rule's LastUpdated stamped so the configuration watermark advances (#1533).
+    /// re-attach it.
     /// </summary>
     private void DeleteMappingFromRule(SyncRule rule, SyncRuleMapping mapping)
     {
@@ -1142,7 +1135,6 @@ public partial class UniqueValueGenerationWorkflowTests : WorkflowTestBase
             DbContext.Entry(source).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
         DbContext.Entry(mapping).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
         rule.AttributeFlowRules.Remove(mapping);
-        rule.LastUpdated = DateTime.UtcNow;
     }
 
     private MetaverseObjectAttributeValue? AccountNameValue(GenerationContext ctx) =>

@@ -121,11 +121,9 @@ public class RemovedMappingRecallWorkflowTests : WorkflowTestBase
         Assert.That(GetAttributeValue(mvo, ctx.MvDescriptionAttributeId)?.StringValue, Is.EqualTo(HrDescription),
             "Description should flow while the mapping is enabled");
 
-        // Disable the mapping, as Set-JIMSyncRuleMapping -Enabled:$false would (the audited update path
-        // stamps the mapping's LastUpdated, advancing the configuration watermark).
+        // Disable the mapping, as Set-JIMSyncRuleMapping -Enabled:$false would.
         var mapping = ctx.HrImportRule.AttributeFlowRules.Single(m => m.TargetMetaverseAttributeId == ctx.MvDescriptionAttributeId);
         mapping.Enabled = false;
-        mapping.LastUpdated = DateTime.UtcNow;
 
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
         Assert.That(activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
@@ -158,7 +156,6 @@ public class RemovedMappingRecallWorkflowTests : WorkflowTestBase
 
         // Re-create the mapping (a new row, as the portal or New-JIMSyncRuleMapping would create).
         ctx.HrImportRule.AttributeFlowRules.Add(deletedMapping);
-        ctx.HrImportRule.LastUpdated = DateTime.UtcNow;
 
         await RunFullSyncAsync(ctx.Hr);
 
@@ -168,12 +165,10 @@ public class RemovedMappingRecallWorkflowTests : WorkflowTestBase
     }
 
     [Test]
-    public async Task DeleteSyncRuleMapping_StampsParentRuleSoConfigurationWatermarkAdvancesAsync()
+    public async Task DeleteSyncRuleMapping_StampsParentRuleLastUpdatedAsync()
     {
-        // Deleting a mapping removes the only row carrying its timestamps, so without a stamp on the parent
-        // rule the configuration watermark (GetLatestSyncRuleConfigurationChangeAsync) never advances and the
-        // next Full Synchronisation keeps its unchanged-object optimisation on, skipping the very objects the
-        // recall must visit (#1533).
+        // Deleting a mapping removes the only row carrying its timestamps, so the change is recorded on the parent
+        // rule instead (#1533).
         var system = await CreateConnectedSystemAsync("HR");
         var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
         var descriptionAttr = new ConnectedSystemObjectTypeAttribute { Name = "Description", Type = AttributeDataType.Text, Selected = true };
@@ -206,7 +201,7 @@ public class RemovedMappingRecallWorkflowTests : WorkflowTestBase
         {
             Assert.That(persistedRule, Is.Not.Null);
             Assert.That(persistedRule!.LastUpdated, Is.Not.Null,
-                "deleting a mapping must stamp the parent Synchronisation Rule so the configuration watermark advances");
+                "deleting a mapping is a change to its Synchronisation Rule, so it stamps the rule");
             Assert.That(persistedRule!.LastUpdated!.Value, Is.GreaterThanOrEqualTo(beforeDelete),
                 "the stamp must be the deletion time");
         }
@@ -236,9 +231,7 @@ public class RemovedMappingRecallWorkflowTests : WorkflowTestBase
     /// shared in-memory rule store the processors read. The mapping and its sources are detached from the EF
     /// change tracker first, because merely removing a still-tracked mapping from the rule's collection lets
     /// EF's navigation fix-up quietly re-attach it on the next SaveChanges; a real deletion removes the row, so
-    /// nothing can come back. The rule's LastUpdated stamp mirrors what the repository's
-    /// DeleteSyncRuleMappingAsync writes so the configuration watermark advances (#1533); that repository
-    /// behaviour is covered directly by DeleteSyncRuleMapping_StampsParentRuleSoConfigurationWatermarkAdvancesAsync.
+    /// nothing can come back.
     /// </summary>
     private SyncRuleMapping DeleteMappingFromRule(SyncRule rule, int targetMetaverseAttributeId)
     {
@@ -247,7 +240,6 @@ public class RemovedMappingRecallWorkflowTests : WorkflowTestBase
             DbContext.Entry(source).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
         DbContext.Entry(mapping).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
         rule.AttributeFlowRules.Remove(mapping);
-        rule.LastUpdated = DateTime.UtcNow;
         return mapping;
     }
 

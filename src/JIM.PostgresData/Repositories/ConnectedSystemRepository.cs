@@ -1577,7 +1577,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         int page,
         int pageSize,
         int? knownTotalCount = null,
-        DateTime? lastSyncTimestamp = null,
         Guid? afterId = null,
         int? objectTypeId = null,
         DateTime? createdOnOrAfter = null)
@@ -1609,97 +1608,25 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // is self-consistent.
         var afterIdValue = afterId ?? Guid.Empty;
 
-        List<ConnectedSystemObject> results;
+        // Full Include chain for every object on the page: a Full Synchronisation evaluates every object (#891).
+        var csoQuery = ApplySyncPageFilters(Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter)
+            .OrderBy(cso => cso.Id)
+            .AsQueryable();
 
-        if (lastSyncTimestamp.HasValue)
-        {
-            // Selective attribute loading: load CSO scalars for the whole page first,
-            // then only load attribute values for CSOs that have changed since last sync.
-            // Unchanged CSOs skip Attribute Flow entirely, saving significant I/O at scale.
-            var watermark = lastSyncTimestamp.Value;
+        csoQuery = afterId.HasValue
+            ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
+            : csoQuery.Skip(offset);
+        var results = await csoQuery.Take(pageSize).ToListAsync();
 
-            // Step 1: Load all CSOs for this page WITHOUT attribute values (scalars + Type only)
-            var csoScalarQuery = ApplySyncPageFilters(Repository.Database.ConnectedSystemObjects
-                .Include(cso => cso.Type)
-                .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter)
-                .OrderBy(cso => cso.Id)
-                .AsQueryable();
-            csoScalarQuery = afterId.HasValue
-                ? csoScalarQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
-                : csoScalarQuery.Skip(offset);
-            var allCsos = await csoScalarQuery
-                .Take(pageSize)
-                .ToListAsync();
+        // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
+        await PopulateReferenceValuesAsync(results);
 
-            // Step 2: Partition into changed and unchanged CSOs
-            var changedCsoIds = new List<Guid>();
-            foreach (var cso in allCsos)
-            {
-                // A CSO flagged by the Temporal Scope Reconciler (#892), or marked because a Metaverse-Derived
-                // Attribute Flow input changed in another system (#1750), is treated as changed so its attribute and
-                // reference values are loaded; otherwise Pass 2 Attribute Flow would run against an empty attribute
-                // set. Each flag is cleared once the object has been re-evaluated. The rule is shared with the Full
-                // Synchronisation preview (#1530).
-                var isUnchanged = cso.IsUnchangedSince(watermark);
-
-                if (isUnchanged)
-                {
-                    cso.IsUnchangedSinceLastSync = true;
-                }
-                else
-                {
-                    changedCsoIds.Add(cso.Id);
-                }
-            }
-
-            // Step 3: Load attribute values ONLY for changed CSOs
-            if (changedCsoIds.Count > 0)
-            {
-                var attributeValues = await Repository.Database.ConnectedSystemObjectAttributeValues
-                    .Include(av => av.Attribute)
-                    .Where(av => changedCsoIds.Contains(av.ConnectedSystemObject.Id))
-                    .ToListAsync();
-
-                // EF relationship fixup populates cso.AttributeValues automatically for tracked CSOs
-            }
-
-            // Step 4: Populate reference values only for changed CSOs
-            var changedCsos = allCsos.Where(cso => !cso.IsUnchangedSinceLastSync).ToList();
-            if (changedCsos.Count > 0)
-                await PopulateReferenceValuesAsync(changedCsos);
-
-            // Step 5: Load MVOs for ALL CSOs (needed for Pass 1 Pending Export confirmation
-            // and for reference attribute processing of unchanged CSOs with reference rules)
-            await LoadMetaverseObjectsForCsosAsync(allCsos);
-
-            Log.Information("GetConnectedSystemObjectsAsync: Page {Page} — {Changed} changed, {Unchanged} unchanged (skipping attribute load)",
-                page, changedCsoIds.Count, allCsos.Count - changedCsoIds.Count);
-
-            results = allCsos;
-        }
-        else
-        {
-            // Standard loading: full Include chain for all CSOs (no watermark available).
-            // Used for first-ever sync or when caller doesn't provide a watermark.
-            var csoQuery = ApplySyncPageFilters(Repository.Database.ConnectedSystemObjects
-                .Include(cso => cso.Type)
-                .Include(cso => cso.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-                .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter)
-                .OrderBy(cso => cso.Id)
-                .AsQueryable();
-
-            csoQuery = afterId.HasValue
-                ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
-                : csoQuery.Skip(offset);
-            results = await csoQuery.Take(pageSize).ToListAsync();
-
-            // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
-            await PopulateReferenceValuesAsync(results);
-
-            // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
-            await LoadMetaverseObjectsForCsosAsync(results);
-        }
+        // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
+        await LoadMetaverseObjectsForCsosAsync(results);
 
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
@@ -8036,23 +7963,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 change.SyncRuleId = null;
         }
 
-        // A deleted rule takes its timestamps with it, so record the deletion where the configuration watermark reads it
-        // (#2309), in the same save. Loaded tracked explicitly: JIM.Web runs the context NoTracking.
-        await StampSyncRuleDeletionAsync();
-
         Repository.Database.Remove(syncRule);
         await Repository.Database.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Stamps <see cref="ServiceSettings.SyncRuleLastDeletedAt"/> on the tracked singleton, for the caller's next save.
-    /// Absent only before seeding, when there is no synchronisation to protect.
-    /// </summary>
-    private async Task StampSyncRuleDeletionAsync()
-    {
-        var serviceSettings = await Repository.Database.ServiceSettings.AsTracking().OrderBy(s => s.Id).FirstOrDefaultAsync();
-        if (serviceSettings != null)
-            serviceSettings.SyncRuleLastDeletedAt = DateTime.UtcNow;
     }
     #endregion
 
@@ -8176,13 +8088,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         if (tracked == null)
             return;
 
-        // Deleting a mapping is a Synchronisation Rule configuration change, but the deleted row can no longer
-        // carry the evidence: GetLatestSyncRuleConfigurationChangeAsync computes the configuration watermark
-        // from the SURVIVING rules' and mappings' timestamps, so without a stamp here the next Full
-        // Synchronisation would keep its unchanged-object optimisation on and skip the very objects whose
-        // values the deleted mapping contributed, leaving them in place indefinitely (#1533). Stamp the parent
-        // rule's LastUpdated so the deletion advances the watermark; the deletion's initiator and audit trail
-        // live on its own Activity, so the rule's LastUpdatedBy* fields are left to rule-level edits.
+        // Deleting a mapping is a change to its Synchronisation Rule, and the deleted row can no longer carry the
+        // evidence, so stamp the parent rule's LastUpdated. The deletion's initiator and audit trail live on its own
+        // Activity, so the rule's LastUpdatedBy* fields are left to rule-level edits.
         var parentRuleId = tracked.SyncRuleId;
         var parentRule = await Repository.Database.SyncRules
             .AsTracking()
@@ -8351,8 +8259,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             mapping.Enabled = source.Enabled;
             mapping.DisabledReason = source.DisabledReason;
             // The caller stamps AuditHelper.SetUpdated on the detached source before persisting; the stamp is
-            // the mapping's configuration change trail and feeds the Full Synchronisation configuration
-            // watermark (GetLatestSyncRuleConfigurationChangeAsync), so it must be copied across too.
+            // the mapping's configuration change trail, so it must be copied across too.
             mapping.LastUpdated = source.LastUpdated;
             mapping.LastUpdatedByType = source.LastUpdatedByType;
             mapping.LastUpdatedById = source.LastUpdatedById;
@@ -8735,13 +8642,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 )",
             connectedSystemId);
 
-        // 11. Delete Synchronisation Rules, recording the deletion in the configuration watermark first (#2309): the rules
-        //     take their timestamps with them, and other systems' resolution may have depended on them. A system with no
-        //     rules changes no synchronisation configuration, so it leaves the watermark alone.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ServiceSettings"" SET ""SyncRuleLastDeletedAt"" = {1}
-              WHERE EXISTS (SELECT 1 FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
-            connectedSystemId, DateTime.UtcNow);
+        // 11. Delete Synchronisation Rules
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
@@ -8898,10 +8799,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(omr => (omr.SyncRuleId.HasValue && systemRuleIds.Contains(omr.SyncRuleId.Value))
                           || (omr.ConnectedSystemObjectTypeId.HasValue && omr.ConnectedSystemObjectType!.ConnectedSystemId == connectedSystemId))
             .ToListAsync());
-        var systemRules = await db.SyncRules.AsTracking().Where(sr => sr.ConnectedSystemId == connectedSystemId).ToListAsync();
-        if (systemRules.Count > 0)
-            await StampSyncRuleDeletionAsync();
-        db.SyncRules.RemoveRange(systemRules);
+        db.SyncRules.RemoveRange(await db.SyncRules.AsTracking().Where(sr => sr.ConnectedSystemId == connectedSystemId).ToListAsync());
         db.ConnectedSystemRunProfiles.RemoveRange(await db.ConnectedSystemRunProfiles.AsTracking().Where(rp => rp.ConnectedSystemId == connectedSystemId).ToListAsync());
         db.ConnectedSystemContainers.RemoveRange(await db.ConnectedSystemContainers.AsTracking()
             .Where(c => (c.ConnectedSystem != null && c.ConnectedSystem.Id == connectedSystemId)

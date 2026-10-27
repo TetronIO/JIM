@@ -8,10 +8,9 @@ namespace JIM.Application.Servers.Preview;
 /// administrator decides with a number in front of them.
 /// </summary>
 /// <remarks>
-/// Never faster than <see cref="ReferenceObjectsPerSecond"/>. A routine Full Synchronisation skips the objects unchanged
-/// since the last one, so its own speed overstates how fast every object can be evaluated, and a preview is asked for
-/// exactly when configuration has changed and nothing will be skipped. A system whose last Full Synchronisation ran
-/// slower than the reference is estimated at its own speed, because then the measurement is the better evidence.
+/// Never faster than <see cref="ReferenceObjectsPerSecond"/>, so a fast last run on an unusually quiet host does not
+/// promise the same next time. A system whose last Full Synchronisation ran slower than the reference is estimated at
+/// its own speed, because then the measurement is the better evidence.
 /// </remarks>
 internal static class FullSynchronisationDurationEstimate
 {

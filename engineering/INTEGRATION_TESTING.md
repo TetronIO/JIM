@@ -986,7 +986,7 @@ The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/9
 2. Restamp the cohort's `jimEmployeeEndDate` to now + `-LeaverWindowSeconds` (default 180) via one batched `ldapmodify`.
 3. Delta import + delta sync on Source: proves the hot path sees the new dates while they are still in scope (asserts zero disconnections).
 4. Wait for the wall clock to pass the boundary.
-5. Negative control: a full sync with no data changes must deprovision nothing (the hot path skips unchanged objects).
+5. Negative control: a delta sync with no data changes must deprovision nothing (it selects only changed objects; a full sync would not miss the transition, since it evaluates every object).
 6. Manually trigger the built-in reconciler schedule, which flags the whole cohort in one sweep.
 7. A full sync then disconnects exactly the cohort (asserts `DisconnectedOutOfScope` equals the cohort size); the User deletion rule deletes the Metaverse Objects, and Target deprovisioning plus group membership removals are exported.
 8. Assertions: cohort accounts are removed from the Target directory; per-group Target member sets equal the Source member sets minus the cohort (compared by uid; full verification when the template has 150 or fewer groups, sampled otherwise); Source groups are untouched; no unresolved references; no `[ERR]` lines.

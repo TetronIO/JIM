@@ -57,63 +57,28 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
-    /// <remarks>
-    /// Asserted against the run's rule rather than paired with a run: both loaders skip unchanged objects through the
-    /// same <see cref="ConnectedSystemObject.IsUnchangedSince"/> and <see cref="ConnectedSystem.GetUnchangedObjectWatermark(DateTime?)"/>
-    /// the preview reads (both covered in <c>UnchangedObjectOptimisationTests</c>).
-    /// </remarks>
-    [TestCase(false, 0, 1)]
-    [TestCase(true, 1, 0)]
-    public async Task PreviewFullSyncAsync_OfADriftedTargetObjectUnchangedSinceTheLastSynchronisation_ProposesOnlyWhatTheRunProcessesAsync(
-        bool configurationChangedSince, int expectedUpdates, int expectedUnchanged)
+    [Test]
+    public async Task PreviewFullSyncAsync_OfADriftedTargetObjectUnchangedSinceTheLastSynchronisation_ProposesTheCorrectionTheRunMakesAsync()
     {
         var ctx = await SetUpDriftAsync(enforceState: true);
 
-        // The drifted value was imported before the target's last synchronisation; with no configuration change since
-        // configuration was last fully applied, a Full Synchronisation skips the object, drift and all.
+        // The drifted value was imported before the target's last synchronisation, and nothing has changed since. A Full
+        // Synchronisation evaluates every object all the same (#891), so it corrects the drift, and the preview says so.
         var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
         targetCso.Created = DateTime.UtcNow.AddHours(-2);
         targetCso.LastUpdated = DateTime.UtcNow.AddHours(-1);
         // ...and processed by that synchronisation, which cleared the mark its provisioning set (#2092).
         targetCso.SynchronisationPending = false;
-        var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
-        target.LastSyncCompletedAt = DateTime.UtcNow;
-        target.ConfigurationLastFullyAppliedAt = configurationChangedSince ? DateTime.UtcNow.AddDays(-1) : DateTime.UtcNow;
+        SyncRepo.ConnectedSystems[ctx.Target.Id].LastSyncCompletedAt = DateTime.UtcNow;
 
         var preview = await Jim.SyncPreview.PreviewFullSyncAsync(ctx.Target.Id);
+        await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
 
+        var realUpdates = UpdatesStagedFor(ctx.Target);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(preview.Counts.ObjectsToUpdate, Is.EqualTo(expectedUpdates),
-                configurationChangedSince ? "a configuration change reaches every object" : "the run does not process an unchanged object");
-            Assert.That(preview.UnchangedObjectCount, Is.EqualTo(expectedUnchanged));
-        }
-    }
-
-    [Test]
-    public async Task StreamFullSyncPreviewAsync_OfAnObjectUnchangedSinceTheLastSynchronisation_SaysItWouldNotChangeAsync()
-    {
-        var ctx = await SetUpDriftAsync(enforceState: true);
-        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
-        targetCso.Created = DateTime.UtcNow.AddHours(-2);
-        targetCso.LastUpdated = DateTime.UtcNow.AddHours(-1);
-        // ...and processed by that synchronisation, which cleared the mark its provisioning set (#2092).
-        targetCso.SynchronisationPending = false;
-        var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
-        target.LastSyncCompletedAt = DateTime.UtcNow;
-        target.ConfigurationLastFullyAppliedAt = DateTime.UtcNow;
-
-        var items = new List<FullSyncPreviewItem>();
-        await foreach (var item in Jim.SyncPreview.StreamFullSyncPreviewAsync(ctx.Target.Id))
-            items.Add(item);
-
-        var unchanged = items.Single(i => i.Kind == FullSyncPreviewItemKind.Unchanged);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(unchanged.ConnectedSystemObjectId, Is.EqualTo(targetCso.Id));
-            Assert.That(unchanged.DisplayName, Is.EqualTo("Edited in AD"), "named, so the row saying it would not change can be recognised");
-            Assert.That(unchanged.Preview, Is.Null, "the run does not process it, so there is nothing to evaluate");
-            Assert.That(items.Any(i => i.Kind == FullSyncPreviewItemKind.Evaluated), Is.False);
+            Assert.That(realUpdates, Is.EqualTo(1), "arrange: the run corrects the drift although the object is unchanged");
+            Assert.That(preview.Counts.ObjectsToUpdate, Is.EqualTo(realUpdates), "the preview proposes the correction the run stages");
         }
     }
 

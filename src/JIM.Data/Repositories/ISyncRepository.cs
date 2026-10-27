@@ -81,7 +81,7 @@ public interface ISyncRepository
     /// <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>.</param>
     /// <param name="createdOnOrAfter">When provided, restricts the page to objects created at or after this instant:
     /// the closing sweep of a type-ordered run, for objects created while it was in flight.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
@@ -357,8 +357,8 @@ public interface ISyncRepository
         IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null);
 
     /// <summary>
-    /// Clears the <c>ScopeReviewPending</c> flag on CSOs the sync engine has re-evaluated past the unchanged-skip
-    /// (issue #892). Called at page flush. No-op when <paramref name="ids"/> is empty.
+    /// Clears the <c>ScopeReviewPending</c> flag on CSOs the sync engine has re-evaluated (issue #892). Called at page
+    /// flush. No-op when <paramref name="ids"/> is empty.
     /// </summary>
     Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
 
@@ -407,9 +407,9 @@ public interface ISyncRepository
     /// <summary>
     /// Persists an optimistic export apply delta (issue #1079): bulk-inserts newly exported
     /// attribute value rows and bulk-deletes superseded ones. Touches NO parent CSO row (Status,
-    /// LastUpdated and every other CSO field are left exactly as they were): re-arming the Full
-    /// Synchronisation unchanged-object watermark for a no-op confirming import depends on
-    /// LastUpdated staying untouched here. Callers are responsible for keeping the in-memory
+    /// LastUpdated and every other CSO field are left exactly as they were): keeping a no-op
+    /// confirming import out of the next Delta Synchronisation depends on LastUpdated staying
+    /// untouched here. Callers are responsible for keeping the in-memory
     /// Connected System Object graph in sync with the persisted delta afterwards.
     /// <para>
     /// SPEC-1082 D9: also nulls <see cref="ConnectedSystemObject.ImportStateHash"/> and
@@ -1264,26 +1264,6 @@ public interface ISyncRepository
     /// </summary>
     /// <param name="syncRuleIds">The Synchronisation Rule ids to resolve. Deduplicated internally.</param>
     Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds);
-
-    /// <summary>
-    /// Gets the most recent configuration change instant across all Synchronisation Rules and their mappings
-    /// (each entity's LastUpdated, falling back to Created), or null when no rules exist. Rule enable/disable,
-    /// scoping and matching changes stamp the rule; mapping creation, attribute priority reordering and
-    /// "Null is a value" changes stamp the mapping, and a mapping's deletion stamps its parent rule (#1533). A deleted
-    /// rule leaves no row behind, so its deletion, alone or with its Connected System, is read from the Service
-    /// Settings singleton (#2309). Together these cover every configuration surface that affects inbound resolution.
-    /// A Full Synchronisation compares it against the last completed sync to decide whether
-    /// the unchanged-object optimisation must be disabled for the run so new configuration reaches every object.
-    /// </summary>
-    Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync();
-
-    /// <summary>
-    /// A Connected System's two synchronisation watermarks (<see cref="ConnectedSystem.LastSyncCompletedAt"/> and
-    /// <see cref="ConnectedSystem.ConfigurationLastFullyAppliedAt"/>), read on their own, or null when the system does
-    /// not exist. The Full Synchronisation preview (#1530) decides from them, as the run does, whether the
-    /// unchanged-object optimisation applies (<see cref="ConnectedSystem.GetUnchangedObjectWatermark(DateTime?, DateTime?, DateTime?)"/>).
-    /// </summary>
-    Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId);
 
     /// <summary>
     /// A Connected System's <see cref="ConnectedSystem.ObjectMatchingRuleMode"/>, read on its own, or null when the system

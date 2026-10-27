@@ -119,10 +119,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // This enables efficient drift detection during CSO processing
         BuildDriftDetectionCache(allSyncRules, activeSyncRules, derivedFlowGraph);
 
-        // Build reference object type cache for selective attribute loading optimisation.
-        // Object types with reference attribute rules need full attribute loading even when unchanged.
-        BuildReferenceObjectTypeCache(activeSyncRules);
-
         // Use object types already loaded on the Connected System (with matching rules and attributes)
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
@@ -149,33 +145,11 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
         _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
 
-        // A Full Synchronisation is the documented way to apply configuration changes (attribute priority
-        // reordering, "Null is a value", rule enable/disable, scoping) to every object. The unchanged-object
-        // optimisation skips Attribute Flow for objects whose SOURCE DATA has not changed since the last
-        // completed sync, which is only safe while the CONFIGURATION has not changed either; otherwise a pure
-        // configuration change would never re-resolve anything until the object's data happened to change.
-        // The comparison baseline is ConfigurationLastFullyAppliedAt (the start of the last completed Full
-        // Synchronisation), NOT LastSyncCompletedAt: a no-change Delta Synchronisation advances the latter
-        // without applying configuration, and must not hide a configuration change from the next full run.
-        // When any Synchronisation Rule or mapping changed after that baseline (across all Connected Systems,
-        // because another system's priority affects this system's resolution), disable the optimisation for
-        // this run by loading without a watermark, so every object is fully evaluated against the new
-        // configuration.
-        // The rule lives on the model, shared with the Full Synchronisation preview (#1530).
+        // A Full Synchronisation evaluates every object, every run, with no regard to when it last changed (#891). It is
+        // the administrator's remediation tool: it applies configuration and fixed engine logic to existing data, and
+        // repairs whatever a Delta Synchronisation missed, so it must not trust the timestamps and marks a Delta
+        // Synchronisation relies on to pick its objects. Delta Synchronisation is the fast path.
         var fullSyncStartedAt = DateTime.UtcNow;
-        DateTime? csoLoadWatermark = null;
-        if (_connectedSystem.LastSyncCompletedAt.HasValue)
-        {
-            var configChangedAt = await _syncRepo.GetLatestSyncRuleConfigurationChangeAsync();
-            csoLoadWatermark = _connectedSystem.GetUnchangedObjectWatermark(configChangedAt);
-            if (csoLoadWatermark == null)
-            {
-                Log.Information("PerformFullSyncAsync: Synchronisation Rule configuration changed at {ConfigChangedAt:O}, " +
-                    "after it was last fully applied at {Baseline:O}. Disabling the unchanged-object optimisation for " +
-                    "this run so the new configuration is applied to every object.",
-                    configChangedAt, _connectedSystem.ConfigurationLastFullyAppliedAt);
-            }
-        }
 
         // Process CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
@@ -206,7 +180,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // The count is the progress estimate only, and ObjectsProcessed may exceed it.
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, fullSyncStartedAt,
             (afterId, objectTypeId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectsAsync(
-                _connectedSystem.Id, 1, pageSize, totalCsosToProcess, csoLoadWatermark, afterId, objectTypeId, createdOnOrAfter),
+                _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
             "Full Synchronisation", observeUndeclaredReferenceTargets: true);
 
         for (var i = 1; ; i++)
@@ -450,10 +424,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
             // Ensure the activity and any pending db updates are applied after all pages are processed
             await _syncRepo.UpdateActivityAsync(_activity);
-
-            // Record that this run applied the configuration as of its start to every object; a configuration
-            // change made mid-run carries a later timestamp and is picked up by the next Full Synchronisation.
-            _connectedSystem.ConfigurationLastFullyAppliedAt = fullSyncStartedAt;
 
             // Update the delta sync watermark to establish baseline for future delta syncs
             await UpdateDeltaSyncWatermarkAsync();

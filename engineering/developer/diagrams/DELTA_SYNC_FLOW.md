@@ -8,11 +8,10 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 
 | Aspect | Full Sync | Delta Sync |
 |--------|-----------|------------|
-| CSO Selection | ALL CSOs (unchanged CSOs skip Attribute Flow unless Synchronisation Rule configuration changed since it was last fully applied; a CSO carrying either mark is never unchanged) | Only CSOs marked `SynchronisationPending` (#2092) or `DerivedInputChangePending` (#1750), or created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
+| CSO Selection | ALL CSOs, every run (#891) | Only CSOs marked `SynchronisationPending` (#2092) or `DerivedInputChangePending` (#1750), or created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
 | Early Exit | Never | Yes, if 0 modified CSOs and no Metaverse Object awaits an export scope review (#892, #1925) |
 | Per-page pipeline | Identical | Identical |
 | Watermark Update | Yes (establishes the baseline for the next Delta Sync) | Yes (even when 0 changes) |
-| Configuration baseline (`ConfigurationLastFullyAppliedAt`) | Recorded at the end of the run | Never advanced |
 | Stranded-value sweep after a Connector Space clear (#1549, #1605) | Runs if armed and gated open | Never |
 | Use Case | Initial sync, periodic reconciliation, applying configuration changes | Incremental updates |
 
