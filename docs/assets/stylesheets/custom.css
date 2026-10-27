@@ -275,7 +275,7 @@
   height: 1.4em;
   padding: 0.25em;
   margin-right: 0.4em;
-  vertical-align: -0.38em;                    /* centre the tile on the cap height */
+  vertical-align: -0.05em;                    /* centres the tile on the capitals of IBM Plex Sans (measured) */
 }
 
 .md-typeset .grid.cards > :is(ul, ol) > li > p:first-child > .twemoji:first-child {
