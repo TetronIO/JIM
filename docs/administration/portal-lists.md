@@ -84,11 +84,7 @@ The table of one object's attributes is the exception to one line per row: a Con
 
 All three tables have a search box, which matches an attribute's name or any of its values shown on the page, and column headers you can click to sort. The search and sort are kept in the page address, so a refresh or a shared link shows the same view.
 
-<<<<<<< HEAD
 ## :material-tray-full: The Operations Activity tab
-=======
-## :material-tray-full: The Operations queue
->>>>>>> origin/main
 
 Of the Activity tab's three sections, only **Completed** is a scrolling list: it holds everything the Worker has ever finished. **Queued** and **In Progress** are ordinary tables, because they only ever hold work in flight. Queued shows as many rows as fit the window while In Progress stays in view, keeping the rows nearest In Progress (the work about to run), and never fewer than three; **Show more** reveals the rest. A Schedule Execution's tasks sit under a header row that names the Schedule, draws its rail and carries **View execution** and the option to cancel it.
 
