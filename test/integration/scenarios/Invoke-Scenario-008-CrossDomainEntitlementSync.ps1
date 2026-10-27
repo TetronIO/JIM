@@ -1833,16 +1833,17 @@ try {
                 Start-Sleep -Seconds ([int][Math]::Ceiling($remainingSeconds))
             }
 
-            # Step 7.6: Negative control. NO data has changed since the pre-boundary cycle, so the
-            # hot path (which skips unchanged objects) must miss the scope transition entirely.
-            Write-Host "  Negative control: full sync with no data changes (must deprovision nothing)..." -ForegroundColor Gray
-            $controlSync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $controlSync.activityId -Name "LeaverCohort negative-control Full Sync"
+            # Step 7.6: Negative control. NO data has changed since the pre-boundary cycle, so a Delta
+            # Synchronisation (which selects only changed objects) must miss the scope transition entirely.
+            # A Full Synchronisation would not: it evaluates every object (#891).
+            Write-Host "  Negative control: delta sync with no data changes (must deprovision nothing)..." -ForegroundColor Gray
+            $controlSync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $controlSync.activityId -Name "LeaverCohort negative-control Delta Sync"
             $controlDisconnected = Get-ActivityChangeCount -ActivityId $controlSync.activityId -ChangeType "DisconnectedOutOfScope"
             if ($controlDisconnected -ne 0) {
-                throw "LeaverCohort negative control failed: a plain full sync disconnected $controlDisconnected object(s) without the reconciler. Either the unchanged-skip is not working or something else changed the cohort."
+                throw "LeaverCohort negative control failed: a delta sync with no data changes disconnected $controlDisconnected object(s). Something changed the cohort."
             }
-            Write-Host "    OK Hot path missed the static-data transition (0 disconnections)" -ForegroundColor Green
+            Write-Host "    OK Delta sync missed the static-data transition (0 disconnections)" -ForegroundColor Green
 
             # Step 7.7: Reconciler sweep. The built-in schedule is disabled by setup; trigger it
             # manually and wait for a terminal state (same pattern as Scenarios 012/13).
@@ -1866,8 +1867,8 @@ try {
             Write-Host "    OK Reconciler sweep completed" -ForegroundColor Green
 
             # Step 7.8: Apply. The sweep flagged the cohort's CSOs (ScopeReviewPending); this sync
-            # re-evaluates them past the unchanged-skip, disconnects them out of scope, and the
-            # User deletion rule (WhenAuthoritativeSourceDisconnected, zero grace) deletes their
+            # evaluates every object (#891), disconnects the cohort out of scope, and the User
+            # deletion rule (WhenAuthoritativeSourceDisconnected, zero grace) deletes their
             # Metaverse Objects synchronously, staging Target deprovisioning.
             Write-Host "  Running full sync to process the flagged cohort..." -ForegroundColor Gray
             $applySync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru

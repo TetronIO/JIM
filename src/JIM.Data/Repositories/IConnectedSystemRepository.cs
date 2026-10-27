@@ -140,7 +140,7 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on a set of Connected System Objects (issue #892) once the sync
-    /// engine has re-evaluated them past the unchanged-skip. Called at page flush during synchronisation. No-op when
+    /// engine has re-evaluated them. Called at page flush during synchronisation. No-op when
     /// <paramref name="ids"/> is empty.
     /// </summary>
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
@@ -1217,7 +1217,7 @@ public interface IConnectedSystemRepository
         CancellationToken cancellationToken = default);
     /// <param name="objectTypeId">Keyset callers only: restricts the page to one Object Type; see <see cref="ISyncRepository.GetConnectedSystemObjectsAsync"/>.</param>
     /// <param name="createdOnOrAfter">Keyset callers only: restricts the page to objects created at or after this instant.</param>
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for

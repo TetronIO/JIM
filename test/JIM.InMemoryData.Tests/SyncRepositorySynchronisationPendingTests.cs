@@ -79,35 +79,6 @@ public class SyncRepositorySynchronisationPendingTests
     }
 
     [Test]
-    public async Task GetConnectedSystemObjectsAsync_WithWatermark_FlagsUnchangedObjectsAsTheProductionLoaderDoesAsync()
-    {
-        var watermark = DateTime.UtcNow.AddMinutes(-5);
-        var unchanged = Cso(created: watermark.AddHours(-2), metaverseObjectId: Guid.NewGuid());
-        var changed = Cso(created: watermark.AddHours(-2), lastUpdated: watermark.AddMinutes(1), metaverseObjectId: Guid.NewGuid());
-        var marked = Cso(created: watermark.AddHours(-2), metaverseObjectId: Guid.NewGuid(), synchronisationPending: true);
-        var unjoined = Cso(created: watermark.AddHours(-2));
-        foreach (var cso in new[] { unchanged, changed, marked, unjoined })
-            _repo.SeedConnectedSystemObject(cso);
-
-        var page = await _repo.GetConnectedSystemObjectsAsync(CsId, 1, 10, lastSyncTimestamp: watermark, afterId: Guid.Empty);
-        var flagged = page.Results.Where(c => c.IsUnchangedSinceLastSync).Select(c => c.Id).ToList();
-
-        Assert.That(flagged, Is.EqualTo(new[] { unchanged.Id }),
-            "only a joined, Normal, unmarked object neither created nor updated since the watermark is unchanged");
-    }
-
-    [Test]
-    public async Task GetConnectedSystemObjectsAsync_WithoutWatermark_FlagsNothingAsync()
-    {
-        var watermark = DateTime.UtcNow.AddMinutes(-5);
-        _repo.SeedConnectedSystemObject(Cso(created: watermark.AddHours(-2), metaverseObjectId: Guid.NewGuid()));
-
-        var page = await _repo.GetConnectedSystemObjectsAsync(CsId, 1, 10, lastSyncTimestamp: null, afterId: Guid.Empty);
-
-        Assert.That(page.Results.Single().IsUnchangedSinceLastSync, Is.False, "no watermark means every object is evaluated");
-    }
-
-    [Test]
     public async Task CreateConnectedSystemObjectsAsync_MarksEveryCreatedObjectAsync()
     {
         var cso = Cso(created: DateTime.UtcNow);

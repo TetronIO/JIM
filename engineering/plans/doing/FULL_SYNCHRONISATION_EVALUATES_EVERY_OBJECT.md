@@ -1,9 +1,9 @@
 # Full Synchronisation Evaluates Every Object - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phases 1-4 and 7 complete; scenario runs and measurement outstanding)
 - **Issue:** [#891](https://github.com/TetronIO/JIM/issues/891)
 - **Related Issues:** [#2092](https://github.com/TetronIO/JIM/issues/2092) (changes committed mid-run skipped by every later Delta and Full Synchronisation), [#2309](https://github.com/TetronIO/JIM/issues/2309) (objects needing re-processing skipped until their own data changes), [#892](https://github.com/TetronIO/JIM/issues/892) (Temporal Scope Reconciler), [#1750](https://github.com/TetronIO/JIM/issues/1750) (Metaverse-Derived Attribute Flows), [#1530](https://github.com/TetronIO/JIM/issues/1530) (Full Synchronisation preview)
-- **Related Plans:** [`doing/CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md`](doing/CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md) (shares the unchanged-object rule this plan removes)
+- **Related Plans:** [`CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md`](CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md) (shares the unchanged-object rule this plan removes)
 - **Last Updated:** 2026-10-27
 
 ## Overview
@@ -43,11 +43,13 @@ With the skip on, a Full Synchronisation is roughly a Delta Synchronisation plus
 | Full Import content-hash skip (#1082) | Every object is still read from the source, so deletion detection is unaffected. Only the attribute comparison is skipped, and only when a hash of freshly read data matches the stored stamp. Delta Imports and export confirmations clear the stamp, and Verification Mode turns the skip off. A missed delta makes the hash differ, so Full Import still remediates. |
 | `SynchronisationPending` (#2092) | Delta Synchronisation selects objects with it. A change committed during a run is stamped below the watermark that run writes, so without the mark Delta Synchronisation would never process it. |
 | `DerivedInputChangePending` (#1750) | Delta Synchronisation selects objects with it; the object's own data has not changed, but a derived flow's input has. |
-| `ScopeReviewPending` (#892) and the Temporal Scope Reconciler | Delta Synchronisation reads it (`SyncDeltaSyncTaskProcessor.cs:98, 379`); Delta remains blind to clock-driven scope changes without it. |
+| `ScopeReviewPending` (#892) and the Temporal Scope Reconciler | The Metaverse Object flag drives the export scope review in every synchronisation, Delta included (`SyncDeltaSyncTaskProcessor.cs:98, 379`). The Connected System Object flag is a different matter: see the correction below. |
 | `LastSyncCompletedAt` | The Delta Synchronisation watermark. |
 | Full Synchronisation clearing those marks at page flush | Still needed, so the next Delta Synchronisation does not reprocess what the Full Synchronisation already handled. |
 
 After this change the marks still have to be correct for Delta Synchronisation to be correct, but a mark that is missed becomes recoverable by running a Full Synchronisation.
+
+**Correction found during implementation:** the Connected System Object's `ScopeReviewPending` flag (an inbound, date-driven scope change) is not part of Delta Synchronisation's selection (`GetConnectedSystemObjectsModifiedSinceAsync` selects `SynchronisationPending`, `DerivedInputChangePending` and timestamps only). Its only consumer was the Full Synchronisation skip's exemption. So before this change, a deployment that schedules only Delta Synchronisation never applied a date-driven inbound scope change, reconciler or not; after it, a Full Synchronisation applies one with or without the flag, and Delta Synchronisation still does not. That gap predates this plan and is not needed to deliver it, so it is proposed as its own change: add the flag to Delta Synchronisation's selection, with a partial index like its siblings, and move Scenarios 008 and 012's reconciler step onto Delta Synchronisation.
 
 ## Technical Architecture
 
@@ -78,7 +80,7 @@ Synchronisation Rule and mapping `LastUpdated`/`Created` stamping stays; it is o
 
 ## Implementation Phases
 
-### Phase 1: Tests that fail today (red)
+### Phase 1: Tests that fail today (red) ✅
 
 Worker and workflow tests (`test/JIM.Worker.Tests/`), each confirmed failing against current `main` for the right reason:
 
@@ -89,15 +91,15 @@ Worker and workflow tests (`test/JIM.Worker.Tests/`), each confirmed failing aga
 
 Tests 1 to 3 must run against the PostgreSQL repository (database tests) as well as the in-memory one, since the in-memory repository models the watermark separately and EF in-memory tracking can mask loading gaps.
 
-### Phase 2: Remove the skip (green)
+### Phase 2: Remove the skip (green) ✅
 
 Worker, model and repository removals from the table above, excluding the migration and preview. Run `dotnet build JIM.sln` and the Worker, Models and InMemoryData test projects.
 
-### Phase 3: Remove configuration-change detection and migrate
+### Phase 3: Remove configuration-change detection and migrate ✅
 
 Remove `GetLatestSyncRuleConfigurationChangeAsync`, `ConfigurationLastFullyAppliedAt`, `SyncRuleLastDeletedAt` and their writers; add the migration. Verify the migration applies cleanly on a seeded database in the full stack.
 
-### Phase 4: Full Synchronisation preview
+### Phase 4: Full Synchronisation preview ✅
 
 Remove the `Unchanged` kind and the watermark from `SyncPreviewServer` and `FullSyncPreviewResult`; update `SyncPreviewFidelityTests` so preview and run agree that every object is evaluated. Update the preview duration estimate's documentation (`docs/configuration/connected-systems.md:133`): its premise that "a routine run skips objects" no longer holds, though the estimate's conservative floor can stay. Confirm the change with the owners of the in-flight preview plan (#1530) so the two do not conflict.
 
@@ -111,13 +113,15 @@ Two scenarios use a plain Full Synchronisation as a negative control that must *
 
 Run Scenarios 008, 012, 013 and 026 at `Small`, plus the full suite at `Small` before the PR.
 
+**As implemented:** both negative controls now use Delta Synchronisation. The reconciler-then-sync steps stay on Full Synchronisation, because Delta Synchronisation does not yet select a reconciler-flagged Connected System Object (see the correction under Scope); moving them onto Delta Synchronisation belongs with that fix. Full Synchronisation catching the transition without the reconciler is proven by `FullSync_RelativeDateScopeBoundaryPassedWithStaticData_DisconnectsWithoutReconcilerAsync`.
+
 ### Phase 6: Measure the cost
 
 Run a repeat Full Synchronisation (no data changes) at `Scale100k50Groups` on `main` and on the branch, in the devcontainer, and record both durations and peak memory in this plan. The no-watermark path is already the one every first synchronisation takes at scale (#2492 measured it at 500k), so this is about repeat-run cost, not feasibility.
 
 Decision gate: if the repeat run is impractical for scheduled use, the answer is documentation steering schedules to Delta Synchronisation, not restoring the skip. If the user decides otherwise at this gate, the fallback is an opt-in, default-off Run Profile setting (option B from the #891 review), planned separately.
 
-### Phase 7: Documentation and changelog
+### Phase 7: Documentation and changelog ✅
 
 - `docs/configuration/run-profiles.md:21`, `docs/concepts/synchronisation-pipeline.md:116`, `docs/reference/glossary.md:64`, `docs/configuration/sync-preview.md:43`, `docs/configuration/connected-systems.md:133`: a Full Synchronisation evaluates every object. State when to use each synchronisation type: Delta Synchronisation for scheduled runs; Full Synchronisation for a new Connected System, after configuration changes, after a JIM upgrade, and to remediate anything a Delta Synchronisation may have missed.
 - `engineering/developer/diagrams/FULL_SYNC_CSO_PROCESSING.md` (lines 8, 22, 189), `PENDING_EXPORT_LIFECYCLE.md:244`, `EXPORT_EXECUTION_FLOW.md:224`: remove references to the unchanged-object fast path.

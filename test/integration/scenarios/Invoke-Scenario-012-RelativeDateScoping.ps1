@@ -395,11 +395,10 @@ try {
                 Start-Sleep -Seconds ([int][Math]::Ceiling($remaining))
             }
 
-            # The source data is now static but the clock has advanced past the end date, so the sync and
-            # export hot paths would skip $empClock (unchanged since last sync). The Temporal Scope Reconciler
-            # (#892) is the mechanism that detects this: trigger its built-in schedule to flag the object, then
-            # run a sync. The flag lets the flagged CSO past the unchanged-skip so scope is re-evaluated and the
-            # now-out-of-scope object is disconnected (flag-and-delegate).
+            # The source data is now static but the clock has advanced past the end date, so a Delta
+            # Synchronisation would not select $empClock (unchanged since last sync). The Temporal Scope
+            # Reconciler (#892) detects the transition and flags the object (flag-and-delegate); the Full
+            # Synchronisation below evaluates every object (#891), so it disconnects it.
             $reconSchedule = @(Get-JIMSchedule | Where-Object { $_.name -eq "Temporal Scope Reconciliation" })
             if ($reconSchedule.Count -ne 1) {
                 throw "T4 expected exactly one built-in 'Temporal Scope Reconciliation' schedule; found $($reconSchedule.Count)"

@@ -130,8 +130,7 @@ Synchronisation of the system has run since it.
 
 **Large systems.** Above the size at which JIM asks how much detail a preview should keep, the same question also says
 roughly how long the preview will take, so you decide before it starts. The estimate is never faster than a
-conservative reference rate, and slower where this system's last Full Synchronisation was: a routine run skips objects
-unchanged since the one before, so its own speed would understate a run that has to look at everything.
+conservative reference rate, and slower where this system's last Full Synchronisation was.
 
 **Reading it.** The preview leads with the worst consequence, then lists each change by Connected System and attribute
 under **What would change**, including updates, provisioning and deprovisioning in the target systems the run reaches,
