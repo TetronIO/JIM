@@ -1,7 +1,6 @@
-/* Space Grotesk for marketing/publication-feel headings (hero title, header
-   site title). Body text remains IBM Plex Sans (set via mkdocs.yml).
-   Variable font: weight axis pulled at 600 + 700. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap');
+/* Fonts load in docs/overrides/main.html: IBM Plex Sans (variable, for body
+   text at 450), IBM Plex Mono, and Space Grotesk for the hero title and the
+   header's site title. */
 
 /* JIM Brand Colour Overrides */
 
@@ -420,6 +419,25 @@
 .md-typeset h5,
 .md-typeset h6 {
   color: var(--md-default-fg-color);
+}
+
+/* Body text: 16px at every screen width, at IBM Plex Sans 450 (the weight IBM
+   designed for running text; 400 reads faint on screen) with slightly opened
+   leading. Material grows the root font to 137.5% from 100em (1600px) and 150%
+   from 125em (2000px), which put body text at 17.6px and 19.2px on large
+   monitors; pinning the root at Material's own base of 125% stops that. */
+@media screen and (min-width: 100em) {
+  html { font-size: 125%; }
+}
+
+.md-typeset {
+  font-weight: 450;
+  line-height: 1.65;
+}
+
+.md-typeset strong,
+.md-typeset b {
+  font-weight: 600;
 }
 
 .md-typeset h1 { font-weight: 400; }

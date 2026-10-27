@@ -257,7 +257,7 @@ JIM uses a three-tier type system. Each typeface has a defined role; do not mix 
 
 Body text, UI controls, navigation, list items, table content, and heading levels H2 to H6. The default voice everywhere except code and the display-accent layer. Designed by IBM, SIL Open Font License 1.1. Sharper character disambiguation (1/l/I, 0/O) than many grotesques, which matters where GUIDs, DNs, and command snippets appear.
 
-Self-hosted in the portal at `wwwroot/fonts/ibm-plex-sans/`. Loaded via Google Fonts on the docs site.
+Self-hosted in the portal at `wwwroot/fonts/ibm-plex-sans/`. Loaded via Google Fonts on the docs site as the variable font, so docs body text sits at weight 450 (IBM's text weight; 400 reads faint on screen), with bold at 600, at 16px on every screen width (Material's root-size growth above 1600px is pinned off) and a line height of 1.65.
 
 ### IBM Plex Mono (technical)
 
@@ -273,7 +273,7 @@ Used sparingly for hero titles, the portal sidebar wordmark, and publication-sty
 
 **Where not to use:** body text, sub-headings (H2 to H6), tables, UI controls, or marketing prose. Overuse tips the brand from "considered modern" toward "developer-tool studio".
 
-Self-hosted in the portal at `wwwroot/fonts/space-grotesk/`. Loaded via CSS `@import` from Google Fonts on the docs site.
+Self-hosted in the portal at `wwwroot/fonts/space-grotesk/`. Loaded from Google Fonts on the docs site, in the same request as the Plex faces (`docs/overrides/main.html`).
 
 ### Heading weight corrections
 
