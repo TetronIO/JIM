@@ -9,6 +9,21 @@ audience: administrator
 
 This guide sets up a Delta Import for the [JIM SQL Connector](jim-sql-connector.md) in **Change-Log Table** mode, from an empty database to a scheduled run. It is the recommended mode, and the only one that observes a deletion.
 
+```jim-diagram
+archetype: flow
+title: What a Change-Log Table Delta Import does
+desc: "JIM first notes the highest sequence value in the change log (1). It reads every change-log row above the watermark it saved last time, in sequence order, a page at a time (2), and keeps only the last change recorded for each object in the page (3). For a create or an update, it reads the object as it now stands from the Object Type's own table or view, related tables included (4). For a deletion, it imports the anchor alone, which tells JIM the object has gone (5). When the run completes, it saves the value noted in step 1 as the new watermark."
+in: { label: Change-log table, note: one row per change }
+steps:
+  - { id: note, label: Note the top sequence value, badge: 1 }
+  - { id: read, label: Read newer rows, sub: above the saved watermark, badge: 2 }
+  - { id: last, label: Keep the last change, sub: per object, badge: 3 }
+  - { id: object, label: Read the object, sub: on a create or update, badge: 4, note: as it now stands }
+  - { id: save, label: Save the watermark, sub: when the run completes }
+detours:
+  - { from: last, to: save, label: deletion, step: { label: The anchor alone, sub: the object has gone, badge: 5 } }
+```
+
 ## :material-cog-outline: How it works
 
 Your database keeps a table (or a view over one it already keeps) holding one row per change: the changed object's anchor, what kind of change it was, and a value that only ever goes up. On each Delta Import, JIM:

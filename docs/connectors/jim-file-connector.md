@@ -11,6 +11,38 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 
 **Capabilities:** Full Import, Export
 
+```jim-diagram
+archetype: comparison
+title: The File Connector's three modes compared
+desc: "Import Only, the default, reads the file on each Full Import and never writes it; the file must exist first, and a change made to it outside JIM is read at the next import. Export Only writes the file on each export, confirmed as soon as it is written, and never reads it back; the file need not exist, because an export creates it, but the Object Type must then be set as a fixed value. A change made to the file outside JIM goes unseen, because JIM compares with the values it last wrote. Bidirectional writes the file on each export and then reads it in a confirming import; the file must exist first, and a change made outside JIM is read by the confirming import. Every mode reads or writes one file, at a path under /connector-files."
+columns:
+  - { label: Import Only, sub: the default }
+  - { label: Export Only, sub: "writes, never reads back" }
+  - { label: Bidirectional, sub: "export, then a confirming import" }
+rows:
+  - label: Reads the file
+    cells:
+      - { text: on each Full Import }
+      - { text: never }
+      - { text: after each export, sub: in a confirming import }
+  - label: Writes the file
+    cells:
+      - { text: never }
+      - { text: on each export, sub: confirmed as soon as it is written }
+      - { text: on each export, sub: confirmed as soon as it is written }
+  - label: "Must the file exist?"
+    cells:
+      - { text: "yes, before you configure it" }
+      - { text: "no: an export creates it", sub: then set a fixed Object Type }
+      - { text: "yes, before you configure it" }
+  - label: Edits made outside JIM
+    cells:
+      - { text: read at the next import }
+      - { text: go unseen, sub: JIM compares with what it last wrote }
+      - { text: read by the confirming import }
+footer: "Every mode reads or writes one file, at a path under `/connector-files`"
+```
+
 ## :material-format-list-checks: Supported Features
 
 - **Configurable delimiters**<br /> Comma (default), tab, pipe, semicolon, or any custom character

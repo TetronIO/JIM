@@ -9,6 +9,29 @@ audience: administrator
 
 What the [SQL Connector](jim-sql-connector.md)'s database account needs, how its connection is encrypted, and what an administrator who configures it is trusted with.
 
+```jim-diagram
+archetype: comparison
+title: How each database's connection is protected
+desc: "A Microsoft SQL Server connection is encrypted with TLS by default, and fails rather than fall back to plain text. Its certificate is always validated, and a certificate from an authority JIM does not yet trust can be trusted from the card the failed connection test shows. It runs unencrypted only if Encrypt Connection is turned off. An Oracle Database connection uses Native Network Encryption by default (AES, with SHA-2 integrity checking), which needs no certificate. Over TCPS (TLS) instead, the server's certificate must be one the operating system already trusts, because the Oracle driver accepts no additional trust anchors. Its None setting sends data unencrypted, for a lab only. For both, the password is stored encrypted and never logged, and the account needs no db_owner, DBA or SELECT ANY TABLE."
+columns:
+  - { label: Microsoft SQL Server }
+  - { label: Oracle Database }
+rows:
+  - label: By default
+    cells:
+      - { text: TLS, sub: never falls back to plain text }
+      - { text: Native Network Encryption, sub: "AES, with SHA-2 integrity checking" }
+  - label: Certificate
+    cells:
+      - { text: always validated, sub: "an unknown authority: trust it from the failed test's card" }
+      - { text: "none needed, except over TCPS", sub: "TCPS: one the operating system already trusts" }
+  - label: Unencrypted
+    cells:
+      - { text: only with Encrypt Connection off }
+      - { text: "`None`, for a lab only" }
+footer: "Both: the password is stored encrypted and never logged, and no `db_owner`, `DBA` or `SELECT ANY TABLE` is needed"
+```
+
 ## :material-account-lock-outline: Database account permissions
 
 Create a dedicated database account for JIM and grant it only what the Run Profiles you configure will use:

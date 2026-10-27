@@ -11,6 +11,19 @@ This guide connects the [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) t
 
 Keycloak's SCIM API differs from the SCIM specification in several ways that change how a Connected System has to be set up: it does not stamp every change with a new last-modified date, it normalises some values, and it hides some objects. Each step below says which difference it accounts for.
 
+```jim-diagram
+archetype: flow
+title: Six steps to connect JIM to a Keycloak realm
+desc: "Step 1 turns on the realm's SCIM API in Realm settings. Step 2 creates a confidential client for JIM and grants it manage-users twice, on its service account and in its dedicated scope, with an audience of the Base URL. Step 3 creates the Connected System, with Change Detection set to Full Scan, because Keycloak does not move the last-modified date for most changes. Step 4 shapes the Attribute Flows to values Keycloak keeps: lower-case userName and email, and one email address. Step 5 scopes out the accounts Keycloak protects, which hold an administrative role. Step 6 runs a Full Import, which brings groups in with their members."
+steps:
+  - { id: api, label: SCIM API on, sub: Realm settings, badge: 1 }
+  - { id: client, label: Client for JIM, sub: "`manage-users`", badge: 2, note: granted twice }
+  - { id: cs, label: Connected System, sub: Full Scan, badge: 3, note: as Change Detection }
+  - { id: flows, label: Attribute Flows, sub: values Keycloak keeps, badge: 4, note: "lower case, one email" }
+  - { id: scope, label: Scope out, sub: protected accounts, badge: 5 }
+  - { id: import, label: Full Import, sub: groups with members, badge: 6 }
+```
+
 ## :material-clipboard-list-outline: Before you begin
 
 - **Keycloak 26.8.0 or later.** 26.8.0 made the SCIM API supported. Earlier versions differ in the roles discovery needs, in how they check a token's audience, and in how many changes one request may carry, so this guide does not apply to them.
