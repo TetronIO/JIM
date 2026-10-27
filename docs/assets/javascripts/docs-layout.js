@@ -5,9 +5,8 @@
  *
  *   Width toggle
  *     A header button, beside the light/dark toggle, that switches the content between the
- *     reading width and the full window width. At full width, tables, code and diagrams take
- *     the room while paragraphs, lists and notes keep the reading measure (custom.css,
- *     "Reader layout controls"). The choice is remembered in this browser; the inline script
+ *     reading width and the full window width, which text, tables, code and diagrams all fill
+ *     (custom.css, "Reader layout controls"). The choice is remembered in this browser; the inline script
  *     in docs/overrides/main.html applies it before the page draws, so nothing jumps.
  *
  *   Resizable table columns

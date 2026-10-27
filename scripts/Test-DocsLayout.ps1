@@ -9,8 +9,8 @@
     docs/assets/javascripts/docs-layout.js adds two reader controls to the docs site:
 
       - a header button that switches the content between the reading width and the full window
-        width, remembered in the browser; at full width, tables, code and diagrams take the room
-        while paragraphs, lists and notes keep the reading measure; and
+        width, remembered in the browser; at full width, text, tables, code and diagrams all take
+        the room; and
       - a drag handle on the right edge of each table header cell, which resizes that column by
         pointer, by keyboard (arrow keys, Shift for bigger steps), and resets the table on a
         double-click.
@@ -20,8 +20,8 @@
     browser against the site's own custom.css and the script, and asserts:
 
       - the toggle is offered on a wide window and hidden where the layout is already full width;
-      - switching widens the grid, keeps a paragraph at the reading measure while a table
-        widens, sets aria-pressed and the label, and is remembered across a reload;
+      - switching widens the grid and a paragraph with it, sets aria-pressed and the label, and
+        is remembered across a reload;
       - a column handle moves width between its column and the next by drag and by keyboard,
         never below a minimum, without changing the table's width or making it scroll, and a
         double-click restores the table's natural layout.
@@ -103,6 +103,7 @@ const server = http.createServer((req, res) => { res.writeHead(200, { 'Content-T
     check(await toggle.isVisible(), 'the width toggle is not visible on a 1920px window');
     const before = await page.evaluate(() => ({
       grid: document.querySelector('.md-main .md-grid').getBoundingClientRect().width,
+      prose: document.getElementById('prose').getBoundingClientRect().width,
       pressed: document.querySelector('.jim-width-toggle').getAttribute('aria-pressed')
     }));
     check(before.pressed === 'false', `the toggle starts with aria-pressed "${before.pressed}", not "false"`);
@@ -112,15 +113,12 @@ const server = http.createServer((req, res) => { res.writeHead(200, { 'Content-T
       attr: document.documentElement.getAttribute('data-jim-width'),
       grid: document.querySelector('.md-main .md-grid').getBoundingClientRect().width,
       prose: document.getElementById('prose').getBoundingClientRect().width,
-      table: document.getElementById('t').getBoundingClientRect().width,
       pressed: document.querySelector('.jim-width-toggle').getAttribute('aria-pressed'),
-      label: document.querySelector('.jim-width-toggle').getAttribute('aria-label'),
-      root: parseFloat(getComputedStyle(document.documentElement).fontSize)
+      label: document.querySelector('.jim-width-toggle').getAttribute('aria-label')
     }));
     check(after.attr === 'full', `switching sets data-jim-width "${after.attr}", not "full"`);
     check(after.grid > before.grid + 200, `the grid did not widen (${before.grid}px to ${after.grid}px)`);
-    check(after.prose <= 36 * after.root + 1, `a paragraph runs ${after.prose}px wide at full width, past the 36rem reading measure`);
-    check(after.table > after.prose + 100, `the table (${after.table}px) did not widen beyond the paragraph (${after.prose}px)`);
+    check(after.prose - before.prose > (after.grid - before.grid) - 4, `a paragraph did not widen with the grid (${before.prose}px to ${after.prose}px, while the grid went from ${before.grid}px to ${after.grid}px)`);
     check(after.pressed === 'true', `after switching, aria-pressed is "${after.pressed}", not "true"`);
     check(/reading width/i.test(after.label || ''), `after switching, the label "${after.label}" does not offer the reading width`);
 
