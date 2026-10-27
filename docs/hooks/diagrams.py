@@ -1509,8 +1509,13 @@ def page_slug(src_path):
     return re.sub(r"[^a-z0-9]+", "-", str(src_path).lower().removesuffix(".md")).strip("-")
 
 
-def replace_fences(markdown, src_path, parse=None):
-    """Replace every jim-diagram fence in a page with its rendered diagram."""
+def replace_fences(markdown, src_path, parse=None, resolve=None):
+    """Replace every jim-diagram fence in a page with its rendered diagram.
+
+    resolve turns a map node's page link ("connected-systems.md#schema") into the
+    URL the built site serves it at. MkDocs rewrites Markdown links, but not links
+    inside raw HTML, so the hook has to; an anchor on the same page needs nothing.
+    """
     if parse is None:
         import yaml
         parse = yaml.safe_load
@@ -1521,7 +1526,12 @@ def replace_fences(markdown, src_path, parse=None):
         count += 1
         line = markdown.count("\n", 0, match.start()) + 1
         try:
-            return render(parse(match.group(1)), f"{page_slug(src_path)}-{count}")
+            spec = parse(match.group(1))
+            if resolve and isinstance(spec, dict) and spec.get("archetype") == "map":
+                for node in spec.get("nodes") or []:
+                    if isinstance(node, dict) and node.get("link") and not str(node["link"]).startswith("#"):
+                        node["link"] = resolve(str(node["link"]))
+            return render(spec, f"{page_slug(src_path)}-{count}")
         except DiagramError as err:
             raise DiagramError(f"{src_path}:{line}: {err}") from None
         except Exception as err:  # a YAML syntax error, say
@@ -1533,8 +1543,19 @@ def replace_fences(markdown, src_path, parse=None):
 def on_page_markdown(markdown, page, config, files, **kwargs):
     from mkdocs.exceptions import PluginError
 
+    import posixpath
+
+    def resolve(link):
+        path, _, anchor = link.partition("#")
+        if not path.endswith(".md"):
+            return link  # a folder or file outside the Markdown pages, served as it is written
+        target = files.get_file_from_path(posixpath.normpath(posixpath.join(posixpath.dirname(page.file.src_uri), path)))
+        if target is None:
+            raise DiagramError(f'the link "{link}" names a page that does not exist')
+        return target.url_relative_to(page.file) + (f"#{anchor}" if anchor else "")
+
     try:
-        return replace_fences(markdown, page.file.src_uri)
+        return replace_fences(markdown, page.file.src_uri, resolve=resolve)
     except DiagramError as err:
         raise PluginError(f"jim-diagram: {err}") from None
 

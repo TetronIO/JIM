@@ -631,6 +631,18 @@ class MapTests(unittest.TestCase):
 class HookTests(unittest.TestCase):
     PAGE = "Intro paragraph.\n\n```jim-diagram\n{spec}\n```\n\n## Next\n"
 
+    @unittest.skipUnless(HAVE_YAML, "PyYAML is installed with the docs toolchain")
+    def test_a_page_link_is_resolved_to_its_built_url_and_an_anchor_is_left_alone(self):
+        import json
+        spec = copy.deepcopy(MAP)
+        spec["nodes"][0]["link"] = "other-page.md#a-heading"
+        spec["nodes"][1]["link"] = "#an-anchor"
+        out = diagrams.replace_fences(self.PAGE.format(spec=json.dumps(spec)), "p.md",
+                                      resolve=lambda link: "../built/" + link.upper())
+        self.assertIn('href="../built/OTHER-PAGE.MD#A-HEADING"', out)
+        self.assertIn('href="#an-anchor"', out)
+        self.assertNotIn('href="other-page.md', out)
+
     def test_a_page_without_a_diagram_is_unchanged(self):
         md = "# Title\n\n```powershell\nGet-Thing\n```\n"
         self.assertEqual(diagrams.replace_fences(md, "p.md", lambda s: s), md)
