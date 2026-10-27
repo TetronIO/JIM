@@ -92,9 +92,13 @@ BeforeAll {
         $action | Should -Not -BeNullOrEmpty -Because 'Keycloak shows its login form'
 
         # Keycloak marks its login cookies Secure, which a browser still sends to http://localhost but .NET does not
-        # send over plain HTTP, so carry them to the form by hand.
-        $cookies = @($login.Headers['Set-Cookie'] | ForEach-Object { ($_ -split ';')[0] }) -join '; '
-        $redirect = Invoke-WebRequest -Method Post -Uri $action -Headers @{ Cookie = $cookies } -MaximumRedirection 0 -SkipHttpErrorCheck -Body @{
+        # send over plain HTTP, so give the session the same cookies without the flag.
+        $browser = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+        foreach ($header in @($login.Headers['Set-Cookie'])) {
+            $name, $value = ($header -split ';')[0] -split '=', 2
+            $browser.Cookies.Add([uri]$action, [System.Net.Cookie]::new($name.Trim(), $value))
+        }
+        $redirect = Invoke-WebRequest -Method Post -Uri $action -WebSession $browser -MaximumRedirection 0 -SkipHttpErrorCheck -Body @{
             username = $script:PersonName; password = $script:PersonPassword; credentialId = ''
         }
         $page = ([regex]::Replace([string]$redirect.Content, '<[^>]+>', ' ') -replace '\s+', ' ').Trim()
