@@ -3,6 +3,7 @@
 
 using JIM.Application.Services;
 using JIM.Models.Operations;
+using JIM.Models.Scheduling.DTOs;
 using MudBlazor;
 
 namespace JIM.Web.Models;
@@ -214,6 +215,40 @@ public static class ServiceHealthDisplay
             _ => $"{(int)duration.TotalDays} d"
         };
     }
+
+    /// <summary>
+    /// When the next Schedule fires, in the reader's terms (#2549): "today 16:30", "tomorrow 02:00", the weekday within
+    /// the week ahead ("Wed 02:00"), and the date beyond it ("20 Sep 02:00").
+    /// </summary>
+    /// <param name="nextRunUtc">When the Schedule is next due (UTC).</param>
+    /// <param name="asOfUtc">Now (UTC): the report's own time, so the line agrees with the rest of the card.</param>
+    /// <param name="zone">The time zone to say it in.</param>
+    public static string NextScheduleWhen(DateTime nextRunUtc, DateTime asOfUtc, TimeZoneInfo zone)
+    {
+        var next = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(nextRunUtc, DateTimeKind.Utc), zone);
+        var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(asOfUtc, DateTimeKind.Utc), zone).Date;
+        var days = (next.Date - today).Days;
+        var time = next.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+
+        return days switch
+        {
+            <= 0 => $"today {time}",
+            1 => $"tomorrow {time}",
+            < 7 => $"{next.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture)} {time}",
+            _ => $"{next.ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture)} {time}"
+        };
+    }
+
+    /// <summary>How long until the next Schedule fires, abbreviated for a card ("in 3 d", "in 40 min").</summary>
+    public static string NextScheduleCountdown(DateTime nextRunUtc, DateTime asOfUtc) =>
+        $"in {CompactDuration(nextRunUtc - asOfUtc)}";
+
+    /// <summary>
+    /// The phrase the collapsed Service Health header adds, so the next Schedule is never hidden with the cards
+    /// ("next Schedule tomorrow 02:00"), or null when no Schedule is due.
+    /// </summary>
+    public static string? NextScheduleHeaderPhrase(NextDueSchedule? next, DateTime asOfUtc, TimeZoneInfo zone) =>
+        next == null ? null : $"next Schedule {NextScheduleWhen(next.NextRunTime, asOfUtc, zone)}";
 
     /// <summary>
     /// A duration in its largest whole unit, in full words for a sentence ("4 minutes", "1 hour").

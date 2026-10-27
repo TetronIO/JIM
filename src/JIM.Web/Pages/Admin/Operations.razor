@@ -23,7 +23,7 @@
    opening and animating shut. *@
 @if (_report != null)
 {
-    <ServiceHealthStrip Report="_report" Class="mt-2"
+    <ServiceHealthStrip Report="_report" NextSchedule="_nextSchedule" Class="mt-2"
                         @bind-Collapsed="_healthCollapsed" @bind-Collapsed:after="SaveHealthCollapsedAsync" />
 }
 
@@ -96,6 +96,9 @@
     /// </summary>
     private bool _healthCollapsed;
 
+    // The Schedule that will next add work to the queue, read with the health report so the two agree (#2549).
+    private JIM.Models.Scheduling.DTOs.NextDueSchedule? _nextSchedule;
+
     private Timer? _pollTimer;
     private bool _disposed;
 
@@ -117,6 +120,7 @@
     {
         using var jim = JimFactory.Create();
         _report = await jim.SystemHealth.GetServiceHealthAsync(DateTime.UtcNow);
+        _nextSchedule = await jim.Scheduler.GetNextDueScheduleAsync();
         var summary = await jim.PasswordSynchronisation.GetQueueSummaryAsync();
         _passwordAttentionCount = summary.ParkedCount + summary.ExpiredCount;
         _generatedValueAttentionCount = (await jim.GeneratedValueDecisions.GetSummaryAsync()).NeedsDecisionCount;
