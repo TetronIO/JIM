@@ -3,6 +3,8 @@
 
 using JIM.Application.Interfaces;
 using JIM.Application.Servers;
+using JIM.Connectors;
+using JIM.Connectors.Sql;
 using JIM.Models.Interfaces;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -226,6 +228,39 @@ public class SeedingIdempotencyTests
 
         Assert.That(_harness.CreatedConnectorDefinitions, Is.Empty, "an existing definition must never be re-created");
         Assert.That(_harness.CreatedActivities, Is.Empty, "a converged sync must record no Activities at all");
+    }
+
+    [Test]
+    public async Task SyncBuiltInConnectorDefinitionsAsync_DefinitionMissing_CarriesEachSettingsExampleAsync()
+    {
+        await _harness.Jim.Seeding.SyncBuiltInConnectorDefinitionsAsync();
+
+        var sql = _harness.CreatedConnectorDefinitions.Single(d => d.Name == ConnectorConstants.SqlConnectorName);
+        var objectTypes = sql.Settings.Single(s => s.Name == SqlConnectorConstants.SettingObjectTypes);
+        Assert.That(objectTypes.Example, Is.EqualTo(SqlConnectorConstants.ObjectTypesExample),
+            "the portal shows the example from the stored definition, so it must be copied there");
+    }
+
+    [Test]
+    public async Task SyncBuiltInConnectorDefinitionsAsync_SettingExampleChanged_UpdatesTheStoredExampleAsync()
+    {
+        foreach (var connector in SeedingServer.BuiltInConnectors())
+        {
+            var definition = new ConnectorDefinition { Id = _harness.ConnectorDefinitions.Count + 1, Name = connector.Name, BuiltIn = true };
+            SeedingServer.ApplyConnectorDeclarations((IConnectorCapabilities)connector, definition);
+            _harness.Jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition((IConnectorSettings)connector, definition);
+            _harness.ConnectorDefinitions[connector.Name] = definition;
+        }
+
+        // A deployment whose definition predates the setting's example.
+        var objectTypes = _harness.ConnectorDefinitions[ConnectorConstants.SqlConnectorName].Settings
+            .Single(s => s.Name == SqlConnectorConstants.SettingObjectTypes);
+        objectTypes.Example = null;
+
+        await _harness.Jim.Seeding.SyncBuiltInConnectorDefinitionsAsync();
+
+        Assert.That(objectTypes.Example, Is.EqualTo(SqlConnectorConstants.ObjectTypesExample),
+            "an example added or changed in a later release must reach an existing deployment");
     }
 
     [Test]

@@ -174,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The SQL Connector can now be configured in the portal: its required **Object Types** setting showed "Unknown setting type" instead of a field, so the JSON document describing your tables could only be set through REST or PowerShell. It is now a multi-line field with a complete example beneath it to copy, and saving with it empty is refused.
 - 🐛 A run queued behind a parallel Schedule step now waits for the step to finish. It used to start alongside it, so a hand-queued Full Import could run at the same time as the Schedule's Full Import of the same Connected System.
 - 🐛 A leaver whose end date passes, or a joiner whose start date arrives, is now processed by the next Delta Synchronisation once Temporal Scope Reconciliation has flagged them; until now only a Full Synchronisation applied the change, so a schedule of Delta Synchronisations never did.
 - 🐛 Sorting or searching an Activity's execution items by name no longer times out on large runs; a 40,000-item Display Name sort took 48 seconds and showed an error page.

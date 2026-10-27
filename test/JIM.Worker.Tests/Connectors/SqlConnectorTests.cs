@@ -369,8 +369,21 @@ public class SqlConnectorTests
             Assert.That(setting.Required, Is.True, "A Connected System with no object types can do nothing at all.");
             Assert.That(setting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Schema));
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.Text), "The document is multi-line, so it needs a Text setting rather than a String one.");
-            Assert.That(setting.Description, Does.Contain("objectTypes"), "The Description is where an administrator finds the shape and an example to copy.");
-            Assert.That(setting.Description, Does.Contain("anchorColumns"));
+            Assert.That(setting.Description, Does.Contain("anchorColumns"), "The Description is where an administrator finds the document's shape.");
+            Assert.That(setting.Example, Is.EqualTo(SqlConnectorConstants.ObjectTypesExample), "The example to copy is carried separately so the portal can show it as a code block.");
+            Assert.That(setting.Description, Does.Not.Contain(SqlConnectorConstants.ObjectTypesExample), "An example left inside the Description is rendered as one run-on paragraph.");
+        }
+    }
+
+    [Test]
+    public void GetSettings_DeltaImportMode_CarriesItsExampleSeparatelyFromItsDescription()
+    {
+        var setting = GetSetting(SqlConnectorConstants.SettingDeltaImportMode);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(setting.Example, Is.EqualTo(SqlConnectorConstants.DeltaConfigurationExample));
+            Assert.That(setting.Description, Does.Not.Contain(SqlConnectorConstants.DeltaConfigurationExample));
         }
     }
 

@@ -1,5 +1,7 @@
 @using JIM.Models.Staging
 @inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -94,21 +96,45 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
         }
     </div>
 }
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Text)
+{
+    @* A multi-line document the administrator writes by hand (the SQL Connector's Object Types, for one), so
+       the field is monospaced, grows with its content and does not spell-check what is code, not prose. *@
+    <div class="@CssClass">
+        <MudTextField T="string"
+                      Label="@SettingValue.Setting.Name"
+                      @bind-Value="SettingValue.StringValue"
+                      @bind-Value:after="NotifyValueChangedAsync"
+                      Immediate="@Immediate"
+                      Required="@IsRequired"
+                      RequiredError="@($"A {SettingValue.Setting.Name} is required")"
+                      HelperText="@SettingValue.Setting.Description"
+                      Lines="10"
+                      Sizing="InputSizing.Auto"
+                      MaxLines="30"
+                      Variant="Variant.Outlined"
+                      Class="jim-setting-text"
+                      UserAttributes="@(new Dictionary<string, object?> { ["spellcheck"] = "false" })" />
+        @SettingExample
+    </div>
+}
 else if (SettingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, DropDownValues: not null })
 {
-    <MudSelect @bind-Value="SettingValue.StringValue"
-               @bind-Value:after="NotifyValueChangedAsync"
-               HelperText="@SettingValue.Setting.Description"
-               Label="@SettingValue.Setting.Name"
-               Variant="Variant.Outlined"
-               Class="@CssClass"
-               Required="@SettingValue.Setting.Required"
-               RequiredError="@($"A {SettingValue.Setting.Name} is required")">
-        @foreach (var dropDownValue in SettingValue.Setting.DropDownValues)
-        {
-            <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
-        }
-    </MudSelect>
+    <div class="@CssClass">
+        <MudSelect @bind-Value="SettingValue.StringValue"
+                   @bind-Value:after="NotifyValueChangedAsync"
+                   HelperText="@SettingValue.Setting.Description"
+                   Label="@SettingValue.Setting.Name"
+                   Variant="Variant.Outlined"
+                   Required="@SettingValue.Setting.Required"
+                   RequiredError="@($"A {SettingValue.Setting.Name} is required")">
+            @foreach (var dropDownValue in SettingValue.Setting.DropDownValues)
+            {
+                <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
+            }
+        </MudSelect>
+        @SettingExample
+    </div>
 }
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Label)
 {
@@ -223,6 +249,49 @@ else
     public string? DirectoryServerTerm { get; set; }
 
     private bool _passwordVisible;
+
+    /// <summary>
+    /// The setting's Example, when the Connector supplies one: shown verbatim as a code block beneath the field,
+    /// with a Copy action, so an administrator writing a document by hand has a complete one to start from.
+    /// </summary>
+    private RenderFragment SettingExample => __builder =>
+    {
+        var example = SettingValue.Setting.Example;
+        if (string.IsNullOrWhiteSpace(example))
+            return;
+
+        <div class="jim-setting-example mt-2 mx-3" data-testid="jim-setting-example">
+            <div class="d-flex align-center justify-space-between">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Example</MudText>
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ContentCopy"
+                           OnClick="CopyExampleToClipboardAsync">Copy</MudButton>
+            </div>
+            <pre class="jim-code-block"><code>@((MarkupString)(IsJson(example) ? Helpers.HighlightJson(example) : System.Net.WebUtility.HtmlEncode(example)))</code></pre>
+        </div>
+    };
+
+    private static bool IsJson(string value)
+    {
+        var trimmed = value.TrimStart();
+        return trimmed.StartsWith('{') || trimmed.StartsWith('[');
+    }
+
+    private async Task CopyExampleToClipboardAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", SettingValue.Setting.Example);
+            Snackbar.Add("Example copied to clipboard.", Severity.Info);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("Failed to copy to clipboard. Please copy manually.", Severity.Warning);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is nobody left to tell.
+        }
+    }
 
     private Task NotifyValueChangedAsync()
     {

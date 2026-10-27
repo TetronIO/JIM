@@ -163,7 +163,6 @@ public static class ConnectorSettingValidator
             ConnectedSystemSettingType.Heading => true,
             ConnectedSystemSettingType.Label => true,
             ConnectedSystemSettingType.Divider => true,
-            ConnectedSystemSettingType.Text => true,
             _ => !string.IsNullOrEmpty(settingValue.StringValue)
         };
     }
