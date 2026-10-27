@@ -169,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The Operations History side panel now shows why an execution completed with a warning, beneath its status, where it showed the status alone and the reason was only on the Activity page.
 - 🐛 A portal tab that stops responding, such as one frozen in the background, no longer leaves errors in JIM.Web's log when its page is closed. Lists now finish closing cleanly, and the remaining "Unhandled exception in circuit" entry is logged as a warning, as it already was for a browser that had disconnected.
 - 🐛 `Connect-JIM` signs in with AD FS. JIM advertised the Web API's bare identifier (`api://{id}`) as a scope, which AD FS splits at its last slash and refuses with MSIS9602, so the sign-in in the browser ended in an error. With an AD FS authority, JIM now asks for the identifier's `openid` scope (`api://{id}/openid`), the form AD FS reads as the resource. (#2441)
 - 🐛 The Logs page no longer shows a database query JIM cancelled on purpose, such as when someone leaves a page before it finishes loading, as an error: PostgreSQL's "canceling statement due to user request" now shows at Debug. A query stopped by the statement timeout is still an error.

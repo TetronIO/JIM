@@ -297,6 +297,46 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
+    public void OperationsHistoryTab_ActivityWithAWarningSelected_ShowsEachWarningInThePanel()
+    {
+        // The panel's status chip said Complete With Warning but not why: the reason was only on the Activity page.
+        var activity = RunProfileExecution("Glitterband EMEA", "Export", ActivityStatus.CompleteWithWarning);
+        activity.WarningMessage = "Memory was low while this ran.\n\nJIM couldn't probe Panoply AD for values already in use.";
+        ArrangeWindow([activity], 1);
+
+        var cut = Render<OperationsHistoryTab>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Glitterband EMEA")));
+        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Glitterband EMEA")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var warnings = cut.FindComponents<MudBlazor.MudAlert>().Where(a => a.Instance.Severity == MudBlazor.Severity.Warning).ToList();
+            Assert.That(warnings, Has.Count.EqualTo(1), "the panel must carry the Activity's warning");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(warnings[0].Markup, Does.Contain("Memory was low while this ran."));
+                Assert.That(warnings[0].Markup, Does.Contain("JIM couldn&#x27;t probe Panoply AD").Or.Contain("JIM couldn't probe Panoply AD"));
+            }
+        });
+    }
+
+    [Test]
+    public void OperationsHistoryTab_ActivityWithoutAWarningSelected_ShowsNoWarning()
+    {
+        ArrangeWindow([RunProfileExecution("Glitterband EMEA", "Export", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsHistoryTab>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Glitterband EMEA")));
+        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Glitterband EMEA")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("View Full Details"), "the panel did not open");
+            Assert.That(cut.FindComponents<MudBlazor.MudAlert>().Where(a => a.Instance.Severity == MudBlazor.Severity.Warning), Is.Empty);
+        });
+    }
+
+    [Test]
     public void OperationsHistoryTab_MetaverseObjectActivityForADeletedObject_NamesItWithoutALink()
     {
         var metaverseObjectId = Guid.NewGuid();

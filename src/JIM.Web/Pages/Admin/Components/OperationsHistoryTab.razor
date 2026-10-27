@@ -478,6 +478,17 @@
                 </MudChip>
             </div>
 
+            @* Why the run warned, beneath the status it explains; one line per warning, as on the Activity page. *@
+            @if (!string.IsNullOrWhiteSpace(_selectedActivity.WarningMessage))
+            {
+                <MudAlert Severity="Severity.Warning">
+                    @foreach (var warningLine in _selectedActivity.WarningMessage.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        <MudText Typo="Typo.body1">@warningLine</MudText>
+                    }
+                </MudAlert>
+            }
+
             @* Schedule context; renders nothing unless a Schedule produced this Activity. *@
             <ActivityScheduleContext ScheduleExecutionId="_selectedActivity.ScheduleExecutionId"
                                      ScheduleStepIndex="_selectedActivity.ScheduleStepIndex"
