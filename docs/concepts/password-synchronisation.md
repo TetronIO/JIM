@@ -22,7 +22,7 @@ That is also why there is no way to remove a configuration, only to disable it. 
 
 How long a change waits before JIM gives up on it is the Connected System's **initial password time to live** setting, shared with initial password provisioning: the question both are asking is how long that system may be unavailable before JIM stops trying, and the answer is a property of the system.
 
-## ▶️ Setting a password
+## Setting a password
 
 JIM has one operation for giving somebody a password, **Set Password**, and you aim it one of two ways. Both go through the same queue, the same delivery service, the same retries and the same history; what differs is where the password goes, and so what the sensible defaults are.
 

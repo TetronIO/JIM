@@ -170,7 +170,13 @@ $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'ST
 $script:UnmarkableRules = @('EXC-1', 'MNT-3', 'PRI-1')
 $script:Tiers = @('Block', 'Ratchet', 'Warn')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
-$script:EmojiRegex = [regex]::new('(?:[\u2600-\u27BF]|[\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDEFF])\uFE0F?')
+# STY-1. Three kinds of emoji: the pictograph blocks (Misc Symbols, Dingbats, and the
+# supplementary pictographs as UTF-16 pairs); the scattered characters that default to emoji
+# presentation (a play button, a return arrow, an information sign); and any character a
+# variation selector (U+FE0F) asks to draw as emoji. Typographic symbols such as an arrow,
+# a trademark or a copyright sign pass unless that selector follows them.
+# scripts/Test-DocsSite.ps1 scans the built site with the same pattern; keep the two in step.
+$script:EmojiRegex = [regex]::new('(?:(?:[\u2600-\u27BF\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA\u2139\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u21A9\u21AA\u2934\u2935\u3030\u303D\u3297\u3299\u203C\u2049]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDEFF])\uFE0F?|[^\s\uFE0F]\uFE0F)')
 
 # ---------------------------------------------------------------------------
 # Configuration, baseline and nav
@@ -1064,9 +1070,7 @@ function Test-Language {
             New-Finding 'LANG-8' $p.Line "a link to a GitHub issue or pull request; a public page leaves JIM's own workings out (VOI-4)."
         }
 
-        # STY-1: emoji, matched by block (Misc Symbols, Dingbats, the supplementary pictographs as
-        # UTF-16 pairs, and the few pictographs elsewhere), each with an optional variation selector
-        # so a warning sign counts once. Typographic symbols (trademark, copyright, arrows) pass.
+        # STY-1 (the pattern is described where $script:EmojiRegex is defined).
         foreach ($m in $script:EmojiRegex.Matches($text)) {
             New-Finding 'STY-1' $p.Line "an emoji ('$($m.Value)'); use a Material Design icon instead, such as :material-check-circle-outline:{ .jim-yes role=`"img`" aria-label=`"Yes`" } for a tick in a table (see STY-1 and STY-3)."
         }

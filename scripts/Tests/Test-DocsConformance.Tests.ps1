@@ -897,8 +897,23 @@ Describe 'Test-DocsConformance: STY-1 no emoji' {
         @($r.Output -split "`n" | Where-Object { $_ -match 'STY-1' }).Count | Should -Be 1
     }
 
+    It 'fails an emoji outside the pictograph blocks, such as a play button or a return arrow' {
+        $body = "## $([char]0x25B6)$([char]0xFE0F) Setting a password`n`nText.`n`n## $([char]0x21A9)$([char]0xFE0F) Rolling back`n`nText.`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        @($r.Output -split "`n" | Where-Object { $_ -match 'STY-1' }).Count | Should -Be 2
+    }
+
+    It 'fails any character given emoji presentation by a variation selector' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Licensed $([char]0x00A9)$([char]0xFE0F) Tetron.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'STY-1'
+    }
+
     It 'passes Material icons, typographic symbols, and emoji in code' {
-        $body = "## :material-layers-outline: Architecture`n`n| Export | :material-check-circle-outline:{ .jim-yes } |`n|---|---|`n`nJIM$([char]0x2122) $([char]0x00A9) Tetron.`n`nRun ``echo $([char]0x2705)`` to test.`n`n``````text`n$([char]0x2705) done`n```````n"
+        $body = "## :material-layers-outline: Architecture`n`n| Export | :material-check-circle-outline:{ .jim-yes } |`n|---|---|`n`nJIM$([char]0x2122) $([char]0x00A9) Tetron. Import $([char]0x2192) Sync $([char]0x2194) Export.`n`nRun ``echo $([char]0x2705)`` to test.`n`n``````text`n$([char]0x2705) done`n```````n"
         $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
         (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
     }

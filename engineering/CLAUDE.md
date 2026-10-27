@@ -261,6 +261,7 @@ The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format
 The changelog is a **customer-facing product document**. The audience is administrators and decision-makers wanting to know what's new. Entries should make JIM appear useful, reliable, sophisticated, and exciting; written with light product/marketing polish that conveys a capable team shipping a great product.
 - Write entries as product changes, not developer notes: focus on the benefit or outcome, not the implementation detail
 - Use a leading emoji per entry to add energy and visual scanning context (e.g. ✨ for new features, 🐛 for fixes, ⚡ for performance, 🔒 for security)
+- The emoji stay in `CHANGELOG.md` and the GitHub release notes; the docs site's Changelog page strips them (`docs/hooks/changelog.py`), because the docs site uses no emoji (STY-1)
 - Do NOT include: internal refactoring, test changes, developer tooling, CI/CD tweaks, or anything that has no user-facing impact
 - Trivial changes (renamed a CSS class, moved a file, updated a comment) do NOT belong in the changelog
 
