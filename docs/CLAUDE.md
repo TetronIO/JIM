@@ -89,7 +89,7 @@ Nothing else is needed. They are clickable automatically (see "Diagram lightbox"
 
 ## Generated diagrams (`jim-diagram`)
 
-A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. Six archetypes are available: **flow**, **lifecycle**, **anatomy**, **decision**, **comparison** and **map**. Pick the one that matches what the page explains, and draw from the page's own words. A flow is something that processes, with steps and branches:
+A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/done/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. Six archetypes are available: **flow**, **lifecycle**, **anatomy**, **decision**, **comparison** and **map**. Pick the one that matches what the page explains, and draw from the page's own words. A flow is something that processes, with steps and branches:
 
 ````markdown
 ```jim-diagram

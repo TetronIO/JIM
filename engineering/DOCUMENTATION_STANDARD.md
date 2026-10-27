@@ -75,7 +75,7 @@ A rule that is wrong for one place is excused in that place, with a reason the n
 
 ### Conformant pages, priority pages, promotion
 
-- A page listed under `ConformantPages`, or inside a folder listed under `ConformantFolders`, has been migrated to this standard. It carries no baseline: its Ratchet findings fail outright. A page or folder is added once every page declares its type and has no baseline entries, and is never taken off again. The one exception is a Ratchet rule introduced after its pages were conformant, listed under `BaselineOnConformant` (VIS-1): it keeps its baseline on conformant pages too, so the pages that predate it are held at their debt while a new page must meet it from its first commit.
+- A page listed under `ConformantPages`, or inside a folder listed under `ConformantFolders`, has been migrated to this standard. It carries no baseline: its Ratchet findings fail outright. A page or folder is added once every page declares its type and has no baseline entries, and is never taken off again. The one exception is a Ratchet rule introduced after its pages were conformant, listed under `BaselineOnConformant`: it keeps its baseline on conformant pages too, so the pages that predate it are held at their debt while a new page must meet it from its first commit.
 - A **priority page** ([Priority pages and tutorials](#priority-pages-and-tutorials)) that is conformant is held higher still: its warnings fail too, and its size budget is 3,000 words rather than 5,000.
 - A Warn rule is promoted (to Ratchet or Block) by editing `config.psd1`, once it has run for a release without a false positive. A rule that produces a false positive it cannot be configured out of is demoted, not tolerated.
 
@@ -212,7 +212,7 @@ A diagram gives the reader the shape of a subject (what flows where, which state
 
 | ID | Tier | Rule |
 |----|------|------|
-| **VIS-1** | Ratchet | The page has at least one diagram: a `jim-diagram` spec, a concept diagram included from `assets/diagrams/` (`--8<-- "assets/diagrams/<name>.svg"`), an inline `<svg class="jim-diagram">`, or a Mermaid diagram. One shown inside another code block, as an example of how to write one, does not count. The Changelog page is excused in place, since its entries are generated from `CHANGELOG.md`. A new page has its diagram from its first commit. |
+| **VIS-1** | Block | The page has at least one diagram: a `jim-diagram` spec, a concept diagram included from `assets/diagrams/` (`--8<-- "assets/diagrams/<name>.svg"`), an inline `<svg class="jim-diagram">`, or a Mermaid diagram. One shown inside another code block, as an example of how to write one, does not count. The Changelog page is excused in place, since its entries are generated from `CHANGELOG.md`. A new page has its diagram from its first commit. |
 | **VIS-2** | Review | A section whose text describes a flow of three or more steps or components, a lifecycle of states, relationships among three or more things, a decision that branches, or a precedence or ordering, has a diagram. A list of settings, a single step, or anything a table already says better, does not need one. |
 | **VIS-3** | Review | A diagram carries information specific to its page: the page's own steps, states, objects and outcomes, named as the page names them. No decorative or generic diagrams; one that would sit as well on any other page of its section is generic. |
 | **VIS-4** | Review | What a diagram shows matches the page's text and the product: the same steps in the same order, the same names, the same outcomes, and nothing the product does not do. This is ACC-4 for pictures: check a diagram against the source as you would a sentence, and change the diagram and the text in the same edit. |
@@ -321,7 +321,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | A11Y-1 | Mermaid diagrams carry accTitle and accDescr | Block | `Test-DocsConformance.ps1` |
 | A11Y-2 | Images and diagrams carry text alternatives | Block | `Test-DocsConformance.ps1` |
 | A11Y-3 | Meaningful link text | Review | |
-| VIS-1 | At least one diagram on every page | Ratchet | `Test-DocsConformance.ps1` |
+| VIS-1 | At least one diagram on every page | Block | `Test-DocsConformance.ps1` |
 | VIS-2 | A diagram where a section describes a shape | Review | |
 | VIS-3 | Diagrams specific to their page, never decorative | Review | |
 | VIS-4 | Diagrams match the text and the product | Review | |

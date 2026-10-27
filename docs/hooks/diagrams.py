@@ -14,7 +14,7 @@ An author writes a diagram as a short spec, in the page, where it belongs:
 
 and this hook replaces the fence with the diagram before Markdown is converted.
 Each spec names an archetype (a flow, for now; the others follow in later
-phases of engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md), and the archetype
+phases of engineering/plans/done/DOCS_DIAGRAM_ON_EVERY_PAGE.md), and the archetype
 owns the layout, so the author only supplies what the diagram says.
 
 Every diagram is drawn twice: a wide layout, 800 units across, drawn at close

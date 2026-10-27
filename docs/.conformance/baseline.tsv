@@ -1,14 +1,3 @@
 # Docs conformance baseline: the existing debt each Ratchet rule allows, per page. Counts only ever fall.
 # Lock in an improvement with: pwsh ./scripts/Test-DocsConformance.ps1 -UpdateBaseline
 # The rules are defined in engineering/DOCUMENTATION_STANDARD.md. Columns: rule <TAB> page (relative to docs/) <TAB> count.
-VIS-1	connectors/jim-file-connector.md	1
-VIS-1	connectors/jim-scim-connector-keycloak.md	1
-VIS-1	connectors/jim-scim-connector.md	1
-VIS-1	connectors/jim-scim-service-provider-connector-identity-providers.md	1
-VIS-1	connectors/jim-sql-connector-delta-import-change-log.md	1
-VIS-1	connectors/jim-sql-connector-delta-import-watermark.md	1
-VIS-1	connectors/jim-sql-connector-examples.md	1
-VIS-1	connectors/jim-sql-connector-security.md	1
-VIS-1	connectors/jim-sql-connector-troubleshooting.md	1
-VIS-1	connectors/jim-sql-connector-values-in-use.md	1
-VIS-1	connectors/jim-sql-connector.md	1
