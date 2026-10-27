@@ -14,7 +14,7 @@ The API key cmdlets manage the full lifecycle of API keys used for non-interacti
 
 ---
 
-## Get-JIMApiKey
+## :material-key-outline: Get-JIMApiKey
 
 Retrieves API key information. The full key value is never returned; only the key prefix is shown for identification.
 
@@ -72,7 +72,7 @@ Get-JIMApiKey -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 ---
 
-## New-JIMApiKey
+## :material-key-plus: New-JIMApiKey
 
 Creates a new API key for non-interactive authentication.
 
@@ -139,7 +139,7 @@ $key.Key  # Full key value; store this securely
 
 ---
 
-## Set-JIMApiKey
+## :material-key-change: Set-JIMApiKey
 
 Updates an existing API key's name, description, roles, expiry, or enabled status. The key value itself cannot be changed.
 
@@ -199,7 +199,7 @@ Get-JIMApiKey | Where-Object { $_.ExpiresAt -and $_.ExpiresAt -lt (Get-Date) } |
 
 ---
 
-## Remove-JIMApiKey
+## :material-key-remove: Remove-JIMApiKey
 
 Permanently deletes an API key. Any requests using this key will fail immediately after deletion.
 
@@ -254,7 +254,7 @@ Get-JIMApiKey | Where-Object { $_.Name -like "temp-*" } | Remove-JIMApiKey -Forc
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [API Keys](../configuration/api-keys.md): what API keys are, how they're managed, and the surfaces (UI, PowerShell, REST API) for working with them
 - [Connection](connection.md): establishing and managing connections to JIM

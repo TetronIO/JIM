@@ -11,7 +11,7 @@ Cmdlets for querying Configuration Change History, querying deleted objects, sea
 
 ---
 
-## Get-JIMConfigurationChangeHistory
+## :material-history: Get-JIMConfigurationChangeHistory
 
 Retrieves the recorded configuration changes for a Synchronisation Rule, Connected System, Schedule, Service Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, Role, Predefined Search, Connector Definition, Example Data Set, or Example Data Template. Every create, update, and delete is captured as a complete, versioned snapshot carried on its Activity, so you can see exactly what changed, when, and who changed it. Three retrieval modes are supported: a paged summary list (default), a single version with its diff against the previous version (`-Version`), and a comparison of any two versions (`-CompareFrom` / `-CompareTo`). Sensitive values (for example encrypted Connected System settings) are never returned; a changed secret is reported only as changed, never by value. An API Key's history stores only its metadata and Role assignments; the key secret is never returned in any form, not even as a hash. A Role's history covers both its definition and its static membership, so each member add or remove appears as its own version. A Predefined Search's history also covers its criteria groups and criteria: each add, edit, or removal rolls up into a version on the owning search. A Connector Definition's history covers its capabilities, setting definitions, and files, so a capability or setting shipped in an updated connector appears as its own version; a file's contents are fingerprinted by hash, never returned. An Example Data Set's history records only its metadata and value count (never the individual values), and an Example Data Template's history covers its object-type and attribute configuration; a template's data-generation runs are a separate operational activity, not part of its configuration history.
 
@@ -165,7 +165,7 @@ Get-JIMConfigurationChangeHistory -Type ExampleDataSet -Id 5
 
 ---
 
-## Get-JIMDeletedObject
+## :material-delete-outline: Get-JIMDeletedObject
 
 Retrieves deleted objects from the audit trail. Supports filtering by object type, date range, and search terms, with paginated results for efficient browsing of large deletion histories.
 
@@ -244,7 +244,7 @@ Get-JIMDeletedObject -Page 3 -PageSize 100
 
 ---
 
-## Search-JIMMetaverseObjectChange
+## :material-text-search: Search-JIMMetaverseObjectChange
 
 Searches changes to Metaverse Objects across every object, newest first: by when they were made, by Metaverse Object Type, by display name, and by how named attributes changed. Use it to answer questions such as "who was disabled this month?" or "who moved out of Finance?" without knowing which objects to look at. Each result names the object (including objects since deleted), the Activity the change was made in, and every attribute the change touched, with the values added and removed.
 
@@ -329,7 +329,7 @@ Search-JIMMetaverseObjectChange -DisplayName 'Ana Ruiz' -Attribute 'Manager' -Al
 
 ---
 
-## Get-JIMConnectedSystemObjectChangeValue
+## :material-file-compare: Get-JIMConnectedSystemObjectChangeValue
 
 Gets every value change one Connected System Object change recorded for one attribute, a page at a time. Change history (`Get-JIMConnectedSystemObjectChangeHistory`) and an execution item's changes (`Get-JIMActivityExecutionItem`) return each changed attribute's first ten value changes and, in `valueChangeTotal`, how many there are. A change to a large group can record one value change per member, so read the rest with this cmdlet, naming the change by the `id` change history returns. A change to an object since deleted can still be read.
 
@@ -391,7 +391,7 @@ Get-JIMConnectedSystemObjectChangeValue -ChangeId "a1b2c3d4-0000-0000-0000-00000
 
 ---
 
-## Get-JIMMetaverseObjectChangeValue
+## :material-compare-horizontal: Get-JIMMetaverseObjectChangeValue
 
 Gets every value change one Metaverse Object change recorded for one attribute, a page at a time. Change history (`Get-JIMMetaverseObjectChangeHistory`), the change search (`Search-JIMMetaverseObjectChange`) and an execution item's changes (`Get-JIMActivityExecutionItem`) return each changed attribute's first ten value changes and, in `valueChangeTotal`, how many there are. A change to a large group can record one value change per member, so read the rest with this cmdlet, naming the change by the `id` change history returns. A change to an object since deleted can still be read.
 
@@ -453,7 +453,7 @@ Get-JIMMetaverseObjectChangeValue -ChangeId $change.id -AttributeName 'Static Me
 
 ---
 
-## Get-JIMHistoryCount
+## :material-counter: Get-JIMHistoryCount
 
 Gets the count of change history records for a Connected System. Useful for monitoring history growth and planning cleanup operations.
 
@@ -509,7 +509,7 @@ Get-JIMConnectedSystem |
 
 ---
 
-## Invoke-JIMHistoryCleanup
+## :material-broom: Invoke-JIMHistoryCleanup
 
 Runs a history retention pass on demand. Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, Configuration Change Previews, Activities, and Pending Password Changes that reached a terminal state (including a provisioned Connected System Object's initial password). Records still being worked are never removed, however old.
 
@@ -579,7 +579,7 @@ Invoke-JIMHistoryCleanup -PassThru |
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [API reference](../api/index.md): the Scalar API reference (linked from the API index) covers the history endpoints
 - [Activities](activities.md): cmdlets for querying activity logs and execution history

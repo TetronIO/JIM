@@ -13,7 +13,7 @@ In about 30 minutes, you take 25 people from an HR system's file, bring them int
 
 Both systems are files, read and written by the JIM File Connector, so you need nothing but JIM itself: this works on an evaluation installation with no network access. Every step is shown in the portal and in PowerShell; follow either, or switch between them.
 
-## Before you begin
+## :material-clipboard-list-outline: Before you begin
 
 - **JIM is installed and running,** and you can sign in to the portal as an administrator. [Quick Start](quickstart.md) covers installing it.
 - **For the PowerShell steps,** the JIM PowerShell module is installed and connected to your JIM, as [PowerShell Module](quickstart.md#powershell-module) describes:
@@ -25,7 +25,7 @@ Both systems are files, read and written by the JIM File Connector, so you need 
 - **You can run commands on the server JIM runs on,** to copy the two sample files into JIM.
 - **You have downloaded the two sample files:** [hr-people.csv](../assets/tutorial/hr-people.csv), the HR system's 25 people, and [staff-directory.csv](../assets/tutorial/staff-directory.csv), the staff directory JIM writes to, which holds only its column headings.
 
-## Step 1: Put the sample files where JIM can read them
+## :material-folder-outline: Step 1: Put the sample files where JIM can read them
 
 The File Connector reads and writes files under `/connector-files`, a folder in JIM's own storage. From the folder you downloaded the files to, copy them into a `tutorial` folder there:
 
@@ -45,7 +45,7 @@ The File Connector reads and writes files under `/connector-files`, a folder in 
     sudo podman exec -i jim-worker sh -c 'cat > /connector-files/tutorial/staff-directory.csv' < staff-directory.csv
     ```
 
-## Step 2: Connect JIM to the HR system
+## :material-file-document-outline: Step 2: Connect JIM to the HR system
 
 A Connected System is one system JIM exchanges data with. Create one for the HR file, say where the file is, and choose which of its columns JIM manages. Each person is identified by their `employeeId`, which becomes the External ID.
 
@@ -81,7 +81,7 @@ A Connected System is one system JIM exchanges data with. Create one for the HR 
     Set-JIMConnectedSystemAttribute -ConnectedSystemId $hrSystem.Id -ObjectTypeId $hrEmployee.Id -AttributeUpdates $selection | Out-Null
     ```
 
-## Step 3: Connect JIM to the staff directory
+## :material-server-network-outline: Step 3: Connect JIM to the staff directory
 
 Create a second Connected System for the staff directory file. JIM only writes to this one, so its **Mode** is **Export Only**: JIM writes each change to the file and treats it as confirmed, without reading the file back.
 
@@ -113,7 +113,7 @@ Create a second Connected System for the staff directory file. JIM only writes t
     Set-JIMConnectedSystemAttribute -ConnectedSystemId $directory.Id -ObjectTypeId $directoryEmployee.Id -AttributeUpdates $selection | Out-Null
     ```
 
-## Step 4: Bring the HR system's people into the Metaverse
+## :material-hub-outline: Step 4: Bring the HR system's people into the Metaverse
 
 First, tell JIM how to recognise a person it already holds. An Object Matching Rule on the HR System says that an HR record and a Metaverse Object are the same person when the record's `employeeId` equals the Metaverse Object's Employee ID. On this first run nobody matches, but run the steps again and JIM finds the people it already has, rather than creating them twice.
 
@@ -162,7 +162,7 @@ Then create a Synchronisation Rule, which says how data flows between a Connecte
     }
     ```
 
-## Step 5: Send the people to the staff directory
+## :material-export: Step 5: Send the people to the staff directory
 
 The second Synchronisation Rule is an export rule: for each User in the Metaverse, it creates an entry in the staff directory (provisioning), and writes five of the person's attributes to it.
 
@@ -207,7 +207,7 @@ It has a scope, too. Your JIM most likely holds one User already: you, the admin
         -ComparisonType StartsWith -StringValue 'HR-' | Out-Null
     ```
 
-## Step 6: Create the Run Profiles
+## :material-play-circle-outline: Step 6: Create the Run Profiles
 
 A Run Profile is one operation JIM runs against a Connected System. You need three: a Full Import to read the HR file, a Full Synchronisation to apply the rules, and an Export to write the staff directory. Each one reads or writes the file its Connected System names, so leave **File Path** empty on all three.
 
@@ -226,7 +226,7 @@ A Run Profile is one operation JIM runs against a Connected System. You need thr
     New-JIMRunProfile -ConnectedSystemName 'Staff Directory' -Name 'Export' -RunType Export | Out-Null
     ```
 
-## Step 7: Import the HR file
+## :material-import: Step 7: Import the HR file
 
 Run the Full Import. JIM reads the file and holds each row as a Connected System Object in the HR System's Connector Space, its own copy of what the HR system says.
 
@@ -245,7 +245,7 @@ Run the Full Import. JIM reads the file and holds each row as a Connected System
 <!-- checkpoint: (Get-JIMConnectedSystemObject -ConnectedSystemId $hrSystem.Id -Count) -eq 25 -->
 The HR System's Connector Space holds 25 Connected System Objects, which its **Connector Space** button counts.
 
-## Step 8: Synchronise
+## :material-sync: Step 8: Synchronise
 
 Run the Full Synchronisation. JIM applies both Synchronisation Rules: the import rule projects each person into the Metaverse, and the export rule finds that each of them belongs in the staff directory, so it stages an entry for each as a Pending Export.
 
@@ -267,7 +267,7 @@ Run the Full Synchronisation. JIM applies both Synchronisation Rules: the import
 <!-- checkpoint: (Get-JIMPendingExport -ConnectedSystemId $directory.Id -Count) -eq 25 -->
 JIM has projected 25 Metaverse Objects, Amara Okafor (`HR-1001`) among them, and the Staff Directory has 25 Pending Exports waiting, which its **Pending Exports** button counts. Nothing has been written to the staff directory yet.
 
-## Step 9: Export to the staff directory
+## :material-flag-checkered: Step 9: Export to the staff directory
 
 Run the Export. JIM writes each Pending Export to the staff directory file.
 
@@ -300,7 +300,7 @@ Then look at the file JIM wrote:
 <!-- checkpoint-file: /connector-files/tutorial/staff-directory.csv rows=25 -->
 The Staff Directory has no Pending Exports left, and its file lists all 25 people, one row each, with the five columns the export rule writes.
 
-## What you achieved
+## :material-trophy-outline: What you achieved
 
 You connected JIM to two systems and synchronised 25 identities from one to the other, through the Metaverse:
 

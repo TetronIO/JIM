@@ -11,7 +11,7 @@ The scoping criteria cmdlets decide which objects a Synchronisation Rule process
 
 ---
 
-## Get-JIMScopingCriteria
+## :material-filter-outline: Get-JIMScopingCriteria
 
 Gets a Synchronisation Rule's scoping criteria: its top-level groups, each with the criteria and child groups inside it, or one group by ID.
 
@@ -59,7 +59,7 @@ Get-JIMSyncRule -Id 5 | Get-JIMScopingCriteria
 
 ---
 
-## New-JIMScopingCriteriaGroup
+## :material-filter-plus-outline: New-JIMScopingCriteriaGroup
 
 Creates a scoping criteria group on a Synchronisation Rule, at the top level or inside another group. A group is met when everything in it is (`All`), or when one thing in it is (`Any`).
 
@@ -105,7 +105,7 @@ New-JIMScopingCriteriaGroup -SyncRuleId 5 -Type All -Position 1
 
 ---
 
-## Set-JIMScopingCriteriaGroup
+## :material-filter-cog-outline: Set-JIMScopingCriteriaGroup
 
 Changes how a scoping criteria group combines what it contains, or where it sits among the groups beside it.
 
@@ -147,7 +147,7 @@ Set-JIMScopingCriteriaGroup -SyncRuleId 5 -GroupId 2 -Position 3
 
 ---
 
-## Remove-JIMScopingCriteriaGroup
+## :material-filter-remove-outline: Remove-JIMScopingCriteriaGroup
 
 Deletes a scoping criteria group, with every criterion and child group inside it. It cannot be undone.
 
@@ -182,7 +182,7 @@ Remove-JIMScopingCriteriaGroup -SyncRuleId 5 -GroupId 2
 
 ---
 
-## New-JIMScopingCriterion
+## :material-plus-circle-outline: New-JIMScopingCriterion
 
 Adds a criterion to a scoping criteria group: one attribute compared with one value. Name a Metaverse attribute on an export Synchronisation Rule, and a Connected System attribute on an import one.
 
@@ -320,7 +320,7 @@ New-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 `
 
 ---
 
-## Set-JIMScopingCriterion
+## :material-pencil-outline: Set-JIMScopingCriterion
 
 Replaces a criterion in a scoping criteria group: its attribute, comparison and value all come from what you give, as with `New-JIMScopingCriterion`. Its case sensitivity is the exception: without `-CaseSensitive`, the criterion keeps its current setting.
 
@@ -393,7 +393,7 @@ Set-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 -CriterionId 12 `
 
 ---
 
-## Remove-JIMScopingCriterion
+## :material-minus-circle-outline: Remove-JIMScopingCriterion
 
 Deletes a criterion from a scoping criteria group.
 
@@ -429,7 +429,7 @@ Remove-JIMScopingCriterion -SyncRuleId 5 -GroupId 2 -CriterionId 7
 
 ---
 
-## Test-JIMScope
+## :material-test-tube: Test-JIMScope
 
 Tests whether an object would be in scope of a Synchronisation Rule, criterion by criterion, as of a chosen time, and when that would change. See [Testing a scope](../configuration/scoping-criteria.md#testing-a-scope).
 
@@ -489,7 +489,7 @@ Test-JIMScope -SyncRuleId 12 -ConnectedSystemObjectId '0b0e1c5a-6d3a-4c7e-9a43-6
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Scoping Criteria](../configuration/scoping-criteria.md): how criteria are evaluated, multi-valued attributes, relative dates and what happens to objects that leave scope
 - [Previews](previews.md#new-jimconfigurationchangepreview): preview a change to a Synchronisation Rule's scoping criteria before making it

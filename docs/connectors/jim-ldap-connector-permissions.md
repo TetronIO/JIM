@@ -27,7 +27,7 @@ The LDAP service account used by JIM should follow the principle of least privil
 
 The bullets above say what access JIM needs; the three subsections below are the concrete recipes for granting it. Active Directory delegates on a container, through control access rights and inheritable access control entries. OpenLDAP has none of that machinery: permissions come from `olcAccess` rules on the directory's own configuration. 389 Directory Server keeps access control instructions as `aci` values on the entries themselves. The mechanics differ; the goal, least privilege, does not.
 
-## Active Directory
+## :material-microsoft-windows: Active Directory
 
 Bind JIM as a dedicated account, never a Domain Admin. An ordinary user object is enough; JIM needs no rights at all outside the branch it manages.
 
@@ -68,7 +68,7 @@ List Contents and Read Property are what the tombstone search needs, and JIM onl
 
 Read over the Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`) stays optional and is deliberately not in the entries above. Without it JIM reports that it could not tell whether Fine-Grained Password Policies exist, and treats the domain policy as a floor; with it, the Password Channel panel gives a definite answer.
 
-## OpenLDAP
+## :material-server-outline: OpenLDAP
 
 Bind JIM as a dedicated service account, never the directory's rootDN. Any entry with a `userPassword` attribute can bind; a typical shape is an `organizationalRole` plus `simpleSecurityObject` entry such as `cn=svc-jim,ou=Services,dc=example,dc=com`.
 
@@ -120,7 +120,7 @@ JIM discovers the `ppolicy` overlay's default policy (see [Password policy disco
 --8<-- "test/integration/docker/openldap/acl/jim-ppolicy-overlay.ldif"
 ```
 
-## 389 Directory Server
+## :material-folder-network-outline: 389 Directory Server
 
 Bind JIM as a dedicated service account, never `cn=Directory Manager`. Any entry with a `userPassword` attribute can bind; `cn=svc-jim,ou=Services,dc=example,dc=com` is the shape. The Directory Manager bypasses every access control instruction and the password policy, which is exactly why it is the wrong identity for JIM.
 

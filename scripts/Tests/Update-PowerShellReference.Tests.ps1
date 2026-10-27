@@ -1153,6 +1153,15 @@ Describe 'Update-PowerShellReference -Check' {
         $result.Output | Should -Match 'END'
     }
 
+    It 'names the page of a cmdlet section whose heading opens with an icon (STY-3)' {
+        $page = "# Widgets`n`n" + (New-Section 'Get-JIMWidget') + "`n## :material-delete-outline: Remove-JIMWidget`n`nHand-written, not generated yet.`n"
+        $fixture = New-Fixture -Pages @{ 'widgets.md' = $page }
+        Invoke-Generator $fixture | Out-Null
+        $result = Invoke-Generator $fixture -Check
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'widgets\.md.*Remove-JIMWidget has no generated block;'
+    }
+
     It 'fails on a cmdlet section with no block, naming the page and the cmdlet, and leaves the section alone' {
         $page = "# Widgets`n`n" + (New-Section 'Get-JIMWidget') + "`n## Remove-JIMWidget`n`nHand-written, not generated yet.`n"
         $fixture = New-Fixture -Pages @{ 'widgets.md' = $page }

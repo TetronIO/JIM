@@ -12,7 +12,7 @@ An **activity** is a tracked operation in JIM. Every significant action creates 
 
 Activities are the primary mechanism for monitoring synchronisation progress and troubleshooting issues. Run Profile activities additionally include detailed per-object execution items, so you can drill from a high-level "5 errors" counter down to the specific objects that failed.
 
-## Lifecycle
+## :material-progress-clock: Lifecycle
 
 Activities move through a small set of statuses:
 
@@ -25,11 +25,11 @@ Activities move through a small set of statuses:
 
 [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md) explains each warning and error.
 
-## Initiated by
+## :material-account-arrow-right-outline: Initiated by
 
 Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, the system itself, or an unidentified, unauthenticated caller (**Anonymous**) for a failed sign-in, API key or SSO access token attempt. This is the audit trail. An activity a Schedule produced names the Schedule, with **(Schedule)** beside it, and links the Schedule Execution while it is kept; **System** is JIM's own work, such as seeding and housekeeping. Each kind has one icon, the same on every page that shows it.
 
-## Summary statistics
+## :material-chart-box-outline: Summary statistics
 
 Activities for Run Profile executions carry counters relevant to the operation type, named here as the REST API and `Get-JIMActivity` return them:
 
@@ -69,11 +69,11 @@ When a Full Import activity's deletion detection is refused, it completes as **C
 
 A refused detection also means the run does not count as a successful Full Import for the post-clear reconciliation gate; see [Run Profiles > Safeguards > Full Import](run-profiles.md#full-import).
 
-## Execution items
+## :material-format-list-bulleted-square: Execution items
 
 A Run Profile execution records an **execution item** for each object it touched, with what happened to it and any error, so you can go from a run's error counts to the objects behind them. [Execution Items](activity-execution-items.md) covers what each one records, and how its detail page traces what caused a change and what it caused in turn.
 
-## Scheduled Metaverse Object Deletion
+## :material-delete-clock-outline: Scheduled Metaverse Object Deletion
 
 When a Metaverse Object's [deletion grace period](metaverse.md) expires, the worker's housekeeping deletes it, queues deletes for any accounts covered by an export Synchronisation Rule whose [Deprovisioning Action](deprovisioning.md) is Delete, and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that does work is recorded as a **Scheduled Metaverse Object Deletion** activity, with an execution item per deleted Metaverse Object, per staged membership-removal Pending Export, and per failure. Deprovisioning deletes are reported on the deleted object's own item, nested beneath its **Metaverse Object deleted** outcome, as on a synchronisation run. Each deletion's item names the run that scheduled it, so [why it happened](causality.md#why-it-happened) reaches back across the grace period to the change that started it. A pass with nothing to delete records no activity.
 
@@ -81,13 +81,13 @@ Housekeeping runs while the Worker has no other work, at most once a minute, and
 
 The activity's detail page shows the batch like a Run Profile execution: summary cards (Metaverse Objects Deleted, Recall Pending Exports, Object Types, Errors) above a searchable, filterable table listing each deleted object by name and type, with any per-object errors alongside.
 
-## Parent and child activities
+## :material-family-tree: Parent and child activities
 
 Some Activities group others beneath them. The **System Initialisation** Activity groups the built-in objects JIM creates for itself as it starts, such as Roles and Schedules, one child Activity each; and a password change's Activity groups the Activities recording its delivery to each Connected System. The REST API returns each Activity's `parentActivityId`, lists an Activity's children, and filters the list with `hasChildActivities`.
 
 A Schedule's steps are not grouped this way: each step's Activity carries its [Schedule context](#schedule-context) instead, and the [Schedule Execution view](schedules.md#the-schedule-execution-view) links each step to its Activity.
 
-## Schedule context
+## :material-calendar-clock-outline: Schedule context
 
 An Activity that a [Schedule](schedules.md) produced says so, naming the Schedule and which of its steps this was ("step 3 of 6") and linking back to the Schedule Execution it belonged to. It appears on the Activity's detail page and in the Operations History side panel, and is absent for work nobody scheduled.
 
@@ -95,11 +95,11 @@ The attribution is recorded on the Activity itself rather than looked up through
 
 The same attribution reaches automation: `Get-JIMActivity` and the Activities REST endpoints carry `ScheduledByScheduleName`, `ScheduledByScheduleId`, `ScheduleExecutionId` and `ScheduleStepIndex` on each Activity, and leave them empty for work nobody scheduled. See the [Activity cmdlets](../powershell/activities.md#get-jimactivity).
 
-## Target links
+## :material-link-variant: Target links
 
 On an activity's detail page, the Target links to where that object is managed: a Synchronisation Rule change opens the rule's detail page, a schema import opens the Connected System's Schema tab, and so on. Service Settings have no page of their own, so their Target link opens the Service Settings page with a matching search already applied, taking you straight to that setting instead of the full list.
 
-## Filtering the Activity list
+## :material-filter-outline: Filtering the Activity list
 
 The Activity page in the admin portal filters a busy list down to what you are reviewing:
 
@@ -112,7 +112,7 @@ An Activity is a whole operation, such as a synchronisation run touching thousan
 
 Automation gets the same filters, not a subset of them. `GET /api/v1/activities` accepts `search`, `targetType`, `initiatorType`, `operation`, `outcome`, `status`, `initiatedById`, `initiatedBy`, `hasChildActivities`, `createdFrom`, `createdTo`, `connectedSystem`, `runProfile`, `scheduledOnly` and `scheduleId`; repeat a query parameter to pass several values, which combine with OR within that filter, while separate filters narrow each other. `Get-JIMActivity` exposes the same set as parameters (see the [Activity cmdlets](../powershell/activities.md#get-jimactivity)). The portal, the REST API and PowerShell all run the same query, so the same filters return the same Activities on every surface.
 
-## Configuration Change History {#configuration-change-history}
+## :material-history: Configuration Change History {#configuration-change-history}
 
 Changes to configuration objects are recorded on the Activity itself. When you create, update, or delete a Synchronisation Rule, Connected System, Schedule, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, Role, Predefined Search (including its criteria groups and criteria), Connector Definition (its capabilities, setting definitions, and files), Example Data Set, or Example Data Template, or update or revert a Service Setting, JIM captures a complete, versioned snapshot of the object's post-change state and carries it on the originating Activity, alongside who made the change, when, and an optional reason. This is how JIM answers "what did this rule look like last week, and who changed it" without a separate audit store.
 
@@ -132,11 +132,11 @@ Retrieve Configuration Change History with the `Get-JIMConfigurationChangeHistor
 
 When an object is **deleted**, its final captured state is shown on the delete Activity itself, rendered as a removal, together with who deleted it and any reason given. This is where to look for the history of something that no longer exists: the object's own Changes tab and its by-id change-history lookup are gone with it, but opening the delete Activity from the Activities list shows exactly what the object looked like at the moment it was removed. As with every snapshot, secrets are recorded as changed but never stored.
 
-## Live progress
+## :material-monitor-dashboard: Live progress
 
 While a Run Profile runs, its Activity reports progress live: in the portal, from `GET /api/v1/activities/{id}/progress`, and with `Get-JIMActivity -Follow`. [Live Progress](activity-progress.md) describes what each shows, and the steps a run reports.
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Monitoring a Run Profile execution:**
 
@@ -150,13 +150,13 @@ While a Run Profile runs, its Activity reports progress live: in the portal, fro
 2. Retrieve the activities you're interested in for full detail
 3. For a Schedule, filter the Activity tab to that Schedule (Operations > Activity), or open the Schedule Execution, which links each step to its Activity
 
-## Manage Activities
+## :material-cog-outline: Manage Activities
 
 - **JIM portal**<br /> Activities area of the admin UI
 - **PowerShell**<br /> [Activities cmdlets](../powershell/activities.md) (`Get-JIMActivity`, etc.)
 - **REST API**<br /> Activities endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Object Changes](object-changes.md): search changes to Metaverse Objects by attribute and value
 - [Run Profiles](run-profiles.md): the operations that produce most activities

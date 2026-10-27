@@ -11,7 +11,7 @@ The schema cmdlets import a Connected System's schema and choose which of its Ob
 
 ---
 
-## Import-JIMConnectedSystemSchema
+## :material-import: Import-JIMConnectedSystemSchema
 
 Imports a Connected System's schema, its Object Types and their attributes, or refreshes one imported before.
 
@@ -139,7 +139,7 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 
 ---
 
-## Get-JIMConnectedSystemObjectType
+## :material-shape-outline: Get-JIMConnectedSystemObjectType
 
 Gets the Object Types in a Connected System's schema, with their attributes.
 
@@ -209,7 +209,7 @@ Get-JIMConnectedSystem -Id 3 |
 
 ---
 
-## Set-JIMConnectedSystemObjectType
+## :material-pencil-outline: Set-JIMConnectedSystemObjectType
 
 Changes whether JIM manages a Connected System Object Type, and what happens to the values its objects contributed when they are deleted.
 
@@ -260,7 +260,7 @@ Deselecting an Object Type takes it out of management: the next Full Import mark
 
 ---
 
-## Set-JIMConnectedSystemAttribute
+## :material-tag-outline: Set-JIMConnectedSystemAttribute
 
 Updates the selection, external ID configuration, data type and case-exact declaration of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
 
@@ -370,7 +370,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeU
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](connected-systems.md): create, change and delete the Connected Systems whose schema these cmdlets manage
 - [Auxiliary Object Classes](connected-system-auxiliary-classes.md): the auxiliary classes an LDAP Connected System's Object Types carry

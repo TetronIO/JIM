@@ -9,7 +9,7 @@ audience: administrator
 
 A Metaverse Object is one identity in the [Metaverse](metaverse.md): a single `User`, `Group`, or an object of a type you defined. Its page answers the questions asked of it most: where does this value come from, and why does this person have an account in that system, or not have one in this one? Both answers are read-only, and are available through the REST API and PowerShell too.
 
-## Where a value comes from
+## :material-arrow-decision-outline: Where a value comes from
 
 A Metaverse Object's **Details** tab offers three views: **Form**, **Tabs** and **Inspect**. Form and Tabs show the values. **Inspect** shows where each value comes from, and is the view to use when a value looks wrong. You can also open it directly with `?view=inspect` on the object's address.
 
@@ -29,7 +29,7 @@ The same information is available through the REST API (`GET /api/v1/metaverse/o
 
 A value's source is not only in the Inspect view: the object's **Changes** tab names each attribute change's source alongside the change itself, and a [Pending Export's detail page](connected-systems.md#pending-exports) shows both where the outbound value came from and which Attribute Flow staged it. Both link back into Inspect so you can jump straight from a change or a queued export to the full picture.
 
-## Why it is connected, and why it is not
+## :material-link-variant: Why it is connected, and why it is not
 
 A Metaverse Object's **Connections** tab lists every Connected System Object joined to it, with its role, its state and a per-row **Preview Sync** (see [Sync Preview](sync-preview.md)). It also answers the two questions a helpdesk asks most: why does this person have an account in that system, and why don't they have one in this one? The tab is available to Administrators.
 
@@ -58,7 +58,7 @@ Nothing on the Connections tab changes data: the explanations are evaluated in m
 
 The same explanations, in the same words, are available through the REST API (`GET /api/v1/metaverse/objects/{id}/connections`, adding `?includeNotConnected=true` for the Not connected entries; see the [interactive API reference](../../api/reference/)) and PowerShell ([`Get-JIMMetaverseObjectConnection`](../powershell/metaverse.md#get-jimmetaverseobjectconnection)).
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Metaverse](metaverse.md): Object Types, attributes and pending deletions.
 - [Attribute Priority](../concepts/attribute-priority.md): which source's value wins.

@@ -11,7 +11,7 @@ File System cmdlets let you browse the JIM Container's file system, used when co
 
 ---
 
-## Get-JIMFileSystemItem
+## :material-folder-search-outline: Get-JIMFileSystemItem
 
 Lists files and directories within the JIM Container's allowed mount points.
 
@@ -68,7 +68,7 @@ Get-JIMFileSystemItem -Roots
 
 ---
 
-## Test-JIMFileSystemPath
+## :material-file-search-outline: Test-JIMFileSystemPath
 
 Checks whether a file system path is within the JIM Container's allowed mount points.
 
@@ -100,6 +100,6 @@ Test-JIMFileSystemPath -Path "/connector-files/imports/users.csv"
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](connected-systems.md): cmdlets for configuring file-based connectors that read paths validated here

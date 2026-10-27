@@ -18,7 +18,7 @@ Before deleting a system that other systems depend on, [preview the deletion](#p
 
 Deleting a Connected System records a final snapshot of its configuration in the [Configuration Change History](activities.md#configuration-change-history), so a decommissioned system's last-known state, and who removed it, remain auditable after it is gone. You can attach an optional reason in the admin portal delete dialog, with `Remove-JIMConnectedSystem -ChangeReason`, or via the REST API. As with all such snapshots, connector secrets are recorded as changed but never stored.
 
-## Previewing a deletion
+## :material-eye-outline: Previewing a deletion
 
 Deprovisioning through synchronisation reaches well beyond the system being deleted: another system takes over the values it also contributes, values nothing else contributes are cleared, people whose Deletion Rule it triggers become eligible for deletion, and every downstream system is corrected to match. A **deletion impact preview** works all of that out against the objects as they stand, changing nothing, so you can read it before you commit.
 

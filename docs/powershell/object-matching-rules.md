@@ -11,7 +11,7 @@ The Object Matching Rule cmdlets manage how JIM pairs a Connected System Object 
 
 ---
 
-## Switch-JIMMatchingMode
+## :material-toggle-switch-variant: Switch-JIMMatchingMode
 
 Switches a Connected System between simple mode, where its Object Matching Rules sit on its Object Types, and advanced mode, where each Synchronisation Rule has its own. The rules move with the switch.
 
@@ -66,7 +66,7 @@ Switch-JIMMatchingMode -ConnectedSystemId 1 -Mode ConnectedSystem -PassThru |
 
 ---
 
-## Get-JIMMatchingRule
+## :material-vector-link: Get-JIMMatchingRule
 
 Gets the Object Matching Rules on a Connected System Object Type, in the order JIM tries them, or one rule by ID. These are the rules simple mode uses.
 
@@ -122,7 +122,7 @@ Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5
 
 ---
 
-## New-JIMMatchingRule
+## :material-plus-circle-outline: New-JIMMatchingRule
 
 Creates an Object Matching Rule on a Connected System Object Type: a Connected System attribute, or an expression over the Connected System Object, matched against a Metaverse attribute on the Metaverse Object Type the rule searches.
 
@@ -187,7 +187,7 @@ New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 3 `
 
 ---
 
-## Set-JIMMatchingRule
+## :material-pencil-outline: Set-JIMMatchingRule
 
 Changes an Object Matching Rule on a Connected System Object Type. What you leave out stays as it is; a source attribute or expression replaces the rule's source.
 
@@ -244,7 +244,7 @@ Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -SourceExpression '"E" + Trim(cs[
 
 ---
 
-## Remove-JIMMatchingRule
+## :material-trash-can-outline: Remove-JIMMatchingRule
 
 Deletes an Object Matching Rule from a Connected System Object Type.
 
@@ -282,7 +282,7 @@ Remove-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Force
 
 ---
 
-## Get-JIMSyncRuleMatchingRule
+## :material-link-variant: Get-JIMSyncRuleMatchingRule
 
 Gets the Object Matching Rules on a Synchronisation Rule, in the order JIM tries them, or one rule by ID. These are the rules advanced mode uses.
 
@@ -336,7 +336,7 @@ Get-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3
 
 ---
 
-## New-JIMSyncRuleMatchingRule
+## :material-link-variant-plus: New-JIMSyncRuleMatchingRule
 
 Creates an Object Matching Rule on a Synchronisation Rule: a Connected System attribute, or an expression over the Connected System Object, matched against a Metaverse attribute. The rule searches the Synchronisation Rule's Metaverse Object Type, so there is none to give.
 
@@ -396,7 +396,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId 5 `
 
 ---
 
-## Set-JIMSyncRuleMatchingRule
+## :material-link-edit: Set-JIMSyncRuleMatchingRule
 
 Changes an Object Matching Rule on a Synchronisation Rule. What you leave out stays as it is; a source attribute or expression replaces the rule's source.
 
@@ -450,7 +450,7 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 `
 
 ---
 
-## Remove-JIMSyncRuleMatchingRule
+## :material-link-variant-remove: Remove-JIMSyncRuleMatchingRule
 
 Deletes an Object Matching Rule from a Synchronisation Rule.
 
@@ -488,7 +488,7 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 
 ---
 
-## Test-JIMMatchingRule
+## :material-test-tube: Test-JIMMatchingRule
 
 Tests what a saved Object Matching Rule would match on for sample values or a real Connected System Object and, with `-LookUp`, which Metaverse Object a synchronisation would join. See [Testing a rule](../configuration/object-matching-rules.md#testing-a-rule).
 
@@ -546,7 +546,7 @@ Test-JIMMatchingRule -ConnectedSystemId 3 -Id 40 -ConnectedSystemObjectId '0b0e1
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Object Matching Rules](../configuration/object-matching-rules.md): how matching works, its outcomes, matching on an expression, and the two modes
 - [Previews](previews.md#new-jimconfigurationchangepreview): preview a change to the rules, or a mode switch, before making it

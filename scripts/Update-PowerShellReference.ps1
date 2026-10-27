@@ -773,8 +773,8 @@ foreach ($page in @(Get-ChildItem -LiteralPath $DocsPath -Filter '*.md' -File | 
     }
 
     # Where each cmdlet's section is, so the cmdlets with no block can be listed by page. A name can end at
-    # "JIM" (Connect-JIM).
-    foreach ($heading in [regex]::Matches($text, '(?m)^#{2,3} (?<name>[A-Za-z]+-JIM[A-Za-z0-9]*)\s*$')) {
+    # "JIM" (Connect-JIM). An H2 opens with an icon shortcode (STY-3), which the match steps over.
+    foreach ($heading in [regex]::Matches($text, '(?m)^#{2,3} (?::[a-z0-9]+(?:-[a-z0-9]+)+:\s*)?(?<name>[A-Za-z]+-JIM[A-Za-z0-9]*)\s*$')) {
         $name = $heading.Groups['name'].Value
         if (-not $sectionPage.ContainsKey($name)) { $sectionPage[$name] = $relative }
     }
@@ -812,7 +812,7 @@ foreach ($name in @($exported.Keys | Where-Object { -not $seenBlocks.ContainsKey
         Write-Finding $sectionPage[$name] 1 "$name has no generated block; put '<!-- BEGIN GENERATED: $name -->' and '<!-- END GENERATED: $name -->' in its section, where its Syntax, Parameters and Output go, and run scripts/Update-PowerShellReference.ps1"
     }
     else {
-        Write-Finding '' 0 "$name has no generated block, and no section on any page; give it a '## $name' section on its docs/powershell/ page, with the markers, and run scripts/Update-PowerShellReference.ps1"
+        Write-Finding '' 0 "$name has no generated block, and no section on any page; give it a '## :material-console: $name' section on its docs/powershell/ page, with the markers, and run scripts/Update-PowerShellReference.ps1"
     }
     $failures++
 }

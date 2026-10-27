@@ -13,7 +13,7 @@ It configures the identity provider, not JIM, so it does not need `Connect-JIM`.
 
 ---
 
-## Register-JIMIdentityProvider
+## :material-shield-key-outline: Register-JIMIdentityProvider
 
 Registers JIM with its identity provider, or repairs the registration.
 

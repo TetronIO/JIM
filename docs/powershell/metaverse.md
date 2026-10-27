@@ -11,7 +11,7 @@ The Metaverse is the central identity store in JIM. These cmdlets find and read 
 
 ---
 
-## Search-JIMMetaverseObject
+## :material-magnify: Search-JIMMetaverseObject
 
 Runs a [Predefined Search](predefined-searches.md), returning each match in summary with the attributes the search lists. It answers quickly at scale, 100,000 objects and more, so use it for lists and searches; use [`Get-JIMMetaverseObject`](#get-jimmetaverseobject) for an object in full, or to choose the attributes.
 
@@ -84,7 +84,7 @@ Search-JIMMetaverseObject -PredefinedSearchUri "groups" -SortBy "Display Name" -
 
 ---
 
-## Get-JIMMetaverseObject
+## :material-hub-outline: Get-JIMMetaverseObject
 
 Gets Metaverse Objects: one by ID, or a page of them filtered by Object Type, display name or an attribute's value, or how many match.
 
@@ -199,7 +199,7 @@ Get-JIMMetaverseObject -ObjectTypeName "User" -Page 3 -PageSize 50
 
 ---
 
-## Get-JIMMetaverseObjectChangeHistory
+## :material-history: Get-JIMMetaverseObjectChangeHistory
 
 Gets a Metaverse Object's change history, newest first: who or what made each change, the Synchronisation Rule and Run Profile behind it, and the values it changed.
 
@@ -269,7 +269,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 ---
 
-## Get-JIMMetaverseObjectProvenance
+## :material-map-marker-path: Get-JIMMetaverseObjectProvenance
 
 Shows where a Metaverse Object's attribute values came from: which Connected System and Synchronisation Rule contributed each one, or that no contributor is recorded.
 
@@ -351,7 +351,7 @@ Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
 
 ---
 
-## Get-JIMMetaverseObjectConnection
+## :material-link-variant: Get-JIMMetaverseObjectConnection
 
 Explains why a Metaverse Object is connected where it is, and why it is not connected elsewhere. It answers the same question as the Metaverse Object's Connections tab in the portal, in the same words; see [Why it is connected, and why it is not](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not) for what each reason means.
 
@@ -437,7 +437,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -All |
 
 ---
 
-## Get-JIMPendingDeletion
+## :material-delete-clock-outline: Get-JIMPendingDeletion
 
 Gets the Metaverse Objects pending deletion: a page of them, how many there are, or a summary of where their deletions stand.
 
@@ -519,7 +519,7 @@ Get-JIMPendingDeletion -Summary
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Metaverse Object Types](metaverse-object-types.md): the Object Types Metaverse Objects belong to
 - [Metaverse Attributes](metaverse-attributes.md): the attributes they hold, and Attribute Priority

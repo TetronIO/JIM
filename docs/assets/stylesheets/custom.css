@@ -1,7 +1,6 @@
-/* Space Grotesk for marketing/publication-feel headings (hero title, header
-   site title). Body text remains IBM Plex Sans (set via mkdocs.yml).
-   Variable font: weight axis pulled at 600 + 700. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap');
+/* Fonts load in docs/overrides/main.html: IBM Plex Sans (variable, for body
+   text at 450), IBM Plex Mono, and Space Grotesk for the hero title and the
+   header's site title. */
 
 /* JIM Brand Colour Overrides */
 
@@ -39,11 +38,13 @@
   --md-typeset-a-color: #0076d3;             /* --jim-link-color */
   --md-accent-fg-color: #0076d3;
 
-  /* Grid card surfaces: soft light grey (lightened a touch from JIM.Web's navy-o6
-     #f3f3f3 background), deepening slightly on hover */
-  --jim-card-bg: #f7f7f7;
-  --jim-card-bg-hover: #efefef;
-  --jim-card-border: rgba(0, 0, 0, 0.13);   /* a touch darker than Material's default lightest */
+  /* Grid card surfaces: white with a cool hairline, so the brand-tinted icon
+     tiles read cleanly (on a grey card they turned muddy); a lavender wash and a
+     lavender border on hover */
+  --jim-card-bg: #ffffff;
+  --jim-card-bg-hover: #faf9fd;
+  --jim-card-border: #e4e1ec;
+  --jim-card-border-hover: #c9bff0;
 
   /* Icon tiles (landing-page headings, card icons) and table status marks */
   --jim-icon-tile-bg: #f1eef9;               /* brand purple, about 8% on white */
@@ -136,6 +137,7 @@
   --jim-card-bg: #0d1e30;
   --jim-card-bg-hover: #14293f;
   --jim-card-border: var(--md-default-fg-color--lightest);   /* unchanged from Material default */
+  --jim-card-border-hover: var(--md-default-fg-color--lighter);
 
   /* Icon tiles and table status marks */
   --jim-icon-tile-bg: rgba(123, 104, 184, 0.16);
@@ -217,7 +219,7 @@
 
 .md-typeset .grid.cards > :is(ul, ol) > li:hover,
 .md-typeset .grid > .card:hover {
-  border-color: var(--md-default-fg-color--lighter);
+  border-color: var(--jim-card-border-hover);
   background-color: var(--jim-card-bg-hover);
   box-shadow: none;
 }
@@ -322,13 +324,16 @@
    docs/overrides/home.html
    ======================================== */
 
+/* Lit from the top centre, the same light source as the dark-mode hero below,
+   over a vertical brand-purple gradient */
 .jim-hero {
   width: 100%;
   padding: 1.75rem 1rem 3.5rem;
-  background: linear-gradient(135deg, #5A45A2 0%, #483790 60%, #2f2466 100%);
+  background:
+    radial-gradient(70% 120% at 50% -10%, rgba(150, 128, 232, 0.55) 0%, rgba(150, 128, 232, 0) 70%),
+    linear-gradient(180deg, #4f3c9c 0%, #3b2b80 100%);
   color: #ffffff;
   text-align: center;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
 }
 
 .jim-hero__inner {
@@ -414,6 +419,25 @@
 .md-typeset h5,
 .md-typeset h6 {
   color: var(--md-default-fg-color);
+}
+
+/* Body text: 16px at every screen width, at IBM Plex Sans 450 (the weight IBM
+   designed for running text; 400 reads faint on screen) with slightly opened
+   leading. Material grows the root font to 137.5% from 100em (1600px) and 150%
+   from 125em (2000px), which put body text at 17.6px and 19.2px on large
+   monitors; pinning the root at Material's own base of 125% stops that. */
+@media screen and (min-width: 100em) {
+  html { font-size: 125%; }
+}
+
+.md-typeset {
+  font-weight: 450;
+  line-height: 1.65;
+}
+
+.md-typeset strong,
+.md-typeset b {
+  font-weight: 600;
 }
 
 .md-typeset h1 { font-weight: 400; }
@@ -533,10 +557,27 @@ body:has(.jim-home) .md-content {
   max-width: none;
 }
 
+body:has(.jim-home) .md-main__inner {
+  margin-top: 0;
+}
+
+/* Light mode: a faint lavender band under the hero, fading to white behind the
+   system diagram, so the purple settles into the page rather than stopping dead */
+body[data-md-color-scheme="default"]:has(.jim-home) .md-main {
+  background: linear-gradient(180deg, #f3f0fb 0, #ffffff 26rem);
+}
+
+/* The system diagram opens the page. Markdown wraps its snippet include in a
+   <p>, and diagram-zoom.js wraps the SVG in the trigger button inside that. */
+body:has(.jim-home) .jim-home > p:first-of-type,
+body:has(.jim-home) .jim-home > p:first-of-type > .jim-dgz-trigger:first-child {
+  margin-top: 0;
+}
+
 body:has(.jim-home) .md-content__inner {
   max-width: 72rem;
   margin: 0 auto;
-  padding-top: 2rem;
+  padding-top: 1.25rem;
   padding-left: 2rem;
   padding-right: 2rem;
 }

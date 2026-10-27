@@ -13,7 +13,7 @@ Both return the same object, tabled under [`Get-JIMConnectedSystemObjectSyncPrev
 
 ---
 
-## Get-JIMConnectedSystemObjectSyncPreview
+## :material-eye-outline: Get-JIMConnectedSystemObjectSyncPreview
 
 Previews what synchronising a Connected System Object would do: the inbound chain (scope, join or projection, Attribute Flow), the outbound decisions the resulting Metaverse Object state would produce, and, where the object would fall out of scope and disconnect, the destructive cascade (whether the Metaverse Object would be deleted or scheduled for deletion, and which downstream Connected System Objects would be deprovisioned).
 
@@ -71,7 +71,7 @@ $preview.Warnings | Where-Object Code -eq 'OutOfScope' | Select-Object Detail
 
 ---
 
-## Get-JIMMetaverseObjectSyncPreview
+## :material-hub-outline: Get-JIMMetaverseObjectSyncPreview
 
 Previews what synchronising from a Metaverse Object's current state would do: the outbound decisions that state would produce. A Metaverse Object is never synchronised itself; its Connected System Objects are, so this cmdlet evaluates the Metaverse Object **as it stands now**, outbound only, with no inbound chain of its own (`Inbound` is always `$null`). For the full inbound-then-outbound chain of one Connected System Object, use [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview) instead.
 
@@ -108,7 +108,7 @@ $preview.ProposedExports | Format-Table ConnectedSystemId, ChangeType
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Sync Preview](../configuration/sync-preview.md): what these cmdlets evaluate, including the destructive cascade
 - [Previews](previews.md): previewing a proposed configuration change across every object it would affect

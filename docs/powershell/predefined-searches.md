@@ -14,7 +14,7 @@ Cmdlets for administering Predefined Searches. Predefined Searches are named, re
 
 ---
 
-## Get-JIMPredefinedSearch
+## :material-magnify: Get-JIMPredefinedSearch
 
 Gets Predefined Searches. Administrators see all searches, including any that are currently disabled, so they can be discovered and enabled via [`Set-JIMPredefinedSearch`](#set-jimpredefinedsearch).
 
@@ -106,7 +106,7 @@ Get-JIMPredefinedSearch | Where-Object { -not $_.IsEnabled }
 
 ---
 
-## Set-JIMPredefinedSearch
+## :material-pencil-outline: Set-JIMPredefinedSearch
 
 Applies a partial update to a Predefined Search. Only parameters explicitly provided are sent; omitted fields are left unchanged.
 
@@ -163,7 +163,7 @@ Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -ChangeReason "Retiring in favou
 
 ---
 
-## Criteria groups and criteria
+## :material-filter-outline: Criteria groups and criteria
 
 These cmdlets manage the criteria that filter a Predefined Search's results. Criteria live in **criteria groups**; add a group first, then add criteria to it. See [Filtering with criteria](../configuration/predefined-searches.md#filtering-with-criteria) for the operators available per attribute type and how criteria combine (each group is All/AND or Any/OR, top-level groups are OR-ed, and groups nest to any depth for mixed logic).
 
@@ -189,7 +189,7 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $any.Id -Metaver
 
 ---
 
-## Get-JIMPredefinedSearchCriteriaGroup
+## :material-filter-variant: Get-JIMPredefinedSearchCriteriaGroup
 
 Lists a Predefined Search's criteria groups, each with its criteria and nested groups.
 
@@ -227,7 +227,7 @@ Get-JIMPredefinedSearch -Uri people | Get-JIMPredefinedSearchCriteriaGroup
 
 ---
 
-## New-JIMPredefinedSearchCriteriaGroup
+## :material-filter-plus-outline: New-JIMPredefinedSearchCriteriaGroup
 
 Creates a criteria group on a Predefined Search. Pass `-ParentGroupId` to nest it under an existing group, for example to express (A OR B) AND C.
 
@@ -268,7 +268,7 @@ New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -ParentGroupId 10 -Ty
 
 ---
 
-## Set-JIMPredefinedSearchCriteriaGroup
+## :material-filter-cog-outline: Set-JIMPredefinedSearchCriteriaGroup
 
 Changes a criteria group's logic type or position.
 
@@ -305,7 +305,7 @@ Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupId 10 -Type Any
 
 ---
 
-## Remove-JIMPredefinedSearchCriteriaGroup
+## :material-filter-remove-outline: Remove-JIMPredefinedSearchCriteriaGroup
 
 Deletes a criteria group and everything in it: its criteria and its nested groups. The Predefined Search itself and its other groups are kept, and the deletion is recorded as a version in the search's [Configuration Change History](history.md).
 
@@ -339,7 +339,7 @@ Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupId 10 -Chang
 
 ---
 
-## New-JIMPredefinedSearchCriterion
+## :material-plus-circle-outline: New-JIMPredefinedSearchCriterion
 
 Adds a criterion to a criteria group. It takes the attribute (by `-MetaverseAttributeId` or `-MetaverseAttributeName`), a `-ComparisonType`, and the value parameter that matches the attribute's data type (`-StringValue`, `-IntValue`, `-LongValue`, `-DecimalValue`, `-DateTimeValue`, `-BoolValue`, or `-GuidValue`). `-CaseSensitive $false` makes a text comparison case-insensitive. On a multi-valued attribute a positive operator matches when any value does and a `Not...` operator when the object holds a value and none matches; see [multi-valued attributes and missing values](../configuration/predefined-searches.md#multi-valued-attributes-and-missing-values).
 
@@ -425,7 +425,7 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
 
 ---
 
-## Set-JIMPredefinedSearchCriterion
+## :material-pencil-outline: Set-JIMPredefinedSearchCriterion
 
 Replaces a criterion's attribute, operator and value. It is a full update, taking the same parameters as [New-JIMPredefinedSearchCriterion](#new-jimpredefinedsearchcriterion). Its case sensitivity is the exception: without `-CaseSensitive`, the criterion keeps its current setting.
 
@@ -481,7 +481,7 @@ Set-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -CriterionId 
 
 ---
 
-## Remove-JIMPredefinedSearchCriterion
+## :material-minus-circle-outline: Remove-JIMPredefinedSearchCriterion
 
 Deletes a criterion from its criteria group. The group, its other criteria and the Predefined Search are kept, and the deletion is recorded as a version in the search's [Configuration Change History](history.md).
 
@@ -516,7 +516,7 @@ Remove-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -Criterion
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Search-JIMMetaverseObject](metaverse.md#search-jimmetaverseobject): run a Predefined Search to return matching objects
 - [Metaverse](metaverse.md): related cmdlets for querying Metaverse Objects

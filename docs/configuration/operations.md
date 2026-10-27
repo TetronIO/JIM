@@ -9,14 +9,14 @@ audience: operator
 
 **Administration > Operations** is where an administrator finds out what JIM is doing, what it has done, what it will do next, and whether the services that do it are alive. It is one page with four tabs and a Service Health strip above them.
 
-## The tabs
+## :material-view-list-outline: The tabs
 
 - **Activity**<br /> What the Worker has queued, what it is running and what it has finished, on one page. See [The Activity tab](#the-activity-tab).
 - **Schedules**<br /> The [Schedules](schedules.md) that run work automatically, each with its last run and how that run ended.
 - **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. An [initial password](../concepts/passwords.md#giving-new-connected-system-objects-their-first-password) on a newly provisioned Connected System Object travels the same queue, labelled with origin **Initial**. See [Watching the queue](../concepts/password-synchronisation.md#watching-the-queue).
 - **Generated Values**<br /> Generated values held for a decision, and allowed renames waiting for their export. See [Generated values in target systems](generated-values-in-target-systems.md).
 
-## The Activity tab
+## :material-timeline-clock-outline: The Activity tab
 
 The Activity tab reads in time order, with the latest at the top: **Queued** (later), then **In Progress** (now), then **Completed** (earlier). The three sections share their columns, so Connected System, Run Profile and Initiated By line up down the page.
 
@@ -28,7 +28,7 @@ The **Queued**, **In Progress** and **Completed** chips above the sections choos
 
 **Queue a Run Profile** adds a Run Profile execution to the end of the queue: choose the Connected System and the Run Profile, then **Queue**. If nothing else is queued or running, it starts straight away.
 
-## Service Health
+## :material-heart-pulse: Service Health
 
 JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service), and the **Scheduler**, which starts Schedules when they fall due. Each service writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it, so a Worker that has stopped shows as stopped rather than looking like a Worker with nothing to do. The container health check alone is invisible from the portal.
 
@@ -73,7 +73,7 @@ Every service writes its heartbeat every 5 seconds. Both Worker services are pre
 
 The strip refreshes every 10 seconds, so a change of status appears within roughly one refresh of it happening.
 
-## Watching from outside the portal
+## :material-monitor-dashboard: Watching from outside the portal
 
 The same report is available to monitoring and scripts, and comes from the same rules, so a script and an administrator at the portal always agree.
 
@@ -90,7 +90,7 @@ if ($health.Overall -ne 'Healthy') {
 
 The unauthenticated `/api/v1/health` endpoints ([Health Monitoring](../administration/deployment.md#health-monitoring)) answer for the web tier only and say nothing about the Worker, the Password Delivery Service or the Scheduler. Use them for load balancers and orchestrators; use `system/health` for anything that needs to know whether JIM's work is actually being done.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Activities](activities.md): the record of every operation, and how to watch one run
 - [Schedules](schedules.md): automated, ordered sequences of operations

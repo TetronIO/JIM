@@ -11,7 +11,7 @@ The Pending Export cmdlet reads the changes JIM has worked out for a Connected S
 
 ---
 
-## Get-JIMPendingExport
+## :material-export: Get-JIMPendingExport
 
 Gets the Pending Exports queued for a Connected System, and pages through the value changes of a large multi-valued attribute.
 
@@ -201,7 +201,7 @@ Get-JIMPendingExport -Id "a1b2c3d4-..." -AttributeName "member" -Page 1 -PageSiz
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected System Objects](connected-system-objects.md): the objects the Pending Exports change
 - [Run Profiles](run-profiles.md): run the exports that write Pending Exports to the Connected System

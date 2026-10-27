@@ -11,7 +11,7 @@ The Schedule cmdlets manage when JIM runs Run Profiles on its own: create a Sche
 
 ---
 
-## Get-JIMSchedule
+## :material-calendar-clock-outline: Get-JIMSchedule
 
 Retrieves one or more Schedules. Without parameters, returns every Schedule; with `-Id`, returns one.
 
@@ -140,7 +140,7 @@ Get-JIMSchedule |
 
 ---
 
-## New-JIMSchedule
+## :material-calendar-plus: New-JIMSchedule
 
 Creates a Schedule. Which parameters it needs depends on the trigger type and the pattern type.
 
@@ -226,7 +226,7 @@ New-JIMSchedule "Nightly HR sync" `
 
 ---
 
-## Set-JIMSchedule
+## :material-calendar-edit-outline: Set-JIMSchedule
 
 Changes a Schedule. Only the parameters you give are changed; everything else keeps its current value.
 
@@ -290,7 +290,7 @@ Set-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -OnStepFailure Contin
 
 ---
 
-## Remove-JIMSchedule
+## :material-calendar-remove-outline: Remove-JIMSchedule
 
 Deletes a Schedule permanently. This cannot be undone.
 
@@ -332,7 +332,7 @@ Get-JIMSchedule -Name "Temp*" | Remove-JIMSchedule -Force
 
 ---
 
-## Enable-JIMSchedule
+## :material-calendar-check-outline: Enable-JIMSchedule
 
 Enables a Schedule, so it runs when its trigger fires.
 
@@ -371,7 +371,7 @@ Enable-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -PassThru |
 
 ---
 
-## Disable-JIMSchedule
+## :material-calendar-remove: Disable-JIMSchedule
 
 Disables a Schedule, so it no longer runs when its trigger fires. Its configuration is kept, and it can be enabled again.
 
@@ -409,7 +409,7 @@ Get-JIMSchedule -Name "Legacy*" | Disable-JIMSchedule -PassThru
 
 ---
 
-## Add-JIMScheduleStep
+## :material-playlist-plus: Add-JIMScheduleStep
 
 Adds a step to a Schedule. Each step runs a Run Profile against a Connected System. Steps run one after another unless `-Parallel` runs a step at the same time as the one before it.
 
@@ -505,7 +505,7 @@ Add-JIMScheduleStep -ScheduleId $scheduleId -StepType RunProfile `
 
 ---
 
-## Set-JIMScheduleStep
+## :material-playlist-edit: Set-JIMScheduleStep
 
 Changes what one step does when it fails, leaving every other step, and the Schedule itself, as they are. To change a step's other settings, send the whole step list through `Set-JIMSchedule -Steps`.
 
@@ -551,7 +551,7 @@ Get-JIMSchedule -Name "Nightly HR sync" |
 
 ---
 
-## Remove-JIMScheduleStep
+## :material-playlist-remove: Remove-JIMScheduleStep
 
 Removes a step from a Schedule by its position. The remaining steps are renumbered: removing step 1 from a Schedule with steps 0, 1 and 2 makes the former step 2 step 1.
 
@@ -594,7 +594,7 @@ Remove-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
 
 ---
 
-## When a step fails
+## :material-alert-octagon-outline: When a step fails
 
 Each Schedule has an `OnStepFailure` setting, `Stop` (the default) or `Continue`, and each step has an `OnFailure` setting that either follows the Schedule (`FollowSchedule`, the default for new steps) or overrides it (`Stop` or `Continue`). JIM reads the setting when the step fails, so a change applies to the next failure, including in a run already under way.
 
@@ -620,7 +620,7 @@ What counts as a step failing, and how the settings appear in the portal, are co
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Schedule Executions](schedule-executions.md): run a Schedule now, and watch or stop its runs
 - [Schedules](../configuration/schedules.md): what schedules are, trigger types and patterns, step types, and execution behaviour

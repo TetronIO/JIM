@@ -13,7 +13,7 @@ JIM therefore asks you which auxiliary classes an Object Type should carry, and 
 
 This section applies only to directories that publish an RFC 4512 subschema subentry. **Active Directory resolves its own auxiliary classes into each structural class**, so its Object Types already carry those attributes and none of the controls below appear.
 
-## Merging a class into an Object Type
+## :material-merge: Merging a class into an Object Type
 
 On a Connected System's **Schema** tab, open a structural Object Type's sub-tab. Its **Auxiliary Classes** panel shows what the Object Type is made of: its own class, then each auxiliary class merged into it as a chip you can remove, and an **Add auxiliary class** button.
 
@@ -29,7 +29,7 @@ A merged class's attributes join the Object Type's attribute table at the next *
 
 Only what you enable is persisted, so a schema refresh can never silently change what an Object Type carries. A class the directory has removed disappears from the list, and the removal surfaces through the existing schema refresh confirmation rather than quietly.
 
-## Suggestions
+## :material-lightbulb-outline: Suggestions
 
 Two things can suggest a class, and neither ever applies itself:
 
@@ -40,7 +40,7 @@ Two things can suggest a class, and neither ever applies itself:
 
 Every auxiliary class in the schema is listed whether or not anything suggests it, so a class you know the name of can always be found and enabled.
 
-## Discovery
+## :material-magnify: Discovery
 
 The classes the dialog lists come from the schema. **Discover classes in use**, at the foot of the same dialog, is a separate read, of the directory's entries, recording which auxiliary classes they actually carry. It changes no configuration.
 
@@ -55,7 +55,7 @@ A run is queued as a worker task and reports against an Activity, so you can wat
 
 The panel shows whichever applies: never run, running (with a link to its Activity and a **Cancel**), last completed, or cancelled with partial results.
 
-## How objectClass is written on export
+## :material-export: How objectClass is written on export
 
 JIM composes `objectClass` itself and refuses it as an Attribute Flow target, in the same way it refuses credential attributes. No hand-written flow can know which auxiliary classes a given entry needs, because that follows from which of the merged classes' attributes actually have values on that entry, and that differs entry by entry.
 
@@ -69,7 +69,7 @@ An auxiliary class's MUST appears as **Optional** in the attribute table, delibe
 
 **Only some entries should carry a class?** Scope it with Synchronisation Rules. The class is only ever added where flows produce its attributes, so no second Connected System and no split container scoping is needed.
 
-## Objects whose identity is an auxiliary class
+## :material-vector-link: Objects whose identity is an auxiliary class
 
 Some populations are defined by an auxiliary class attached to a generic structural carrier, rather than by a structural class of their own. With **Include Auxiliary Classes** enabled on the **Settings** tab, those classes appear as Object Types in their own right and import as they always have.
 
@@ -77,7 +77,7 @@ To let JIM **create** them, the Object Type's sub-tab carries a **Provisioning**
 
 Until a carrier is named, JIM imports objects of the type and refuses to create them, and the panel says so.
 
-## Automation
+## :material-cog-play-outline: Automation
 
 Every control above is available to the REST API and PowerShell:
 
