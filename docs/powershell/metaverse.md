@@ -150,7 +150,7 @@ By default, one page of matching objects, each in summary. With `-Id`, the Metav
 | `DeletionTriggeredBySystemName` | `string` | The Connected System whose disconnection made the Metaverse Object pending deletion. Empty when it is not pending deletion, when no single system triggered it (its last connection went without one), or when the deletion was scheduled before JIM recorded the trigger. |
 | `Type` | `object` | The Metaverse Object Type, with its Id and Name. It has `Id` and `Name`. |
 | `AttributeValues` | `object[]` | Every value the Metaverse Object holds, one entry per value, each with the attribute it belongs to and the Connected System and Synchronisation Rule that contributed it. Each has `Id`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `StringValue`, `DateTimeValue`, `IntValue`, `LongValue`, `DecimalValue`, `ByteValue`, `GuidValue`, `BoolValue`, `ReferenceValueId`, `ReferenceValueDisplayName`, `ContributedBySystemId`, `ContributedBySystemName`, `ContributedBySyncRuleId`, `ContributedBySyncRuleName`, `ContributedByKind`, `ContributedByClaimType` and `NullValue`. |
-| `ConnectedSystemObjects` | `object[]` | Every Connected System Object joined to the Metaverse Object, with how it was joined and the state of its connection, as the portal's Connections tab shows them. Each has `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. |
+| `ConnectedSystemObjects` | `object[]` | Every Connected System Object joined to the Metaverse Object, with how it was joined and the state of its connection, as the portal's Connections tab shows them. Each has `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ExternalId`, `SecondaryExternalId`, `PendingExternalId`, `PendingSecondaryExternalId`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. |
 
 **With `-Count`**: an `int`.
 <!-- END GENERATED: Get-JIMMetaverseObject -->
@@ -383,8 +383,12 @@ One object per entry: each joined Connected System Object and, with `-IncludeNot
 | `ConnectedSystem` | `string` | The Connected System's name. |
 | `ConnectedSystemId` | `int` | The unique identifier of the Connected System. |
 | `Connected` | `bool` | `$true` for a joined Connected System Object, `$false` for an export Synchronisation Rule that has not connected. |
-| `Object` | `string` | The joined Connected System Object's name, or its external id where it has none; empty when not connected. |
+| `Object` | `string` | The joined Connected System Object's identifier as the portal's Connections tab shows it: its Secondary External ID (for an LDAP Connected System, its distinguished name) where it has one, otherwise its External ID, falling back to the value a queued Pending Export will assign; empty when not connected. |
 | `ConnectedSystemObjectId` | `guid` | The unique identifier of the joined Connected System Object; empty when not connected. |
+| `ExternalId` | `string` | The joined object's External ID; empty when it has none yet or when not connected. |
+| `SecondaryExternalId` | `string` | The joined object's Secondary External ID; empty when its Connected System has none, it has no value yet, or when not connected. |
+| `PendingExternalId` | `string` | The External ID a queued Pending Export will give the joined object, where it has none yet; empty otherwise. |
+| `PendingSecondaryExternalId` | `string` | The Secondary External ID a queued Pending Export will give the joined object, where it has none yet; empty otherwise. |
 | `ObjectType` | `string` | The Connected System Object Type's name. |
 | `Role` | `string` | Source, Target, Source and Target or None, from the enabled Synchronisation Rules for that Connected System and Object Type; always Target when not connected. |
 | `State` | `string` | For a connection, its state, such as InSync or UpdatePending; when not connected, why: NotInScope, ProvisioningDisabled, RuleMisconfigured or NotYetProvisioned. |

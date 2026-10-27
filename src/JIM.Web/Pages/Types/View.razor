@@ -993,8 +993,8 @@
                 CsoId: connection.ConnectedSystemObjectId,
                 CsoConnectedSystemId: connection.ConnectedSystemId,
                 CsoConnectedSystemName: connection.ConnectedSystemName,
-                CsoDisplayName: connection.DisplayName,
-                CsoExternalId: null,
+                CsoDisplayName: null,
+                CsoExternalId: connection.ExternalId ?? connection.PendingExternalId,
                 CsoObjectTypeName: connection.ObjectTypeName,
                 MvoTypeName: MetaverseObjectType?.Name,
                 MvoTypePluralName: MetaverseObjectType?.PluralName);

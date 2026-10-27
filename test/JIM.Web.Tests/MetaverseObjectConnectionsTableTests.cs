@@ -29,7 +29,7 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
         bool isTarget = true) => new()
     {
         ConnectedSystemObjectId = Guid.NewGuid(),
-        DisplayName = "S8-287551",
+        ExternalId = "S8-287551",
         ConnectedSystemId = 1,
         ConnectedSystemName = "Yellowstone APAC",
         ObjectTypeName = "person",
@@ -123,6 +123,67 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
         var links = cut.FindAll("a").Select(a => a.GetAttribute("href")).ToList();
         Assert.That(links, Does.Contain("/admin/connected-systems/1"));
         Assert.That(links, Does.Contain($"/admin/connected-systems/1/connector-space/{connection.ConnectedSystemObjectId}"));
+    }
+
+    /// <summary>
+    /// The Secondary External ID (an LDAP DN) is what a person can read, so it leads; the External ID (often a GUID)
+    /// stays beneath it for troubleshooting.
+    /// </summary>
+    [Test]
+    public void Render_ObjectWithSecondaryExternalId_LinksTheSecondaryAndShowsTheExternalIdBeneath()
+    {
+        var connection = BuildConnection(ConnectedSystemObjectConnectionState.InSync);
+        connection.ExternalId = "599cfaa8-668c-1041-905c-a36b0fa4c127";
+        connection.SecondaryExternalId = "CN=Alice Smith,OU=Users,DC=glitterband,DC=local";
+
+        var cut = Render<MetaverseObjectConnectionsTable>(p => p
+            .Add(c => c.IsLoaded, true)
+            .Add(c => c.Connections, [connection]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Find("[data-testid='jim-mvo-connection-object']").TextContent.Trim(), Is.EqualTo(connection.SecondaryExternalId));
+            Assert.That(cut.Find("[data-testid='jim-mvo-connection-object-external-id']").TextContent.Trim(), Is.EqualTo(connection.ExternalId));
+        }
+    }
+
+    [Test]
+    public void Render_ObjectWithoutSecondaryExternalId_LinksTheExternalIdAlone()
+    {
+        var connection = BuildConnection(ConnectedSystemObjectConnectionState.InSync);
+
+        var cut = Render<MetaverseObjectConnectionsTable>(p => p
+            .Add(c => c.IsLoaded, true)
+            .Add(c => c.Connections, [connection]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Find("[data-testid='jim-mvo-connection-object']").TextContent.Trim(), Is.EqualTo("S8-287551"));
+            Assert.That(cut.FindAll("[data-testid='jim-mvo-connection-object-external-id']"), Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// An object awaiting provisioning shows the Secondary External ID its Pending Export will give it, marked as
+    /// pending, rather than JIM's own object id.
+    /// </summary>
+    [Test]
+    public void Render_PendingProvisioning_ShowsThePendingSecondaryExternalIdAsPending()
+    {
+        var connection = BuildConnection(ConnectedSystemObjectConnectionState.ProvisioningExportPending);
+        connection.ExternalId = null;
+        connection.PendingSecondaryExternalId = "CN=Alice Smith,OU=Users,DC=bluewater,DC=local";
+
+        var cut = Render<MetaverseObjectConnectionsTable>(p => p
+            .Add(c => c.IsLoaded, true)
+            .Add(c => c.Connections, [connection]));
+
+        var pending = cut.FindComponent<PendingValue>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pending.Instance.Value, Is.EqualTo(connection.PendingSecondaryExternalId));
+            Assert.That(cut.Markup, Does.Not.Contain(connection.ConnectedSystemObjectId.ToString() + "<"));
+        }
     }
 
     [Test]

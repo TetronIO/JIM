@@ -1595,7 +1595,7 @@ Describe 'Get-JIMMetaverseObjectConnection' {
                 Connections       = @(
                     [PSCustomObject]@{
                         ConnectedSystemObjectId = [guid]::NewGuid()
-                        DisplayName             = 'jsmith'
+                        ExternalId              = 'jsmith'
                         ConnectedSystemId       = 5
                         ConnectedSystemName     = 'HR'
                         ObjectTypeName          = 'person'
@@ -1760,6 +1760,46 @@ Describe 'Get-JIMMetaverseObjectConnection' {
                 $notInScope.Bullets | Should -Be @('Department must equal "Finance" (currently "Engineering")')
                 $notInScope.Summary | Should -BeLike 'Jane Smith is not provisioned to Finance App.*'
                 @($notInScope.Scoping)[0].Criteria[0].Path | Should -Be '1.1'
+            }
+        }
+
+        It 'Names an object by its Secondary External ID where it has one, as the portal does' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        MetaverseObjectId = $mvoId
+                        DisplayName       = 'Alice Smith'
+                        Connections       = @(
+                            [PSCustomObject]@{
+                                ConnectedSystemObjectId = [guid]::NewGuid()
+                                ConnectedSystemName     = 'Glitterband EMEA'
+                                ExternalId              = '599cfaa8-668c-1041-905c-a36b0fa4c127'
+                                SecondaryExternalId     = 'CN=Alice Smith,OU=Users,DC=glitterband,DC=local'
+                                IsTarget                = $true
+                                State                   = 'InSync'
+                            },
+                            [PSCustomObject]@{
+                                ConnectedSystemObjectId    = [guid]::NewGuid()
+                                ConnectedSystemName        = 'Bluewater NA'
+                                PendingSecondaryExternalId = 'CN=Alice Smith,OU=Users,DC=bluewater,DC=local'
+                                IsTarget                   = $true
+                                State                      = 'ProvisioningExportPending'
+                            }
+                        )
+                        NotConnected      = $null
+                    }
+                }
+
+                $results = @(Get-JIMMetaverseObjectConnection -Id $mvoId)
+
+                $results[0].Object | Should -Be 'CN=Alice Smith,OU=Users,DC=glitterband,DC=local'
+                $results[0].ExternalId | Should -Be '599cfaa8-668c-1041-905c-a36b0fa4c127'
+                $results[0].SecondaryExternalId | Should -Be 'CN=Alice Smith,OU=Users,DC=glitterband,DC=local'
+                $results[1].Object | Should -Be 'CN=Alice Smith,OU=Users,DC=bluewater,DC=local'
+                $results[1].ExternalId | Should -BeNullOrEmpty
+                $results[1].PendingSecondaryExternalId | Should -Be 'CN=Alice Smith,OU=Users,DC=bluewater,DC=local'
             }
         }
 

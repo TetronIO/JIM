@@ -31,7 +31,7 @@ A value's source is not only in the Inspect view: the object's **Changes** tab n
 
 ## :material-link-variant: Why it is connected, and why it is not
 
-A Metaverse Object's **Connections** tab lists every Connected System Object joined to it, with its role, its state and a per-row **Preview Sync** (see [Sync Preview](sync-preview.md)). It also answers the two questions a helpdesk asks most: why does this person have an account in that system, and why don't they have one in this one? The tab is available to Administrators.
+A Metaverse Object's **Connections** tab lists every Connected System Object joined to it, with its role, its state and a per-row **Preview Sync** (see [Sync Preview](sync-preview.md)). The **Object** column names each one by its Secondary External ID where its Connected System has one (for an LDAP directory, the distinguished name), with its External ID beneath; otherwise by its External ID alone. An object still being provisioned shows the identifiers its Pending Export will give it, marked as pending. It also answers the two questions a helpdesk asks most: why does this person have an account in that system, and why don't they have one in this one? The tab is available to Administrators.
 
 **Why it is connected.** Expand a connection's row to see:
 
