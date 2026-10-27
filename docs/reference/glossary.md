@@ -9,6 +9,33 @@ audience: implementer
 
 Key terms and concepts used throughout JIM.
 
+```jim-diagram
+archetype: map
+title: How JIM's core terms connect
+desc: "A Connector reaches a Connected System. A Schedule runs Run Profiles; each Run Profile runs against a Connected System and is recorded as an Activity. A Connected System has its Connector Space, which holds Connected System Objects. A Connected System Object flows through a Synchronisation Rule into a Metaverse Object, which the Metaverse holds. Each term links to its entry below."
+nodes:
+  - { id: connector, label: Connector, link: "#connector", row: 0, col: 0 }
+  - { id: cs, label: Connected System, link: "#connected-system", row: 0, col: 1 }
+  - { id: rp, label: Run Profile, link: "#run-profile", row: 0, col: 2 }
+  - { id: schedule, label: Schedule, link: "#schedule", row: 0, col: 3 }
+  - { id: space, label: Connector Space, link: "#connector-space", row: 1, col: 1 }
+  - { id: activity, label: Activity, link: "#activity", row: 1, col: 2 }
+  - { id: metaverse, label: Metaverse, link: "#metaverse", row: 1, col: 3 }
+  - { id: cso, label: Connected System Object, link: "#connected-system-object", row: 2, col: 1 }
+  - { id: sr, label: Synchronisation Rule, link: "#synchronisation-rule", row: 2, col: 2 }
+  - { id: mvo, label: Metaverse Object, link: "#metaverse-object", row: 2, col: 3 }
+edges:
+  - { from: connector, to: cs, label: reaches }
+  - { from: rp, to: cs, label: runs against }
+  - { from: schedule, to: rp, label: runs }
+  - { from: cs, to: space, label: has its }
+  - { from: rp, to: activity, label: recorded as }
+  - { from: space, to: cso, label: holds }
+  - { from: metaverse, to: mvo, label: holds }
+  - { from: cso, to: sr, label: flows through }
+  - { from: sr, to: mvo, label: into }
+```
+
 Activity { #activity }
 :   A logged operation (such as import, sync, or export) with its status, timing, and outcome details. Activities provide a complete audit trail of every operation JIM performs.
 

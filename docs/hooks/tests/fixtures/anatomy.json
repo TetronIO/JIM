@@ -1,0 +1,73 @@
+[
+  {
+    "archetype": "anatomy",
+    "title": "What an API key is made of",
+    "desc": "An API key is the prefix jim_ak_ and a random secret; JIM keeps only a SHA-256 hash of the secret.",
+    "subject": {
+      "kind": "value",
+      "parts": [
+        {
+          "text": "jim_ak_",
+          "strong": true,
+          "callout": "Prefix: always visible"
+        },
+        {
+          "id": "secret",
+          "text": "••••••••••••••••••",
+          "callout": "Secret: shown once, at creation"
+        }
+      ]
+    },
+    "derived": {
+      "from": "secret",
+      "label": "stored as",
+      "box": "SHA-256 hash",
+      "note": "all JIM keeps; a lost secret means a new key"
+    },
+    "properties": [
+      {
+        "name": "Roles",
+        "value": "what it may do"
+      },
+      {
+        "name": "Expiry",
+        "value": "a date, or none"
+      },
+      {
+        "name": "Enabled",
+        "value": "on or off"
+      },
+      {
+        "name": "Last used",
+        "value": "time and source IP"
+      }
+    ]
+  },
+  {
+    "archetype": "anatomy",
+    "title": "What a Connected System holds",
+    "desc": "A Connected System holds its connection settings, schema, Connector Space and Run Profiles.",
+    "subject": {
+      "kind": "object",
+      "label": "Connected System",
+      "parts": [
+        {
+          "label": "Connection settings",
+          "detail": "from its Connector"
+        },
+        {
+          "label": "Schema",
+          "detail": "Object Types and attributes"
+        },
+        {
+          "label": "Connector Space",
+          "detail": "its Connected System Objects"
+        },
+        {
+          "label": "Run Profiles",
+          "detail": "import, synchronise, export"
+        }
+      ]
+    }
+  }
+]

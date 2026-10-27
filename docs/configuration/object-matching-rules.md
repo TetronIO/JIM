@@ -9,6 +9,28 @@ audience: administrator
 
 Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Each rule compares one source, a Connected System attribute or an expression over the Connected System Object, with one Metaverse attribute:
 
+```jim-diagram
+archetype: decision
+title: How an Object Matching Rule decides a join
+desc: "JIM tries the Object Matching Rules in order. If a rule's value matches exactly one Metaverse Object, the objects are Joined and the rule and value are recorded. If it matches several, the result is an Ambiguous Match and nothing joins or projects. If the rule cannot be worked out, the result is Object Matching Rule Failed and no later rule is tried. If nothing matches, or the rule has no value, JIM tries the next rule; when no rules are left, the result is No match, and projection or provisioning may create an object."
+start: {label: Connected System Object}
+questions:
+- {id: rule, label: Next Object Matching Rule, sub: 'how many Metaverse Objects match?'}
+- {id: more, label: 'More rules?'}
+outcomes:
+- {id: joined, label: Joined, sub: the rule and value recorded, good: true}
+- {id: ambiguous, label: Ambiguous Match, sub: nothing joins or projects}
+- {id: failed, label: Object Matching Rule Failed, sub: no later rule is tried}
+- {id: none, label: No match, sub: projection or provisioning may create one}
+answers:
+- {from: rule, to: joined, label: exactly one}
+- {from: rule, to: ambiguous, label: several}
+- {from: rule, to: failed, label: cannot be worked out}
+- {from: rule, to: more, label: 'none, or no value'}
+- {from: more, to: rule, label: 'yes: try it'}
+- {from: more, to: none, label: 'no'}
+```
+
 | Connected System attribute or expression | Metaverse Object Attribute | Description |
 |---------------|---------------|-------------|
 | `employeeId` | `Employee ID` | Match on employee identifier |

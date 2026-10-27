@@ -9,6 +9,23 @@ audience: administrator
 
 **API keys** provide non-interactive authentication for scripts, automation, and service-to-service integrations. Each key is associated with one or more [roles](roles.md) that determine what it can do.
 
+```jim-diagram
+archetype: anatomy
+title: What an API key is made of
+desc: "An API key is the prefix jim_ak_, which stays visible so you can tell keys apart, followed by a random secret that is shown once, when the key is created. JIM stores only a SHA-256 hash of the secret, so a lost secret means a new key. Each key also carries its Roles, which decide what it may do; an expiry date or none; an enabled flag; and the time and source IP of its last use."
+subject:
+  kind: value
+  parts:
+  - {text: jim_ak_, strong: true, callout: 'Prefix: always visible'}
+  - {id: secret, text: ••••••••••••••••••, callout: 'Secret: shown once, at creation'}
+derived: {from: secret, label: stored as, box: SHA-256 hash, note: all JIM keeps; a lost secret means a new key}
+properties:
+- {name: Roles, value: what it may do}
+- {name: Expiry, value: 'a date, or none'}
+- {name: Enabled, value: on or off}
+- {name: Last used, value: time and source IP}
+```
+
 ## :material-eye-outline: One-time disclosure
 
 The full secret value of an API key is returned **only once**, at the moment the key is created. After that, only the key prefix is visible. JIM stores only a SHA-256 hash of the key; the plaintext is never persisted, and there is no way to recover it.

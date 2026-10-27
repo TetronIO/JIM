@@ -1,6 +1,6 @@
 # A Diagram on Every Docs Page: Implementation Plan
 
-- **Status:** Doing (Phase 1, the renderer and the flow archetype)
+- **Status:** Doing (Phases 1 to 3 done; Phase 4, the Configuration batch, next)
 - **Issue:** [#2564](https://github.com/TetronIO/JIM/issues/2564)
 - **PRD:** [`PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md`](../../prd/doing/PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md)
 
@@ -103,7 +103,7 @@ docs/configuration/api-keys.md          docs/hooks/diagrams.py               bui
 
 Each phase is its own pull request. Phases 1 to 3 land before any page gets a diagram, so the Configuration batch is pure authoring.
 
-### Phase 1: Renderer foundation and the first archetype
+### Phase 1: Renderer foundation and the first archetype ✅
 
 - `docs/hooks/diagrams.py` with the fence parser, spec validation, the metrics loader, text wrapping and the **flow** archetype (wide and narrow).
 - `scripts/Update-DiagramFontMetrics.ps1` and the committed `docs/hooks/diagram_metrics.json`.
@@ -117,12 +117,12 @@ Each phase is its own pull request. Phases 1 to 3 land before any page gets a di
     - the label-cut check passes.
 - Wire both into `changelog-lint` when `docs/hooks/**`, `custom.css` or the scripts change.
 
-### Phase 2: The remaining archetypes
+### Phase 2: The remaining archetypes ✅
 
 - Lifecycle, anatomy, decision, comparison and relationship map, each with wide and narrow layouts, each with unit and browser tests.
 - The **glossary relationship map** lands here as the relationship map's showcase: JIM's core terms with each node linking to its glossary anchor.
 
-### Phase 3: The rules and the tooling
+### Phase 3: The rules and the tooling ✅
 
 - `engineering/DOCUMENTATION_STANDARD.md`: a new "Visuals" section with VIS-1 to VIS-4 and rule index rows; VOI-5 links to it.
 - VIS-1 in `Test-DocsConformance.ps1` (added to `KnownRules`, with its check and tests), tier `Ratchet`, baseline seeded, and the changelog's `allow-page` marker.

@@ -89,7 +89,7 @@ Nothing else is needed. They are clickable automatically (see "Diagram lightbox"
 
 ## Generated diagrams (`jim-diagram`)
 
-A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. **Flow** is the archetype available now:
+A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. Six archetypes are available: **flow**, **lifecycle**, **anatomy**, **decision**, **comparison** and **map**. Pick the one that matches what the page explains, and draw from the page's own words. A flow is something that processes, with steps and branches:
 
 ````markdown
 ```jim-diagram
@@ -113,7 +113,104 @@ detours:                                                              # optional
 - **Every key is checked.** An unknown or misspelt key, a missing label, or a detour between steps that do not exist fails the build with the page and line. So does a label that cannot fit its box on two lines, or a flow too wide for the 800-unit layout: shorten the label or split the diagram; there is no setting to squeeze it. A step a detour leaves or rejoins cannot carry a `note`, because the detour's line would cross it.
 - **Two layouts are drawn,** wide and narrow, and `custom.css` ("Generated diagrams") shows the narrow one below 600px. The lightbox wraps each, and hides the trigger of the one not showing.
 - **Labels are sized from committed font metrics** (`docs/hooks/diagram_metrics.json`). If the site's fonts change, regenerate them with `pwsh -File ./scripts/Update-DiagramFontMetrics.ps1`.
-- **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains.
+- **Code in a label:** wrap a cmdlet, attribute or value in backticks (`` `Get-JIMConnectedSystem` ``) and it is set, and measured, in Plex Mono. A code span is never split across lines.
+
+A **lifecycle** is something that moves between states, with what moves it:
+
+````markdown
+```jim-diagram
+archetype: lifecycle
+title: The Connected System lifecycle, one cmdlet per step
+desc: ...
+start: { label: "`New-JIMConnectedSystem`" }          # optional: a dot and the arrow that creates it
+container: { label: Connected System, note: "`Get-JIMConnectedSystem` reads it ..." }   # optional frame
+states:                                                # two to four, in order
+  - { id: configured, label: Configured, sub: no objects yet }
+  - { id: holding, label: Holding objects, sub: Connector Space filled }
+transitions:                                           # only between neighbouring states, one each way
+  - { from: configured, to: holding, label: imported by a Run Profile }
+  - { from: holding, to: configured, label: "`Clear-JIMConnectedSystem`", note: keeps configuration, schema and rules }
+end: { from: container, label: "`Remove-JIMConnectedSystem`", note: "check first with `Get-...DeletionPreview`",
+       state: { label: Deleted, sub: with all its data } }   # optional: from a state's id, or the container
+```
+````
+
+An **anatomy** takes something apart. Its subject is either a `value` (a string, drawn as a token, as an API key is) or an `object` (a card listing its parts):
+
+````markdown
+```jim-diagram
+archetype: anatomy
+title: What an API key is made of
+desc: ...
+subject:
+  kind: value                                          # or: kind: object, label: ..., parts: [{ label, detail }]
+  parts:                                               # one to four, left to right
+    - { text: jim_ak_, strong: true, callout: "Prefix: always visible" }
+    - { id: secret, text: "••••••••••••••••••", callout: "Secret: shown once, at creation" }
+derived: { from: secret, label: stored as, box: SHA-256 hash, note: all JIM keeps }   # optional, a value's part only
+properties:                                            # optional, up to four chips
+  - { name: Roles, value: what it may do }
+```
+````
+
+A **decision** is a branching diagnosis or outcome. Questions stack down the left; each answer goes to an outcome on the right, to the next question, or back to an earlier one:
+
+````markdown
+```jim-diagram
+archetype: decision
+title: How an Object Matching Rule decides a join
+desc: ...
+start: { label: Connected System Object }              # optional
+questions:                                             # one to four, top to bottom
+  - { id: rule, label: Next Object Matching Rule, sub: how many Metaverse Objects match? }
+  - { id: more, label: More rules? }
+outcomes:                                              # two to six; good: true draws the outcome you want solid
+  - { id: joined, label: Joined, sub: the rule and value recorded, good: true }
+  - { id: none, label: No match, sub: projection or provisioning may create one }
+answers:                                               # every outcome reached, every later question reached
+  - { from: rule, to: joined, label: exactly one }
+  - { from: rule, to: more, label: "none, or no value" }   # to the next question only
+  - { from: more, to: rule, label: "yes: try it" }         # back to an earlier one: a loop
+  - { from: more, to: none, label: "no" }
+```
+````
+
+A **comparison** sets two or three options side by side against the same rows. A `meter` (0 to 12) draws a row of dots, filled in proportion: "every object" against "only what changed":
+
+````markdown
+```jim-diagram
+archetype: comparison
+title: Full and Delta runs compared
+desc: ...
+columns: [{ label: Full, sub: "every object, every time" }, { label: Delta, sub: "only what changed, faster" }]
+rows:                                                  # one to four, each with one cell per column
+  - label: Import
+    cells:
+      - { text: reads every object, sub: one no longer returned is deleted, meter: 12 }
+      - { text: reads changes since the last import, meter: 3 }
+footer: "Export flushes the Pending Exports either way: it has no Full or Delta form"   # optional
+```
+````
+
+A **map** shows how three to fourteen things connect, on a grid of up to four rows and four columns. An edge runs along a row or a column and may not pass through another node. A `link` (a page anchor, or a relative path) makes the node a link, so a map can index the page it sits on:
+
+````markdown
+```jim-diagram
+archetype: map
+title: How JIM's core terms connect
+desc: ...
+nodes:
+  - { id: connector, label: Connector, link: "#connector", row: 0, col: 0 }
+  - { id: cs, label: Connected System, link: "#connected-system", row: 0, col: 1 }
+edges:
+  - { from: connector, to: cs, label: reaches }
+```
+````
+
+On a phone, a decision stacks each question over its outcomes, a comparison becomes one block per column, and a map becomes a list of its nodes, each followed by the connections leaving it. A map with links is not wrapped by the lightbox (`diagram-zoom.js` skips any diagram containing a link), because a link inside the trigger button cannot be reached by keyboard; every other generated diagram keeps its Enlarge chip in a strip above it, clear of its content.
+
+- **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, a label hidden under another shape, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains. Before committing a page's diagram, check the page itself and look at the result: `pwsh -File ./scripts/Test-Diagrams.ps1 -Path docs/<section>/<page>.md -ScreenshotDir <folder>` runs the same checks on the page's diagrams and saves a picture of each.
+- **Review a batch from its contact sheet.** `pwsh -File ./scripts/New-DiagramContactSheet.ps1 -Section configuration` (or `-Path` with one or more pages) writes one self-contained HTML page showing every diagram in the section, page by page, each in the light and dark themes at the 720px reading column and on a 390px phone, and lists each page with no diagram yet. It renders the specs with `diagrams.py` itself, so no MkDocs build is needed, only PyYAML and the browser the checks above use; it prints where it wrote the sheet (the system temporary folder unless `-OutFile` says otherwise). Concept SVGs are drawn too; Mermaid diagrams are listed, not drawn. A spec that fails shows its error in place, and the script exits 1.
 
 ## Diagram lightbox
 
