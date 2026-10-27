@@ -9,6 +9,17 @@ audience: evaluator
 
 JIM has completed **pre-release stabilisation**. The core identity lifecycle (Import, Sync, Export and Schedule) is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and integration test coverage across its synchronisation scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
 
+```jim-diagram
+archetype: flow
+title: Where JIM is, and the milestones ahead
+desc: "Pre-release stabilisation is complete: the core identity lifecycle of Import, Sync, Export and Schedule works, and the platform is hardened for production. The milestones ahead, in order, are v1.0, Identity Lifecycle Complete, the first stable release; v1.x, Connector Ecosystem, which expands the systems JIM connects to out of the box; and v2.0, IGA Foundation, so identities can be managed directly in JIM. The roadmap gives no dates."
+steps:
+- {id: pre, label: Pre-release stabilisation, sub: complete}
+- {id: v1, label: v1.0, sub: Identity Lifecycle Complete, note: first stable release}
+- {id: v1x, label: v1.x, sub: Connector Ecosystem, note: more systems out of the box}
+- {id: v2, label: v2.0, sub: IGA Foundation, note: manage identities in JIM}
+```
+
 For the latest status and issue tracking, see the public [JIM Roadmap project board](https://github.com/orgs/TetronIO/projects/1).
 
 ---

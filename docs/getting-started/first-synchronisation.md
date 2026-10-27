@@ -11,6 +11,19 @@ validated: v0.16.0
 
 In about 30 minutes, you take 25 people from an HR system's file, bring them into JIM, and have JIM write them out to a staff directory. By the end, JIM holds a Metaverse Object for each person, and a second file, written by JIM, lists all 25.
 
+```jim-diagram
+archetype: flow
+title: Twenty-five people, from the HR file to the staff directory
+desc: "The HR System's file, hr-people.csv, holds 25 people. The Full Import (step 7) reads it into the HR System's Connector Space as 25 Connected System Objects. The Full Synchronisation (step 8) applies both Synchronisation Rules: it projects 25 Metaverse Objects and stages 25 Pending Exports for the staff directory. The Export (step 9) writes each Pending Export to the Staff Directory's file, staff-directory.csv, which then lists all 25 people."
+in: {label: HR System, note: "`hr-people.csv`"}
+out: {label: Staff Directory, note: "`staff-directory.csv`"}
+container: {label: JIM}
+steps:
+- {id: import, label: Full Import, badge: 7, sub: 25 Connected System Objects}
+- {id: sync, label: Full Synchronisation, badge: 8, sub: 25 Metaverse Objects, note: 25 Pending Exports staged}
+- {id: export, label: Export, badge: 9, sub: writes all 25}
+```
+
 Both systems are files, read and written by the JIM File Connector, so you need nothing but JIM itself: this works on an evaluation installation with no network access. Every step is shown in the portal and in PowerShell; follow either, or switch between them.
 
 ## :material-clipboard-list-outline: Before you begin

@@ -9,6 +9,28 @@ audience: administrator
 
 When more than one Connected System feeds the same Metaverse attribute, JIM has to decide which value wins. **Attribute Priority** makes that decision deterministic: each contributing Synchronisation Rule has a priority for the attribute, and the highest-priority contributor that has an opinion wins. The result no longer depends on the order your synchronisations happen to run in.
 
+```jim-diagram
+archetype: decision
+title: How Attribute Priority picks a contributor
+desc: "JIM takes the Synchronisation Rules that contribute to a Metaverse attribute in priority order, 1 first. If no contributor is left, the attribute has no contributor and is left unset. If the next contributor supplies a value, its value wins and lower priorities are not consulted. If it supplies none, but it applies to the object (enabled, joined and in scope) and has Null is a value set, it asserts no value: the attribute is cleared downstream, and lower priorities are not consulted. Otherwise, including a rule that does not apply to the object at all, it is skipped and JIM considers the next contributor."
+start: {label: Metaverse attribute}
+questions:
+- {id: left, label: "A contributor left?", sub: "next in priority order, 1 first"}
+- {id: value, label: "Does it supply a value?"}
+- {id: niv, label: "Applies, with Null is a value?", sub: "enabled, joined and in scope"}
+outcomes:
+- {id: unset, label: No contributor, sub: the attribute is left unset}
+- {id: wins, label: Its value wins, sub: lower priorities not consulted, good: true}
+- {id: blank, label: No value asserted, sub: "cleared downstream; lower priorities not consulted"}
+answers:
+- {from: left, to: unset, label: "no"}
+- {from: left, to: value, label: "yes"}
+- {from: value, to: wins, label: "yes"}
+- {from: value, to: niv, label: "no"}
+- {from: niv, to: blank, label: "yes"}
+- {from: niv, to: left, label: "no: skip it"}
+```
+
 This is an **inbound** concern. It governs how values flow from Connected Systems into the Metaverse; it does not change how the Metaverse is exported back out.
 
 ## :material-sort-numeric-ascending: How resolution works

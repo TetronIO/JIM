@@ -9,6 +9,29 @@ audience: administrator
 
 Wherever JIM shows you an object (a search result, a Pending Export, a causality chain, a change history entry) it has to decide what to call it. Identity data rarely offers a single reliable answer: an Active Directory group carries `cn` but often no `displayName`, a CSV feed might offer neither, and some objects genuinely have no name at all.
 
+```jim-diagram
+archetype: comparison
+title: One naming rule, applied to both kinds of object
+desc: "JIM names an object by trying an ordered list of naming attributes, then falling back to an identifier; the first that holds an actual value wins, and a blank or whitespace-only value counts as absent. A Connected System Object tries displayName, then cn, then name, then its External ID, and then its Secondary External ID, which is the Distinguished Name for LDAP systems; its attribute names are matched ignoring case, because the schema belongs to your Connected System. A Metaverse Object tries Display Name, then Common Name, then its ID; its attribute names are matched exactly, because the Metaverse schema is JIM's own."
+columns:
+- {label: Connected System Objects}
+- {label: Metaverse Objects}
+rows:
+- label: Naming attributes, in order
+  cells:
+  - {text: "`displayName`, `cn`, `name`"}
+  - {text: "Display Name, Common Name"}
+- label: Then an identifier
+  cells:
+  - {text: "External ID, then Secondary External ID", sub: "the Distinguished Name, for LDAP systems"}
+  - {text: the object's ID}
+- label: Attribute names matched
+  cells:
+  - {text: ignoring case, sub: the schema is your system's}
+  - {text: exactly, sub: the schema is JIM's own}
+footer: "The first that holds a value wins; a blank or whitespace-only value counts as absent"
+```
+
 JIM resolves this the same way everywhere: **try an ordered list of naming attributes, then fall back to an identifier.** One rule, applied consistently, so the same object reads the same way on every screen.
 
 ## :material-sort-variant: The order
