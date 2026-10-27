@@ -89,19 +89,24 @@ public sealed class ActivityEtaTracker(TimeProvider timeProvider, int maxTracked
                 if (_samples.Count > 0 && (objectsProcessed < _lastProcessed || objectsToProcess != _lastTotal))
                     _samples.Clear();
 
+                // Only a movement of the counter is a sample; a poll that finds it where it was adds
+                // nothing but time, which the rate reads from the clock. Were every poll a sample, a
+                // stall longer than the window (the worker counts once per page, and a page of large
+                // groups can take minutes) would leave only identical counts in the window and a
+                // rate of zero for a run still working. Keeping movements only, the window always
+                // reaches back past the last one, and the rate falls the longer the counter stalls.
+                if (_samples.Count == 0 || objectsProcessed != _lastProcessed)
+                    _samples.Enqueue((now, objectsProcessed));
+
                 _lastProcessed = objectsProcessed;
                 _lastTotal = objectsToProcess;
-                _samples.Enqueue((now, objectsProcessed));
 
                 // Trim by count, then by age; always retain at least two samples so slow phases
-                // (sampling less often than the window) still produce an estimate.
+                // (moving less often than the window) still produce an estimate.
                 while (_samples.Count > MaxSamplesPerActivity)
                     _samples.Dequeue();
                 while (_samples.Count > 2 && now - _samples.Peek().Time > RateWindow)
                     _samples.Dequeue();
-
-                if (_samples.Count < 2)
-                    return new ActivityEtaEstimate(null, null);
 
                 var oldest = _samples.Peek();
                 var elapsedSeconds = (now - oldest.Time).TotalSeconds;

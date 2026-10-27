@@ -174,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A running Activity's progress no longer reads "Finishing up" while objects are still being processed. A run slowed by large objects, such as groups with many members, used to show it from as early as 95%; its rate and time remaining now slow down instead, and "Finishing up" appears only once every object has been counted.
 - 🐛 A run queued behind a parallel Schedule step now waits for the step to finish. It used to start alongside it, so a hand-queued Full Import could run at the same time as the Schedule's Full Import of the same Connected System.
 - 🐛 A leaver whose end date passes, or a joiner whose start date arrives, is now processed by the next Delta Synchronisation once Temporal Scope Reconciliation has flagged them; until now only a Full Synchronisation applied the change, so a schedule of Delta Synchronisations never did.
 - 🐛 Sorting or searching an Activity's execution items by name no longer times out on large runs; a 40,000-item Display Name sort took 48 seconds and showed an error page.
