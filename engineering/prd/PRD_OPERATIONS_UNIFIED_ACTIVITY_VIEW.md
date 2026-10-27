@@ -69,8 +69,8 @@ A third gap: nothing on the page says when the next Schedule will add work to th
 6. Queued contains only tasks in the worker queue: Schedule Executions (grouped under their header, with step rail, "Open execution" and "Cancel Schedule", as today) and individually queued tasks.
 7. Queued is sorted so the **next run sits at the bottom of the section**, immediately above In progress; the furthest-out item is at the top. This keeps the whole page in one time direction. A short hint under the header states the order.
 8. Tasks in the same parallel Schedule step share a run position and are marked as parallel (the existing split icon).
-9. Each queued item shows an **Est. start** time, estimated from the expected end of the runs ahead of it and each Run Profile's last successful duration. Where no estimate is possible (no previous run), the cell is blank rather than guessed.
-10. Queued shows at most 10 rows by default, keeping the rows nearest In progress, with a "Show N more" control for the rest, so a long queue never pushes In progress off screen.
+9. Each queued item shows an **Est. start** time, estimated from the expected end of the runs ahead of it. A run's expected duration is the **median of that Run Profile's last 5 successful runs** (fewer if fewer exist), so one unusually slow or fast run does not skew the estimate. Where there is no successful run to go on, the cell is blank rather than guessed, and estimates for items behind it are blank too.
+10. Queued shows only as many rows as fit the viewport while keeping In progress (its header and first running row) visible without scrolling, with a floor of 3 rows. It keeps the rows nearest In progress and offers "Show N more" for the rest. The row count is recalculated when the window is resized, not on every live update, so rows do not jump while the administrator is reading.
 11. Cancel actions behave exactly as on the current Queue tab (tasks waiting for a previous step cannot be cancelled individually; a Schedule Execution can be cancelled as a whole).
 
 **In progress**
@@ -162,7 +162,7 @@ Completed 8  EARLIER  Most recent first                     [ ] Has child activi
 
 **Given**: a Schedule Execution with 24 queued steps
 **When**: the administrator opens the Activity tab
-**Then**: Queued shows the 10 rows nearest In progress and "Show 14 more"; In progress is visible without scrolling on a 1080p display
+**Then**: Queued shows as many of the rows nearest In progress as fit the window (at least 3) and "Show N more" for the rest; In progress is visible without scrolling
 
 ### Scenario 5: Next Schedule with Service Health collapsed
 
@@ -187,10 +187,10 @@ Completed 8  EARLIER  Most recent first                     [ ] Has child activi
 
 | Area | Impact |
 |------|--------|
-| Database | None expected. `Schedule.NextRunTime` already exists. Est. start may need last-successful-duration per Run Profile; check whether an index is needed |
+| Database | None expected. `Schedule.NextRunTime` already exists. Est. start needs the last 5 successful durations per Run Profile; check whether an index is needed |
 | API | None |
 | Worker | None |
-| Application | Possibly a method for the next due Schedule and for last-successful durations per Run Profile |
+| Application | Possibly a method for the next due Schedule and for the median recent duration per Run Profile |
 | UI | `Operations.razor` tab strip; new Activity tab replacing `OperationsQueueTab.razor` and `OperationsHistoryTab.razor`; `ServiceHealthStrip.razor` / `ServiceHealthDisplay`; links in `ActivityDetail.razor` and elsewhere that target `?t=history` or `?t=queue` |
 
 ## Documentation Impact
@@ -201,16 +201,12 @@ Completed 8  EARLIER  Most recent first                     [ ] Has child activi
 | `docs/configuration/activities.md` | Update references to the History tab |
 | `docs/configuration/schedules.md` | Update references to the Queue and History tabs |
 
-## Open Questions
-
-1. Est. start: is "last successful duration" a good enough estimator, or should it use a median of recent runs to damp outliers?
-2. Should the Queued "Show more" cap be 10, or sized to the viewport?
-
 ## Acceptance Criteria
 
 - [ ] The Operations page has an Activity tab in place of Queue and History, and it opens by default
 - [ ] Sections appear in the order Queued, In progress, Completed, with counts and time cues
-- [ ] Queued shows only queued tasks and Schedule Executions, sorted with the next run nearest In progress, capped with "Show more"
+- [ ] Queued shows only queued tasks and Schedule Executions, sorted with the next run nearest In progress, sized to the viewport (minimum 3 rows) with "Show more"
+- [ ] Est. start uses the median of each Run Profile's last 5 successful runs, and is blank where there is none
 - [ ] Every in-progress task shows the high-fidelity progress display; parallel tasks appear together under their Schedule Execution
 - [ ] Completed is paged server-side and excludes in-progress runs; the Result filter applies to it alone
 - [ ] Queued / In progress / Completed toggles work in any combination and persist in the URL
