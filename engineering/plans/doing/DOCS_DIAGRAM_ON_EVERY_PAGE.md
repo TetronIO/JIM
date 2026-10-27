@@ -1,6 +1,6 @@
 # A Diagram on Every Docs Page: Implementation Plan
 
-- **Status:** Doing (Phase 1 done; Phase 2: lifecycle and anatomy built, decision, comparison and relationship map in review)
+- **Status:** Doing (Phases 1 and 2 done)
 - **Issue:** [#2564](https://github.com/TetronIO/JIM/issues/2564)
 - **PRD:** [`PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md`](../../prd/doing/PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md)
 
@@ -117,7 +117,7 @@ Each phase is its own pull request. Phases 1 to 3 land before any page gets a di
     - the label-cut check passes.
 - Wire both into `changelog-lint` when `docs/hooks/**`, `custom.css` or the scripts change.
 
-### Phase 2: The remaining archetypes
+### Phase 2: The remaining archetypes ✅
 
 - Lifecycle, anatomy, decision, comparison and relationship map, each with wide and narrow layouts, each with unit and browser tests.
 - The **glossary relationship map** lands here as the relationship map's showcase: JIM's core terms with each node linking to its glossary anchor.

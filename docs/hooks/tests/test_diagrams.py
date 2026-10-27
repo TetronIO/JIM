@@ -373,6 +373,160 @@ class AnatomyTests(unittest.TestCase):
             render(spec)
 
 
+DECISION = {
+    "archetype": "decision",
+    "title": "How an Object Matching Rule decides a join",
+    "desc": "Rules are tried in order: one match joins, several is an Ambiguous Match, a rule that cannot be worked out fails, and none tries the next rule until none are left.",
+    "start": {"label": "Connected System Object"},
+    "questions": [
+        {"id": "rule", "label": "Next Object Matching Rule", "sub": "how many Metaverse Objects match?"},
+        {"id": "more", "label": "More rules?"},
+    ],
+    "outcomes": [
+        {"id": "joined", "label": "Joined", "sub": "the rule and value recorded", "good": True},
+        {"id": "ambiguous", "label": "Ambiguous Match", "sub": "nothing joins or projects"},
+        {"id": "failed", "label": "Object Matching Rule Failed", "sub": "no later rule is tried"},
+        {"id": "none", "label": "No match", "sub": "projection or provisioning may create one"},
+    ],
+    "answers": [
+        {"from": "rule", "to": "joined", "label": "exactly one"},
+        {"from": "rule", "to": "ambiguous", "label": "several"},
+        {"from": "rule", "to": "failed", "label": "cannot be worked out"},
+        {"from": "rule", "to": "more", "label": "none, or no value"},
+        {"from": "more", "to": "rule", "label": "yes: try it"},
+        {"from": "more", "to": "none", "label": "no"},
+    ],
+}
+
+COMPARISON = {
+    "archetype": "comparison",
+    "title": "Full and Delta runs compared",
+    "desc": "Full runs read or evaluate every object; Delta runs only what changed. Export has no Full or Delta form.",
+    "columns": [{"label": "Full", "sub": "every object, every time"}, {"label": "Delta", "sub": "only what changed, faster"}],
+    "rows": [
+        {"label": "Import", "cells": [
+            {"text": "reads every object", "sub": "one no longer returned is deleted", "meter": 12},
+            {"text": "reads changes since the last import", "sub": "needs a connector that tracks changes", "meter": 3}]},
+        {"label": "Synchronisation", "cells": [
+            {"text": "evaluates every Connected System Object", "sub": "previewable before it runs", "meter": 12},
+            {"text": "evaluates objects with pending changes", "meter": 3}]},
+    ],
+    "footer": "Export flushes the Pending Exports either way: it has no Full or Delta form",
+}
+
+MAP = {
+    "archetype": "map",
+    "title": "How JIM's core terms connect",
+    "desc": "A Connector reaches a Connected System, whose Connector Space holds Connected System Objects; a Synchronisation Rule flows them into Metaverse Objects.",
+    "nodes": [
+        {"id": "connector", "label": "Connector", "link": "#connector", "row": 0, "col": 0},
+        {"id": "cs", "label": "Connected System", "link": "#connected-system", "row": 0, "col": 1},
+        {"id": "rp", "label": "Run Profile", "link": "#run-profile", "row": 0, "col": 2},
+        {"id": "space", "label": "Connector Space", "link": "#connector-space", "row": 1, "col": 1},
+        {"id": "cso", "label": "Connected System Object", "link": "#connected-system-object", "row": 2, "col": 1},
+        {"id": "sr", "label": "Synchronisation Rule", "link": "#synchronisation-rule", "row": 2, "col": 2},
+        {"id": "mvo", "label": "Metaverse Object", "link": "#metaverse-object", "row": 2, "col": 3},
+    ],
+    "edges": [
+        {"from": "connector", "to": "cs", "label": "reaches"},
+        {"from": "rp", "to": "cs", "label": "runs against"},
+        {"from": "cs", "to": "space", "label": "has its"},
+        {"from": "space", "to": "cso", "label": "holds"},
+        {"from": "cso", "to": "sr", "label": "flows through"},
+        {"from": "sr", "to": "mvo", "label": "into"},
+    ],
+}
+
+
+class DecisionTests(unittest.TestCase):
+    def test_it_renders_questions_outcomes_and_answers(self):
+        html = render(DECISION, "de")
+        self.assertTrue(html.startswith('<div class="jim-dg jim-dg-decision">'))
+        wide = svgs(html)[0]
+        for text in ("Next Object Matching Rule", "More rules?", "Joined", "Ambiguous Match", "No match",
+                     "exactly one", "cannot be worked out", "yes: try it"):
+            self.assertIn(text, wide)
+        self.assertEqual(wide.count('class="jimdg-dg-question"'), 2)
+
+    def test_a_good_outcome_is_drawn_solid(self):
+        wide = svgs(render(DECISION, "de"))[0]
+        self.assertEqual(wide.count('class="jimdg-core"'), 1)
+
+    def test_an_answer_names_a_question_or_an_outcome(self):
+        spec = copy.deepcopy(DECISION)
+        spec["answers"][0]["to"] = "nowhere"
+        with self.assertRaisesRegex(diagrams.DiagramError, "nowhere"):
+            render(spec)
+
+    def test_an_answer_to_a_later_question_must_be_the_next_one(self):
+        spec = copy.deepcopy(DECISION)
+        spec["questions"].append({"id": "third", "label": "Third?"})
+        spec["answers"].append({"from": "rule", "to": "third", "label": "skip"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "next question"):
+            render(spec)
+
+    def test_every_outcome_is_reached(self):
+        spec = copy.deepcopy(DECISION)
+        spec["outcomes"].append({"id": "orphan", "label": "Orphan"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "orphan"):
+            render(spec)
+
+
+class ComparisonTests(unittest.TestCase):
+    def test_it_renders_a_grid_of_cells_with_meters(self):
+        html = render(COMPARISON, "co")
+        self.assertTrue(html.startswith('<div class="jim-dg jim-dg-comparison">'))
+        wide = svgs(html)[0]
+        self.assertEqual(wide.count('class="jimdg-dg-dot-on"'), 12 + 3 + 12 + 3)
+        self.assertEqual(wide.count('class="jimdg-dg-dot"'), 9 + 9)
+        self.assertIn("Export flushes the Pending Exports", wide)
+
+    def test_each_row_has_a_cell_per_column(self):
+        spec = copy.deepcopy(COMPARISON)
+        spec["rows"][0]["cells"].pop()
+        with self.assertRaisesRegex(diagrams.DiagramError, "cell"):
+            render(spec)
+
+    def test_a_meter_is_zero_to_twelve(self):
+        spec = copy.deepcopy(COMPARISON)
+        spec["rows"][0]["cells"][0]["meter"] = 13
+        with self.assertRaisesRegex(diagrams.DiagramError, "meter"):
+            render(spec)
+
+
+class MapTests(unittest.TestCase):
+    def test_every_node_links_to_its_entry(self):
+        html = render(MAP, "mp")
+        self.assertTrue(html.startswith('<div class="jim-dg jim-dg-map">'))
+        wide = svgs(html)[0]
+        self.assertEqual(wide.count('<a href="#'), 7)
+        self.assertIn('<a href="#connected-system-object"', wide)
+
+    def test_an_edge_runs_along_a_row_or_a_column(self):
+        spec = copy.deepcopy(MAP)
+        spec["edges"].append({"from": "connector", "to": "mvo", "label": "diagonal"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "row or a column"):
+            render(spec)
+
+    def test_an_edge_cannot_pass_through_another_node(self):
+        spec = copy.deepcopy(MAP)
+        spec["edges"].append({"from": "cs", "to": "cso", "label": "skips the space"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "through"):
+            render(spec)
+
+    def test_two_nodes_cannot_share_a_cell(self):
+        spec = copy.deepcopy(MAP)
+        spec["nodes"][1]["col"] = 0
+        with self.assertRaisesRegex(diagrams.DiagramError, "same place"):
+            render(spec)
+
+    def test_a_link_is_a_page_anchor_or_relative_path(self):
+        spec = copy.deepcopy(MAP)
+        spec["nodes"][0]["link"] = "javascript:alert(1)"
+        with self.assertRaisesRegex(diagrams.DiagramError, "link"):
+            render(spec)
+
+
 class HookTests(unittest.TestCase):
     PAGE = "Intro paragraph.\n\n```jim-diagram\n{spec}\n```\n\n## Next\n"
 

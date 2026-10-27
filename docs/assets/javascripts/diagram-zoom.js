@@ -486,6 +486,9 @@
   function wireInlineSvgs(root) {
     (root || document).querySelectorAll("svg.jim-diagram").forEach(function (svg) {
       if (svg.closest(".jim-dgz-trigger") || svg.closest(".jim-dgz")) return;
+      // A diagram whose nodes are links (a generated map) stays as it is: a link inside the
+      // trigger button would be unreachable by keyboard, and the map is drawn to be read in place.
+      if (svg.querySelector("a[href]")) return;
       var label = svgLabel(svg);
       makeTrigger(svg, label, function () {
         openOverlay(cloneForOverlay(svg), label);

@@ -89,7 +89,7 @@ Nothing else is needed. They are clickable automatically (see "Diagram lightbox"
 
 ## Generated diagrams (`jim-diagram`)
 
-A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. Three archetypes are available: **flow**, **lifecycle** and **anatomy**. A flow is something that processes, with steps and branches:
+A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. Six archetypes are available: **flow**, **lifecycle**, **anatomy**, **decision**, **comparison** and **map**. Pick the one that matches what the page explains, and draw from the page's own words. A flow is something that processes, with steps and branches:
 
 ````markdown
 ```jim-diagram
@@ -152,6 +152,62 @@ properties:                                            # optional, up to four ch
   - { name: Roles, value: what it may do }
 ```
 ````
+
+A **decision** is a branching diagnosis or outcome. Questions stack down the left; each answer goes to an outcome on the right, to the next question, or back to an earlier one:
+
+````markdown
+```jim-diagram
+archetype: decision
+title: How an Object Matching Rule decides a join
+desc: ...
+start: { label: Connected System Object }              # optional
+questions:                                             # one to four, top to bottom
+  - { id: rule, label: Next Object Matching Rule, sub: how many Metaverse Objects match? }
+  - { id: more, label: More rules? }
+outcomes:                                              # two to six; good: true draws the outcome you want solid
+  - { id: joined, label: Joined, sub: the rule and value recorded, good: true }
+  - { id: none, label: No match, sub: projection or provisioning may create one }
+answers:                                               # every outcome reached, every later question reached
+  - { from: rule, to: joined, label: exactly one }
+  - { from: rule, to: more, label: "none, or no value" }   # to the next question only
+  - { from: more, to: rule, label: "yes: try it" }         # back to an earlier one: a loop
+  - { from: more, to: none, label: "no" }
+```
+````
+
+A **comparison** sets two or three options side by side against the same rows. A `meter` (0 to 12) draws a row of dots, filled in proportion: "every object" against "only what changed":
+
+````markdown
+```jim-diagram
+archetype: comparison
+title: Full and Delta runs compared
+desc: ...
+columns: [{ label: Full, sub: "every object, every time" }, { label: Delta, sub: "only what changed, faster" }]
+rows:                                                  # one to four, each with one cell per column
+  - label: Import
+    cells:
+      - { text: reads every object, sub: one no longer returned is deleted, meter: 12 }
+      - { text: reads changes since the last import, meter: 3 }
+footer: "Export flushes the Pending Exports either way: it has no Full or Delta form"   # optional
+```
+````
+
+A **map** shows how three to fourteen things connect, on a grid of up to four rows and four columns. An edge runs along a row or a column and may not pass through another node. A `link` (a page anchor, or a relative path) makes the node a link, so a map can index the page it sits on:
+
+````markdown
+```jim-diagram
+archetype: map
+title: How JIM's core terms connect
+desc: ...
+nodes:
+  - { id: connector, label: Connector, link: "#connector", row: 0, col: 0 }
+  - { id: cs, label: Connected System, link: "#connected-system", row: 0, col: 1 }
+edges:
+  - { from: connector, to: cs, label: reaches }
+```
+````
+
+On a phone, a decision stacks each question over its outcomes, a comparison becomes one block per column, and a map becomes a list of its nodes, each followed by the connections leaving it. A map with links is not wrapped by the lightbox (`diagram-zoom.js` skips any diagram containing a link), because a link inside the trigger button cannot be reached by keyboard; every other generated diagram keeps its Enlarge chip in a strip above it, clear of its content.
 
 - **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, a label hidden under another shape, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains.
 

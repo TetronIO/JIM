@@ -17,7 +17,9 @@
       - no two labels overlap;
       - no line runs through a label;
       - text renders at 10px or more on screen;
-      - the page never scrolls sideways.
+      - the page never scrolls sideways;
+      - with the lightbox script loaded, its Enlarge chip covers no label, and no diagram's links
+        sit inside its button.
 
     It needs Python 3 (no packages: the renderer is standard library only), a browser (the one
     .devcontainer/setup.sh installs for the Playwright MCP server), and network access to
@@ -56,6 +58,7 @@ $driver = @'
 const fs = require('fs');
 const { chromium } = require(process.env.JIM_PW_MODULE);
 const css = fs.readFileSync(process.env.JIM_CSS_PATH, 'utf8');
+const zoom = fs.readFileSync(process.env.JIM_ZOOM_PATH, 'utf8');
 const body = fs.readFileSync(process.env.JIM_FRAGMENTS, 'utf8');
 
 // The parts of Material's page the diagrams sit in: a typeset article in a content column.
@@ -66,7 +69,8 @@ const page = (column) => `<!doctype html><html><head><meta charset="utf-8">
 body { margin: 0; font-family: "IBM Plex Sans", sans-serif; }
 .md-content__inner { box-sizing: border-box; max-width: ${column}; margin: 0 auto; padding: 0 16px; }
 </style></head><body data-md-color-scheme="default">
-<article class="md-content__inner md-typeset">${body}</article></body></html>`;
+<article class="md-content__inner md-typeset">${body}</article>
+<script>${zoom}<\/script></body></html>`;
 
 const VIEWS = [
   { name: 'desktop reading width', width: 1440, column: '720px', layout: 'wide' },
@@ -79,6 +83,7 @@ const VIEWS = [
   const findings = [];
   for (const view of VIEWS) {
     const tab = await browser.newPage({ viewport: { width: view.width, height: 900 } });
+    tab.on('pageerror', err => findings.push(`${view.name}: the page threw: ${err.message}`));
     await tab.setContent(page(view.column), { waitUntil: 'networkidle' });
     await tab.evaluate(() => document.fonts.ready);
     const result = await tab.evaluate((expected) => {
@@ -89,9 +94,14 @@ const VIEWS = [
       if (document.documentElement.scrollWidth > window.innerWidth) out.push(`the page scrolls sideways by ${document.documentElement.scrollWidth - window.innerWidth}px`);
       document.querySelectorAll('.jim-dg').forEach((dg, i) => {
         const name = `diagram ${i + 1} ("${dg.querySelector('title').textContent}")`;
-        const shown = [...dg.querySelectorAll('svg')].filter(s => s.getBoundingClientRect().width > 0);
+        const shown = [...dg.querySelectorAll('svg.jim-diagram')].filter(s => s.getBoundingClientRect().width > 0);
         if (shown.length !== 1) { out.push(`${name}: ${shown.length} layouts show, not one`); return; }
         const svg = shown[0];
+        // The lightbox wraps a diagram in a button: a link inside one is unreachable, and its
+        // Enlarge chip must not sit on the diagram's content.
+        if (svg.querySelector('a') && svg.closest('button')) out.push(`${name}: its links sit inside the lightbox's button`);
+        const trigger = svg.closest('.jim-dgz-trigger');
+        const hint = trigger && trigger.querySelector('.jim-dgz-trigger__hint');
         if (!svg.classList.contains(`jim-dg-${expected}`)) out.push(`${name}: the ${svg.classList.contains('jim-dg-wide') ? 'wide' : 'narrow'} layout shows, not the ${expected} one`);
         const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
         const texts = [...svg.querySelectorAll('text')];
@@ -103,6 +113,7 @@ const VIEWS = [
           t.scrollIntoView({ block: 'center' });
           const r = box(t);
           if (!inside(r, box(svg), 1)) out.push(`${name}: "${t.textContent}" runs outside the diagram`);
+          if (hint && overlap(r, box(hint))) out.push(`${name}: the Enlarge chip covers "${t.textContent}"`);
           const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
           if (!top || !(top === t || t.contains(top))) out.push(`${name}: "${t.textContent}" is hidden under another shape`);
         }
@@ -147,12 +158,13 @@ try {
     $env:JIM_PW_MODULE = $playwrightModule
     $env:JIM_CSS_PATH = $cssPath
     $env:JIM_FRAGMENTS = $fragmentPath
+    $env:JIM_ZOOM_PATH = Join-Path $repoRoot 'docs/assets/javascripts/diagram-zoom.js'
     $json = & node $tempScript
     if ($LASTEXITCODE -ne 0) { throw "The diagram check failed to run (node exited $LASTEXITCODE)." }
 }
 finally {
     Remove-Item -LiteralPath $tempScript, $fragmentPath -Force -ErrorAction SilentlyContinue
-    Remove-Item Env:JIM_PW_MODULE, Env:JIM_CSS_PATH, Env:JIM_FRAGMENTS -ErrorAction SilentlyContinue
+    Remove-Item Env:JIM_PW_MODULE, Env:JIM_CSS_PATH, Env:JIM_FRAGMENTS, Env:JIM_ZOOM_PATH -ErrorAction SilentlyContinue
 }
 
 $result = $json | ConvertFrom-Json

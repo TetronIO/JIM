@@ -928,6 +928,11 @@ body:has(.jim-home) .md-content__button {
 .md-typeset .jim-dg .jim-diagram {
   margin: 0;
 }
+/* The lightbox's Enlarge chip sits in a strip above a generated diagram, never on its content. */
+.md-typeset .jim-dg .jim-dgz-trigger {
+  margin: 0;
+  padding-top: 2.1rem;
+}
 .md-typeset .jim-dg .jim-dg-narrow,
 .md-typeset .jim-dg .jim-dgz-trigger:has(> .jim-dg-narrow) {
   display: none;
@@ -964,6 +969,13 @@ body:has(.jim-home) .md-content__button {
 .jim-diagram .jimdg-dg-leader { stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; stroke-dasharray: 3 3; }
 .jim-diagram .jimdg-dg-card { fill: var(--jimdg-node-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; }
 .jim-diagram .jimdg-dg-row { fill: none; stroke: none; }
+.jim-diagram .jimdg-dg-question { fill: var(--jimdg-layer-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; }
+.jim-diagram .jimdg-dg-sub-on { font-size: 12px; fill: var(--jimdg-core-text); opacity: 0.88; }
+.jim-diagram .jimdg-dg-dot { fill: none; stroke: var(--jimdg-node-stroke); stroke-width: 1.5; }
+.jim-diagram .jimdg-dg-dot-on { fill: var(--jimdg-core-fill); }
+.jim-diagram a.jimdg-dg-link:hover rect,
+.jim-diagram a.jimdg-dg-link:focus-visible rect { stroke: var(--jimdg-core-fill); stroke-width: 2; }
+.jim-diagram a.jimdg-dg-link:focus-visible { outline: none; }
 
 /* ========================================
    Diagram lightbox

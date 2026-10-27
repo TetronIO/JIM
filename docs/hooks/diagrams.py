@@ -67,6 +67,7 @@ STYLES = {
     "tag": ("jimdg-dg-tag", 12, 400, False),
     "badge": ("jimdg-dg-badge-text", 12, 700, False),
     "label-on": ("jimdg-dg-label-on", 13, 700, False),
+    "sub-on": ("jimdg-dg-sub-on", 12, 400, False),
     "chip": ("jimdg-dg-chip", 12, 400, False),
     "chip-name": ("jimdg-dg-chip-name", 12, 700, False),
     "token": ("jimdg-dg-token", 22, 400, True),
@@ -199,7 +200,7 @@ class Node:
         self.note = spec.get("note")
         self.lines = [(line, "label") for line in wrap(spec["label"], "label", max_width - 2 * PAD_X, metrics)]
         if spec.get("sub"):
-            self.lines.append((spec["sub"], "sub"))
+            self.lines += [(line, "sub") for line in wrap(spec["sub"], "sub", max_width - 2 * PAD_X, metrics)]
         if note_inside and self.note:
             self.lines.append((self.note, "note"))
         widest = max(metrics.measure(text, role) for text, role in self.lines)
@@ -941,12 +942,481 @@ def anatomy_narrow(spec, metrics):
     return layout(spec, metrics, NARROW, True)
 
 
+# ── Decision ──────────────────────────────────────────────────────────────────
+
+DECISION_KEYS = {"archetype", "title", "desc", "start", "questions", "outcomes", "answers"}
+
+
+def validate_decision(spec):
+    check_keys(spec, DECISION_KEYS, "the diagram")
+    questions = spec.get("questions") or []
+    outcomes = spec.get("outcomes") or []
+    if not 1 <= len(questions) <= 4:
+        raise DiagramError("a decision needs one to four questions")
+    if not 2 <= len(outcomes) <= 6:
+        raise DiagramError("a decision needs two to six outcomes")
+    q_ids, o_ids = [], []
+    for kind, items, keys, ids in (("question", questions, STATE_KEYS, q_ids),
+                                   ("outcome", outcomes, STATE_KEYS | {"good"}, o_ids)):
+        for i, item in enumerate(items):
+            check_keys(item, keys, f"{kind} {i + 1}")
+            require(item, "id", f"{kind} {i + 1}")
+            require(item, "label", f"{kind} {i + 1}")
+            if item["id"] in q_ids + o_ids:
+                raise DiagramError(f'the id "{item["id"]}" is used twice')
+            ids.append(item["id"])
+    if "start" in spec:
+        check_keys(spec["start"], {"label"}, "the start")
+        require(spec["start"], "label", "the start")
+    reached = set()
+    downs, loops = set(), set()
+    for i, ans in enumerate(spec.get("answers") or []):
+        where = f"answer {i + 1}"
+        check_keys(ans, {"from", "to", "label"}, where)
+        for key in ("from", "to", "label"):
+            require(ans, key, where)
+        if ans["from"] not in q_ids:
+            raise DiagramError(f'{where} comes from "{ans["from"]}", which is not a question')
+        if ans["to"] not in q_ids + o_ids:
+            raise DiagramError(f'{where} goes to "{ans["to"]}", which is neither a question nor an outcome')
+        reached.add(ans["to"])
+        if ans["to"] in q_ids:
+            a, b = q_ids.index(ans["from"]), q_ids.index(ans["to"])
+            if b > a:
+                if b != a + 1:
+                    raise DiagramError(f"{where} must go to the next question, or back to an earlier one")
+                if a in downs:
+                    raise DiagramError(f'question "{ans["from"]}" already has an answer to the next question')
+                downs.add(a)
+            elif b == a:
+                raise DiagramError(f"{where} goes from a question to itself")
+            else:
+                if a in loops:
+                    raise DiagramError(f'question "{ans["from"]}" already loops back')
+                loops.add(a)
+    for oid in o_ids:
+        if oid not in reached:
+            raise DiagramError(f'no answer reaches the outcome "{oid}"')
+    for i, qid in enumerate(q_ids[1:], 1):
+        if i - 1 not in downs:
+            raise DiagramError(f'no answer leads to the question "{qid}"')
+
+
+def outcome_node(spec, max_w, min_w, metrics):
+    if spec.get("good"):
+        node = Node(spec, max_w, min_w, metrics, "jimdg-core")
+        node.lines = [(text, {"label": "label-on", "sub": "sub-on"}.get(role, role)) for text, role in node.lines]
+        return node
+    return Node(spec, max_w, min_w, metrics, "jimdg-stage")
+
+
+def decision_parts(spec):
+    q_ids = [q["id"] for q in spec["questions"]]
+    o_ids = [o["id"] for o in spec["outcomes"]]
+    to_out = {qid: [a for a in spec["answers"] if a["from"] == qid and a["to"] in o_ids] for qid in q_ids}
+    down = {a["from"]: a for a in spec["answers"]
+            if a["to"] in q_ids and q_ids.index(a["to"]) == q_ids.index(a["from"]) + 1}
+    loop = {a["from"]: a for a in spec["answers"]
+            if a["to"] in q_ids and q_ids.index(a["to"]) < q_ids.index(a["from"])}
+    return q_ids, o_ids, to_out, down, loop
+
+
+def decision_wide(spec, metrics):
+    canvas = Canvas()
+    q_ids, o_ids, to_out, down, loop = decision_parts(spec)
+    qs = {q["id"]: Node(q, 240, 120, metrics, "jimdg-dg-question") for q in spec["questions"]}
+    os_ = {o["id"]: outcome_node(o, 236, 150, metrics) for o in spec["outcomes"]}
+    start = Node(spec["start"], 124, 96, metrics, "jimdg-system") if "start" in spec else None
+    qw = max(n.w for n in qs.values())
+    ow = max(n.w for n in os_.values())
+    for n in qs.values():
+        n.w = qw
+    for n in os_.values():
+        n.w = ow
+    label_w = max([metrics.measure(a["label"], "edge") for v in to_out.values() for a in v] or [0])
+    loop_room = 0
+    if loop:
+        loop_room = 24 + max(metrics.measure(a["label"], "edge") for a in loop.values())
+    lead = max(start.w + 30 if start else 0, loop_room)
+    trunk_gap, out_gap = 24, max(56, label_w + 20)
+    total = lead + qw + trunk_gap + out_gap + ow
+    if total > WIDE - 12:
+        raise DiagramError(f"the decision is too wide for the wide layout ({total:.0f} of {WIDE - 12} units); "
+                           "shorten its labels")
+    x0 = (WIDE - total) / 2
+    qx = x0 + lead
+    bx = qx + qw + trunk_gap
+    ox = bx + out_gap
+    y = 8
+    prev_q, group_bottom = None, 8
+    for qid in q_ids:
+        q = qs[qid]
+        q.x = qx
+        outs = [os_[a["to"]] for a in to_out[qid]]
+        group_h = sum(n.h for n in outs) + 14 * max(0, len(outs) - 1)
+        top = max(y, (prev_q.bottom + 48) if prev_q else y)
+        top = max(top, group_bottom + 14 + group_h / 2 - q.h / 2 if outs else top)
+        q.y = top
+        gy = q.cy - group_h / 2
+        if outs and gy < group_bottom + (14 if prev_q else 0):
+            shift = group_bottom + 14 - gy
+            q.y += shift
+            gy += shift
+        for n in outs:
+            n.x, n.y = ox, gy
+            gy += n.h + 14
+        if outs:
+            group_bottom = gy - 14
+        prev_q = q
+    if start:
+        first = qs[q_ids[0]]
+        start.x, start.y = x0, first.y + first.h * 0.4 - start.h / 2
+        start.y = max(8, start.y)
+    shift = 8 - min([n.y for n in list(qs.values()) + list(os_.values())] + ([start.y] if start else []))
+    for n in list(qs.values()) + list(os_.values()) + ([start] if start else []):
+        n.y += shift
+    for qid in q_ids:
+        q = qs[qid]
+        for a in to_out[qid]:
+            o = os_[a["to"]]
+            canvas.arrow([(q.right, q.cy), (bx, q.cy), (bx, o.cy), (o.x, o.cy)])
+            canvas.add(canvas.text((bx + o.x) / 2, o.cy - 8, a["label"], "edge"))
+        if qid in down:
+            nxt = qs[down[qid]["to"]]
+            canvas.arrow([(q.cx, q.bottom), (q.cx, nxt.y)])
+            canvas.add(canvas.text(q.cx + 8, (q.bottom + nxt.y) / 2 + 4, down[qid]["label"], "edge", "start"))
+        if qid in loop:
+            back = qs[loop[qid]["to"]]
+            lx = qx - 16
+            ty = back.y + back.h * 0.78
+            canvas.arrow([(q.x, q.cy), (lx, q.cy), (lx, ty), (back.x, ty)])
+            ly = (q.cy + ty) / 2 + 4
+            if start and start.y - 4 < ly < start.bottom + 14:
+                raise DiagramError("the loop's label would sit on the start box; put more between the questions")
+            canvas.add(canvas.text(lx - 8, ly, loop[qid]["label"], "edge", "end"))
+    if start:
+        first = qs[q_ids[0]]
+        canvas.arrow([(start.right, start.cy), (first.x, start.cy)])
+        start.draw(canvas)
+    for n in list(qs.values()) + list(os_.values()):
+        n.draw(canvas)
+    height = max(n.bottom for n in list(qs.values()) + list(os_.values()) + ([start] if start else [])) + 8
+    return canvas, height
+
+
+def decision_narrow(spec, metrics):
+    canvas = Canvas()
+    q_ids, o_ids, to_out, down, loop = decision_parts(spec)
+    q_labels = {q["id"]: q["label"] for q in spec["questions"]}
+    trunk, ox = 26, 46
+    y = 8
+    nodes = []
+    if "start" in spec:
+        start = Node(spec["start"], NARROW - 24, NARROW - 24, metrics, "jimdg-system")
+        start.x, start.y = 12, y
+        nodes.append(start)
+        canvas.arrow([(trunk, start.bottom), (trunk, start.bottom + 26)])
+        y = start.bottom + 26
+    for qid in q_ids:
+        q = Node(next(s for s in spec["questions"] if s["id"] == qid), NARROW - 24, NARROW - 24, metrics,
+                 "jimdg-dg-question")
+        q.x, q.y = 12, y
+        nodes.append(q)
+        y = q.bottom
+        if qid in loop:
+            text = f'{loop[qid]["label"]}, back to “{q_labels[loop[qid]["to"]]}”'
+            for n, line in enumerate(wrap(text, "edge", NARROW - 48, metrics)):
+                y += 20
+                if n == 0:
+                    canvas.add(f'<polygon class="jimdg-flow-arrow" points="{num(trunk)},{num(y - 10)} '
+                               f'{num(trunk - 4)},{num(y - 2)} {num(trunk + 4)},{num(y - 2)}"/>')
+                canvas.add(canvas.text(trunk + 14, y, line, "edge", "start"))
+        last_cy = None
+        branch_top = y
+        for a in to_out[qid]:
+            o = outcome_node(next(s for s in spec["outcomes"] if s["id"] == a["to"]), NARROW - ox - 12,
+                             NARROW - ox - 12, metrics)
+            lines = wrap(a["label"], "edge", NARROW - ox - 12, metrics)
+            for line in lines:
+                y += 18
+                canvas.add(canvas.text(ox, y, line, "edge", "start"))
+            o.x, o.y = ox, y + 8
+            nodes.append(o)
+            canvas.arrow([(trunk, o.cy), (o.x, o.cy)])
+            last_cy = o.cy
+            y = o.bottom
+        if last_cy is not None:
+            canvas.add(f'<line class="jimdg-flow" x1="{trunk}" y1="{num(branch_top)}" x2="{trunk}" y2="{num(last_cy)}"/>')
+        if qid in down:
+            lines = wrap(down[qid]["label"], "edge", NARROW - 48, metrics)
+            seg_top = y
+            for line in lines:
+                y += 18
+                canvas.add(canvas.text(trunk + 14, y, line, "edge", "start"))
+            y += 14
+            canvas.arrow([(trunk, seg_top if last_cy is None else last_cy), (trunk, y)])
+    for n in nodes:
+        n.draw(canvas)
+    return canvas, y + 8
+
+
+# ── Comparison ────────────────────────────────────────────────────────────────
+
+COMPARISON_KEYS = {"archetype", "title", "desc", "columns", "rows", "footer"}
+
+
+def validate_comparison(spec):
+    check_keys(spec, COMPARISON_KEYS, "the diagram")
+    cols = spec.get("columns") or []
+    rows = spec.get("rows") or []
+    if not 2 <= len(cols) <= 3:
+        raise DiagramError("a comparison needs two or three columns")
+    if not 1 <= len(rows) <= 4:
+        raise DiagramError("a comparison needs one to four rows")
+    for i, col in enumerate(cols):
+        check_keys(col, {"label", "sub"}, f"column {i + 1}")
+        require(col, "label", f"column {i + 1}")
+    for i, row in enumerate(rows):
+        check_keys(row, {"label", "cells"}, f"row {i + 1}")
+        require(row, "label", f"row {i + 1}")
+        cells = row.get("cells") or []
+        if len(cells) != len(cols):
+            raise DiagramError(f"row {i + 1} needs one cell per column ({len(cols)})")
+        for j, cell in enumerate(cells):
+            check_keys(cell, {"text", "sub", "meter"}, f"row {i + 1}, cell {j + 1}")
+            require(cell, "text", f"row {i + 1}, cell {j + 1}")
+            meter = cell.get("meter")
+            if meter is not None and (not isinstance(meter, int) or not 0 <= meter <= 12):
+                raise DiagramError(f"row {i + 1}, cell {j + 1}: a meter is a whole number from 0 to 12")
+
+
+def meter(canvas_parts, cx, y, filled, spacing=14):
+    on = set(range(12)) if filled >= 12 else {round((i + 0.5) * 12 / filled - 0.5) for i in range(filled)} if filled else set()
+    left = cx - spacing * 5.5
+    for i in range(12):
+        cls = "jimdg-dg-dot-on" if i in on else "jimdg-dg-dot"
+        canvas_parts.append(f'<circle class="{cls}" cx="{num(left + i * spacing)}" cy="{num(y)}" r="4.5"/>')
+
+
+def cell_lines(cell, width, metrics):
+    lines = [(line, "label") for line in wrap(cell["text"], "label", width, metrics)]
+    if cell.get("sub"):
+        lines += [(line, "sub") for line in wrap(cell["sub"], "sub", width, metrics)]
+    return lines
+
+
+def comparison_wide(spec, metrics):
+    canvas = Canvas()
+    cols, rows = spec["columns"], spec["rows"]
+    head_w = max(110, min(180, max(metrics.measure(r["label"], "label") for r in rows) + 32))
+    gap = 14
+    cell_w = (WIDE - 16 - head_w - gap * len(cols)) / len(cols)
+    x0 = 8 + head_w + gap
+    y = 8
+    for j, col in enumerate(cols):
+        cx = x0 + j * (cell_w + gap) + cell_w / 2
+        canvas.add(canvas.text(cx, y + 16, col["label"], "title"))
+        if col.get("sub"):
+            if metrics.measure(col["sub"], "note") > cell_w:
+                raise DiagramError(f'the column caption "{col["sub"]}" is wider than its column; shorten it')
+            canvas.add(canvas.text(cx, y + 34, col["sub"], "note"))
+    y += 50 if any(c.get("sub") for c in cols) else 30
+    for row in rows:
+        contents = [cell_lines(c, cell_w - 24, metrics) for c in row["cells"]]
+        has_meter = any(c.get("meter") is not None for c in row["cells"])
+        h = 24 + LINE * max(len(c) for c in contents) + (26 if has_meter else 0) + 4
+        label = Node({"label": row["label"]}, head_w, head_w, metrics, "jimdg-system")
+        label.x, label.y, label.h = 8, y, max(h, label.h)
+        h = label.h
+        label.draw(canvas)
+        for j, (cell, lines) in enumerate(zip(row["cells"], contents)):
+            x = x0 + j * (cell_w + gap)
+            parts = [f'<rect class="jimdg-stage" x="{num(x)}" y="{num(y)}" width="{num(cell_w)}" height="{num(h)}" rx="8"/>']
+            for k, (text, role) in enumerate(lines):
+                parts.append(canvas.text(x + cell_w / 2, y + 22 + LINE * k, text, role))
+            if cell.get("meter") is not None:
+                meter(parts, x + cell_w / 2, y + h - 18, cell["meter"], 14 if cell_w >= 200 else 12)
+            canvas.add('<g class="jimdg-dg-node">' + "".join(parts) + "</g>")
+        y += h + 12
+    if spec.get("footer"):
+        lines = wrap(spec["footer"], "note", WIDE - 16, metrics)
+        canvas.add(f'<line class="jimdg-dg-leader" x1="8" y1="{num(y)}" x2="{WIDE - 8}" y2="{num(y)}"/>')
+        for line in lines:
+            y += 22
+            canvas.add(canvas.text(WIDE / 2, y, line, "note"))
+        y += 4
+    return canvas, y + 4
+
+
+def comparison_narrow(spec, metrics):
+    canvas = Canvas()
+    cols, rows = spec["columns"], spec["rows"]
+    width = NARROW - 16
+    y = 8
+    for j, col in enumerate(cols):
+        canvas.add(canvas.text(NARROW / 2, y + 16, col["label"], "title"))
+        y += 22
+        if col.get("sub"):
+            for line in wrap(col["sub"], "note", width, metrics):
+                y += 18
+                canvas.add(canvas.text(NARROW / 2, y, line, "note"))
+        y += 12
+        for row in rows:
+            cell = row["cells"][j]
+            lines = [(row["label"], "edge")] + cell_lines(cell, width - 24, metrics)
+            h = 24 + LINE * len(lines) + (26 if cell.get("meter") is not None else 0) + 4
+            parts = [f'<rect class="jimdg-stage" x="8" y="{num(y)}" width="{width}" height="{num(h)}" rx="8"/>']
+            for k, (text, role) in enumerate(lines):
+                parts.append(canvas.text(NARROW / 2, y + 22 + LINE * k, text, role))
+            if cell.get("meter") is not None:
+                meter(parts, NARROW / 2, y + h - 18, cell["meter"])
+            canvas.add('<g class="jimdg-dg-node">' + "".join(parts) + "</g>")
+            y += h + 10
+        y += 10
+    if spec.get("footer"):
+        canvas.add(f'<line class="jimdg-dg-leader" x1="8" y1="{num(y)}" x2="{NARROW - 8}" y2="{num(y)}"/>')
+        for line in wrap(spec["footer"], "note", width, metrics):
+            y += 20
+            canvas.add(canvas.text(NARROW / 2, y, line, "note"))
+        y += 4
+    return canvas, y + 4
+
+
+# ── Relationship map ──────────────────────────────────────────────────────────
+
+MAP_KEYS = {"archetype", "title", "desc", "nodes", "edges"}
+LINK = re.compile(r"^(#[\w-]+|[\w./-]+?(#[\w-]+)?)$")
+
+
+def validate_map(spec):
+    check_keys(spec, MAP_KEYS, "the diagram")
+    nodes = spec.get("nodes") or []
+    if not 3 <= len(nodes) <= 14:
+        raise DiagramError("a map needs three to fourteen nodes")
+    ids, cells = [], {}
+    for i, node in enumerate(nodes):
+        where = f"node {i + 1}"
+        check_keys(node, {"id", "label", "link", "row", "col"}, where)
+        for key in ("id", "label"):
+            require(node, key, where)
+        for key, limit in (("row", 4), ("col", 4)):
+            if not isinstance(node.get(key), int) or not 0 <= node[key] < limit:
+                raise DiagramError(f"{where} needs a {key} from 0 to {limit - 1}")
+        if node["id"] in ids:
+            raise DiagramError(f'node id "{node["id"]}" is used twice')
+        if (node["row"], node["col"]) in cells:
+            raise DiagramError(f'"{node["id"]}" and "{cells[(node["row"], node["col"])]}" are in the same place')
+        if node.get("link") and (not LINK.match(node["link"]) or node["link"].startswith("//")):
+            raise DiagramError(f'{where}: a link is a page anchor (#term) or a relative path, not "{node["link"]}"')
+        ids.append(node["id"])
+        cells[(node["row"], node["col"])] = node["id"]
+    by_id = {n["id"]: n for n in nodes}
+    for i, edge in enumerate(spec.get("edges") or []):
+        where = f"edge {i + 1}"
+        check_keys(edge, {"from", "to", "label"}, where)
+        for key in ("from", "to"):
+            require(edge, key, where)
+            if edge[key] not in by_id:
+                raise DiagramError(f'{where} names "{edge[key]}", which is not a node')
+        a, b = by_id[edge["from"]], by_id[edge["to"]]
+        if a["row"] != b["row"] and a["col"] != b["col"]:
+            raise DiagramError(f"{where} must run along a row or a column")
+        if a["row"] == b["row"]:
+            lo, hi = sorted((a["col"], b["col"]))
+            between = [c for c in range(lo + 1, hi) if (a["row"], c) in cells]
+        else:
+            lo, hi = sorted((a["row"], b["row"]))
+            between = [r for r in range(lo + 1, hi) if (r, a["col"]) in cells]
+        if between:
+            raise DiagramError(f"{where} would run through another node")
+
+
+def map_node(canvas, node, spec_node):
+    if spec_node.get("link"):
+        canvas.add(f'<a href="{html.escape(spec_node["link"])}" class="jimdg-dg-link">')
+    node.draw(canvas)
+    if spec_node.get("link"):
+        canvas.add("</a>")
+
+
+def map_wide(spec, metrics):
+    canvas = Canvas()
+    specs = {n["id"]: n for n in spec["nodes"]}
+    ncols = max(n["col"] for n in spec["nodes"]) + 1
+    nrows = max(n["row"] for n in spec["nodes"]) + 1
+    W = 128
+    nodes = {k: Node(v, W, W, metrics, "jimdg-stage") for k, v in specs.items()}
+    H = max(max(n.h for n in nodes.values()), 50)
+    gap_x = min(140, (WIDE - 16 - ncols * W) / max(1, ncols - 1))
+    total = ncols * W + (ncols - 1) * gap_x
+    x0 = (WIDE - total) / 2
+    gap_y = 56
+    for k, n in nodes.items():
+        n.w, n.h = W, H
+        n.x = x0 + specs[k]["col"] * (W + gap_x)
+        n.y = 8 + specs[k]["row"] * (H + gap_y)
+    for edge in spec.get("edges") or []:
+        a, b = nodes[edge["from"]], nodes[edge["to"]]
+        label = edge.get("label")
+        if specs[edge["from"]]["row"] == specs[edge["to"]]["row"]:
+            if a.x < b.x:
+                canvas.arrow([(a.right, a.cy), (b.x, b.cy)])
+                left, right = a.right, b.x
+            else:
+                canvas.arrow([(a.x, a.cy), (b.right, b.cy)])
+                left, right = b.right, a.x
+            if label:
+                if metrics.measure(label, "edge") + 8 > right - left:
+                    raise DiagramError(f'the edge label "{label}" is wider than the gap it labels; shorten it')
+                canvas.add(canvas.text((left + right) / 2, a.cy - 8, label, "edge"))
+        else:
+            if a.y < b.y:
+                canvas.arrow([(a.cx, a.bottom), (b.cx, b.y)])
+                top, bottom = a.bottom, b.y
+            else:
+                canvas.arrow([(a.cx, a.y), (b.cx, b.bottom)])
+                top, bottom = b.bottom, a.y
+            if label:
+                if metrics.measure(label, "edge") > W / 2 + gap_x - 16:
+                    raise DiagramError(f'the edge label "{label}" is too wide to sit beside its arrow; shorten it')
+                canvas.add(canvas.text(a.cx + 8, (top + bottom) / 2 + 4, label, "edge", "start"))
+    for k, n in nodes.items():
+        map_node(canvas, n, specs[k])
+    return canvas, 8 + nrows * H + (nrows - 1) * gap_y + 8
+
+
+def map_narrow(spec, metrics):
+    canvas = Canvas()
+    specs = {n["id"]: n for n in spec["nodes"]}
+    order = sorted(spec["nodes"], key=lambda n: (n["row"], n["col"]))
+    edges = spec.get("edges") or []
+    y = 8
+    for sn in order:
+        node = Node(sn, NARROW - 16, NARROW - 16, metrics, "jimdg-stage")
+        node.x, node.y = 8, y
+        map_node(canvas, node, sn)
+        y = node.bottom
+        for edge in [e for e in edges if e["from"] == sn["id"]]:
+            text = f'{edge.get("label") or "to"} {specs[edge["to"]]["label"]}'
+            for n, line in enumerate(wrap(text, "edge", NARROW - 52, metrics)):
+                y += 20
+                if n == 0:
+                    canvas.add(f'<polygon class="jimdg-flow-arrow" points="{num(30)},{num(y - 5)} '
+                               f'{num(22)},{num(y - 9.5)} {num(22)},{num(y - 0.5)}"/>')
+                canvas.add(canvas.text(38, y, line, "edge", "start"))
+        y += 12
+    return canvas, y
+
+
 # ── Rendering ─────────────────────────────────────────────────────────────────
 
 ARCHETYPES = {
     "flow": (validate_flow, flow_wide, flow_narrow),
     "lifecycle": (validate_lifecycle, lifecycle_wide, lifecycle_narrow),
     "anatomy": (validate_anatomy, anatomy_wide, anatomy_narrow),
+    "decision": (validate_decision, decision_wide, decision_narrow),
+    "comparison": (validate_comparison, comparison_wide, comparison_narrow),
+    "map": (validate_map, map_wide, map_narrow),
 }
 
 
