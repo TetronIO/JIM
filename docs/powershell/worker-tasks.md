@@ -53,12 +53,17 @@ Each Worker Task's header, with one property the module adds.
 | `ObjectsProcessed` | `int` | The number of objects processed so far (from the associated Activity). |
 | `ProgressMessage` | `string` | The current progress message (from the associated Activity). |
 | `Steps` | `object` | The run's steps and the one running now, or empty where the task is not a Run Profile execution and so has no steps: clearing Connected System Objects, example data generation and factory reset all record none. A list view showing this task falls back to the object counts alone in that case. It has `CurrentStepName`, `CurrentStepNumber`, `TotalSteps` and `Steps`. |
+| `ExecutionMode` | `string` | Whether the worker runs this task on its own or together with the tasks queued alongside it. One of `Sequential` or `Parallel`. |
+| `Started` | `datetime` | When the worker started this task (UTC), or empty while it has not started. |
+| `ConnectedSystemRunProfileId` | `int` | The Run Profile this task executes, or empty where the task is not a Run Profile execution. |
+| `ConnectedSystemName` | `string` | The name of the Connected System whose Run Profile this task executes, or empty where the task is not a Run Profile execution or the Run Profile no longer exists. |
+| `RunProfileName` | `string` | The name of the Run Profile this task executes, or empty where the task is not a Run Profile execution or the Run Profile no longer exists. |
 | `ScheduleExecutionId` | `guid` | If this task is part of a schedule execution, the execution ID for UI grouping. |
 | `ScheduleExecutionName` | `string` | The schedule name at execution time, for display in the queue UI. |
 | `ScheduleStepIndex` | `int` | The step index within the schedule, for ordering within the group. |
 | `ScheduleTotalSteps` | `int` | The number of step groups the Schedule Execution is working through. |
 | `ScheduleCurrentStepIndex` | `int` | The step group the Schedule Execution has reached, counting from 0. |
-| `StepDisplay` | `string` | The step the run is on, as one sentence such as "Step 3 of 7: Saving changes". It is the sentence the portal shows in Admin > Operations > Queue, and the one `Start-JIMRunProfile -Wait` shows live, so a run reads the same wherever it is watched from. Empty for a task that is not a Run Profile execution, since those record no steps. |
+| `StepDisplay` | `string` | The step the run is on, as one sentence such as "Step 3 of 7: Saving changes". It is the sentence the portal shows in Admin > Operations > Activity, and the one `Start-JIMRunProfile -Wait` shows live, so a run reads the same wherever it is watched from. Empty for a task that is not a Run Profile execution, since those record no steps. |
 <!-- END GENERATED: Get-JIMWorkerTask -->
 
 ### Examples

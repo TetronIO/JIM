@@ -105,7 +105,7 @@ The Activity page in the admin portal filters a busy list down to what you are r
 
 - **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions), **System** (housekeeping, resets, data generation), **Security** ([interactive sign-in, API key and SSO access token authentication events](../administration/security-audit-events.md)), or **Password Synchronisation** ([a password change fanning out to the systems an identity has accounts in](../concepts/passwords.md), and what each of them did with it). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
 - **Detail filters**<br /> Operation, outcome, type, status, initiator (user, API key, or system), a created date range, and a target/initiator search.
-- **Schedule filters**<br /> On the Operations > History tab, **Scheduled only** narrows the list to work a [Schedule](schedules.md) produced, and the Schedule filter narrows it to particular ones. Combined with the outcome filter, this answers whether a step has been failing repeatedly or only once: filter to the Schedule, set the outcome to the failure you saw, and read down the dates.
+- **Schedule filters**<br /> In the Completed section of the Operations > Activity tab, **Scheduled only** narrows the list to work a [Schedule](schedules.md) produced, and the Schedule filter narrows it to particular ones. Combined with the outcome filter, this answers whether a step has been failing repeatedly or only once: filter to the Schedule, set the outcome to the failure you saw, and read down the dates.
 - **Shareable URLs**<br /> The filter state is reflected in the page URL, so a filtered view can be bookmarked or shared; opening the link reproduces the same view. For example, reviewing user-made configuration changes over the last week is one URL an auditor can return to each review cycle.
 
 An Activity is a whole operation, such as a synchronisation run touching thousands of objects. To find changes to particular objects by how their attributes changed (everyone whose status changed to Disabled this month, say), use [Object Changes](object-changes.md) instead.
@@ -148,7 +148,7 @@ While a Run Profile runs, its Activity reports progress live: in the portal, fro
 
 1. List activities, filtered by name, target type, or initiator as needed
 2. Retrieve the activities you're interested in for full detail
-3. For a Schedule, filter the list to that Schedule (Operations > History), or open the Schedule Execution, which links each step to its Activity
+3. For a Schedule, filter the Activity tab to that Schedule (Operations > Activity), or open the Schedule Execution, which links each step to its Activity
 
 ## Manage Activities
 
