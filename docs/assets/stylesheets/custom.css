@@ -567,7 +567,10 @@ body[data-md-color-scheme="default"]:has(.jim-home) .md-main {
   background: linear-gradient(180deg, #f3f0fb 0, #ffffff 26rem);
 }
 
-body:has(.jim-home) .jim-home > .jim-dgz-trigger:first-of-type {
+/* The system diagram opens the page. Markdown wraps its snippet include in a
+   <p>, and diagram-zoom.js wraps the SVG in the trigger button inside that. */
+body:has(.jim-home) .jim-home > p:first-of-type,
+body:has(.jim-home) .jim-home > p:first-of-type > .jim-dgz-trigger:first-child {
   margin-top: 0;
 }
 
