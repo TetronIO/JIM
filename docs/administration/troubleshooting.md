@@ -144,7 +144,7 @@ You clicked **Login** (or let `Connect-JIM` open your browser) and the identity 
 
 **How to fix.**
 
-1. Confirm your identity provider has a public client registered with at least the redirect URI `http://localhost:8400/callback/`. The per-provider guides cover this: [Entra ID Step 5b](sso-setup/microsoft-entra-id.md#step-5b-configure-powershell-module-authentication-optional-but-recommended), [AD FS Step 1](sso-setup/ad-fs.md#step-1-register-jim-with-ad-fs), [Keycloak Step 6](sso-setup/keycloak.md#step-6-configure-powershell-module-authentication-recommended).
+1. Confirm your identity provider has a public client registered with at least the redirect URI `http://localhost:8400/callback/`. The per-provider guides cover this: [Entra ID Step 5b](sso-setup/microsoft-entra-id.md#step-5b-configure-powershell-module-authentication-optional-but-recommended), [AD FS Step 1](sso-setup/ad-fs.md#step-1-register-jim-with-ad-fs), [Keycloak Step 1](sso-setup/keycloak.md#step-1-register-jim-with-keycloak).
 2. If the public client is a **separate registration** from the web application (always the case for Keycloak and AD FS), set `JIM_SSO_PUBLIC_CLIENT_ID` on the JIM server to the public client's client ID and restart JIM.
 3. If the public client **shares a registration** with the web application (Entra ID with both platforms added to one app), you do not need to set `JIM_SSO_PUBLIC_CLIENT_ID`; make sure the web app registration has the loopback redirect URI added under its native/mobile platform.
 
