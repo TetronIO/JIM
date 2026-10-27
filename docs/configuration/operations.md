@@ -1,6 +1,6 @@
 ---
 title: Operations
-description: "The Operations page: queued, running and completed work on the Activity tab, the Schedules, Passwords and Generated Values tabs, and the Service Health of the Worker and Scheduler."
+description: "The Operations page: queued, running and completed work, Schedules, Passwords, Generated Values, and the Service Health of the Worker and Scheduler."
 type: object
 audience: operator
 ---
@@ -20,7 +20,7 @@ audience: operator
 
 The Activity tab reads in time order, with the latest at the top: **Queued** (later), then **In Progress** (now), then **Completed** (earlier). The three sections share their columns, so Connected System, Run Profile and Initiated By line up down the page.
 
-- **Queued**<br /> Work waiting for the Worker: Run Profile executions and the other background tasks, and the steps of any Schedule Execution still to come, grouped under a header that names the Schedule, draws its steps as a rail, and carries **View execution** and the option to cancel it. The next run is the last row, directly above In Progress; **Runs** gives each row's place ("Next", "2nd", "3rd"), and the tasks of a parallel Schedule step share one. **Est. Start** says when each is expected to start, from the median of the last five successful runs of each Run Profile ahead of it. It is left blank where there is nothing to go on, such as a Run Profile that has never completed, and so is every estimate after it. The section shows as many rows as fit the window while In Progress stays in view, and never fewer than three; **Show more** reveals the rest.
+- **Queued**<br /> Work waiting for the Worker: Run Profile executions and the other background tasks, and the steps of any Schedule Execution still to come, grouped under a header that names the Schedule, draws its steps as a rail, and carries **View execution** and the option to cancel it. The next run is the last row, directly above In Progress; **Runs** gives each row's place ("Next", "2nd", "3rd"), and the tasks of a parallel Schedule step share one. **Est. Start** says when each is expected to start, from the median of the last five successful runs of each Run Profile ahead of it. It is left blank where there is nothing to go on, such as a Run Profile with no successful run yet, and so is every estimate after it. The section shows as many rows as fit the window while In Progress stays in view, and never fewer than three; **Show more** reveals the rest.
 - **In Progress**<br /> Everything the Worker is running now, each with its run's steps and the running step's progress (see [Live progress](activity-progress.md#the-runs-steps-on-the-activity-tab)). When a parallel Schedule step is running, its tasks appear together under the Schedule Execution's header. **Est. Finish** comes from the same median, and is never earlier than the running step needs.
 - **Completed**<br /> The [Activities](activities.md) record of what the Worker has finished, newest first, with a side panel for each one. A run moves here from In Progress as soon as it ends.
 
