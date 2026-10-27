@@ -10,7 +10,7 @@ validated: v0.16.0
 
 This page covers installing, starting and signing in to JIM. For a synchronisation that goes wrong (a run that ends with a warning or an error, or an object that will not join, import or export), see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
 
-## Start-up
+## :material-rocket-launch-outline: Start-up
 
 ### A service logs `The database is not reachable yet`
 
@@ -63,11 +63,11 @@ On its first start against your own PostgreSQL server, JIM never becomes ready. 
 ALTER DATABASE jim OWNER TO jim;
 ```
 
-## Podman
+## :material-package-variant-closed: Podman
 
 Problems particular to running JIM on Podman, such as a rootless JIM that will not start, or Ubuntu's AppArmor profiles stopping JIM's containers, are on [Troubleshooting Podman](troubleshooting-podman.md).
 
-## HTTPS
+## :material-certificate-outline: HTTPS
 
 ### The browser cannot connect at `http://<server>`
 
@@ -114,7 +114,7 @@ proxy_buffer_size 16k;
 proxy_buffers 8 16k;
 ```
 
-## Authentication
+## :material-shield-key-outline: Authentication
 
 ### Sign-in loops between JIM and the identity provider
 
@@ -156,7 +156,7 @@ curl https://your-jim-url/api/v1/auth/config
 
 The `clientId` in the response must be the client that has the loopback redirect URI registered at your identity provider.
 
-## Known noisy log lines
+## :material-bell-off-outline: Known noisy log lines
 
 Some messages in the container logs look alarming but are expected and harmless. They are documented here so operators can confirm at a glance that nothing is actually wrong.
 
@@ -184,7 +184,7 @@ jim.scheduler  |       Application started. Press Ctrl+C to shut down.
 
 The container should also transition to `healthy` in `docker ps`.
 
-## Still stuck?
+## :material-lifebuoy: Still stuck?
 
 Collect these before asking for help:
 

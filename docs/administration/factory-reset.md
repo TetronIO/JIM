@@ -9,7 +9,7 @@ audience: administrator
 
 A Factory Reset returns JIM to the state of a fresh installation: every Connected System, Synchronisation Rule, Metaverse Object and Activity goes, and the built-in configuration comes back as it shipped. Use it to clear a test or demonstration system, such as one filled with [Example Data](../configuration/example-data.md), or to hand a system over clean. It cannot be undone, so never run it on a system you depend on without a backup.
 
-## What is removed and what survives
+## :material-delete-sweep-outline: What is removed and what survives
 
 | Removed | Survives |
 |---|---|
@@ -28,13 +28,13 @@ A few details:
 
 The whole wipe is a single database transaction: if any part of it fails, nothing is removed.
 
-## Before you begin
+## :material-clipboard-list-outline: Before you begin
 
 - **Take a backup** of the database and the encryption keys, together; see [Backup & Disaster Recovery](backup-recovery.md). It is the only way to undo a reset.
 - **Let running work finish.** JIM refuses to reset while any Activity is in progress, and says how many; wait for them, or cancel them from [Operations](../configuration/operations.md), and try again.
 - **Know how you will sign back in** if you will remove administrators (step 3).
 
-## Reset JIM
+## :material-restore: Reset JIM
 
 1. Open Administration, select **Danger Zone** at the foot of the page to reveal it, then select **Factory Reset**.
 2. Read the lists of what is removed and preserved.
@@ -52,13 +52,13 @@ JIM wipes the data, restores the built-in configuration and signs everyone out, 
 
 From a script, `Reset-JIMSystem` does the same; see [System](../powershell/system.md#reset-jimsystem). It asks for confirmation unless given `-Force`, and removes administrators only with `-IncludeAdministrators`. The REST API runs it from `POST /api/v1/system/reset`.
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 - Sign in again. With administrators kept, your account works as before.
 - The Activity list holds a single **Factory reset** Activity, naming who ran it and how much it removed.
 - Administration shows no Connected Systems, and the Metaverse holds no objects other than surviving administrators.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Backup & Disaster Recovery](backup-recovery.md): the backup that makes a reset recoverable
 - [Example Data](../configuration/example-data.md): the generated objects only a reset removes

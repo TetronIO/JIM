@@ -34,7 +34,8 @@ BeforeAll {
                 'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'; 'PRI-1' = 'Block'
                 'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
                 'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
-                'STY-1' = 'Block'; 'STY-3' = 'Block'
+                # STY-3 warns here so every other rule's fixtures can use plain H2s; its own tests block.
+                'STY-1' = 'Block'; 'STY-3' = 'Warn'
             }
             RequiredFrontMatter = @('title', 'description', 'type', 'audience')
             AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario', 'validated')
@@ -919,41 +920,75 @@ Describe 'Test-DocsConformance: STY-1 no emoji' {
     }
 }
 
-Describe 'Test-DocsConformance: STY-3 icons on index-page H2s, and only there' {
-    It 'fails an H2 with no icon on a section index page' {
-        $body = "Opening paragraph.`n`n## :material-layers-outline: Architecture`n`nText.`n`n## Versioning`n`nText.`n"
-        $f = New-Fixture -Pages @{ 'guide/index.md' = (New-Page -Type 'landing' -Body $body) }
-        $r = Invoke-Conformance -Fixture $f
-        $r.ExitCode | Should -Be 1
-        $r.Output | Should -Match "index\.md:16\s+STY-3.*'Versioning'"
-        @($r.Output -split "`n" | Where-Object { $_ -match 'STY-3' }).Count | Should -Be 1
+Describe 'Test-DocsConformance: STY-3 an icon on every H2, and on no other heading' {
+    BeforeAll {
+        # STY-3 at Block, which the shared configuration relaxes to Warn for every other rule's fixtures.
+        function New-IconFixture {
+            param([hashtable]$Pages)
+            $rules = (Get-DefaultConfig).Rules
+            $rules['STY-3'] = 'Block'
+            New-Fixture -Pages $Pages -ConfigOverrides @{ Rules = $rules }
+        }
     }
 
-    It 'fails an icon that is not a Material Design icon on a section index page' {
-        $f = New-Fixture -Pages @{ 'guide/index.md' = (New-Page -Type 'landing' -Body "Opening paragraph.`n`n## :octicons-stack-24: Architecture`n`nText.`n") }
+    It 'fails an H2 with no icon, on an article page as on an index page' {
+        $f = New-IconFixture -Pages @{
+            'cs.md'          = (New-Page -Body "Opening paragraph.`n`n## :material-layers-outline: Architecture`n`nText.`n`n## Versioning`n`nText.`n")
+            'guide/index.md' = (New-Page -Type 'landing' -Body "Opening paragraph.`n`n## Synchronisation`n`nText.`n")
+        }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "cs\.md:16\s+STY-3.*'Versioning'"
+        $r.Output | Should -Match "index\.md:12\s+STY-3.*'Synchronisation'"
+        @($r.Output -split "`n" | Where-Object { $_ -match 'STY-3' }).Count | Should -Be 2
+    }
+
+    It 'fails an H2 icon that is not a Material Design icon' {
+        $f = New-IconFixture -Pages @{ 'cs.md' = (New-Page -Body "Opening paragraph.`n`n## :octicons-stack-24: Architecture`n`nText.`n") }
         $r = Invoke-Conformance -Fixture $f
         $r.ExitCode | Should -Be 1
         $r.Output | Should -Match 'STY-3'
     }
 
-    It 'fails a heading icon on an article page, and on a lower heading of an index page' {
-        $f = New-Fixture -Pages @{
-            'cs.md'          = (New-Page -Body "Opening paragraph.`n`n## :material-tag-outline: The order`n`nText.`n")
-            'guide/index.md' = (New-Page -Type 'landing' -Body "Opening paragraph.`n`n## :material-sync: Synchronisation`n`n### :material-cog-outline: Run Profiles`n`nText.`n")
-        }
+    It 'fails an icon on a heading below H2' {
+        $f = New-IconFixture -Pages @{ 'cs.md' = (New-Page -Body "Opening paragraph.`n`n## :material-sync: Synchronisation`n`n### :material-cog-outline: Run Profiles`n`nText.`n") }
         $r = Invoke-Conformance -Fixture $f
         $r.ExitCode | Should -Be 1
-        $r.Output | Should -Match "cs\.md:\d+\s+STY-3.*'The order'"
-        $r.Output | Should -Match "index\.md:\d+\s+STY-3.*'Run Profiles'"
+        $r.Output | Should -Match "cs\.md:\d+\s+STY-3.*'Run Profiles'"
     }
 
-    It 'passes icons on every index-page H2, plain article headings, and an index page with no H2' {
-        $f = New-Fixture -Pages @{
+    It 'passes an icon on every H2, plain lower headings, and a page with no H2' {
+        $f = New-IconFixture -Pages @{
             'index.md'       = (New-Page -Type 'landing' -Body "Opening paragraph.`n`n## :material-star-four-points-outline: Key Features`n`n### Details`n`nText.`n")
             'start/index.md' = (New-Page -Type 'landing' -Body "Opening paragraph with no sections.`n")
-            'cs.md'          = (New-Page -Body "Opening paragraph.`n`n## The order`n`nText.`n")
+            'cs.md'          = (New-Page -Body "Opening paragraph.`n`n## :material-tag-outline: The order`n`n### Ties`n`nText.`n")
         }
         (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+
+    It 'does not read an icon name as prose, for spelling or for the word count' {
+        $words = (1..20 | ForEach-Object { 'word' }) -join ' '
+        $f = New-IconFixture -Pages @{ 'cs.md' = (New-Page -Body "Opening paragraph.`n`n## :material-format-align-center: Alignment`n`n$words`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'LANG-2'
+        $r.ExitCode | Should -Be 0
+
+        # The same page with and without the icon counts the same words (STR-8 reports the count).
+        $count = {
+            param($Heading)
+            $fx = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Opening paragraph.`n`n## $Heading`n`n$words`n") } -ConfigOverrides @{ SizeBudgetWords = 1 }
+            $line = (Invoke-Conformance -Fixture $fx -ExtraArgs @('-ShowWarnings')).Output -split "`n" | Where-Object { $_ -match 'STR-8' }
+            [int]([regex]::Match("$line", 'page is (\d+) words').Groups[1].Value)
+        }
+        (& $count ':material-format-align-center: Alignment') | Should -Be (& $count 'Alignment')
+    }
+
+    It 'lets the other rules read a heading without its icon' {
+        $body = "Opening paragraph.`n`n1. Open the Connected System.`n2. Select Save.`n`n## :material-check-decagram-outline: Check it worked`n`nThe Connected System shows as saved.`n"
+        $f = New-IconFixture -Pages @{ 'save.md' = (New-Page -Title 'Save a Connected System' -Type 'how-to' -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'TYP-1'
+        $r.ExitCode | Should -Be 0
     }
 }
 

@@ -9,7 +9,7 @@ audience: evaluator
 
 JIM is built around the **Metaverse pattern**: a hub-and-spoke architecture where all identity data flows through a central authoritative repository. This page describes the pattern, the system components, and the layered software architecture.
 
-## The Metaverse Pattern
+## :material-hub-outline: The Metaverse Pattern
 
 At the heart of JIM is the **Metaverse**: a centralised repository of identity objects. Rather than synchronising data directly between Connected Systems, every change flows through the Metaverse. This provides:
 
@@ -30,7 +30,7 @@ The Metaverse holds one Metaverse Object for each real-world thing JIM manages: 
 
 Connected Systems hold instances of it: an account in a directory, a row in an HR system, a mail-enabled group. JIM's job is to keep every instance consistent with the canonical object, creating, updating and removing instances as the object changes. This is why the product names the two sides **Metaverse Object** and **Connected System Object** throughout: "identity" describes what the Metaverse is for, and the objects are what JIM actually manages.
 
-## System Context
+## :material-sitemap-outline: System Context
 
 The following diagram shows JIM in the context of the systems and users it interacts with:
 
@@ -38,7 +38,7 @@ The following diagram shows JIM in the context of the systems and users it inter
 
 <p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
-## Containers
+## :material-layers-outline: Containers
 
 JIM is deployed as a set of containers, on Docker or Podman, each with a distinct responsibility:
 
@@ -81,7 +81,7 @@ This is what makes JIM feel live rather than polled:
 
 Polling remains as the safety net throughout. If the notification channel is unavailable, every affected surface falls back to polling automatically and nothing stops working; notifications are treated as hints that something is worth re-reading, never as the source of truth. A SignalR hub at `/hubs/notifications` broadcasts the same events for non-Blazor consumers.
 
-## Layered Architecture
+## :material-layers-triple-outline: Layered Architecture
 
 Inside each service, JIM is layered, and no layer bypasses the one below it. The portal and the REST API call the application layer for every operation, never the database; the application layer works on JIM's domain model; and only the data layer reads and writes PostgreSQL. Connectors sit beside the data layer, and are the only code that talks to your systems.
 
@@ -89,7 +89,7 @@ Inside each service, JIM is layered, and no layer bypasses the one below it. The
 
 <p class="jim-diagram-caption">Arrows show dependencies: each layer depends only on the layer directly beneath it. The Integration layer's Connectors sit at the base of the stack alongside data access.</p>
 
-## Deployment
+## :material-server-outline: Deployment
 
 JIM is deployed as containers, on Docker or Podman, and is designed to work in **air-gapped environments** with no internet connectivity. There are no cloud service dependencies; all features work with on-premises infrastructure only.
 

@@ -20,7 +20,7 @@ Evaluation is asynchronous: `New-JIMConfigurationChangePreview` returns as soon 
 
 ---
 
-## New-JIMConfigurationChangePreview
+## :material-eye-plus-outline: New-JIMConfigurationChangePreview
 
 Starts a preview of a proposed configuration change.
 
@@ -280,7 +280,7 @@ Deprovisions the Connected System (prompting for confirmation) only once its del
 
 ---
 
-## Get-JIMConfigurationChangePreview
+## :material-eye-outline: Get-JIMConfigurationChangePreview
 
 Reads a preview.
 
@@ -333,7 +333,7 @@ if ($unexpected) { $unexpected | Format-Table AttributeName, OldValue, NewValue,
 
 ---
 
-## Get-JIMConfigurationChangePreviewDelta
+## :material-compare: Get-JIMConfigurationChangePreviewDelta
 
 Reads the object-level detail behind a preview: which objects would be affected, and the values on either side of the change.
 
@@ -406,7 +406,7 @@ Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId -GroupId $group.I
 
 ---
 
-## Stop-JIMConfigurationChangePreview
+## :material-eye-off-outline: Stop-JIMConfigurationChangePreview
 
 Stops a running preview.
 
@@ -440,7 +440,7 @@ Stop-JIMConfigurationChangePreview -ActivityId "019fc824-f8c6-7588-8d9a-24a295e7
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it): what previews are and how to read them
 - [Sync Preview cmdlets](sync-preview.md): what synchronising one object would do now, from PowerShell

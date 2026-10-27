@@ -18,7 +18,7 @@ The Activity's [execution items](../configuration/activity-execution-items.md) n
 
 A run that ended because the Worker restarted, or ran short of memory, is covered in [Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md).
 
-## `Deletion detection found ... no longer in the Connected System ... none were marked as deleted`
+## :material-delete-alert-outline: `Deletion detection found ... no longer in the Connected System ... none were marked as deleted`
 
 **What it means.** A Full Import found more objects missing from the Connected System than the Run Profile's deletion detection limit allows, so JIM marked none of them as deleted and the run ended **Complete with warning**. The usual causes are a change of scope or filter, a connection that returned part of the data, or a file replaced by a smaller one; occasionally it is a genuine mass deletion. Nothing has been deleted: the Connected System Objects, and the Metaverse Objects they contribute to, are as they were before the run.
 
@@ -26,7 +26,7 @@ A run that ended because the Worker restarted, or ran short of memory, is covere
 
 **Check.** The next Full Import ends without the warning, and its Activity counts the deletions it detected.
 
-## `Max deletes is ..., but ... deletes were pending, so none were attempted`
+## :material-delete-clock-outline: `Max deletes is ..., but ... deletes were pending, so none were attempted`
 
 The same message names creates or updates when those are what the limit holds back.
 
@@ -36,7 +36,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** The export run ends without the warning, and the Connected System's Pending Exports list shows none still **Pending**.
 
-## **Ambiguous Match**: `This object matches ... Metaverse Objects on ...`
+## :material-vector-link: **Ambiguous Match**: `This object matches ... Metaverse Objects on ...`
 
 **What it means.** An Object Matching Rule found more than one Metaverse Object for one Connected System Object, so JIM neither joined nor projected it. The message names the attribute and the values, and the execution item lists the Metaverse Objects that matched. The object stays as it was; nothing is joined to the wrong person.
 
@@ -44,7 +44,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation, since a Delta Synchronisation processes only the objects that changed. The object's execution item records a join or a projection.
 
-## **Ambiguous Provisioning Match**: `This Metaverse Object matches ... Connected System Objects in '...' on ...`
+## :material-vector-link: **Ambiguous Provisioning Match**: `This Metaverse Object matches ... Connected System Objects in '...' on ...`
 
 **What it means.** Before provisioning, an export rule's Object Matching Rule found more than one existing Connected System Object in the target for one Metaverse Object, so JIM neither joined it to one nor provisioned another. The message names the Connected System, the rule and the values, and the execution item lists the accounts that matched. Nothing is staged for that export rule; the Metaverse Object's other export rules carry on.
 
@@ -52,7 +52,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** After a corrected target, import it and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation. The Metaverse Object's execution item records the join, or the provisioning, for that export rule.
 
-## **Could Not Join Due To Existing Join**: `Cannot join this Connected System Object to Metaverse Object (...) - it already has a connector from this Connected System.`
+## :material-link-variant-off: **Could Not Join Due To Existing Join**: `Cannot join this Connected System Object to Metaverse Object (...) - it already has a connector from this Connected System.`
 
 **What it means.** The Metaverse Object this object matched is already joined to another object from the same Connected System, and a Metaverse Object has at most one Connected System Object per Connected System. Two records in the source almost always describe the same person. Neither join is changed.
 
@@ -60,7 +60,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** After the next import and synchronisation, the object's execution item records a join or a projection.
 
-## **Duplicate Object**: `Duplicate external ID '...' found in the same import batch.`
+## :material-content-copy: **Duplicate Object**: `Duplicate external ID '...' found in the same import batch.`
 
 **What it means.** The Connected System returned two or more objects with the same External ID, so JIM imported none of them: it cannot tell which is the real one.
 
@@ -68,7 +68,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** The next import brings the object in, with no Duplicate Object execution items.
 
-## **Reference Unresolved**: `Couldn't resolve a reference on ... to a Connected System Object`
+## :material-link-variant-remove: **Reference Unresolved**: `Couldn't resolve a reference on ... to a Connected System Object`
 
 **What it means.** An attribute refers to another object (a manager, a group member) that JIM does not hold for this Connected System, usually because it sits outside the containers JIM manages. The rest of the object is imported.
 
@@ -76,7 +76,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** The Connected System's count of unresolved references falls after the next import.
 
-## **Access Denied**: `Export failed: The directory refused the change because the account JIM connects as does not have permission ...`
+## :material-account-lock-outline: **Access Denied**: `Export failed: The directory refused the change because the account JIM connects as does not have permission ...`
 
 The SCIM Connector's messages begin `The service provider did not accept JIM's credentials (401)` or `... do not have permission to make it (403)`, and the SQL Connector's begin `The database refused the change because the account JIM connects as does not have permission ...`.
 
@@ -86,7 +86,7 @@ The SCIM Connector's messages begin `The service provider did not accept JIM's c
 
 **Check.** The next Export run writes the change, however many attempts failed before: its Pending Export shows **Exported**, and clears once an import confirms it. Nothing needs resetting by hand.
 
-## **Export Rejected**: `Export failed: The directory refused the change (...): ...`
+## :material-export: **Export Rejected**: `Export failed: The directory refused the change (...): ...`
 
 The SQL Connector's messages begin `The database refused the change (...)`, naming the SQLSTATE, SQL Server error number or `ORA-` code in brackets.
 
@@ -96,7 +96,7 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 
 **Check.** As for **Access Denied** above.
 
-## **Export Refused**: `Export failed: Cannot write to '...': it is outside the containers selected for this Connected System ...`
+## :material-export: **Export Refused**: `Export failed: Cannot write to '...': it is outside the containers selected for this Connected System ...`
 
 **What it means.** JIM did not send the export, because it would have placed the object in a container that is not selected on the Connected System's **Scope** tab. JIM cannot import an object from there, so it would treat the object as deleted at the next Full Import. The object stays where it is, and the run ends **Complete with warning**.
 
@@ -104,7 +104,7 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 
 **Check.** As for **Access Denied** above.
 
-## **Operation Failed**: `Export failed: ...`
+## :material-alert-octagon-outline: **Operation Failed**: `Export failed: ...`
 
 **What it means.** The export did not reach a Connected System that could consider it: the connection dropped, the server was busy or unavailable or ran out of time, a database deadlocked, or a SCIM service provider answered with a server error (5xx). JIM records these as errors it did not anticipate, so the run ends **Complete with error**. The Pending Export is retried as for **Access Denied** above.
 
@@ -112,7 +112,7 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 
 **Check.** As for **Access Denied** above.
 
-## **Export Pending**: `We exported a change, but did not get confirmation of it`
+## :material-clock-alert-outline: **Export Pending**: `We exported a change, but did not get confirmation of it`
 
 **What it means.** JIM exported a change, but the confirming import read back a different value, or none. The Connected System changed the value as it stored it (often its case), or the import does not return that attribute. JIM exports the change again at every Export run, and reports it on every confirming import that does not see it.
 
@@ -120,7 +120,7 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 
 **Check.** The next confirming import records no Export Pending items, and the Pending Export clears.
 
-## **Synchronisation Failed**: `Synchronisation Rule '...' targets Connected System Object Type '...' in '...', but this Metaverse Object is already represented there by a '...' object.`
+## :material-swap-horizontal: **Synchronisation Failed**: `Synchronisation Rule '...' targets Connected System Object Type '...' in '...', but this Metaverse Object is already represented there by a '...' object.`
 
 **What it means.** Two export Synchronisation Rules for the same Connected System, each for a different Object Type, both have this Metaverse Object in scope. A Metaverse Object has at most one Connected System Object per Connected System, and it already has one of the other Object Type there, so JIM staged nothing for the rule the message names. The object it already has is left as it is.
 
@@ -128,7 +128,7 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 
 **Check.** After the next synchronisation, the object's execution item stages the export it expects, or records nothing for the rule it no longer matches.
 
-## **Synchronisation Failed**: `The scoping criterion on '...' in the Synchronisation Rule '...' could not be evaluated, so this object's scope was left as it was.`
+## :material-filter-remove-outline: **Synchronisation Failed**: `The scoping criterion on '...' in the Synchronisation Rule '...' could not be evaluated, so this object's scope was left as it was.`
 
 **What it means.** JIM could not tell whether the object is in the rule's scope, so it took no action for it and kept any join; every other object carried on. The message gives the cause:
 
@@ -143,7 +143,7 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 
 **Check.** After a changed pattern, run a Full Synchronisation; otherwise the next synchronisation, Delta included, retries the object. Its execution item no longer records Synchronisation Failed.
 
-## **Dates Merged**: `'...' holds ... dates, but target attribute '...' on '...' holds dates to the second, where some of them become the same date, so it is sent ... distinct values`
+## :material-calendar-alert: **Dates Merged**: `'...' holds ... dates, but target attribute '...' on '...' holds dates to the second, where some of them become the same date, so it is sent ... distinct values`
 
 **What it means.** Some of the dates a multi-valued attribute exports are the same date at the step of time the Connected System keeps, its [Date resolution](../configuration/connected-system-attributes.md#date-resolution): two times within one second, for a directory that keeps whole seconds. The Connected System can hold them only as one value, so JIM sent them as one. Nothing failed: the attribute and the object's other attributes exported, and the next import confirms what was sent.
 
@@ -151,7 +151,7 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 
 **Check.** After the next synchronisation that changes the attribute, the object's execution item records the export with no Dates Merged item, or one naming the count you expect.
 
-## A run ends **Failed with error** before processing anything
+## :material-play-circle-outline: A run ends **Failed with error** before processing anything
 
 **What it means.** JIM could not reach the Connected System, or the Connector could not start: the message is the reason the network, the server or the Connector gave, such as a refused connection, a name that does not resolve, or a certificate JIM does not trust. Nothing was imported or exported.
 
@@ -159,7 +159,7 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 
 **Check.** The run's Activity ends **Complete**.
 
-## Still stuck?
+## :material-lifebuoy: Still stuck?
 
 Collect these before asking for help:
 

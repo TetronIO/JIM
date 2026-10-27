@@ -12,14 +12,14 @@ Step-by-step instructions for configuring Single Sign-On with JIM using Keycloak
 !!! info "Read the overview first"
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the prerequisites, the [confidential vs public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, and the [testing steps](../sso-setup.md#testing-your-configuration) you run once configuration is complete.
 
-## Step 1: Create a Realm (if needed)
+## :material-numeric-1-circle-outline: Step 1: Create a Realm (if needed)
 
 1. Log in to the Keycloak Admin Console
 2. Hover over the realm dropdown and click **Create Realm**
 3. Enter a **Realm name** (e.g. `jim`)
 4. Click **Create**
 
-## Step 2: Create a Client for JIM
+## :material-numeric-2-circle-outline: Step 2: Create a Client for JIM
 
 1. Navigate to **Clients**
 2. Click **Create client**
@@ -39,7 +39,7 @@ Step-by-step instructions for configuring Single Sign-On with JIM using Keycloak
     - **Web origins**: `https://your-jim-url`
 8. Click **Save**
 
-## Step 3: Get the Client Secret
+## :material-numeric-3-circle-outline: Step 3: Get the Client Secret
 
 1. Go to the **Credentials** tab
 2. Copy the **Client secret**
@@ -47,7 +47,7 @@ Step-by-step instructions for configuring Single Sign-On with JIM using Keycloak
 !!! note "Scripts and services use API keys"
     JIM accepts Keycloak access tokens from people only: a token gets the roles of the Metaverse Object its `sub` identifies. A Keycloak service account (a client using the client credentials grant) identifies no Metaverse Object, so its tokens get no roles and JIM refuses them. For unattended scripts and services, issue a JIM API key instead; see [API Authentication](../../api/authentication.md).
 
-## Step 4: Create the API Client Scope
+## :material-numeric-4-circle-outline: Step 4: Create the API Client Scope
 
 1. Navigate to **Client scopes**
 2. Click **Create client scope**
@@ -69,14 +69,14 @@ The audience must be the Step 2 client and nothing else: JIM accepts an access t
 
 **Type: None** keeps `jim-api` from being offered to every client created in the realm. The **Type** field sets the scope's realm default, and Keycloak links realm default scopes to each new client. Any client that can request `jim-api` can obtain tokens JIM accepts, so Steps 5 and 6 link it only to JIM's own two clients.
 
-## Step 5: Assign the Scope to the Client
+## :material-numeric-5-circle-outline: Step 5: Assign the Scope to the Client
 
 1. Navigate to **Clients** > **jim**
 2. Go to the **Client scopes** tab
 3. Click **Add client scope**
 4. Select `jim-api` and add as **Optional**
 
-## Step 6: Configure PowerShell Module Authentication (Recommended)
+## :material-numeric-6-circle-outline: Step 6: Configure PowerShell Module Authentication (Recommended)
 
 Configuring the PowerShell module now means administrators can connect to JIM interactively with their SSO account. Unattended scripts cannot sign in interactively, so they use a JIM API key.
 
@@ -106,7 +106,7 @@ The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based
 !!! note
     The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). If port 8400 is busy, the module will try ports 8401 to 8409. Add the corresponding redirect URIs (e.g. `http://localhost:8401/callback/` through `http://localhost:8409/callback/`) if port conflicts are likely in your environment.
 
-## Step 7: Configure JIM Environment Variables
+## :material-numeric-7-circle-outline: Step 7: Configure JIM Environment Variables
 
 ```bash
 # Keycloak Configuration
@@ -136,7 +136,7 @@ JIM_SSO_API_SCOPE=jim-api
 JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
 ```
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 1. Open JIM in a browser. JIM sends you to Keycloak to sign in, then returns you to JIM, signed in.
 2. Open `/claims` and check that `sub`, `name` and `email` carry your values.
@@ -144,7 +144,7 @@ JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
 
 To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
 
-## Realms set up from an earlier version of this guide
+## :material-history: Realms set up from an earlier version of this guide
 
 Earlier versions of this guide created `jim-api` with **Type: Optional** and offered a `jim-service` service account client. To bring such a realm in line:
 
@@ -152,7 +152,7 @@ Earlier versions of this guide created `jim-api` with **Type: Optional** and off
 2. For each client other than `jim` and `jim-powershell`, open its **Client scopes** tab and remove `jim-api` if it is listed.
 3. Delete the `jim-service` client if nothing uses it.
 
-## Keycloak Troubleshooting
+## :material-wrench-outline: Keycloak Troubleshooting
 
 - **Sign-in is unavailable / JIM does not trust the certificate**: Keycloak's HTTPS certificate comes from a certificate authority JIM does not trust, usually your own. Trust it for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
 - **Realm name**: Ensure the realm name in `JIM_SSO_AUTHORITY` matches exactly (case-sensitive)
@@ -166,6 +166,6 @@ Earlier versions of this guide created `jim-api` with **Type: Optional** and off
 3. Select a user and click **Evaluate**
 4. Check the **Generated access token** to see claim values
 
-## Next steps
+## :material-arrow-right-circle-outline: Next steps
 
 If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

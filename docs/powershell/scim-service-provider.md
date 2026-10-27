@@ -16,7 +16,7 @@ A key works only on the SCIM endpoint of the Connected System it was created for
 
 ---
 
-## Get-JIMScimKey
+## :material-key-outline: Get-JIMScimKey
 
 Retrieves the keys of a Connected System's SCIM endpoint, usable or not. The secret is never returned; `KeyPrefix` identifies a key.
 
@@ -67,7 +67,7 @@ Get-JIMScimKey -ConnectedSystemId 12 | Select-Object Name, IsEnabled, ExpiresAt,
 
 ---
 
-## New-JIMScimKey
+## :material-key-plus: New-JIMScimKey
 
 Creates a key for an identity provider to call the Connected System's SCIM endpoint with, and returns it with its secret.
 
@@ -122,7 +122,7 @@ New-JIMScimKey -ConnectedSystemId 12 -Name "Entra provisioning trial" -ExpiresAt
 
 ---
 
-## Set-JIMScimKey
+## :material-key-change: Set-JIMScimKey
 
 Renames, re-describes, re-dates, disables or re-enables a key. Only what is given changes.
 
@@ -164,7 +164,7 @@ Get-JIMScimKey -ConnectedSystemId 12 -Name "Entra provisioning 2025" | Set-JIMSc
 
 ---
 
-## Remove-JIMScimKey
+## :material-key-minus: Remove-JIMScimKey
 
 Permanently deletes a key. An identity provider still using it is refused from that moment; to keep a record of the key, disable it instead.
 
@@ -203,7 +203,7 @@ Get-JIMScimKey -ConnectedSystemId 12 | Where-Object { -not $_.IsEnabled } | Remo
 
 ---
 
-## Get-JIMScimStoreSummary
+## :material-chart-box-outline: Get-JIMScimStoreSummary
 
 Returns the base URL to give an identity provider and what the Connected System's SCIM endpoint holds: resources of each type, deleted resources kept until an import reads them, the changes the next import will read, and when an identity provider last wrote.
 
@@ -244,7 +244,7 @@ Get-JIMConnectedSystem -Name "Entra provisioning" | Get-JIMScimStoreSummary | Se
 
 ---
 
-## Get-JIMScimResourceType
+## :material-shape-outline: Get-JIMScimResourceType
 
 Returns the resource types the Connected System's SCIM endpoint serves. They are read-only.
 
@@ -286,7 +286,7 @@ Get-JIMScimResourceType -ConnectedSystemId 12 | Select-Object Name, Endpoint, Sc
 
 ---
 
-## Get-JIMScimSchema
+## :material-file-tree-outline: Get-JIMScimSchema
 
 Returns the schemas the Connected System's SCIM endpoint serves, with every attribute's characteristics. They are read-only.
 
@@ -324,7 +324,7 @@ Each schema.
 
 ---
 
-## Get-JIMScimJournal
+## :material-history: Get-JIMScimJournal
 
 Returns the requests an identity provider made to one resource, oldest first: what each did, the attributes it changed or ignored (by name, never by value), and the key and address that made it. With `-ChangeId`, returns the requests behind one imported change in a Connected System Object's change history.
 

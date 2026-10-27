@@ -31,7 +31,7 @@ Whichever mode is selected, genuine data-quality issues remain discoverable:
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
 
-## Finding out why a reference is unresolved
+## :material-magnify: Finding out why a reference is unresolved
 
 For each unresolved reference, JIM works out the most likely cause by comparing the value with the Connected System's partitions and its current Container Scope, using the Connector's own rule for which Container holds a value (for a directory, the Distinguished Name's position in the hierarchy). It then says whether the fix lies in JIM's configuration or in the Connected System, and what to do:
 
@@ -47,7 +47,7 @@ For each unresolved reference, JIM works out the most likely cause by comparing 
 
 The causes are judged against the Container Scope as it stands now, not as it stood when the import ran, so they always describe what would fix the references today: once you select a Container, its references read **Not found in scope** until the next Full Import imports the objects they name and resolves them. Above the list, the panel's **Next steps** group the references by the change that would fix them, most first, so a group whose hundreds of unresolved members all sit in one unselected Container shows one step rather than hundreds. Steps you can take in JIM are listed first, under **Fix in JIM**, then those that lie in the Connected System. **Where they point**, above the filtered Connector Space, gives the same steps for the whole Connected System, each with how many objects its references sit on, so a thousand affected objects read as the two or three changes behind them. Nothing about the references themselves changes until an import resolves them.
 
-## On export
+## :material-export: On export
 
 The same setting governs the export side. When JIM writes a reference attribute (a manager, a group's members) it needs the referenced object's own identifier in the target Connected System, which it can only have once that object exists there. A Pending Export whose references cannot all be resolved yet is not held back whole: everything that can be written is written now (a Create inserts the row without the reference columns; a group gains the members that can be resolved), and the Pending Export stays pending, carrying only the reference values still owed, until they resolve. It is retried on the deferred cadence and finished when the referenced objects can be addressed.
 

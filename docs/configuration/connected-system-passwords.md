@@ -9,7 +9,7 @@ audience: administrator
 
 Where a Connected System accepts passwords, JIM reads its password policy, lets you check and use its password channel, and can synchronise password changes to it. [Passwords](../concepts/passwords.md) explains the model; this page covers each Connected System's part in it.
 
-## Password policy and the password channel
+## :material-shield-lock-outline: Password policy and the password channel
 
 Where a Connected System can accept passwords, its **Passwords** tab carries two panels beneath the Password Synchronisation settings: Password Channel, which lets you check the channel works before you rely on it, and Password Policy, which shows you the password rules JIM read from the system itself.
 
@@ -107,7 +107,7 @@ Every Connected System gets its own Activity, grouped under one parent for the c
 
 For automation, `Set-JIMMetaverseObjectPassword -ConnectedSystemId` does the same thing over the same REST endpoint. Omitting `-ConnectedSystemId` aims the password at every Connected System configured for Password Synchronisation instead; see [Passwords > Setting a password](../concepts/password-synchronisation.md#setting-a-password) for the two modes.
 
-## Password Synchronisation
+## :material-swap-horizontal: Password Synchronisation
 
 Setting a password on named Connected System Objects, above, is a choice made per reset. Password Synchronisation is the standing arrangement: which systems receive a Metaverse Object's password when it is set without naming any, so that one change reaches every system it has a Connected System Object in.
 

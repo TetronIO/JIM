@@ -11,7 +11,7 @@ Whenever JIM compares two pieces of text, it is answering one of four questions.
 
 Understanding this model helps you predict when a change will flow, when two objects will join, and why an [expression](expressions.md) behaves the way it does.
 
-## The policy
+## :material-format-letter-case: The policy
 
 | Question | Rule | Where JIM asks it |
 |----------|------|-------------------|
@@ -25,7 +25,7 @@ Understanding this model helps you predict when a change will flow, when two obj
 - **A condition means what it says.**<br /> A scoping criterion for `Sales` matches `Sales` and not `SALES`. Where a source is inconsistent about casing, you switch that one criterion to ignore case.
 - **Finding things is forgiving.**<br /> A capital letter in the wrong place should not hide what you are looking for.
 
-## Quick reference
+## :material-table-large: Quick reference
 
 Every feature that compares text, the question it asks, and the rule that answers it.
 
@@ -57,7 +57,7 @@ Every feature that compares text, the question it asks, and the rule that answer
 | Configuration | [Names you give JIM](#configuration-names-ignore-case): attribute, Object Type, Connected System, Run Profile, Connector and Predefined Search names | Same thing? | Ignore case | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } No |
 | Configuration | [Schema refresh](../configuration/connected-system-schema.md#refreshing-the-schema): matching the Object Types and attributes a Connected System reports to the ones JIM holds | Same thing? | Ignore case | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } No |
 
-## Object Matching Rules
+## :material-vector-link: Object Matching Rules
 
 An Object Matching Rule asks whether an account and an identity are the same thing, so it ignores case: HR's `JBloggs` joins the directory's `jbloggs`. The exception is a rule reading an attribute declared [case-exact](#case-exact-attributes): a new rule on such an attribute respects case, because its Connected System treats `JBloggs` and `jbloggs` as two identifiers. A rule matching on an expression ignores case. The default is the same however the rule is created, in the portal, through the REST API or with PowerShell.
 
@@ -65,7 +65,7 @@ Turn on **Case sensitive** for any other rule only when its Connected System rea
 
 Rules created through the REST API or PowerShell before JIM ignored case by default, without stating a setting, respect case. Nothing about them changed: each rule keeps the setting it was saved with. In simple matching mode the Connected System's Object Matching tab shows each rule's setting as a switch you can turn off. In either mode, `Get-JIMMatchingRule` and `Get-JIMSyncRuleMatchingRule` show it as `CaseSensitive`, and `Set-JIMMatchingRule` or `Set-JIMSyncRuleMatchingRule` with `-CaseSensitive $false` turns it off.
 
-## Case-exact attributes
+## :material-format-letter-case-upper: Case-exact attributes
 
 Some identifiers really are different when their case differs: SCIM's `id`, an Oracle column, a SQL Server column with a case-sensitive collation, an Active Directory attribute with a case-sensitive string syntax. JIM records this on each Connected System attribute as its **case-exact** declaration, which says how the attribute's values answer "are these the same thing?".
 
@@ -92,13 +92,13 @@ The declaration decides how JIM recognises an object by its identifiers. On an E
 
 Every other identifier ignores case in all of these.
 
-## Scoping and search criteria
+## :material-filter-outline: Scoping and search criteria
 
 Scoping criteria and Predefined Search criteria ask whether a value meets a condition, so each one is exact unless you switch it to ignore case. That is the right default for a condition: `Sales` means `Sales`. Where a source is inconsistent, for example an HR feed that sometimes records a department as `Sales` and sometimes `SALES`, switch off case sensitivity on that criterion and it matches both.
 
 Updating a criterion through the REST API or PowerShell keeps its case sensitivity unless the update states it, so `Set-JIMScopingCriterion` or `Set-JIMPredefinedSearchCriterion` without `-CaseSensitive` leaves a criterion that ignores case as it is.
 
-## Identifier uniqueness (ignores case)
+## :material-identifier: Identifier uniqueness (ignores case)
 
 These checks decide whether a value JIM generates, such as an account name, is free to issue (see [Generated values](../configuration/generated-values.md)). They ignore case, and cannot be switched to exact matching.
 
@@ -120,7 +120,7 @@ Why case is ignored here:
 
 **Where a target cannot be asked to ignore case.** A SCIM attribute that the service provider declares case exact, such as `externalId` in the core schema, can only be searched for an exact match. A value that differs only in case is then not found by the probe, but the provider would not refuse it either, and JIM's own records of the accounts it has imported still ignore case. See the SCIM 2.0 Client Connector's [Probing for values already in use](../connectors/jim-scim-connector.md#probing-for-values-already-in-use).
 
-## When a target changes the case of a value
+## :material-swap-vertical: When a target changes the case of a value
 
 Because JIM confirms an export of ordinary text by comparing values exactly, a Connected System that stores a value in a case of its own (lower-casing email addresses as it saves them, say) never hands back what JIM sent. JIM then cannot confirm the export: it sends the change again at every later export, and reports it as not confirmed on every import, for as long as the two disagree. Nothing is lost on the target, which holds the value in its own case; what fails is JIM's confirmation that its value arrived. An identifier is the exception; see [Identifiers a target reports in its own case](#identifiers-a-target-reports-in-its-own-case).
 
@@ -145,7 +145,7 @@ The object's own name is JIM's, though. When the value of a directory object's n
 
 An identifier declared [case-exact](#case-exact-attributes) still compares exactly, because its Connected System treats `JBloggs` and `jbloggs` as two identifiers.
 
-## Configuration names ignore case
+## :material-text-box-edit-outline: Configuration names ignore case
 
 A name you give JIM identifies a piece of configuration, so it asks whether two names are the same thing and ignores case. `Get-JIMMetaverseObject -AttributeName 'employee id'` finds Employee Id, `Get-JIMActivity -ConnectedSystem 'hr'` finds HR's Activities, and an Example Data pattern's `{first name}` reads First Name. This covers attribute and Object Type names, Connected System and Run Profile names in Activity filters, Connector names and Predefined Search URIs, across the REST API, PowerShell and the portal.
 
@@ -153,7 +153,7 @@ Some Connected Systems can hold two attributes whose names differ only in case, 
 
 The same rule applies when a [schema refresh](../configuration/connected-system-schema.md#refreshing-the-schema) finds an Object Type or attribute under a name that differs only in case from the one JIM holds. It is the same Object Type or attribute: it keeps every Synchronisation Rule mapping and Object Matching Rule that uses it, takes the Connected System's new casing, and the preview lists it as renamed.
 
-## Case sensitivity in expressions
+## :material-function-variant: Case sensitivity in expressions
 
 Two different questions are asked inside an [expression](expressions.md), and keeping them straight avoids most surprises:
 

@@ -25,6 +25,7 @@ CHANGELOG = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
 
 # A released version heading, such as "## [0.16.0] - 2026-09-29".
 FIRST_RELEASE = re.compile(r"^## \[\d", re.MULTILINE)
+RELEASE_HEADING = re.compile(r"^## \[", re.MULTILINE)
 
 # An entry's leading emoji: a list marker, then one emoji (with its variation
 # selector, if any) and the space after it. The marker and indent are kept. The
@@ -49,4 +50,6 @@ def on_page_markdown(markdown, page, **kwargs):
     if match is None:
         raise ValueError("CHANGELOG.md has no released version heading")
     released = LEADING_EMOJI.sub(r"\1", text[match.start():])
+    # Every H2 on the site opens with an icon (STY-3); each release heading gets a tag.
+    released = RELEASE_HEADING.sub("## :material-tag-outline: [", released)
     return markdown.replace(PLACEHOLDER, released)

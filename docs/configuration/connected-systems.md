@@ -12,7 +12,7 @@ A **Connected System** is any external directory, database, or file that JIM syn
 
 Every Connected System is associated with a [connector](../connectors/index.md) that knows how to talk to its kind of external store, and holds a Connector Space of imported objects, a discovered schema, and (where applicable) a partition and container hierarchy.
 
-## What a Connected System contains
+## :material-server-network-outline: What a Connected System contains
 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
 
@@ -22,33 +22,33 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
 - **Synchronisation Rules**<br /> The rules that govern how data flows between this system and the Metaverse.
 
-## The Connector Space
+## :material-database-outline: The Connector Space
 
 Each Connected System has a **Connector Space**: a staging area between the external system and the Metaverse, holding a Connected System Object for each object JIM has imported. [Connector Space](connector-space.md) covers what it holds, opening it, objects awaiting deprovisioning, and clearing it.
 
-## Partitions and containers
+## :material-folder-network-outline: Partitions and containers
 
 Where a Connector has partitions and containers, such as the LDAP Connector, the **Scope** tab is where you choose which of them JIM manages. [Partitions and Containers](partitions-and-containers.md) covers the choices, stating them as text, and previewing a change before you make it.
 
-## Unresolved reference handling
+## :material-link-lock: Unresolved reference handling
 
 A reference to an object JIM does not hold, such as a group member outside the Container Scope, stays unresolved, and the Connected System's **Unresolved Reference Handling** decides how a run reports it. [Unresolved References](unresolved-references.md) covers the setting, finding out why a reference is unresolved, and the export side.
 
-## Schema and attributes
+## :material-table-column: Schema and attributes
 
 The **Schema** tab's selections decide what JIM reads from the system. [Connected System Schema](connected-system-schema.md) covers what deselecting means, refreshing the schema, and an object that changes Object Type; [Connected System Attributes](connected-system-attributes.md) covers each attribute's writability and data type, and why credential attributes are never managed.
 
-## Passwords
+## :material-form-textbox-password: Passwords
 
 Where the system accepts passwords, its **Passwords** tab shows the password policy JIM read from it, checks the password channel, and sets Password Synchronisation. [Connected System Passwords](connected-system-passwords.md) covers each.
 
-## Detected facts
+## :material-eye-check-outline: Detected facts
 
 At the top of the Details tab, above the form, a **Detected** strip lists read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing them never opens a new connection. Before the first successful connection, the strip says nothing has been detected yet.
 
 Of the built-in Connectors, only the [LDAP Connector](../connectors/jim-ldap-connector.md#detected-facts) detects and surfaces facts (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect facts, the strip is not shown at all.
 
-## Pending Exports
+## :material-tray-full: Pending Exports
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
 
@@ -70,7 +70,7 @@ The list filters by change type (**Create**, **Update** or **Delete**) and by st
 
 A Pending Export's detail page names two distinct things about each attribute change, side by side: **Attribute Flow** is the outbound Synchronisation Rule that staged the change, and **Value from** is where the underlying Metaverse value came from (a Connected System through an import Attribute Flow, a computed expression, or a Generated Value), linking into that attribute's inspector on the source Metaverse Object. Troubleshooting a wrong exported value usually needs both: which rule sent it, and which source put it on the Metaverse Object in the first place.
 
-## Configuration changes pending a Full Synchronisation
+## :material-database-clock-outline: Configuration changes pending a Full Synchronisation
 
 Most configuration changes do not take effect the moment you save them. Scoping criteria, Attribute Flow, Object
 Matching Rules and schema selection all describe what synchronisation *should* do; the change reaches your data only
@@ -113,7 +113,7 @@ Read the same status from automation with `(Get-JIMConnectedSystem -Id <id>).Con
 `configurationDrift` object on the REST Connected System response. In both cases, check `IsDeterminable` before
 treating `HasPendingChanges` as `false`.
 
-## Previewing a Full Synchronisation
+## :material-eye-outline: Previewing a Full Synchronisation
 
 A Full Synchronisation is when configuration reaches your data: accounts provisioned, updated, disconnected or deleted
 across every Connected System the run reaches. A **Full Synchronisation preview** works out what a Full Synchronisation
@@ -162,11 +162,11 @@ than a completed Full Synchronisation preview of that same system, and queues no
 something has overtaken still queues: its Activity records that the preview was out of date, and PowerShell writes a
 warning saying what overtook it (the REST response carries it in `warnings`).
 
-## Confirming a configuration change
+## :material-pencil-lock-outline: Confirming a configuration change
 
 Changing a Connected System's settings, schema, or partition selection is confirmed before it saves where the change affects synchronisation. Deselecting an Object Type or a partition is treated as destructive: the next Full Import marks the Connected System Objects imported through it obsolete, and the following synchronisation disconnects them and deprovisions whatever they are joined to. See [Configuration changes](configuration-changes.md).
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Setting up a new Connected System:**
 
@@ -181,13 +181,13 @@ Changing a Connected System's settings, schema, or partition selection is confir
 
 **Removing a Connected System:** deleting one asks what should happen to everything it managed, with the impact counted before you choose. [Removing a Connected System](removing-a-connected-system.md) explains both choices, and how to preview the impact on every other system first.
 
-## Manage Connected Systems
+## :material-cog-outline: Manage Connected Systems
 
 - **JIM portal**<br /> Connected Systems area of the admin UI
 - **PowerShell**<br /> [Connected Systems cmdlets](../powershell/connected-systems.md) (`Get-JIMConnectedSystem`, `New-JIMConnectedSystem`, `Set-JIMConnectedSystem`, etc.)
 - **REST API**<br /> Connected Systems endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connectors](../connectors/index.md): the connector types JIM ships with, and what each one does
 - [Concepts: Architecture](../concepts/architecture.md): how Connected Systems fit into JIM's hub-and-spoke model

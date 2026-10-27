@@ -11,7 +11,7 @@ The Metaverse Object Type cmdlets manage the kinds of identity JIM stores, such 
 
 ---
 
-## Get-JIMMetaverseObjectType
+## :material-shape-outline: Get-JIMMetaverseObjectType
 
 Gets Metaverse Object Types: one page of them by default, or one by ID or name.
 
@@ -100,7 +100,7 @@ if ((Get-JIMMetaverseObjectType -Name "User").DeletionSourceWarnings) {
 
 ---
 
-## New-JIMMetaverseObjectType
+## :material-shape-plus-outline: New-JIMMetaverseObjectType
 
 Creates a custom Metaverse Object Type, for identities the built-in User and Group do not fit, such as devices, contractors or service accounts.
 
@@ -159,7 +159,7 @@ New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" `
 
 ---
 
-## Set-JIMMetaverseObjectType
+## :material-pencil-outline: Set-JIMMetaverseObjectType
 
 Changes a Metaverse Object Type: its name, plural name and icon, and how its Metaverse Objects are deleted. A built-in Object Type, such as User or Group, accepts changes to its deletion settings only.
 
@@ -237,7 +237,7 @@ Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -Pr
 
 ---
 
-## Remove-JIMMetaverseObjectType
+## :material-trash-can-outline: Remove-JIMMetaverseObjectType
 
 Deletes a custom Metaverse Object Type.
 
@@ -282,7 +282,7 @@ Remove-JIMMetaverseObjectType -Id 5 -WhatIf
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Metaverse Attributes](metaverse-attributes.md): the attributes an Object Type carries, and their priority
 - [Metaverse cmdlets](metaverse.md): query Metaverse Objects and review pending deletions

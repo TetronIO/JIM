@@ -17,7 +17,7 @@ It also depends on the rule provisioning. Only a newly created Connected System 
 
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
 
-## What you configure
+## :material-tune-variant: What you configure
 
 - **Password Settings**<br /> Where the password comes from. Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here, or [one password you choose for every Connected System Object](#one-password-for-every-connected-system-object). The first two generate a different password per object: choosing your own settings starts from the discovered policy rather than from nothing, switching between the two never discards what you configured, and the generator produces random characters, words, or a pronounceable password, telling you the minimum length and character classes the result is guaranteed to carry.
 - **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can apply are offered; a directory that cannot apply the one chosen still takes the password, and its delivery completes with a warning naming what was applied (see [LDAP Connector Passwords](../connectors/jim-ldap-connector-passwords.md#setting-passwords)). On Active Directory and Samba AD, "Password never expires" follows this choice only where no export has written the object's `userAccountControl` by the time the password is delivered; where one has, your Attribute Flow decides it, and requiring a change at the next sign-in is still applied, though Active Directory ignores it while the flow keeps "Password never expires" set. The portal warns you under this setting when the rule maps `userAccountControl`. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector-passwords.md#enabling-new-active-directory-accounts) for how to set the flag in the flow.
@@ -29,7 +29,7 @@ The setting lives on the Synchronisation Rule rather than on the Connected Syste
 
 **Nobody receives a generated password, including you.** Its job is to get the Connected System Object into a working state, since most directories will not enable an object or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-system-passwords.md#setting-the-password-on-one-connected-system-object) and hand them the value; requiring a change at their next sign-in then does what you would expect. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
 
-## One password for every Connected System Object
+## :material-form-textbox-password: One password for every Connected System Object
 
 The third Password Settings option sets one password you choose on every Connected System Object the rule provisions, so you can tell a new starter what it is. **This option is not recommended**, and the portal says so beside it: every Connected System Object the rule provisions shares that password until each person changes it, so anybody who learns of this can sign in as any new starter who has not.
 
@@ -46,7 +46,7 @@ Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Ro
 
 A password the Connected System would refuse is rejected when you set it, rather than parking every Connected System Object the rule provisions. A rule set to this option with no password stored is refused too, for the same reason.
 
-## What happens after provisioning
+## :material-history: What happens after provisioning
 
 Setting the password is a separate concern from creating the Connected System Object, and deliberately cannot fail the export that created it. The Connected System Object exists; reporting its export as failed would have JIM retry the create.
 
@@ -64,7 +64,7 @@ Each Connected System Object ends up in one of these states, each recorded as a 
 
 The target's own words are kept verbatim on a parked Connected System Object, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
 
-## Clearing parked Connected System Objects
+## :material-lock-reset: Clearing parked Connected System Objects
 
 Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every Connected System Object parked against that rule**, and the Password Delivery Service attempts them again within seconds, with no export run needed. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
 
@@ -72,7 +72,7 @@ Saving an unrelated part of the same rule releases nothing. Those Connected Syst
 
 The typical loop is therefore: read what the target said on the parked Connected System Object, correct the generator settings (most often length or the character classes), and save; delivery follows within seconds.
 
-## Where JIM tells you
+## :material-bell-outline: Where JIM tells you
 
 You do not have to go looking. Parked and expired Connected System Objects are reported in two places:
 
