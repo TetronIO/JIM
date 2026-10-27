@@ -9,6 +9,25 @@ audience: automation-author
 
 A Run Profile execution records one execution item (a Run Profile Execution Item) for each object it changed or failed to change. These cmdlets read one item in full, with its error message when the object failed, and follow the chain of causes behind it, or the consequences it went on to have, one cohort of objects at a time: the same story the [Lineage view](../configuration/causality.md) tells. List a run's items with [`Get-JIMActivity -ExecutionItems`](activities.md#get-jimactivity).
 
+```jim-diagram
+archetype: map
+title: How the execution item cmdlets pipe into each other
+desc: "Each row of a run's items, from Get-JIMActivity -ExecutionItems, pipes into Get-JIMActivityExecutionItem, which returns that one execution item in full. So does each row of an object's timeline, which Get-JIMActivityExecutionItem returns given a Connected System Object's or a Metaverse Object's ID. From one item, -Causes returns what caused it, and -Consequences what it went on to cause, one row per cohort. Each consequence row pipes into Get-JIMCausalCohortMember, which returns every member of that cohort. Each node links to the cmdlet that returns it."
+nodes:
+  - { id: timeline, label: "An object's timeline", link: "#get-jimactivityexecutionitem", row: 0, col: 1 }
+  - { id: runitems, label: "A run's items", link: "activities.md#get-jimactivity", row: 1, col: 0 }
+  - { id: item, label: One execution item, link: "#get-jimactivityexecutionitem", row: 1, col: 1 }
+  - { id: causes, label: What caused it, link: "#get-jimactivityexecutionitem", row: 1, col: 2 }
+  - { id: consequences, label: What it caused, link: "#get-jimactivityexecutionitem", row: 2, col: 1 }
+  - { id: cohort, label: Every cohort member, link: "#get-jimcausalcohortmember", row: 2, col: 2 }
+edges:
+  - { from: timeline, to: item, label: rows pipe into }
+  - { from: runitems, to: item, label: rows pipe into }
+  - { from: item, to: causes, label: "`-Causes`" }
+  - { from: item, to: consequences, label: "`-Consequences`" }
+  - { from: consequences, to: cohort, label: a row pipes into }
+```
+
 ---
 
 ## :material-format-list-checks: Get-JIMActivityExecutionItem

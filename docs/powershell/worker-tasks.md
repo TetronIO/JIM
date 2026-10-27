@@ -9,6 +9,29 @@ audience: automation-author
 
 Worker Task cmdlets let you monitor and cancel queued and in-progress background operations (synchronisation runs, Connector Space clears, example data generation, and similar). Worker Tasks are ephemeral: once a task completes, its record is deleted and the associated [Activity](activities.md) becomes the durable audit record, so these cmdlets only ever return in-flight work.
 
+```jim-diagram
+archetype: comparison
+title: A Worker Task and the Activity it leaves behind
+desc: "A Worker Task exists only while its work is in flight: queued, processing or cancellation requested. Get-JIMWorkerTask reads it, with its status and the step it is on, and Stop-JIMWorkerTask cancels it, the cancellation completing asynchronously. Once the task completes, its record is deleted. The Activity is the durable audit record: Get-JIMActivity reads it, with its outcome and statistics, long after the task has gone; it is not something to stop. Once the task has started processing, its ActivityId links the two."
+columns:
+  - { label: Worker Task, sub: the work in flight }
+  - { label: Activity, sub: the durable record }
+rows:
+  - label: Exists
+    cells:
+      - { text: while queued or processing, sub: deleted once it completes }
+      - { text: after the task has gone }
+  - label: Read with
+    cells:
+      - { text: "`Get-JIMWorkerTask`", sub: "status, and the step it is on" }
+      - { text: "`Get-JIMActivity`", sub: outcome and statistics }
+  - label: Stop with
+    cells:
+      - { text: "`Stop-JIMWorkerTask`", sub: completes asynchronously }
+      - { text: nothing to stop, sub: it records what happened }
+footer: "Once a task starts processing, its `ActivityId` names its Activity"
+```
+
 ---
 
 ## :material-cog-outline: Get-JIMWorkerTask

@@ -11,6 +11,29 @@ The Connector cmdlet reads the Connectors a Connected System can be created from
 one Connector, the settings a Connected System using it is configured with and what the Connector can do. Use it
 to find the Connector ID that `New-JIMConnectedSystem` needs.
 
+```jim-diagram
+archetype: comparison
+title: What Get-JIMConnectorDefinition returns, listed or by one Connector
+desc: "Get-JIMConnectorDefinition has two forms. With no parameters it returns every Connector JIM has; with -Id or -Name it returns one. Both carry the Connector's Id, which New-JIMConnectedSystem takes as -ConnectorDefinitionId, and its name and description. The list gives only how many files make up the Connector and their versions, and whether any Connected System uses it; the single Connector gives its Settings, the settings a Connected System using it is configured with, and its Files. Only the single Connector carries the capability flags, such as SupportsDeltaImport and SupportsExport, so to filter Connectors by what they support, fetch each one by its Id."
+columns:
+  - { label: Every Connector, sub: no parameters }
+  - { label: One Connector, sub: "`-Id` or `-Name`" }
+rows:
+  - label: Identity
+    cells:
+      - { text: "`Id`, `Name`, `Description`" }
+      - { text: "`Id`, `Name`, `Description`" }
+  - label: Settings and files
+    cells:
+      - { text: "a count of `Files`, their `Versions`", sub: "and `InUse`" }
+      - { text: "`Settings` and `Files` in full", sub: what a Connected System is configured with }
+  - label: Capabilities
+    cells:
+      - { text: none }
+      - { text: every capability flag, sub: "such as `SupportsDeltaImport`" }
+footer: "`New-JIMConnectedSystem` takes either form's `Id` as `-ConnectorDefinitionId`"
+```
+
 ---
 
 ## :material-power-plug-outline: Get-JIMConnectorDefinition

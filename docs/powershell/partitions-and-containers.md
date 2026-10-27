@@ -9,6 +9,33 @@ audience: automation-author
 
 The partition and container cmdlets import a Connected System's hierarchy, choose which of its partitions and containers JIM imports objects from, and how far beneath each container. How they decide what JIM sees is covered in [Partitions and Containers](../configuration/partitions-and-containers.md).
 
+```jim-diagram
+archetype: comparison
+title: Two ways to set Container Scope, one Container or the whole scope as text
+desc: "Container Scope can be set one Container at a time with Set-JIMConnectedSystemContainer, or all at once as text with Set-JIMConnectedSystemContainerScopeText. Set-JIMConnectedSystemContainer changes what one Container states, with -Selected, -Excluded and -Scope, one call per Container; every Container it does not name keeps its setting, and the partition holding it must be selected separately, with Set-JIMConnectedSystemPartition. Set-JIMConnectedSystemContainerScopeText states the whole scope, one include or exclude line per Container; a Container the text does not name is deselected, naming a Container selects its partition, and the text is applied in one call, all or nothing, so one bad line changes nothing. Either way, the Containers must first be imported with Import-JIMConnectedSystemHierarchy."
+columns:
+  - { label: One Container, sub: "`Set-JIMConnectedSystemContainer`" }
+  - { label: The whole scope as text, sub: "given to `-Text`" }
+rows:
+  - label: You state
+    cells:
+      - { text: "`-Selected`, `-Excluded`, `-Scope`", sub: for that Container alone }
+      - { text: one line per Container, sub: "`include` or `exclude`" }
+  - label: Containers not named
+    cells:
+      - { text: keep their settings }
+      - { text: are deselected }
+  - label: The partition
+    cells:
+      - { text: "selected separately", sub: "`Set-JIMConnectedSystemPartition`" }
+      - { text: selected by naming a Container in it }
+  - label: Many Containers
+    cells:
+      - { text: one call each }
+      - { text: one call, sub: "all or nothing: one bad line changes nothing" }
+footer: "Import the Containers first with `Import-JIMConnectedSystemHierarchy`"
+```
+
 ---
 
 ## :material-import: Import-JIMConnectedSystemHierarchy

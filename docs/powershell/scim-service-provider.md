@@ -9,6 +9,18 @@ audience: automation-author
 
 A Connected System that uses the SCIM 2.0 Service Provider Connector has a SCIM endpoint of its own, which identity providers push Users and Groups to. These cmdlets manage the keys those identity providers call it with, and read the endpoint's base URL, what it holds and the resource types and schemas it serves. The SCIM 2.0 Service Provider is a [Preview feature](../administration/preview-features.md); every cmdlet here fails while it is turned off.
 
+```jim-diagram
+archetype: flow
+title: Rotating a SCIM key with an overlap
+desc: "A Connected System can have at most two usable SCIM keys, so a key is rotated with an overlap. Create the new key with New-JIMScimKey, which shows its secret once. Give the new key to the identity provider. Watch the old key with Get-JIMScimKey until its LastUsedAt stops moving. Then disable the old key with Set-JIMScimKey, or remove it with Remove-JIMScimKey."
+container: { label: Rotating a key, tag: "at most two usable keys per Connected System" }
+steps:
+  - { id: create, label: Create the new key, sub: secret shown once, note: "`New-JIMScimKey`" }
+  - { id: give, label: Give it to the identity provider }
+  - { id: watch, label: Watch the old key, sub: "until `LastUsedAt` stops moving", note: "`Get-JIMScimKey`" }
+  - { id: retire, label: Retire the old key, sub: disable or remove, note: "`Set-JIMScimKey` or `Remove-JIMScimKey`" }
+```
+
 !!! warning
     A key's secret is shown once, by `New-JIMScimKey`, and cannot be shown again. Keep it somewhere safe; if it is lost, create a new key.
 
