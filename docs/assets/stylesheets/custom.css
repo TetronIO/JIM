@@ -303,6 +303,83 @@
 .md-typeset .twemoji.jim-no { color: var(--jim-mark-no); }
 
 /* ========================================
+   Reader layout controls
+   docs/assets/javascripts/docs-layout.js: the header's width toggle
+   and resizable table columns; scripts/Test-DocsLayout.ps1 checks both.
+   ======================================== */
+
+/* Full width: the grid fills the window, so tables, code and diagrams get the
+   room, while paragraphs, lists and notes keep the reading measure. Below
+   76.25em Material's layout is already full width, so the toggle is hidden. */
+.jim-width-toggle {
+  display: none;
+}
+
+@media screen and (min-width: 76.25em) {
+  .jim-width-toggle {
+    display: inline-block;
+  }
+
+  :root[data-jim-width="full"] .md-grid {
+    max-width: none;
+  }
+
+  :root[data-jim-width="full"] .md-typeset > :is(p, ul, ol, dl, blockquote, .admonition, details) {
+    max-width: 36rem;
+  }
+}
+
+/* Column resize handle: an invisible strip over the header cell's right edge,
+   shown as a brand-coloured rule on hover, focus and drag. */
+.md-typeset table:not([class]) th {
+  position: relative;
+}
+
+/* Once resized, a column's width is its measured border-box width, so the
+   cell's padding must count inside it or every column grows by its padding. */
+.md-typeset table[data-jim-resized] th {
+  box-sizing: border-box;
+}
+
+.jim-col-resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 1;
+}
+
+.jim-col-resize::after {
+  content: "";
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.jim-col-resize:hover::after,
+.jim-col-resize:focus-visible::after,
+[data-jim-col-resizing] .jim-col-resize::after {
+  background: var(--jim-icon-tile-fg);
+}
+
+.jim-col-resize:focus-visible {
+  outline: none;
+}
+
+[data-jim-col-resizing] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* ========================================
    GLightbox theme-aware overlay
    ======================================== */
 

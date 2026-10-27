@@ -286,6 +286,7 @@ extra_css:
 
 extra_javascript:
   - assets/javascripts/diagram-zoom.js
+  - assets/javascripts/docs-layout.js
 
 extra:
   # Visitor analytics and session recorder; rendered by
