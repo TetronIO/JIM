@@ -25,11 +25,27 @@
     .devcontainer/setup.sh installs for the Playwright MCP server), and network access to
     fonts.googleapis.com for the webfonts the metrics were measured from.
 
+.PARAMETER Path
+    Pages (Markdown under docs/) whose jim-diagram specs to check instead of the fixtures, so a
+    page's real diagrams meet the same bar before it is committed. Needs PyYAML (installed with
+    the docs toolchain).
+
+.PARAMETER ScreenshotDir
+    Also save a picture of every diagram, as each view draws it, into this folder, to look at
+    what the checks cannot judge: whether the diagram reads well.
+
 .EXAMPLE
     pwsh -File ./scripts/Test-Diagrams.ps1
+
+.EXAMPLE
+    pwsh -File ./scripts/Test-Diagrams.ps1 -Path docs/configuration/api-keys.md, docs/configuration/roles.md
 #>
 [CmdletBinding()]
-param()
+param(
+    [string[]]$Path,
+
+    [string]$ScreenshotDir
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -38,15 +54,40 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $cssPath = Join-Path $repoRoot 'docs/assets/stylesheets/custom.css'
 $renderer = Join-Path $repoRoot 'docs/hooks/diagrams.py'
 $fixtures = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'docs/hooks/tests/fixtures') -Filter '*.json' | Sort-Object Name)
-if (-not $fixtures) { throw 'No diagram fixtures found in docs/hooks/tests/fixtures.' }
+if (-not $fixtures -and -not $Path) { throw 'No diagram fixtures found in docs/hooks/tests/fixtures.' }
 
 $python = (Get-Command python3 -ErrorAction SilentlyContinue) ?? (Get-Command python -ErrorAction SilentlyContinue)
 if (-not $python) { throw 'Python 3 is needed to run the diagram renderer.' }
 
-$fragments = foreach ($fixture in $fixtures) {
-    $out = & $python.Source $renderer $fixture.FullName
-    if ($LASTEXITCODE -ne 0) { throw "The renderer failed on $($fixture.Name)." }
-    $out -join "`n"
+if ($Path) {
+    # Render each page's jim-diagram fences exactly as the build hook does, and keep the diagrams.
+    $extract = @'
+import re, sys
+sys.path.insert(0, sys.argv[1])
+import diagrams
+for page in sys.argv[2:]:
+    text = open(page, encoding="utf-8").read()
+    out = diagrams.replace_fences(text, page)
+    found = re.findall(r'<div class="jim-dg jim-dg-[a-z]+">.*?</svg>\n</div>', out, re.S)
+    if not found:
+        sys.exit(f"{page} has no jim-diagram")
+    print("\n".join(found))
+'@
+    $pages = @(foreach ($p in $Path) { (Resolve-Path -LiteralPath $p).Path })
+    # A file, not -c: PowerShell's native argument passing mangles the quotes in inline code.
+    $extractPath = Join-Path ([System.IO.Path]::GetTempPath()) ("jim-diagram-pages-{0}.py" -f ([guid]::NewGuid().ToString('n')))
+    Set-Content -LiteralPath $extractPath -Value $extract -Encoding utf8
+    try { $fragments = & $python.Source $extractPath (Join-Path $repoRoot 'docs/hooks') @pages }
+    finally { Remove-Item -LiteralPath $extractPath -Force -ErrorAction SilentlyContinue }
+    if ($LASTEXITCODE -ne 0) { throw 'Rendering the pages failed; the renderer says why above.' }
+    $fixtures = $pages
+}
+else {
+    $fragments = foreach ($fixture in $fixtures) {
+        $out = & $python.Source $renderer $fixture.FullName
+        if ($LASTEXITCODE -ne 0) { throw "The renderer failed on $($fixture.Name)." }
+        $out -join "`n"
+    }
 }
 $fragmentPath = Join-Path ([System.IO.Path]::GetTempPath()) ("jim-diagrams-{0}.html" -f ([guid]::NewGuid().ToString('n')))
 Set-Content -LiteralPath $fragmentPath -Value ($fragments -join "`n") -Encoding utf8
@@ -145,6 +186,16 @@ const VIEWS = [
       return out;
     }, view.layout);
     for (const f of result) findings.push(`${view.name}: ${f}`);
+    if (process.env.JIM_SHOTS && view.name !== 'desktop full width') {
+      const shown = await tab.$$('.jim-dg svg.jim-diagram');
+      let n = 0;
+      for (const svg of shown) {
+        if (!(await svg.isVisible())) continue;
+        n += 1;
+        await svg.scrollIntoViewIfNeeded();
+        await svg.screenshot({ path: `${process.env.JIM_SHOTS}/diagram-${String(n).padStart(2, '0')}-${view.name.replace(/ /g, '-')}.png` });
+      }
+    }
     await tab.close();
   }
   await browser.close();
@@ -159,12 +210,16 @@ try {
     $env:JIM_CSS_PATH = $cssPath
     $env:JIM_FRAGMENTS = $fragmentPath
     $env:JIM_ZOOM_PATH = Join-Path $repoRoot 'docs/assets/javascripts/diagram-zoom.js'
+    if ($ScreenshotDir) {
+        New-Item -ItemType Directory -Force -Path $ScreenshotDir | Out-Null
+        $env:JIM_SHOTS = (Resolve-Path -LiteralPath $ScreenshotDir).Path
+    }
     $json = & node $tempScript
     if ($LASTEXITCODE -ne 0) { throw "The diagram check failed to run (node exited $LASTEXITCODE)." }
 }
 finally {
     Remove-Item -LiteralPath $tempScript, $fragmentPath -Force -ErrorAction SilentlyContinue
-    Remove-Item Env:JIM_PW_MODULE, Env:JIM_CSS_PATH, Env:JIM_FRAGMENTS, Env:JIM_ZOOM_PATH -ErrorAction SilentlyContinue
+    Remove-Item Env:JIM_PW_MODULE, Env:JIM_CSS_PATH, Env:JIM_FRAGMENTS, Env:JIM_ZOOM_PATH, Env:JIM_SHOTS -ErrorAction SilentlyContinue
 }
 
 $result = $json | ConvertFrom-Json
@@ -176,4 +231,4 @@ if ($result.findings.Count -gt 0) {
     Write-Host 'See docs/hooks/diagrams.py and the "Generated diagrams" rules in custom.css.' -ForegroundColor Red
     exit 1
 }
-Write-Host "Diagram check passed: $($fixtures.Count) fixture file(s) render cleanly at every width." -ForegroundColor Green
+Write-Host "Diagram check passed: $($fixtures.Count) $(if ($Path) { 'page(s)' } else { 'fixture file(s)' }) render cleanly at every width." -ForegroundColor Green

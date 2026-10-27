@@ -209,7 +209,7 @@ edges:
 
 On a phone, a decision stacks each question over its outcomes, a comparison becomes one block per column, and a map becomes a list of its nodes, each followed by the connections leaving it. A map with links is not wrapped by the lightbox (`diagram-zoom.js` skips any diagram containing a link), because a link inside the trigger button cannot be reached by keyboard; every other generated diagram keeps its Enlarge chip in a strip above it, clear of its content.
 
-- **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, a label hidden under another shape, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains.
+- **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, a label hidden under another shape, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains. Before committing a page's diagram, check the page itself and look at the result: `pwsh -File ./scripts/Test-Diagrams.ps1 -Path docs/<section>/<page>.md -ScreenshotDir <folder>` runs the same checks on the page's diagrams and saves a picture of each.
 
 ## Diagram lightbox
 
