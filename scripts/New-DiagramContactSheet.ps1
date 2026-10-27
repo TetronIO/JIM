@@ -7,7 +7,7 @@
 
 .DESCRIPTION
     A batch of diagrams (a docs section at a time; see
-    engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md) is approved from one page that shows
+    engineering/plans/done/DOCS_DIAGRAM_ON_EVERY_PAGE.md) is approved from one page that shows
     them all, rather than by opening every page in two themes and on a phone. For each page this
     finds every diagram, in page order:
 

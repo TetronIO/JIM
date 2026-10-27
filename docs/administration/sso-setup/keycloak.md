@@ -9,6 +9,33 @@ audience: implementer
 
 Use this guide to let people sign in to JIM with their Keycloak accounts, both in the portal and in the PowerShell module with `Connect-JIM`. One command registers JIM in your Keycloak realm, and you give JIM the values it returns. JIM identifies each person by their Keycloak user ID, the `sub` claim, which is the same in tokens from the portal and from the PowerShell module.
 
+```jim-diagram
+archetype: comparison
+title: "JIM's two Keycloak clients compared"
+desc: "A Keycloak client cannot be both confidential and public, so JIM has two. The portal's client, jim, is confidential: client authentication is on, and its client secret is JIM_SSO_SECRET. Its redirect URI is /signin-oidc, with /signout-callback-oidc after sign-out, and it is JIM_SSO_CLIENT_ID. The PowerShell module's client, jim-powershell, is public: client authentication is off and it has no secret. Its redirect URIs are http://localhost:8400/callback/ and the same for each port up to 8409, it may also ask for offline_access for a refresh token, and it is JIM_SSO_PUBLIC_CLIENT_ID. Both sign in with PKCE, and both have the jim-api client scope as optional, which puts jim in the access token's audience; no other client may ask for it."
+columns:
+  - { label: "`jim`", sub: "the portal, confidential" }
+  - { label: "`jim-powershell`", sub: "the PowerShell module, public" }
+rows:
+  - label: Client authentication
+    cells:
+      - { text: "On, with a secret", sub: "`JIM_SSO_SECRET`" }
+      - { text: "Off, no secret" }
+  - label: Redirect URIs
+    cells:
+      - { text: "`/signin-oidc`", sub: "and `/signout-callback-oidc`" }
+      - { text: "`localhost` ports 8400 to 8409", sub: "`/callback/`, ten in all" }
+  - label: Client scopes
+    cells:
+      - { text: "`jim-api`, optional" }
+      - { text: "`jim-api`, optional", sub: "and `offline_access`" }
+  - label: In JIM
+    cells:
+      - { text: "`JIM_SSO_CLIENT_ID`" }
+      - { text: "`JIM_SSO_PUBLIC_CLIENT_ID`" }
+footer: "Both sign in with PKCE; `jim-api` puts `jim` in the access token's audience"
+```
+
 !!! info "Read the overview first"
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the [confidential and public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, [how JIM recognises people](../sso-setup.md#how-jim-recognises-people), and the [testing steps](../sso-setup.md#testing-your-configuration) you can run once configuration is complete.
 

@@ -9,6 +9,30 @@ audience: administrator
 
 A Connected System Object a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** tab of an export Synchronisation Rule tells JIM to set one on every Connected System Object that rule creates.
 
+```jim-diagram
+archetype: decision
+title: What happens to an initial password after provisioning
+desc: 'When the export gives a new Connected System Object its external id, JIM queues a password change for it. If the object, or the Synchronisation Rule that provisioned it, has since been removed, the change is Withdrawn, which is not a failure. Otherwise the Password Delivery Service tries to set it. A password set is Delivered. A password the target refuses, or settings that cannot produce one, is Parked until you save a change to the rule''s initial password settings. An object that is unreachable or not visible yet is retried on the Connected System''s schedule, each attempt asking again whether the object and rule are still there, until a week has passed, when it is Expired and needs a password set by other means.'
+start: {label: Password change queued}
+questions:
+- {id: there, label: 'Object and rule still there?'}
+- {id: attempt, label: Delivery attempt, sub: 'what happened?'}
+- {id: week, label: 'A week passed?'}
+outcomes:
+- {id: withdrawn, label: Withdrawn, sub: not a failure}
+- {id: delivered, label: Delivered, sub: the password was set, good: true}
+- {id: parked, label: Parked, sub: until you save the initial password settings}
+- {id: expired, label: Expired, sub: set a password by other means}
+answers:
+- {from: there, to: withdrawn, label: 'no'}
+- {from: there, to: attempt, label: 'yes'}
+- {from: attempt, to: delivered, label: password set}
+- {from: attempt, to: parked, label: refused or cannot be made}
+- {from: attempt, to: week, label: unreachable or not visible}
+- {from: week, to: there, label: 'no: retry on schedule'}
+- {from: week, to: expired, label: 'yes'}
+```
+
 For how the password channel works as a whole (policy discovery and its limits, where a password comes from, and the security rules that hold across every surface) see [Passwords](../concepts/passwords.md).
 
 It is off until you turn it on, on every rule: JIM setting passwords on Connected System Objects nobody asked it to is not a sensible default.

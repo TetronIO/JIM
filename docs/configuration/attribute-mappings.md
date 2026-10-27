@@ -9,6 +9,18 @@ audience: administrator
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.
 
+```jim-diagram
+archetype: flow
+title: How an import mapping's value reaches the Metaverse
+desc: 'An import mapping takes a source attribute of the Connected System Object, or an expression over it, and produces a value; where an expression''s input has no value, its Missing Input Behaviour decides what happens. For a text target, value processing then trims, collapses and normalises the case, and treats whitespace as no value. Attribute Priority then decides which contributing rule''s value the Metaverse Object''s attribute takes: the first contributor with a value wins.'
+in: {label: Connected System Object}
+out: {label: Metaverse Object, note: the target attribute}
+steps:
+- {id: map, label: Direct or expression, sub: one per target attribute}
+- {id: process, label: Text value processing, sub: 'trim, collapse, case, whitespace'}
+- {id: priority, label: Attribute Priority, sub: first contributor with a value wins}
+```
+
 **A target attribute can be flowed to by at most one mapping per Synchronisation Rule.** JIM refuses a second mapping targeting an attribute the rule already flows to, and a disabled mapping counts too, since re-enabling it later would recreate the clash. The refusal exists because the synchronisation engine evaluates one mapping per target attribute, so a same-rule duplicate would be accepted in configuration but silently never contribute. Express the intent like this instead:
 
 - **Fall back between source attributes within one rule**<br /> Use a single [expression mapping](#expression-mappings): `Coalesce(cs["jimBadgeColour"], cs["roomNumber"])`, or the equivalent null-coalescing operator `cs["jimBadgeColour"] ?? cs["roomNumber"]`.

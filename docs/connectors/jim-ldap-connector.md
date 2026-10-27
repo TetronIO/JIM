@@ -12,6 +12,31 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 
 **Capabilities:** Full Import, Delta Import, Export, Probe
 
+```jim-diagram
+archetype: decision
+title: How JIM tells which directory it has reached
+desc: "During schema discovery JIM reads the directory's Root DSE and asks up to three questions. If the Root DSE advertises the Active Directory capability in supportedCapabilities, the directory is Samba AD when its vendor name says Samba, and Active Directory otherwise; an AD LDS instance lands here too. If not, a vendor name or Root DSE class naming OpenLDAP makes it OpenLDAP. If not, a vendor name of 389 Project, or a vendor version beginning 389-Directory, makes it 389 Directory Server. Anything else is a generic directory. The type decides how JIM behaves: Active Directory and Samba AD Delta Imports track update sequence numbers (USNs), OpenLDAP's read cn=accesslog, and 389 Directory Server's and generic directories' read the changelog."
+start: { label: Root DSE }
+questions:
+  - { id: ad, label: "Active Directory capability?", sub: "in `supportedCapabilities`" }
+  - { id: openldap, label: "OpenLDAP?", sub: "vendor name, or the Root DSE's class" }
+  - { id: dirsrv, label: "389 Directory Server?", sub: "vendor `389 Project`, or version `389-Directory`" }
+outcomes:
+  - { id: samba, label: Samba AD, sub: Delta Import tracks USNs }
+  - { id: msad, label: Active Directory, sub: "Delta Import tracks USNs; AD LDS too" }
+  - { id: oldap, label: OpenLDAP, sub: "Delta Import reads `cn=accesslog`" }
+  - { id: ds389, label: 389 Directory Server, sub: Delta Import reads the changelog }
+  - { id: generic, label: Generic, sub: Delta Import reads the changelog }
+answers:
+  - { from: ad, to: samba, label: "yes, Samba vendor" }
+  - { from: ad, to: msad, label: "yes" }
+  - { from: ad, to: openldap, label: "no" }
+  - { from: openldap, to: oldap, label: "yes" }
+  - { from: openldap, to: dirsrv, label: "no" }
+  - { from: dirsrv, to: ds389, label: "yes" }
+  - { from: dirsrv, to: generic, label: "no" }
+```
+
 ## :material-server-outline: Supported Directories
 
 | Directory | Notes |

@@ -9,6 +9,26 @@ audience: automation-author
 
 Registering JIM with an identity provider by hand means following a guide click by click, and a missed step shows up only when nobody can sign in. `Register-JIMIdentityProvider` creates the registration the [SSO setup guide](../administration/sso-setup.md) describes, and returns the `JIM_SSO_*` values JIM needs. Run it again whenever you like: it changes nothing if the registration is right, corrects what has drifted, and with `-WhatIf` lists what it would change.
 
+```jim-diagram
+archetype: anatomy
+title: What Register-JIMIdentityProvider hands back, value by value
+desc: "Register-JIMIdentityProvider returns the values JIM's single sign-on needs, each named for its environment variable: Authority for JIM_SSO_AUTHORITY, ClientId for JIM_SSO_CLIENT_ID, ClientSecret for JIM_SSO_SECRET, PublicClientId for JIM_SSO_PUBLIC_CLIENT_ID, ApiScope for JIM_SSO_API_SCOPE, ClaimType for JIM_SSO_CLAIM_TYPE and MvAttribute for JIM_SSO_MV_ATTRIBUTE. ClientSecret is a secure string, and is empty unless the run created or replaced the secret. Changes lists what the run changed, and is empty when the registration was already right; with -WhatIf nothing is returned."
+subject:
+  kind: object
+  label: "What `Register-JIMIdentityProvider` returns"
+  parts:
+    - { label: "`Authority`", detail: "`JIM_SSO_AUTHORITY`" }
+    - { label: "`ClientId`", detail: "`JIM_SSO_CLIENT_ID`" }
+    - { label: "`ClientSecret`", detail: "`JIM_SSO_SECRET`, only if created or replaced" }
+    - { label: "`PublicClientId`", detail: "`JIM_SSO_PUBLIC_CLIENT_ID`" }
+    - { label: "`ApiScope`", detail: "`JIM_SSO_API_SCOPE`" }
+    - { label: "`ClaimType`", detail: "`JIM_SSO_CLAIM_TYPE`" }
+    - { label: "`MvAttribute`", detail: "`JIM_SSO_MV_ATTRIBUTE`" }
+properties:
+  - { name: Each value, value: "for the variable beside it" }
+  - { name: Changes, value: "empty when already right" }
+```
+
 It configures the identity provider, not JIM, so it does not need `Connect-JIM`. AD FS and Keycloak are supported.
 
 ---

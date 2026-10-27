@@ -9,6 +9,36 @@ audience: administrator
 
 JIM is configured through a small set of objects: Connected Systems, Run Profiles, Synchronisation Rules, the Metaverse schema, Schedules, and the API Keys, Certificates, Service Settings and Roles that support them. Each page here explains one object: what it is, how it fits with the others, its common workflows, and where to manage it, in the portal, with PowerShell or through the REST API. In the portal, the info button beside a page's title links to the page here that covers it.
 
+```jim-diagram
+archetype: map
+title: How the configuration objects connect
+desc: 'A Schedule sequences Run Profiles, which run against a Connected System and are recorded as Activities. Each Connected System has a Connector Space, and Synchronisation Rules relate it to the Metaverse, whose objects Predefined Searches search. Data Flow lists every Attribute Flow the rules carry. API Keys carry Roles, which decide what they may do; Certificates and Service Settings support them all. Each object links to its page.'
+nodes:
+- {id: schedules, label: Schedules, link: schedules.md, row: 0, col: 0}
+- {id: rp, label: Run Profiles, link: run-profiles.md, row: 0, col: 1}
+- {id: activities, label: Activities, link: activities.md, row: 0, col: 2}
+- {id: cs, label: Connected Systems, link: connected-systems.md, row: 1, col: 1}
+- {id: sr, label: Synchronisation Rules, link: synchronisation-rules.md, row: 1, col: 2}
+- {id: mv, label: Metaverse, link: metaverse.md, row: 1, col: 3}
+- {id: space, label: Connector Space, link: connector-space.md, row: 2, col: 1}
+- {id: dataflow, label: Data Flow, link: data-flow.md, row: 2, col: 2}
+- {id: searches, label: Predefined Searches, link: predefined-searches.md, row: 2, col: 3}
+- {id: keys, label: API Keys, link: api-keys.md, row: 3, col: 0}
+- {id: roles, label: Roles, link: roles.md, row: 3, col: 1}
+- {id: certs, label: Certificates, link: certificates.md, row: 3, col: 2}
+- {id: settings, label: Service Settings, link: service-settings.md, row: 3, col: 3}
+edges:
+- {from: schedules, to: rp, label: sequence}
+- {from: rp, to: activities, label: recorded as}
+- {from: rp, to: cs, label: run against}
+- {from: cs, to: sr, label: related by}
+- {from: sr, to: mv, label: to}
+- {from: cs, to: space, label: each has a}
+- {from: sr, to: dataflow, label: flows listed in}
+- {from: searches, to: mv, label: search}
+- {from: keys, to: roles, label: carry}
+```
+
 ## :material-sync: Synchronisation
 
 The objects that move identities between your systems and the Metaverse.

@@ -9,6 +9,20 @@ audience: automation-author
 
 A Schedule Execution is one run of a Schedule, from its first step to its last. These cmdlets start one on demand, follow it while it runs, read back what happened, and stop one that is queued or running. To create or change a Schedule itself, see [Schedules](schedules.md).
 
+```jim-diagram
+archetype: lifecycle
+title: A Schedule Execution, from start to finish
+desc: "Start-JIMSchedule starts a Schedule Execution now, whatever the Schedule's trigger and whether or not it is enabled; its trigger starts one too. The execution is Queued until it starts, then InProgress while it works through its step groups. It ends Complete; CompleteWithError when a failed step let it carry on; or Failed when a failed step stopped it. While it is Queued or InProgress, Get-JIMScheduleExecution -Active lists it and Stop-JIMScheduleExecution cancels it, which ends it Cancelled. Start-JIMSchedule -Wait checks every 5 seconds and returns the execution once it has finished."
+start: { label: "`Start-JIMSchedule` or its trigger" }
+container: { label: Schedule Execution, note: "`Stop-JIMScheduleExecution` cancels it in either state: `Cancelled`" }
+states:
+  - { id: queued, label: "`Queued`", sub: waiting to start }
+  - { id: running, label: "`InProgress`", sub: one step group at a time }
+transitions:
+  - { from: queued, to: running, label: it starts }
+end: { from: running, label: it ends, state: { label: Finished, sub: "`Complete` or `Failed` or `CompleteWithError`" } }
+```
+
 Every Schedule Execution these cmdlets return carries `StepDisplay`, the step group it has reached as one sentence, so a script reads the same position the portal shows.
 
 ---

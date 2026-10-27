@@ -9,6 +9,18 @@ audience: administrator
 
 Where a Connected System accepts passwords, JIM reads its password policy, lets you check and use its password channel, and can synchronise password changes to it. [Passwords](../concepts/passwords.md) explains the model; this page covers each Connected System's part in it.
 
+```jim-diagram
+archetype: flow
+title: From a discovered policy to a password set on a Connected System Object
+desc: "JIM reads the Connected System's password policy whenever it retrieves or refreshes the schema; a discovered policy is a floor, not a guarantee. Check password channel runs a read-only preflight whose result is never stored. Set Password generates a password satisfying the policy and keeps it masked. The Password Delivery Service writes it to the Connected System Object within about a second, never as a Pending Export, and the outcome is Set, Retrying or Parked."
+steps:
+  - { id: policy, label: Password policy, sub: read with the schema, note: "a floor, not a guarantee" }
+  - { id: check, label: Check password channel, sub: "read-only, never stored" }
+  - { id: set, label: Set Password, sub: "generated, masked" }
+  - { id: deliver, label: Password Delivery Service, sub: writes it in about a second, note: never a Pending Export }
+out: { label: Connected System Object, note: "Set, Retrying or Parked" }
+```
+
 ## :material-shield-lock-outline: Password policy and the password channel
 
 Where a Connected System can accept passwords, its **Passwords** tab carries two panels beneath the Password Synchronisation settings: Password Channel, which lets you check the channel works before you rely on it, and Password Policy, which shows you the password rules JIM read from the system itself.

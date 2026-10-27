@@ -9,6 +9,25 @@ audience: operator
 
 The Worker runs every Run Profile, so a run ends early when the Worker itself stops, or when it runs short of memory. Open the run's Activity from **Activity** in the portal, or with `Get-JIMActivity`; its message is the title of one of the entries below. The Worker's card on the [Operations](../configuration/operations.md) page shows how much memory it holds and how full the memory it draws on is, and reports **Memory low** from 85% in use. For errors recorded against individual objects, see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
 
+```jim-diagram
+archetype: decision
+title: A run the Worker ended early, by its message
+desc: "For a run that ended early, read the message on the run's Activity. If it mentions memory (the Worker most likely ran out of memory, stopped the run because its memory was nearly exhausted, or the run ran out of memory and stopped), give JIM more memory or run less at once, with a smaller page size or fewer Run Profiles in parallel, then start the Run Profile again. If instead it says the task was abandoned due to a worker crash or restart, find out why the Worker stopped from its log, then start the Run Profile again. If it says neither, the Worker did not stop the run: see Troubleshooting Synchronisation. Either way, the new run's Activity should end Complete."
+start: {label: A run ended early}
+questions:
+- {id: memory, label: 'Does the message mention memory?'}
+- {id: abandoned, label: '`Task was abandoned`?', sub: crash or restart}
+outcomes:
+- {id: more, label: 'More memory, or run less', sub: 'then start the Run Profile again'}
+- {id: log, label: Find why it stopped, sub: 'in the Worker''s log; then run again'}
+- {id: objects, label: Not a Worker stop, sub: see Troubleshooting Synchronisation}
+answers:
+- {from: memory, to: more, label: 'yes'}
+- {from: memory, to: abandoned, label: 'no'}
+- {from: abandoned, to: log, label: 'yes'}
+- {from: abandoned, to: objects, label: 'no'}
+```
+
 ## :material-alert-octagon-outline: `Task was abandoned due to worker crash or restart.`
 
 **What it means.** The worker stopped while it was running this Activity: it restarted, crashed, or its server went down. JIM marks the Activity **Failed with error** when the worker starts again, or when the worker has not reported progress for the [Stale task timeout](configuration.md#service-settings) Service Setting (five minutes by default). Whatever the run had already saved stays saved, and nothing is left half-written: the next run carries on from the state JIM's data is in.

@@ -10,6 +10,18 @@ validated: v0.16.0
 
 JIM stores two pieces of state that must be backed up **together as a matched pair**: the PostgreSQL database and the encryption key set. Backing up one without the other leaves you unable to recover.
 
+```jim-diagram
+archetype: flow
+title: Restoring JIM from one backup set
+desc: "A restore starts from one backup set: the database dump and the key archive taken at the same time. With JIM stopped, restore the encryption keys first (1), emptying the key volume before unpacking the archive. Then restore the database (2) into an empty database; if pg_restore reports an error, do not start JIM. Then start the stack (3), and run an import from a Connected System that signs in with a password: if it connects, the keys and the database match."
+in: {label: One backup set, note: 'dump and keys, same time'}
+steps:
+- {id: keys, label: Restore the keys, badge: 1, sub: volume emptied first, note: with JIM stopped}
+- {id: db, label: Restore the database, badge: 2, sub: into an empty one, note: 'an error: do not start JIM'}
+- {id: start, label: Start the stack, badge: 3}
+out: {label: Run an import, note: 'it connects: a match'}
+```
+
 !!! danger "The database alone is not a recoverable backup"
     Sensitive values in the database are encrypted at rest: each Connected System's credentials and other secret settings, initial passwords waiting to be delivered, and queued Password Synchronisation changes. They can only be decrypted with the encryption keys that were in use when they were written. Restore a database backup onto a host that does not have the matching keys and **every stored secret becomes permanently undecryptable**. The rest of the data restores fine, but JIM cannot connect to any Connected System until an administrator re-enters every affected secret by hand.
 

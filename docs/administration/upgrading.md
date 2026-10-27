@@ -10,6 +10,20 @@ validated: v0.16.0
 
 Upgrading JIM means replacing the `jim.web`, `jim.worker` and `jim.scheduler` container images with a newer release. Your data stays where it is: the database and the encryption key volume are not modified by the image swap itself, and any pending database upgrades are applied automatically when the new worker starts.
 
+```jim-diagram
+archetype: lifecycle
+title: JIM through an upgrade, from paused to finished
+desc: "Before an upgrade, disable the Schedules, recording which were enabled, and let running Activities finish, so JIM is paused with nothing In Progress. Once the services are stopped and backed up, the new release starts: while the worker applies any database upgrade, JIM is not ready and /api/v1/health/ready returns 503. If the database upgrade fails, JIM stays unready. Once it completes, JIM is ready and the endpoint returns 200, but the Schedules are still off. The upgrade is finished only when you have checked it worked and re-enabled the Schedules you recorded, so scheduled work resumes."
+states:
+- {id: paused, label: Paused, sub: 'Schedules off, nothing In Progress'}
+- {id: starting, label: Not ready, sub: 'readiness: `503`'}
+- {id: ready, label: Ready, sub: '`200`; Schedules off'}
+transitions:
+- {from: paused, to: starting, label: new release started}
+- {from: starting, to: ready, label: database upgraded, note: 'failed: stays unready'}
+end: {from: ready, label: Schedules back on, note: 'once checked; those you recorded', state: {label: Finished, sub: scheduled work resumes}}
+```
+
 !!! danger "Take a backup first, and make sure it includes the encryption keys"
     A JIM backup is **two artefacts**: the PostgreSQL database *and* the encryption key set (`jim-keys-volume`, or the path in `JIM_ENCRYPTION_KEY_PATH`). Restored without its matching keys, a database cannot decrypt any secret it stores, such as a Connected System's credentials. If an upgrade goes wrong and you fall back to your pre-upgrade backup, you need both halves; see [Backup & Disaster Recovery](backup-recovery.md).
 

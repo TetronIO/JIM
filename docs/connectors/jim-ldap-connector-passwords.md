@@ -9,6 +9,29 @@ audience: administrator
 
 Where you configure it, the LDAP Connector sets passwords on the accounts JIM manages, over JIM's password channel. This page covers setting passwords on each directory type, and the password policy JIM discovers from the directory.
 
+```jim-diagram
+archetype: comparison
+title: How a password is set on each directory type
+desc: "On Active Directory and Samba AD, JIM sets a password by writing unicodePwd, which the Connector encodes; it applies every choice under After the password is set, and enables the account through userAccountControl where asked. On OpenLDAP, 389 Directory Server and generic directories, JIM uses the LDAP Password Modify extended operation (RFC 3062) and never writes userPassword directly; a directory that does not advertise the operation is reported as a configuration fault. Those directories apply only the Connected System's own expiry policy, and have no enabled flag, so another expiry choice, or an enable, is not applied and the password is reported as set with a warning. On every directory, use LDAPS: a password set puts the password on the wire."
+columns:
+  - { label: Active Directory and Samba AD }
+  - { label: Other directories, sub: "OpenLDAP, 389 Directory Server, generic" }
+rows:
+  - label: Sets it by
+    cells:
+      - { text: "writing `unicodePwd`", sub: encoded by the Connector }
+      - { text: the Password Modify extended operation, sub: "never `userPassword`; a fault if not advertised" }
+  - label: Expiry choice
+    cells:
+      - { text: every choice applied, sub: under After the password is set }
+      - { text: the Connected System's own policy, sub: "for any other, set with a warning" }
+  - label: Enable as it is set
+    cells:
+      - { text: applied, sub: "where asked, through `userAccountControl`" }
+      - { text: not applied, sub: "no enabled flag; set, with a warning" }
+footer: "Every directory: use LDAPS, because a password set puts the password on the wire"
+```
+
 ## :material-form-textbox-password: Setting Passwords
 
 Credential attributes such as `unicodePwd` and `userPassword` are never imported and can never be used in an Attribute Flow; see [Credential attributes are never managed](../configuration/connected-system-attributes.md#credential-attributes-are-never-managed) for the full list and the reasoning. The LDAP Connector writes passwords itself, on a separate channel ([Passwords](../concepts/passwords.md) covers that channel across all Connectors), with two rules specific to directories.

@@ -12,6 +12,29 @@ JIM has two families of preview cmdlet, answering two different questions:
 - **Configuration Change Previews** (`New-JIMConfigurationChangePreview` and friends, below) answer what a *proposed edit* would do, across every object it would affect: JIM evaluates the change against the objects already in the Metaverse and reports which of them would be affected, changing nothing.
 - **[Sync Preview](sync-preview.md)** cmdlets answer what synchronising *one object* would do **right now**, with the configuration you already have saved.
 
+```jim-diagram
+archetype: decision
+title: Whether a Configuration Change Preview can be acted on
+desc: "Read a Configuration Change Preview in this order. If the start result's IsBlocked is true, the proposal was never evaluated, and its blocking finding says why. Otherwise, if HasFailed is true, a stage failed and only some of the objects were evaluated, so the counts cannot be trusted. Otherwise, if IsComplete is false, the preview is still running or was stopped: read it again, or start a new one. Only when IsComplete is true can you act on it, passing its ActivityId as -PreviewActivityId to the change."
+start: { label: Preview started }
+questions:
+  - { id: blocked, label: "`IsBlocked`?", sub: on the start result }
+  - { id: failed, label: "`HasFailed`?" }
+  - { id: complete, label: "`IsComplete`?" }
+outcomes:
+  - { id: never, label: Never evaluated, sub: the blocking finding says why }
+  - { id: subset, label: Do not trust the counts, sub: only some objects were evaluated }
+  - { id: partial, label: Running or stopped, sub: "read it again, or start a new one" }
+  - { id: act, label: Act on it, sub: "pass its `ActivityId` as `-PreviewActivityId`", good: true }
+answers:
+  - { from: blocked, to: never, label: "yes" }
+  - { from: blocked, to: failed, label: "no" }
+  - { from: failed, to: subset, label: "yes" }
+  - { from: failed, to: complete, label: "no" }
+  - { from: complete, to: partial, label: "no" }
+  - { from: complete, to: act, label: "yes" }
+```
+
 Evaluation is asynchronous: `New-JIMConfigurationChangePreview` returns as soon as the proposal itself has been validated, with an Activity id to poll, or waits for the whole answer with `-Wait`. The concepts behind previews (what the stages mean, when a result should not be trusted, and how a preview is recorded against the change it informed) are in [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it).
 
 !!! warning "Read `HasFailed` before you read the counts"

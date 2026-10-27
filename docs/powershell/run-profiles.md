@@ -9,6 +9,24 @@ audience: automation-author
 
 Run Profile cmdlets manage and execute synchronisation Run Profiles on Connected Systems. A Run Profile defines a specific operation type (import, synchronisation, or export) that can be executed against a Connected System. Use these cmdlets to list, create, modify, remove, and trigger Run Profiles. [Run Profiles](../configuration/run-profiles.md) explains the settings, including the [Safeguards](../configuration/run-profiles.md#safeguards) and [Allow Object Type Changes](../configuration/run-profiles.md#allow-object-type-changes-full-import).
 
+```jim-diagram
+archetype: decision
+title: When Start-JIMRunProfile returns
+desc: "Start-JIMRunProfile queues the Run Profile as a task on the JIM worker service. Without -Wait, it returns as soon as the run is queued; with -PassThru it returns the ActivityId, which Get-JIMActivity -Follow follows. With -Wait, it shows the run's progress, checking every 2 seconds, and returns when the run finishes; with no -Timeout it waits as long as that takes. If the run outlasts a -Timeout, the cmdlet throws an error naming the Activity, and the run may still be going in the background."
+questions:
+  - { id: wait, label: "`-Wait` given?", sub: "`Start-JIMRunProfile` queues it either way" }
+  - { id: timeout, label: "Finished within `-Timeout`?", sub: "no `-Timeout`: waits until it is" }
+outcomes:
+  - { id: queued, label: Returns once queued, sub: "follow with `Get-JIMActivity -Follow`", good: true }
+  - { id: done, label: Returns when it finishes, sub: progress shown every 2 seconds, good: true }
+  - { id: thrown, label: Throws an error, sub: "names the Activity; the run goes on" }
+answers:
+  - { from: wait, to: queued, label: "no" }
+  - { from: wait, to: timeout, label: "yes" }
+  - { from: timeout, to: done, label: "yes" }
+  - { from: timeout, to: thrown, label: "no" }
+```
+
 ---
 
 ## :material-play-circle-outline: Get-JIMRunProfile

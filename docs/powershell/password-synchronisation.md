@@ -9,6 +9,29 @@ audience: automation-author
 
 These cmdlets set a Metaverse Object's password, and configure which Connected Systems receive passwords through [Password Synchronisation](../concepts/password-synchronisation.md) and how hard JIM tries to deliver them. Reading the queue of password changes on their way to your Connected Systems, and releasing or cancelling stuck ones, is on [Password Queue](password-queue.md).
 
+```jim-diagram
+archetype: comparison
+title: The two ways Set-JIMMetaverseObjectPassword is aimed
+desc: "With -ConnectedSystemId, the reset case, where you chose the password for the person, the password goes to the Metaverse Object's Connected System Objects in the systems named, and the command refuses, setting nothing, where one is missing. It waits up to 10 seconds by default, requires a change at the next sign-in by default, and delivers even to a system whose Password Synchronisation is switched off. Without it, the event case, where the password changed somewhere, it goes to every Connected System configured for Password Synchronisation. It returns at once by default, leaves the password to expire by each target's own policy, and holds a change for a switched-off system until it is switched on. Either way, -Password supplies the password, or -Generate has JIM make one, returned once on GeneratedPassword."
+columns:
+  - { label: "With `-ConnectedSystemId`", sub: "the reset case: you chose the password" }
+  - { label: Without it, sub: "the event case: it changed somewhere" }
+rows:
+  - label: Goes to
+    cells:
+      - { text: the Connected System Objects in the systems named, sub: "refused, setting nothing, where one is missing" }
+      - { text: every Connected System configured for Password Synchronisation }
+  - label: Defaults
+    cells:
+      - { text: "`RequireChangeAtNextSignIn`", sub: "as `-ExpiryBehaviour`; waits up to 10 seconds" }
+      - { text: "`ExpiresAccordingToTargetPolicy`", sub: "as `-ExpiryBehaviour`; returns at once" }
+  - label: System switched off
+    cells:
+      - { text: still delivered to }
+      - { text: held until it is switched on }
+footer: "Either way, `-Password` supplies it, or `-Generate` makes one, returned once on `GeneratedPassword`"
+```
+
 !!! note "No password you supplied is ever returned"
     Nothing here returns a password you supplied, in any form: the queued value is encrypted in the database and has no representation in any response. The one password returned is one JIM generated for `Set-JIMMetaverseObjectPassword -Generate`, once, to the caller who asked for it.
 

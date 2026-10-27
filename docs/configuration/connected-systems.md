@@ -10,6 +10,25 @@ validated: v0.16.0
 
 A **Connected System** is any external directory, database, or file that JIM synchronises identity data with. Connected Systems are the endpoints of JIM's hub-and-spoke architecture: they provide source data (e.g. an HR system) and receive provisioned data (e.g. an LDAP directory).
 
+```jim-diagram
+archetype: anatomy
+title: What a Connected System holds
+desc: "A Connected System holds its connection details, its discovered schema of Object Types and attributes, its Connector Space of imported objects, partitions and containers where its Connector has them, the Run Profiles executed against it, the Synchronisation Rules that govern how data flows between it and the Metaverse, and its Pending Exports: changes computed by synchronisation but not yet written back. Each is associated with a Connector, which knows how to talk to its kind of external store."
+subject:
+  kind: object
+  label: Connected System
+  parts:
+    - { label: Connection details, detail: how to reach the external system }
+    - { label: Discovered schema, detail: Object Types and attributes }
+    - { label: Connector Space, detail: JIM's local copy of its data }
+    - { label: Partitions and containers, detail: where its Connector has them }
+    - { label: Run Profiles, detail: "import, sync and export" }
+    - { label: Synchronisation Rules, detail: how data flows with the Metaverse }
+    - { label: Pending Exports, detail: changes not yet written back }
+properties:
+  - { name: Connector, value: knows how to talk to it }
+```
+
 Every Connected System is associated with a [connector](../connectors/index.md) that knows how to talk to its kind of external store, and holds a Connector Space of imported objects, a discovered schema, and (where applicable) a partition and container hierarchy.
 
 ## :material-server-network-outline: What a Connected System contains

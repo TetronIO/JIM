@@ -9,6 +9,16 @@ audience: operator
 
 How an import's Activity describes the Connected System's watermark: the point a Delta Import reads changes after.
 
+```jim-diagram
+archetype: flow
+title: How a watermark carries from one import to the next
+desc: 'A Full Import reads everything and sets the watermark: the point the next Delta Import reads changes after. A Delta Import reads the changes after that watermark and records a new one, which the next Delta Import reads after in turn. A Delta Import that fails, is cancelled or withholds detected deletions records no new watermark, so the next Delta Import reads from the same point.'
+steps:
+- {id: full, label: Full Import, sub: reads everything, next: sets the watermark}
+- {id: delta, label: Delta Import, sub: reads changes after it, next: records a new one, note: 'failed, cancelled or deletions withheld: none recorded'}
+- {id: next, label: Next Delta Import, sub: reads changes after that}
+```
+
 ## :material-file-document-outline: On the Activity page
 
 | Run | Shown as | Example | Meaning |

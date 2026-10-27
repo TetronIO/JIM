@@ -9,6 +9,25 @@ audience: administrator
 
 An identity provider needs two things from JIM to push Users and Groups to it: the base URL of a Connected System's SCIM endpoint, and a key. Do this once for each identity provider, after creating its Connected System with the [JIM SCIM 2.0 Service Provider Connector](jim-scim-service-provider-connector.md); afterwards the identity provider sends its changes as they happen, and JIM imports them on the Connected System's Schedule.
 
+```jim-diagram
+archetype: anatomy
+title: What the identity provider's SCIM target holds
+desc: "The provisioning target you create in the identity provider holds six things. Its endpoint is the Connected System's base URL, from the SCIM tab. Its authentication is a bearer token: a key created on the same tab, which is shown only once and which the identity provider sends as Authorization: Bearer followed by the key. It matches Users on userName. It maps its own immutable identifier to externalId, if it offers to. Password provisioning is off, because JIM refuses a password. Which Users and Groups it sends is chosen by its own assignment or scoping settings."
+subject:
+  kind: object
+  label: "SCIM 2.0 target, in the identity provider"
+  parts:
+    - { label: Endpoint, detail: "the base URL, from the SCIM tab" }
+    - { label: Authentication, detail: "bearer token: a key from the SCIM tab" }
+    - { label: Match Users on, detail: "`userName`" }
+    - { label: "`externalId`", detail: "its immutable identifier, if offered" }
+    - { label: Password provisioning, detail: "off: JIM refuses a password" }
+    - { label: Users and Groups sent, detail: chosen by its own scoping }
+properties:
+  - { name: Key, value: shown once }
+  - { name: Sent as, value: "`Authorization: Bearer <key>`" }
+```
+
 ## :material-clipboard-list-outline: Before you begin
 
 - A Connected System using the JIM SCIM 2.0 Service Provider Connector, with its schema imported and the **User** and **Group** Object Types selected ([Create a Connected System for an identity provider](jim-scim-service-provider-connector.md#create-a-connected-system-for-an-identity-provider)).

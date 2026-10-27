@@ -13,6 +13,23 @@ While a Run Profile executes, its progress is available in real time on every su
 - **REST API**<br /> `GET /api/v1/activities/{id}/progress` returns a lightweight progress snapshot: status, phase message, object counts, percentage complete, throughput, estimated seconds remaining, and a live operation-type breakdown. It is designed for frequent polling and is much cheaper to serve than the full Activity detail endpoint; stop polling once the status reaches a terminal value.
 - **PowerShell**<br /> [`Get-JIMActivity -Follow`](../powershell/activities.md) follows an in-progress Activity's live progress until it completes, and [`Start-JIMRunProfile -Wait`](../powershell/run-profiles.md) displays the same live progress while blocking until completion.
 
+```jim-diagram
+archetype: lifecycle
+title: How each step of a run is shown
+desc: 'A Run Profile execution shows every one of its steps. A step still to come is greyed. When its turn comes it is highlighted as the step running now, and its progress bar counts its work. When it finishes it is a completed step, carrying how long it took. A step not needed on this run, such as deletion detection in a Delta Import, is marked with a green ring and a dash. A failed run marks the step it failed in.'
+container: {label: A step of a run, note: the progress bar always counts the running step}
+states:
+- {id: skipped, label: Not needed, sub: 'green ring, dash'}
+- {id: tocome, label: Still to come, sub: greyed}
+- {id: running, label: Running now, sub: highlighted}
+- {id: done, label: Completed, sub: with its duration}
+transitions:
+- {from: tocome, to: skipped, label: not needed}
+- {from: tocome, to: running, label: its turn}
+- {from: running, to: done, label: finishes}
+end: {from: container, label: the run fails in it, state: {label: Failed, sub: where to look first}}
+```
+
 **Every live figure describes the step running now, not the whole run.** The objects processed, the percentage, the throughput and the time remaining are all reset by each step that counts its own work, which is why the readout names its step. There is no whole-run estimate: steps differ too much in cost, and several cannot know their totals in advance, so any run-level figure would be invented rather than measured. How far through the run you are is answered by the steps themselves.
 
 Throughput and the estimated time remaining are derived from recent progress samples, so they reflect the current phase of the run rather than a whole-run average; they appear once enough samples exist and adapt as the run moves between phases. Where a step cannot know its total in advance, the progress bar runs indeterminate and the readout reports how many objects have been processed so far, without a percentage or a time remaining. Whether an import knows depends on the Connected System: a file's records are counted before they are read, so a file import shows a percentage throughout, while a directory cannot be asked how many objects a search will return without running it twice, so those imports show the count and the rate without a percentage rather than a figure JIM guessed. When the counter reaches its total but the step is still finishing its work, the time remaining reads "Finishing up" rather than counting down to a moment that has already passed.

@@ -57,6 +57,18 @@ def svgs(html):
     return re.findall(r"<svg\b.*?</svg>", html, re.S)
 
 
+def note_extents(svg, contains=""):
+    """(left, right, baseline) of each middle-anchored note line, measured with the real metrics."""
+    metrics = diagrams.Metrics.load()
+    out = []
+    for x, y, body in re.findall(r'<text class="jimdg-dg-note" x="([\d.]+)" y="([\d.]+)">(.*?)</text>', svg):
+        text = re.sub(r"<[^>]+>", "", body)
+        if contains in text:
+            w = metrics.measure(text, "note")
+            out.append((float(x) - w / 2, float(x) + w / 2, float(y)))
+    return out
+
+
 class MetricsTests(unittest.TestCase):
     def test_width_sums_glyph_advances_scaled_to_the_font_size(self):
         m = diagrams.Metrics({"sans": {"400": {"default": 1000, "chars": {"a": 500, "b": 250}}}})
@@ -210,6 +222,35 @@ class OutputTests(unittest.TestCase):
             self.assertEqual(node.count("<rect"), 1)
             self.assertGreaterEqual(node.count("<text"), 1)
 
+    def test_a_note_wider_than_its_room_wraps_instead_of_running_into_its_neighbour(self):
+        spec = {"archetype": "flow", "title": "t", "desc": "d", "steps": [
+            {"id": "a", "label": "The first step", "note": "a note too long for one line here"},
+            {"id": "b", "label": "The second step", "note": "and another under its neighbour"}]}
+        wide = svgs(render(spec))[0]
+        notes = note_extents(wide)
+        self.assertGreater(len(notes), 2, "each note should wrap onto two lines")
+        for i, (l1, r1, y1) in enumerate(notes):
+            for l2, r2, y2 in notes[i + 1:]:
+                if y1 == y2:
+                    self.assertTrue(r1 <= l2 or r2 <= l1, f"notes overlap: {notes}")
+
+    def test_a_note_too_long_for_two_lines_is_an_error(self):
+        spec = {"archetype": "flow", "title": "t", "desc": "d", "steps": [
+            {"id": "a", "label": "First", "note": "a note so long that even two lines under a small box "
+                                                  "cannot possibly hold all of it without running away"},
+            {"id": "b", "label": "Second"}]}
+        with self.assertRaisesRegex(diagrams.DiagramError, "note"):
+            render(spec)
+
+    def test_an_end_note_stays_outside_the_container(self):
+        spec = copy.deepcopy(FLOW)
+        spec["out"]["note"] = "every target sees one value"
+        wide = svgs(render(spec))[0]
+        hub = re.search(r'class="jimdg-hub" x="([\d.]+)" y="[\d.]+" width="([\d.]+)"', wide)
+        right = float(hub.group(1)) + float(hub.group(2))
+        for left, _, _ in note_extents(wide, "every target"):
+            self.assertGreaterEqual(left, right)
+
     def test_a_flow_without_a_container_or_ends_still_renders(self):
         spec = {"archetype": "flow", "title": "t", "desc": "d",
                 "steps": [{"id": "a", "label": "First"}, {"id": "b", "label": "Second"}]}
@@ -283,6 +324,19 @@ class CodeSpanTests(unittest.TestCase):
         self.assertIn('<tspan class="jimdg-dg-code">Get-Thing</tspan>', out)
         self.assertNotIn("`", out)
 
+    def test_wrapping_keeps_punctuation_on_its_code_span(self):
+        text = "a page, `-All` or `-Count`; filter by change type or status"
+        lines = diagrams.wrap(text, "note", self.m.measure(text, "note") * 0.6, self.m)
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(" ".join(lines), text)
+
+    def test_a_property_chip_renders_code_spans(self):
+        spec = copy.deepcopy(ANATOMY_VALUE)
+        spec["properties"][0]["value"] = "`$null` when unset"
+        html = render(spec)
+        self.assertIn('<tspan class="jimdg-dg-code">$null</tspan>', html)
+        self.assertNotIn("`", html)
+
     def test_wrapping_never_splits_a_code_span(self):
         lines = diagrams.wrap("check first with `Get-JIMConnectedSystemDeletionPreview`", "note", 300, self.m)
         self.assertEqual(lines[-1], "`Get-JIMConnectedSystemDeletionPreview`")
@@ -331,6 +385,45 @@ class LifecycleTests(unittest.TestCase):
         spec = copy.deepcopy(LIFECYCLE)
         spec["end"]["from"] = "nowhere"
         with self.assertRaisesRegex(diagrams.DiagramError, "nowhere"):
+            render(spec)
+
+    def test_a_forward_transition_note_is_drawn(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["transitions"][0]["note"] = "a forward note"
+        for svg in svgs(render(spec)):
+            self.assertIn("a forward note", svg)
+
+    def test_the_narrow_start_arrow_runs_into_the_first_state(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        del spec["container"]
+        del spec["end"]
+        narrow = svgs(render(spec))[1]
+        cx = float(re.search(r'class="jimdg-dg-start" cx="([\d.]+)"', narrow).group(1))
+        x, w = (float(v) for v in re.search(r'class="jimdg-stage" x="([\d.]+)" y="[\d.]+" width="([\d.]+)"',
+                                            narrow).groups())
+        self.assertTrue(x < cx < x + w, f"start dot at {cx}, first state spans {x} to {x + w}")
+
+    def test_the_narrow_end_label_sits_beside_its_arrow_above_the_terminal(self):
+        narrow = svgs(self.html)[1]
+        term_y = float(re.search(r'class="jimdg-dg-terminal" x="[\d.]+" y="([\d.]+)"', narrow).group(1))
+        label_y = float(re.search(r'<text class="jimdg-dg-edge[^"]*" x="[\d.]+" y="([\d.]+)">'
+                                  r'<tspan class="jimdg-dg-code">Remove-JIMConnectedSystem', narrow).group(1))
+        self.assertLess(label_y, term_y)
+
+    def test_an_end_from_a_framed_state_puts_its_label_below_the_frame(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["end"]["from"] = "holding"
+        spec["end"]["label"] = "it ends"
+        for svg in svgs(render(spec)):
+            hub = re.search(r'class="jimdg-hub" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"', svg)
+            frame_bottom = float(hub.group(1)) + float(hub.group(2))
+            label_y = float(re.search(r'y="([\d.]+)">it ends<', svg).group(1))
+            self.assertGreater(label_y - 10, frame_bottom, "the end label's text must clear the frame's border")
+
+    def test_an_end_from_a_state_with_a_later_state_is_an_error(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["end"]["from"] = "configured"
+        with self.assertRaisesRegex(diagrams.DiagramError, "last state"):
             render(spec)
 
     def test_it_has_no_colour_literals_or_blank_lines(self):
@@ -472,6 +565,14 @@ class DecisionTests(unittest.TestCase):
             render(spec)
 
 
+    def test_two_answers_cannot_share_an_outcome(self):
+        spec = copy.deepcopy(DECISION)
+        first = next(a for a in spec["answers"] if a["to"] in {o["id"] for o in spec["outcomes"]})
+        spec["answers"].append({"from": spec["questions"][-1]["id"], "to": first["to"], "label": "also"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "more than one answer"):
+            render(spec)
+
+
 class ComparisonTests(unittest.TestCase):
     def test_it_renders_a_grid_of_cells_with_meters(self):
         html = render(COMPARISON, "co")
@@ -529,6 +630,18 @@ class MapTests(unittest.TestCase):
 
 class HookTests(unittest.TestCase):
     PAGE = "Intro paragraph.\n\n```jim-diagram\n{spec}\n```\n\n## Next\n"
+
+    @unittest.skipUnless(HAVE_YAML, "PyYAML is installed with the docs toolchain")
+    def test_a_page_link_is_resolved_to_its_built_url_and_an_anchor_is_left_alone(self):
+        import json
+        spec = copy.deepcopy(MAP)
+        spec["nodes"][0]["link"] = "other-page.md#a-heading"
+        spec["nodes"][1]["link"] = "#an-anchor"
+        out = diagrams.replace_fences(self.PAGE.format(spec=json.dumps(spec)), "p.md",
+                                      resolve=lambda link: "../built/" + link.upper())
+        self.assertIn('href="../built/OTHER-PAGE.MD#A-HEADING"', out)
+        self.assertIn('href="#an-anchor"', out)
+        self.assertNotIn('href="other-page.md', out)
 
     def test_a_page_without_a_diagram_is_unchanged(self):
         md = "# Title\n\n```powershell\nGet-Thing\n```\n"

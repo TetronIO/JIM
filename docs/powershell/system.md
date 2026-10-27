@@ -9,6 +9,29 @@ audience: automation-author
 
 System cmdlets provide access to JIM health checks, Service Health, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. Service Health and user info require an active connection.
 
+```jim-diagram
+archetype: decision
+title: When Reset-JIMSystem goes ahead
+desc: "Once confirmed, Reset-JIMSystem is refused with HTTP 409 while any Activity is in progress: wait for it to finish, or cancel it. Otherwise, without -IncludeAdministrators, the reset goes ahead and keeps the administrators. With -IncludeAdministrators, it goes ahead and removes them only when JIM_SSO_INITIAL_ADMIN is set or -AcknowledgeAdministratorLockout is given; otherwise it is refused with HTTP 409, because nobody could sign in to the portal afterwards. Either way a reset records a Reset Activity and signs everyone out of the portal."
+start: { label: Factory reset confirmed }
+questions:
+  - { id: busy, label: "An Activity in progress?" }
+  - { id: admins, label: "`-IncludeAdministrators`?" }
+  - { id: guard, label: "`JIM_SSO_INITIAL_ADMIN` set?", sub: "or the lockout acknowledged" }
+outcomes:
+  - { id: busyno, label: "Refused: HTTP 409", sub: "wait for it to finish, or cancel it" }
+  - { id: kept, label: "Reset, administrators kept", sub: "everyone signs in to the portal again", good: true }
+  - { id: removed, label: "Reset, administrators removed", sub: "everyone signs in to the portal again", good: true }
+  - { id: lockout, label: "Refused: HTTP 409", sub: "nobody could sign in to the portal" }
+answers:
+  - { from: busy, to: busyno, label: "yes" }
+  - { from: busy, to: admins, label: "no" }
+  - { from: admins, to: kept, label: "no" }
+  - { from: admins, to: guard, label: "yes" }
+  - { from: guard, to: removed, label: "yes" }
+  - { from: guard, to: lockout, label: "no" }
+```
+
 !!! tip
     Health, version, and auth config cmdlets accept a `-Url` parameter for standalone use without `Connect-JIM`. When omitted, they fall back to the URL from the active session.
 

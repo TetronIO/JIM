@@ -9,6 +9,29 @@ audience: automation-author
 
 The scoping criteria cmdlets decide which objects a Synchronisation Rule processes. A rule's criteria sit in groups: an object is in scope when any one of the rule's top-level groups is met, and a group combines the criteria and child groups inside it with All, where every one must be met, or Any, where one is enough. A rule with no criteria processes every object of its type. An import rule's criteria test Connected System attributes, and an export rule's test Metaverse attributes. How criteria are evaluated, including missing values, multi-valued attributes and relative dates, is covered in [Scoping Criteria](../configuration/scoping-criteria.md).
 
+```jim-diagram
+archetype: comparison
+title: The group and criterion cmdlets compared
+desc: 'Scoping criteria are built from groups and criteria, each with its own New, Set and Remove cmdlets. New-JIMScopingCriteriaGroup creates a group, All or Any, at the top level or inside another group with -ParentGroupId; New-JIMScopingCriterion adds one attribute compared with one value to a group, a Connected System attribute on an import rule and a Metaverse attribute on an export rule. Set-JIMScopingCriteriaGroup changes a group''s type or its position among the groups beside it, which never changes what is in scope; Set-JIMScopingCriterion replaces the criterion''s attribute, comparison and value, keeping its case sensitivity unless -CaseSensitive is given. Remove-JIMScopingCriteriaGroup deletes the group with every criterion and child group inside it, and cannot be undone; Remove-JIMScopingCriterion deletes the one criterion. Test-JIMScope then tests an object against the result, criterion by criterion.'
+columns:
+- {label: Group, sub: '`*-JIMScopingCriteriaGroup`'}
+- {label: Criterion, sub: '`*-JIMScopingCriterion`'}
+rows:
+- label: New
+  cells:
+  - {text: an All or Any group, sub: 'at the top level, or inside a group with `-ParentGroupId`'}
+  - {text: one attribute against one value, sub: 'Connected System attribute on import, Metaverse attribute on export'}
+- label: Set
+  cells:
+  - {text: 'its type, All or Any, or its position', sub: position orders groups; scope is unchanged}
+  - {text: 'replaces attribute, comparison and value', sub: 'case sensitivity kept unless `-CaseSensitive` is given'}
+- label: Remove
+  cells:
+  - {text: with everything inside it, sub: 'criteria and child groups; cannot be undone'}
+  - {text: just that criterion}
+footer: '`Test-JIMScope` tests an object against the result, criterion by criterion'
+```
+
 ---
 
 ## :material-filter-outline: Get-JIMScopingCriteria

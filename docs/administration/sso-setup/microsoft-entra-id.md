@@ -9,6 +9,25 @@ audience: implementer
 
 Step-by-step instructions for configuring Single Sign-On with JIM using Microsoft Entra ID as the OIDC identity provider.
 
+```jim-diagram
+archetype: anatomy
+title: What JIM's app registration in Microsoft Entra ID holds
+desc: "One app registration serves both the portal and the PowerShell module. Its Web platform (Step 1) holds the redirect URIs /signin-oidc and /signout-callback-oidc. Its Overview (Step 2) shows the Application (client) ID and the Directory (tenant) ID, which become JIM_SSO_CLIENT_ID and part of JIM_SSO_AUTHORITY. Certificates & secrets (Step 3) holds the client secret, JIM_SSO_SECRET, shown only once. API permissions (Step 4) keeps User.Read, present by default. Expose an API (Step 5) adds the access_as_user scope, which becomes JIM_SSO_API_SCOPE. The Mobile and desktop platform (Step 5b, optional) adds the redirect URI http://localhost:8400/callback/ for the PowerShell module, with public client flows allowed."
+subject:
+  kind: object
+  label: JIM app registration
+  parts:
+    - { label: Web platform, detail: "`/signin-oidc`, `/signout-callback-oidc`" }
+    - { label: Overview, detail: "client ID and tenant ID" }
+    - { label: "Certificates & secrets", detail: "client secret, for `JIM_SSO_SECRET`" }
+    - { label: API permissions, detail: "`User.Read`, there by default" }
+    - { label: Expose an API, detail: "`access_as_user`, for `JIM_SSO_API_SCOPE`" }
+    - { label: Mobile and desktop, detail: "`http://localhost:8400/callback/`" }
+properties:
+  - { name: Serves, value: the portal and PowerShell }
+  - { name: Public client flows, value: "Yes, for PowerShell" }
+```
+
 !!! info "Read the overview first"
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the prerequisites, the [confidential vs public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, and the [testing steps](../sso-setup.md#testing-your-configuration) you run once configuration is complete.
 

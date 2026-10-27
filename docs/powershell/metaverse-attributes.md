@@ -9,6 +9,29 @@ audience: automation-author
 
 The Metaverse Attribute cmdlets manage the attributes a Metaverse Object can hold: list, create, change and delete them, bind them to [Metaverse Object Types](metaverse-object-types.md), and order the Connected Systems that contribute a value to each. What Metaverse Attributes are is covered in [Metaverse](../configuration/metaverse.md), and how contributions are ordered in [Attribute Priority](../concepts/attribute-priority.md).
 
+```jim-diagram
+archetype: comparison
+title: What stored values block on a custom Metaverse Attribute
+desc: 'While any Metaverse Object holds a value for a custom Metaverse Attribute, Set-JIMMetaverseAttribute makes one schema change, widening it from single-valued to multi-valued with its type unchanged, which keeps every value, and refuses any other change of type or plurality; Remove-JIMMetaverseAttribute refuses to delete it; and Remove-JIMMetaverseObjectTypeAttribute refuses to unbind it from an Object Type whose objects hold a value. Once the values are cleared, any change of type or plurality is made; the deletion goes ahead, removing its Object Type bindings, Attribute Flows, Scoping Criteria and Object Matching Rules; and unbinding removes the Attribute Flows, Scoping Criteria and Object Matching Rules that use it in that Object Type''s Synchronisation Rules. A built-in attribute cannot be changed, deleted or unbound either way. Get-JIMMetaverseAttributeDeletionPreview shows what a deletion would do.'
+columns:
+- {label: Values held, sub: by any Metaverse Object}
+- {label: Values cleared, sub: none held}
+rows:
+- label: Change type or plurality
+  cells:
+  - {text: only single- to multi-valued, sub: 'same type, every value kept; anything else is refused'}
+  - {text: any change}
+- label: Delete the attribute
+  cells:
+  - {text: refused, sub: clear the values first}
+  - {text: deleted with what uses it, sub: 'bindings, Attribute Flows, Scoping Criteria, Object Matching Rules'}
+- label: Unbind from an Object Type
+  cells:
+  - {text: 'refused, if that type''s objects hold one'}
+  - {text: unbound with what uses it there, sub: 'that type''s Attribute Flows, Scoping Criteria, Object Matching Rules'}
+footer: 'A built-in attribute cannot be changed, deleted or unbound, whatever its objects hold'
+```
+
 ---
 
 ## :material-tag-outline: Get-JIMMetaverseAttribute

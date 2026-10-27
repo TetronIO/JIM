@@ -9,6 +9,30 @@ audience: automation-author
 
 Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Example data generation is recorded as a **Data Generation** Activity, separate from changes to an Example Data Template. Use these cmdlets to review Activities, retrieve a Run Profile execution's statistics, and inspect the child Activities a parent operation spawned. To find out what happened to one object in a run, and why, see [Execution Items](execution-items.md).
 
+```jim-diagram
+archetype: decision
+title: Which Activity cmdlet answers your question
+desc: "Without an Activity's ID, list Activities with Get-JIMActivity, filtering by -Status, -ConnectedSystem, -RunProfile, dates and more. With its ID, which you get from Start-JIMRunProfile -PassThru or from the list: to watch it until it completes, use Get-JIMActivity -Id with -Follow; for the Activity in full, Get-JIMActivity -Id; for a Run Profile execution's counts of processed items and errors, Get-JIMActivityStats; for what happened to each object, Get-JIMActivity -Id -ExecutionItems; and for the child Activities a parent operation such as a Schedule Execution spawned, Get-JIMActivityChildren."
+questions:
+  - { id: id, label: "Do you have its ID?", sub: "an `ActivityId`, as a run returns" }
+  - { id: need, label: "What do you need?" }
+outcomes:
+  - { id: list, label: "`Get-JIMActivity`", sub: "filtered by `-Status` and more" }
+  - { id: follow, label: "`Get-JIMActivity -Follow`", sub: progress until it completes }
+  - { id: full, label: "`Get-JIMActivity -Id`", sub: the Activity in full }
+  - { id: stats, label: "`Get-JIMActivityStats`", sub: a run's counts and timings }
+  - { id: items, label: "`-ExecutionItems`", sub: "with `-Id`: one row per object" }
+  - { id: children, label: "`Get-JIMActivityChildren`", sub: one row per child Activity }
+answers:
+  - { from: id, to: list, label: "no: list them" }
+  - { from: id, to: need, label: "yes" }
+  - { from: need, to: follow, label: to watch it run }
+  - { from: need, to: full, label: all of it }
+  - { from: need, to: stats, label: its statistics }
+  - { from: need, to: items, label: what happened to each object }
+  - { from: need, to: children, label: the Activities it spawned }
+```
+
 ---
 
 ## :material-history: Get-JIMActivity

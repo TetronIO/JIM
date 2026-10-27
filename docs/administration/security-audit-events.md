@@ -9,6 +9,27 @@ audience: security-assessor
 
 JIM records authentication activity, interactive sign-in success and failure, and failed API authentication with an API key or an SSO access token, in the same [Activity](../configuration/activities.md) system used for every other tracked operation, so there is a single audit log rather than a parallel security store. This is the audit-trail leg of OWASP Top 10 A09 (Security Logging and Monitoring Failures); it complements [rate limiting](../api/rate-limiting.md) and [security headers](security-headers.md) from the same assessment.
 
+```jim-diagram
+archetype: decision
+title: What an authentication attempt writes to the Activity log
+desc: "A successful interactive sign-in writes one Activity per session, initiated by the signed-in user. A successful API key authentication writes no Activity; it updates the key's last-used time. A failed attempt, whether an interactive sign-in, an API key or an SSO access token, is aggregated: if an Activity already exists for the same API key prefix, client IP and failure reason in the current 15-minute UTC window, its attempt count goes up and its last-seen time moves on, in place. Otherwise JIM writes a new Activity, initiated by Anonymous, with its first-seen time and an attempt count of 1."
+start: {label: Authentication attempt}
+questions:
+- {id: result, label: 'Did it succeed?'}
+- {id: window, label: 'Same key prefix, IP and reason?', sub: 'in this 15-minute UTC window'}
+outcomes:
+- {id: signin, label: One Activity per session, sub: initiated by the user, good: true}
+- {id: apikey, label: No Activity, sub: the key's last-used time updated}
+- {id: count, label: Attempt count goes up, sub: 'last seen moves on, in place'}
+- {id: new, label: New Activity, sub: 'Anonymous; attempt count 1'}
+answers:
+- {from: result, to: signin, label: 'yes: interactive sign-in'}
+- {from: result, to: apikey, label: 'yes: API key'}
+- {from: result, to: window, label: 'no'}
+- {from: window, to: count, label: 'yes'}
+- {from: window, to: new, label: 'no'}
+```
+
 ## :material-clipboard-text-clock-outline: What is recorded
 
 | Event | Initiator | Write shape |

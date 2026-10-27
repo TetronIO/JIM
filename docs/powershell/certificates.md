@@ -9,6 +9,25 @@ audience: automation-author
 
 Cmdlets for managing certificates in JIM's trusted certificate store. Each certificate is trusted for Connectors (the TLS connections JIM makes to Connected Systems, LDAP over TLS for instance), for sign-in (the connection to JIM's identity provider), or both. `Get-JIMIdentityProviderTrust` and `Add-JIMCertificate -FromIdentityProvider` check and trust the identity provider's certificate; the last two cmdlets read the certificate a Connected System's server presents, and approve it into the store.
 
+```jim-diagram
+archetype: decision
+title: Which cmdlet puts a certificate in the trusted store
+desc: "If you hold the certificate, as a file, a Base64 string or bytes, add it with Add-JIMCertificate and -Path, -CertificateBase64 or -CertificateData. If not, it depends on who presents it. For the identity provider's certificate, check it with Get-JIMIdentityProviderTrust, then add it with Add-JIMCertificate -FromIdentityProvider and the thumbprint you checked. For the certificate a Connected System's server presents, read it with Get-JIMConnectedSystemServerCertificate, which stores nothing, then trust it with Approve-JIMConnectedSystemServerCertificate and its thumbprint."
+start: { label: A certificate to trust }
+questions:
+  - { id: hold, label: "Do you hold it?", sub: "as a file, Base64 or bytes" }
+  - { id: who, label: "Who presents it?" }
+outcomes:
+  - { id: file, label: "`Add-JIMCertificate`", sub: "with `-Path`, `-CertificateBase64` or `-CertificateData`" }
+  - { id: idp, label: "`Add-JIMCertificate`", sub: "with `-FromIdentityProvider` and the `-Thumbprint` you checked" }
+  - { id: server, label: "Read it, then approve it", sub: "the server certificate cmdlets, by `-Thumbprint`" }
+answers:
+  - { from: hold, to: file, label: "yes" }
+  - { from: hold, to: who, label: "no" }
+  - { from: who, to: idp, label: the identity provider }
+  - { from: who, to: server, label: "a Connected System's server" }
+```
+
 ---
 
 ## :material-certificate-outline: Get-JIMCertificate

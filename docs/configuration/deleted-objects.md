@@ -9,6 +9,18 @@ audience: administrator
 
 When JIM deletes a Connected System Object or a Metaverse Object, it keeps a deletion record: the object's last values, when it went, and who or what removed it. The **Deleted Objects** page (Administration, then **Deleted Objects**) is where you find those records, to answer "where did this account go?" long after the object itself has gone. A record is for audit; JIM cannot bring a deleted object back.
 
+```jim-diagram
+archetype: lifecycle
+title: From a live object to its deletion record, and on to clean-up
+desc: "A Connected System Object or Metaverse Object has each change recorded while it is live. When JIM deletes it, a deletion record keeps its last values, when it went and who or what removed it, but only while change tracking is on; JIM cannot bring the object back. The nightly History Retention Cleanup Schedule later removes the record once it is older than the History retention period, 90 days by default."
+states:
+  - { id: live, label: Live object, sub: each change recorded }
+  - { id: deleted, label: Deletion record, sub: "last values, when, who; if tracking is on" }
+transitions:
+  - { from: live, to: deleted, label: JIM deletes it }
+end: { from: deleted, label: History Retention Cleanup, note: "after `History.RetentionPeriod`, 90 days by default", state: { label: Removed, sub: nothing left to find } }
+```
+
 ## :material-file-tree-outline: What a deletion record keeps
 
 | | Connected System Object | Metaverse Object |
