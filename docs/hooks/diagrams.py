@@ -66,7 +66,30 @@ STYLES = {
     "title": ("jimdg-dg-title", 14, 700, False),
     "tag": ("jimdg-dg-tag", 12, 400, False),
     "badge": ("jimdg-dg-badge-text", 12, 700, False),
+    "label-on": ("jimdg-dg-label-on", 13, 700, False),
+    "chip": ("jimdg-dg-chip", 12, 400, False),
+    "chip-name": ("jimdg-dg-chip-name", 12, 700, False),
+    "token": ("jimdg-dg-token", 22, 400, True),
+    "token-strong": ("jimdg-dg-token-strong", 22, 700, True),
+    "token-narrow": ("jimdg-dg-token-sm", 15, 400, True),
+    "token-narrow-strong": ("jimdg-dg-token-sm-strong", 15, 700, True),
 }
+
+# A `backticked` span in any label is code: set in Plex Mono, measured as mono.
+CODE = re.compile(r"`([^`]+)`")
+
+
+def spans(text):
+    """Split text into (segment, is_code) pairs."""
+    out, pos = [], 0
+    for match in CODE.finditer(text):
+        if match.start() > pos:
+            out.append((text[pos:match.start()], False))
+        out.append((match.group(1), True))
+        pos = match.end()
+    if pos < len(text):
+        out.append((text[pos:], False))
+    return out
 
 # Room left either side of measured text, for kerning the metrics leave out.
 SLACK = 1.04
@@ -97,18 +120,25 @@ class Metrics:
 
     def measure(self, text, role):
         _, size, weight, mono = STYLES[role]
-        return self.width(text, size, weight, mono) * SLACK
+        total = 0
+        for segment, code in spans(str(text)):
+            total += self.width(segment, size, 400 if code and not mono else weight, mono or code)
+        return total * SLACK
 
 
 def wrap(text, role, max_width, metrics):
     """Fit text into at most two lines no wider than max_width, or fail."""
     if metrics.measure(text, role) <= max_width:
         return [text]
-    words = text.split()
-    for cut in range(len(words) - 1, 0, -1):
+    words = re.findall(r"`[^`]*`|\S+", text)
+    fits = []
+    for cut in range(1, len(words)):
         first, second = " ".join(words[:cut]), " ".join(words[cut:])
-        if metrics.measure(first, role) <= max_width and metrics.measure(second, role) <= max_width:
-            return [first, second]
+        widest = max(metrics.measure(first, role), metrics.measure(second, role))
+        if widest <= max_width:
+            fits.append((widest, cut, [first, second]))
+    if fits:
+        return min(fits)[2]  # the most even split, so no word is left alone on a line
     raise DiagramError(f'"{text}" does not fit a box {max_width:.0f} units wide on two lines; shorten it')
 
 
@@ -131,7 +161,9 @@ class Canvas:
 
     def text(self, x, y, value, role, anchor="middle"):
         cls = STYLES[role][0] + ("" if anchor == "middle" else f" jimdg-anchor-{anchor}")
-        return f'<text class="{cls}" x="{num(x)}" y="{num(y)}">{esc(value)}</text>'
+        body = "".join(f'<tspan class="jimdg-dg-code">{esc(seg)}</tspan>' if code else esc(seg)
+                       for seg, code in spans(str(value)))
+        return f'<text class="{cls}" x="{num(x)}" y="{num(y)}">{body}</text>'
 
     def arrow(self, points):
         """A polyline ending in an arrowhead, along axis-aligned segments."""
@@ -461,9 +493,461 @@ def flow_narrow(spec, metrics):
     return canvas, height
 
 
+# ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+LIFECYCLE_KEYS = {"archetype", "title", "desc", "start", "container", "states", "transitions", "end"}
+STATE_KEYS = {"id", "label", "sub"}
+TRANSITION_KEYS = {"from", "to", "label", "note"}
+LC_END_KEYS = {"from", "label", "note", "state"}
+
+
+def validate_lifecycle(spec):
+    check_keys(spec, LIFECYCLE_KEYS, "the diagram")
+    states = spec.get("states") or []
+    if not 2 <= len(states) <= 4:
+        raise DiagramError("a lifecycle needs two to four states")
+    ids = []
+    for i, state in enumerate(states):
+        check_keys(state, STATE_KEYS, f"state {i + 1}")
+        require(state, "id", f"state {i + 1}")
+        require(state, "label", f"state {i + 1}")
+        if state["id"] in ids:
+            raise DiagramError(f'state id "{state["id"]}" is used twice')
+        ids.append(state["id"])
+    seen = set()
+    for i, tr in enumerate(spec.get("transitions") or []):
+        where = f"transition {i + 1}"
+        check_keys(tr, TRANSITION_KEYS, where)
+        for key in ("from", "to", "label"):
+            require(tr, key, where)
+        if tr["from"] not in ids or tr["to"] not in ids:
+            raise DiagramError(f"{where} must name two states by id")
+        if abs(ids.index(tr["from"]) - ids.index(tr["to"])) != 1:
+            raise DiagramError(f"{where} must join states next to each other; reorder the states")
+        if (tr["from"], tr["to"]) in seen:
+            raise DiagramError(f'{where}: there is already a transition from "{tr["from"]}" to "{tr["to"]}"')
+        seen.add((tr["from"], tr["to"]))
+    if "start" in spec:
+        check_keys(spec["start"], {"label"}, "the start")
+        require(spec["start"], "label", "the start")
+    if "container" in spec:
+        check_keys(spec["container"], {"label", "note"}, "the container")
+        require(spec["container"], "label", "the container")
+    if "end" in spec:
+        end = spec["end"]
+        check_keys(end, LC_END_KEYS, "the end")
+        for key in ("from", "label", "state"):
+            require(end, key, "the end")
+        allowed = ids + (["container"] if "container" in spec else [])
+        if end["from"] not in allowed:
+            raise DiagramError(f'the end comes from "{end["from"]}", which is not a state'
+                               + (' or "container"' if "container" in spec else ""))
+        check_keys(end["state"], {"label", "sub"}, "the end state")
+        require(end["state"], "label", "the end state")
+
+
+def pairs(spec, ids):
+    """Transitions grouped by the gap they cross: {gap index: {"fwd": tr, "back": tr}}."""
+    out = {}
+    for tr in spec.get("transitions") or []:
+        a, b = ids.index(tr["from"]), ids.index(tr["to"])
+        out.setdefault(min(a, b), {})["fwd" if b > a else "back"] = tr
+    return out
+
+
+def lifecycle_wide(spec, metrics):
+    canvas = Canvas()
+    container = spec.get("container")
+    ids = [s["id"] for s in spec["states"]]
+    states = [Node(s, 180, 120, metrics, "jimdg-stage") for s in spec["states"]]
+    for node in states:
+        node.h = max(node.h, 72)
+    gaps = pairs(spec, ids)
+    widths = []
+    for g in range(len(states) - 1):
+        need = 60
+        for key, tr in gaps.get(g, {}).items():
+            need = max(need, metrics.measure(tr["label"], "edge") + 24)
+            if tr.get("note"):
+                need = max(need, metrics.measure(tr["note"], "note") + 24)
+        widths.append(need)
+    pad = 22 if container else 0
+    inner = sum(n.w for n in states) + sum(widths)
+    note_lines = []
+    if container:
+        inner = max(inner, metrics.measure(container["label"], "title"))
+        if container.get("note"):
+            note_lines = wrap(container["note"], "tag", inner, metrics)
+    start_len = 0
+    if "start" in spec:
+        start_len = max(60, metrics.measure(spec["start"]["label"], "edge") + 20)
+    total = (18 + start_len if start_len else 0) + inner + 2 * pad
+    if total > WIDE - 12:
+        raise DiagramError(f"the lifecycle is too wide for the wide layout ({total:.0f} of {WIDE - 12} units); "
+                           "shorten its labels or use fewer states")
+    x0 = (WIDE - total) / 2
+    box_x = x0 + (18 + start_len if start_len else 0)
+    box_w = inner + 2 * pad
+    x = box_x + pad + (inner - sum(n.w for n in states) - sum(widths)) / 2
+    for i, node in enumerate(states):
+        node.x = x
+        x += node.w + (widths[i] if i < len(widths) else 0)
+    y = 8
+    head = (30 + 18 * len(note_lines) + 18) if container else 0
+    row_top = y + head + 6
+    row_h = max(n.h for n in states)
+    for node in states:
+        node.y = row_top + (row_h - node.h) / 2
+    cy = row_top + row_h / 2
+    box_bottom = row_top + row_h + (18 if container else 0)
+    for g, lanes in gaps.items():
+        if lanes.get("back", {}).get("note"):
+            box_bottom = max(box_bottom, cy + 14 + 22 + (14 if container else 0))
+    if container:
+        canvas.add(f'<rect class="jimdg-hub" x="{num(box_x)}" y="{num(y)}" width="{num(box_w)}" '
+                   f'height="{num(box_bottom - y)}" rx="10"/>')
+        canvas.add(canvas.text(box_x + box_w / 2, y + 26, container["label"], "title"))
+        for i, line in enumerate(note_lines):
+            canvas.add(canvas.text(box_x + box_w / 2, y + 46 + 18 * i, line, "tag"))
+    if start_len:
+        canvas.add(f'<circle class="jimdg-dg-start" cx="{num(x0 + 9)}" cy="{num(cy)}" r="9"/>')
+        target = box_x if container else states[0].x
+        canvas.arrow([(x0 + 18, cy), (target, cy)])
+        canvas.add(canvas.text((x0 + 18 + target) / 2, cy - 8, spec["start"]["label"], "edge"))
+    for g in range(len(states) - 1):
+        a, b = states[g], states[g + 1]
+        mid = (a.right + b.x) / 2
+        lanes = gaps.get(g, {})
+        if "fwd" in lanes:
+            canvas.arrow([(a.right, cy - 14), (b.x, cy - 14)])
+            canvas.add(canvas.text(mid, cy - 22, lanes["fwd"]["label"], "edge"))
+        if "back" in lanes:
+            canvas.arrow([(b.x, cy + 14), (a.right, cy + 14)])
+            canvas.add(canvas.text(mid, cy + 8, lanes["back"]["label"], "edge"))
+            if lanes["back"].get("note"):
+                canvas.add(canvas.text(mid, cy + 32, lanes["back"]["note"], "note"))
+    height = box_bottom + 8
+    end = spec.get("end")
+    if end:
+        term = Node(end["state"], 180, 120, metrics, "jimdg-dg-terminal")
+        if end["from"] == "container":
+            fx, fy = box_x + box_w / 2, box_bottom
+        else:
+            src = states[ids.index(end["from"])]
+            fx, fy = src.cx, src.bottom
+        term.x, term.y = fx - term.w / 2, fy + 44
+        canvas.arrow([(fx, fy), (fx, term.y)])
+        canvas.add(canvas.text(fx + 10, fy + 26, end["label"], "edge", "start"))
+        if end.get("note"):
+            if fx - 10 - metrics.measure(end["note"], "note") < 4:
+                raise DiagramError("the end's note is too wide to sit beside its arrow; shorten it")
+            canvas.add(canvas.text(fx - 10, fy + 26, end["note"], "note", "end"))
+        if fx + 10 + metrics.measure(end["label"], "edge") > WIDE - 4:
+            raise DiagramError("the end's label is too wide to sit beside its arrow; shorten it")
+        term.draw(canvas)
+        height = term.bottom + 8
+    for node in states:
+        node.draw(canvas)
+    return canvas, height
+
+
+def lifecycle_narrow(spec, metrics):
+    canvas = Canvas()
+    container = spec.get("container")
+    ids = [s["id"] for s in spec["states"]]
+    states = [Node(s, 220, 160, metrics, "jimdg-stage") for s in spec["states"]]
+    gaps = pairs(spec, ids)
+    cx = NARROW / 2
+    left = cx - max(n.w for n in states) / 2
+    for node in states:
+        node.x = left
+    label_x = left + 50
+    layer = Canvas()  # transitions, painted after the container so its fill never covers them
+    y = 8
+    if "start" in spec:
+        # The start dot sits top left with its label beside it; the arrow runs down from it.
+        canvas.add(f'<circle class="jimdg-dg-start" cx="24" cy="17" r="9"/>')
+        if 42 + metrics.measure(spec["start"]["label"], "edge") > NARROW - 4:
+            raise DiagramError("the start's label is too wide for the narrow layout; shorten it")
+        canvas.add(canvas.text(42, 21, spec["start"]["label"], "edge", "start"))
+        y = 60
+    box_y = y
+    if container:
+        note_lines = wrap(container["note"], "tag", NARROW - 28, metrics) if container.get("note") else []
+        if metrics.measure(container["label"], "title") > NARROW - 24:
+            raise DiagramError("the container's label is too wide for the narrow layout; shorten it")
+        y += 30 + 18 * len(note_lines) + 16
+    for i, node in enumerate(states):
+        node.y = y
+        y = node.bottom
+        if i < len(states) - 1:
+            rows = []  # (text, role, direction marker or None)
+            lanes = gaps.get(i, {})
+            if "fwd" in lanes:
+                rows.append((lanes["fwd"]["label"], "edge", 1))
+            if "back" in lanes:
+                rows.append((lanes["back"]["label"], "edge", -1))
+                if lanes["back"].get("note"):
+                    rows.append((lanes["back"]["note"], "note", None))
+            rows = [(line, role, mark if n == 0 else None) for text, role, mark in rows
+                    for n, line in enumerate(wrap(text, role, NARROW - 8 - label_x - 14, metrics))]
+            gap = max(36, 18 * len(rows) + 18)
+            nxt_top = y + gap
+            if "fwd" in lanes:
+                layer.arrow([(left + 18, y), (left + 18, nxt_top)])
+            if "back" in lanes:
+                layer.arrow([(left + 34, nxt_top), (left + 34, y)])
+            for r, (text, role, mark) in enumerate(rows):
+                ty = y + 22 + 18 * r
+                if mark:  # a small arrowhead saying which arrow the label belongs to
+                    tip, base = (ty - 1, ty - 9) if mark > 0 else (ty - 9, ty - 1)
+                    layer.add(f'<polygon class="jimdg-flow-arrow" points="{num(label_x + 4)},{num(tip)} '
+                              f'{num(label_x)},{num(base)} {num(label_x + 8)},{num(base)}"/>')
+                layer.add(layer.text(label_x + 14, ty, text, role, "start"))
+            y = nxt_top
+    box_bottom = y + (16 if container else 0)
+    if container:
+        canvas.add(f'<rect class="jimdg-hub" x="6" y="{num(box_y)}" width="{NARROW - 12}" '
+                   f'height="{num(box_bottom - box_y)}" rx="10"/>')
+        canvas.add(canvas.text(cx, box_y + 26, container["label"], "title"))
+        for i, line in enumerate(note_lines):
+            canvas.add(canvas.text(cx, box_y + 46 + 18 * i, line, "tag"))
+    canvas.parts.extend(layer.parts)
+    if "start" in spec:
+        canvas.arrow([(24, 26), (24, box_y if container else states[0].y)])
+    height = box_bottom + 8
+    end = spec.get("end")
+    if end:
+        term = Node(end["state"], 220, 160, metrics, "jimdg-dg-terminal")
+        if end["from"] == "container":
+            fy = box_bottom
+        else:
+            fy = states[ids.index(end["from"])].bottom
+        term.x, term.y = cx - term.w / 2, fy + 34
+        canvas.arrow([(cx, fy), (cx, term.y)])
+        term.draw(canvas)
+        y = term.bottom + 20
+        for text, role in [(end["label"], "edge")] + ([(end["note"], "note")] if end.get("note") else []):
+            for line in wrap(text, role, NARROW - 16, metrics):
+                canvas.add(canvas.text(cx, y, line, role))
+                y += 18
+        height = y - 6
+    for node in states:
+        node.draw(canvas)
+    return canvas, height
+
+
+# ── Anatomy ───────────────────────────────────────────────────────────────────
+
+ANATOMY_KEYS = {"archetype", "title", "desc", "subject", "derived", "properties"}
+
+
+def validate_anatomy(spec):
+    check_keys(spec, ANATOMY_KEYS, "the diagram")
+    subject = spec.get("subject")
+    if not isinstance(subject, dict):
+        raise DiagramError("an anatomy needs a subject")
+    kind = subject.get("kind")
+    part_ids = []
+    if kind == "value":
+        check_keys(subject, {"kind", "parts"}, "the subject")
+        parts = subject.get("parts") or []
+        if not 1 <= len(parts) <= 4:
+            raise DiagramError("a value subject needs one to four parts")
+        for i, part in enumerate(parts):
+            check_keys(part, {"id", "text", "strong", "callout"}, f"part {i + 1}")
+            require(part, "text", f"part {i + 1}")
+            if part.get("id"):
+                part_ids.append(part["id"])
+    elif kind == "object":
+        check_keys(subject, {"kind", "label", "parts"}, "the subject")
+        require(subject, "label", "the subject")
+        parts = subject.get("parts") or []
+        if not 2 <= len(parts) <= 7:
+            raise DiagramError("an object subject needs two to seven parts")
+        for i, part in enumerate(parts):
+            check_keys(part, {"label", "detail"}, f"part {i + 1}")
+            require(part, "label", f"part {i + 1}")
+    else:
+        raise DiagramError(f'the subject kind is "{kind}"; use value or object')
+    if "derived" in spec:
+        derived = spec["derived"]
+        check_keys(derived, {"from", "label", "box", "note"}, "derived")
+        for key in ("from", "box"):
+            require(derived, key, "derived")
+        if kind != "value" or derived["from"] not in part_ids:
+            raise DiagramError(f'derived comes from "{derived["from"]}", which is not the id of a part of a value')
+    props = spec.get("properties") or []
+    if len(props) > 4:
+        raise DiagramError("an anatomy shows at most four properties")
+    for i, prop in enumerate(props):
+        check_keys(prop, {"name", "value"}, f"property {i + 1}")
+        require(prop, "name", f"property {i + 1}")
+
+
+def draw_chips(canvas, props, metrics, width, top, per_row):
+    """Property chips in rows of per_row, centred; returns the bottom."""
+    if not props:
+        return top
+    gap = 12
+    longest = max(metrics.measure(p["name"], "chip-name") + metrics.measure("  " + (p.get("value") or ""), "chip")
+                  for p in props)
+    # As many to a row as the longest chip allows, up to per_row.
+    while per_row > 1 and (width - 16 - gap * (per_row - 1)) / per_row < longest + 16:
+        per_row -= 1
+    chip_w = (width - 16 - gap * (per_row - 1)) / per_row
+    rows = [props[i:i + per_row] for i in range(0, len(props), per_row)]
+    y = top
+    for row in rows:
+        x = (width - (len(row) * chip_w + gap * (len(row) - 1))) / 2
+        for prop in row:
+            text_w = metrics.measure(prop["name"], "chip-name") + metrics.measure("  " + (prop.get("value") or ""), "chip")
+            if text_w > chip_w - 16:
+                raise DiagramError(f'the property "{prop["name"]}: {prop.get("value", "")}" is too long for its chip; shorten it')
+            body = f'<tspan class="jimdg-dg-chip-name">{esc(prop["name"])}</tspan>'
+            if prop.get("value"):
+                body += "  " + esc(prop["value"])
+            canvas.add('<g class="jimdg-dg-node">'
+                       f'<rect class="jimdg-chip" x="{num(x)}" y="{num(y)}" width="{num(chip_w)}" height="34" rx="17"/>'
+                       f'<text class="jimdg-dg-chip" x="{num(x + chip_w / 2)}" y="{num(y + 21.5)}">{body}</text></g>')
+            x += chip_w + gap
+        y += 34 + 10
+    return y - 10
+
+
+def value_layout(spec, metrics, width, narrow):
+    canvas = Canvas()
+    parts = spec["subject"]["parts"]
+    role, strong = ("token-narrow", "token-narrow-strong") if narrow else ("token", "token-strong")
+    widths = [metrics.measure(p["text"], strong if p.get("strong") else role) for p in parts]
+    text_w = sum(widths)
+    pill_w = text_w + (40 if narrow else 64)
+    pill_h = 44 if narrow else 56
+    if pill_w > width - 12:
+        raise DiagramError(f"the value is too long for the {'narrow' if narrow else 'wide'} layout; shorten it")
+    callouts = [(i, p["callout"]) for i, p in enumerate(parts) if p.get("callout")]
+    pill_x = (width - pill_w) / 2
+    top = 8 if narrow else (48 if callouts else 8)
+    starts, x = [], pill_x + (pill_w - text_w) / 2
+    for w in widths:
+        starts.append(x)
+        x += w
+    centres = [s + w / 2 for s, w in zip(starts, widths)]
+    tspans = "".join(f'<tspan class="{STYLES[strong if p.get("strong") else role][0]}">{esc(p["text"])}</tspan>'
+                     for p in parts)
+    size = STYLES[role][1]
+    canvas.add('<g class="jimdg-dg-node">'
+               f'<rect class="jimdg-dg-token-pill" x="{num(pill_x)}" y="{num(top)}" width="{num(pill_w)}" '
+               f'height="{pill_h}" rx="{pill_h / 2:.0f}"/>'
+               f'<text class="{STYLES[role][0]} jimdg-anchor-start" x="{num(starts[0])}" '
+               f'y="{num(top + pill_h / 2 + size * 0.35)}">{tspans}</text></g>')
+    y = top + pill_h
+    if callouts and not narrow:
+        boxes = []
+        for i, text in callouts:
+            w = metrics.measure(text, "label")
+            left = max(4, min(width - 4 - w, centres[i] - w / 2))
+            if boxes and left < boxes[-1][1] + 16:
+                left = boxes[-1][1] + 16  # nudge right of the previous callout
+            if not left + 8 <= centres[i] <= left + w - 8 or left + w > width - 4:
+                raise DiagramError("two callouts are too close to sit over their parts; shorten them")
+            boxes.append((left, left + w))
+            canvas.add(f'<line class="jimdg-dg-leader" x1="{num(centres[i])}" y1="{num(top)}" '
+                       f'x2="{num(centres[i])}" y2="{num(top - 16)}"/>')
+            canvas.add(canvas.text(left + w / 2, top - 24, text, "label"))
+    elif callouts:
+        for n, (i, text) in enumerate(callouts):
+            canvas.add(canvas.badge(centres[i], top, n + 1))
+        y += 14
+        for n, (i, text) in enumerate(callouts):
+            for line in wrap(text, "label", width - 48, metrics):
+                y += 18
+                canvas.add(canvas.text(34, y, line, "label", "start"))
+            canvas.add(canvas.badge(18, y - 4, n + 1))
+            y += 4
+    derived = spec.get("derived")
+    if derived:
+        i = next(k for k, p in enumerate(parts) if p.get("id") == derived["from"])
+        ax = centres[i] if not narrow else width / 2
+        box = Node({"label": derived["box"]}, width - 40 if narrow else 280, 160, metrics, "jimdg-core")
+        box.lines = [(text, "label-on") for text, _ in box.lines]
+        start_y = y
+        box.x, box.y = ax - box.w / 2, start_y + 34
+        box.x = max(6, min(width - 6 - box.w, box.x))
+        canvas.arrow([(ax, start_y), (ax, box.y)])
+        if derived.get("label"):
+            canvas.add(canvas.text(ax + 10, start_y + 22, derived["label"], "edge", "start"))
+        box.draw(canvas)
+        y = box.bottom
+        if derived.get("note"):
+            for line in wrap(derived["note"], "note", width - 16, metrics):
+                y += 18
+                canvas.add(canvas.text(box.cx, y, line, "note"))
+    y = draw_chips(canvas, spec.get("properties") or [], metrics, width, y + 20, 2 if narrow else 4)
+    return canvas, y + 8
+
+
+def object_layout(spec, metrics, width, narrow):
+    canvas = Canvas()
+    subject = spec["subject"]
+    rows = subject["parts"]
+    row_h = 40 if not narrow or not any(r.get("detail") for r in rows) else 52
+    if narrow:
+        card_w = width - 16
+    else:
+        need = max(metrics.measure(r["label"], "label") + metrics.measure(r.get("detail") or "", "sub") + 48
+                   for r in rows)
+        card_w = min(width - 16, max(360, need, metrics.measure(subject["label"], "title") + 40))
+    card_x = (width - card_w) / 2
+    top = 8
+    head = 40
+    card_h = head + row_h * len(rows)
+    canvas.add(f'<rect class="jimdg-dg-card" x="{num(card_x)}" y="{top}" width="{num(card_w)}" height="{num(card_h)}" rx="10"/>')
+    r10, right = 10, card_x + card_w
+    canvas.add(f'<path class="jimdg-layer" d="M{num(card_x)},{top + head} V{top + r10} Q{num(card_x)},{top} {num(card_x + r10)},{top} '
+               f'H{num(right - r10)} Q{num(right)},{top} {num(right)},{top + r10} V{top + head} Z"/>')
+    canvas.add(canvas.text(card_x + card_w / 2, top + 26, subject["label"], "title"))
+    y = top + head
+    for r in rows:
+        parts = [f'<rect class="jimdg-dg-row" x="{num(card_x)}" y="{num(y)}" width="{num(card_w)}" height="{row_h}"/>']
+        if r is not rows[-1]:
+            parts.append(f'<line class="jimdg-card-divider" x1="{num(card_x)}" y1="{num(y + row_h)}" '
+                         f'x2="{num(card_x + card_w)}" y2="{num(y + row_h)}"/>')
+        if narrow and r.get("detail"):
+            for text, role in ((r["label"], "label"), (r["detail"], "sub")):
+                if metrics.measure(text, role) > card_w - 32:
+                    raise DiagramError(f'"{text}" is too wide for the narrow layout; shorten it')
+            parts.append(canvas.text(card_x + 16, y + 21, r["label"], "label", "start"))
+            parts.append(canvas.text(card_x + 16, y + 39, r["detail"], "sub", "start"))
+        else:
+            if metrics.measure(r["label"], "label") + metrics.measure(r.get("detail") or "", "sub") + 48 > card_w:
+                raise DiagramError(f'the part "{r["label"]}" and its detail are too wide; shorten them')
+            parts.append(canvas.text(card_x + 16, y + row_h / 2 + 4.5, r["label"], "label", "start"))
+            if r.get("detail"):
+                parts.append(canvas.text(card_x + card_w - 16, y + row_h / 2 + 4.5, r["detail"], "sub", "end"))
+        canvas.add('<g class="jimdg-dg-node">' + "".join(parts) + "</g>")
+        y += row_h
+    y = draw_chips(canvas, spec.get("properties") or [], metrics, width, top + card_h + 20, 2 if narrow else 4)
+    return canvas, y + 8
+
+
+def anatomy_wide(spec, metrics):
+    layout = value_layout if spec["subject"]["kind"] == "value" else object_layout
+    return layout(spec, metrics, WIDE, False)
+
+
+def anatomy_narrow(spec, metrics):
+    layout = value_layout if spec["subject"]["kind"] == "value" else object_layout
+    return layout(spec, metrics, NARROW, True)
+
+
 # ── Rendering ─────────────────────────────────────────────────────────────────
 
-ARCHETYPES = {"flow": (validate_flow, flow_wide, flow_narrow)}
+ARCHETYPES = {
+    "flow": (validate_flow, flow_wide, flow_narrow),
+    "lifecycle": (validate_lifecycle, lifecycle_wide, lifecycle_narrow),
+    "anatomy": (validate_anatomy, anatomy_wide, anatomy_narrow),
+}
 
 
 def svg(canvas, width, height, layout, uid, spec):

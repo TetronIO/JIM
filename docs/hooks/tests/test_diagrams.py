@@ -79,9 +79,13 @@ class WrapTests(unittest.TestCase):
     def test_short_text_stays_on_one_line(self):
         self.assertEqual(diagrams.wrap("Scoping criteria", "label", 1000, self.m), ["Scoping criteria"])
 
-    def test_text_wider_than_the_box_wraps_onto_two_lines(self):
+    def test_text_wider_than_the_box_wraps_onto_the_two_most_even_lines(self):
         lines = diagrams.wrap("Object Matching Rules", "label", 110, self.m)
-        self.assertEqual(lines, ["Object Matching", "Rules"])
+        self.assertEqual(lines, ["Object", "Matching Rules"])
+
+    def test_wrapping_does_not_leave_a_short_word_alone(self):
+        lines = diagrams.wrap("reads it and changes it in either state", "label", 160, self.m)
+        self.assertEqual(lines, ["reads it and changes", "it in either state"])
 
     def test_text_that_cannot_fit_on_two_lines_is_an_error(self):
         with self.assertRaisesRegex(diagrams.DiagramError, "does not fit"):
@@ -210,6 +214,163 @@ class OutputTests(unittest.TestCase):
         spec = {"archetype": "flow", "title": "t", "desc": "d",
                 "steps": [{"id": "a", "label": "First"}, {"id": "b", "label": "Second"}]}
         self.assertEqual(len(svgs(render(spec))), 2)
+
+
+LIFECYCLE = {
+    "archetype": "lifecycle",
+    "title": "The Connected System lifecycle, one cmdlet per step",
+    "desc": "New-JIMConnectedSystem creates a Connected System; imports fill it; Clear-JIMConnectedSystem empties it; Remove-JIMConnectedSystem deletes it.",
+    "start": {"label": "`New-JIMConnectedSystem`"},
+    "container": {"label": "Connected System",
+                  "note": "`Get-JIMConnectedSystem` reads it and `Set-JIMConnectedSystem` changes it, in either state"},
+    "states": [
+        {"id": "configured", "label": "Configured", "sub": "no objects yet"},
+        {"id": "holding", "label": "Holding objects", "sub": "Connector Space filled"},
+    ],
+    "transitions": [
+        {"from": "configured", "to": "holding", "label": "imported by a Run Profile"},
+        {"from": "holding", "to": "configured", "label": "`Clear-JIMConnectedSystem`",
+         "note": "keeps configuration, schema and rules"},
+    ],
+    "end": {"from": "container", "label": "`Remove-JIMConnectedSystem`",
+            "note": "check first with `Get-JIMConnectedSystemDeletionPreview`",
+            "state": {"label": "Deleted", "sub": "with all its data"}},
+}
+
+ANATOMY_VALUE = {
+    "archetype": "anatomy",
+    "title": "What an API key is made of",
+    "desc": "An API key is the prefix jim_ak_ and a random secret; JIM keeps only a SHA-256 hash of the secret.",
+    "subject": {"kind": "value", "parts": [
+        {"text": "jim_ak_", "strong": True, "callout": "Prefix: always visible"},
+        {"id": "secret", "text": "\u2022" * 18, "callout": "Secret: shown once, at creation"},
+    ]},
+    "derived": {"from": "secret", "label": "stored as", "box": "SHA-256 hash",
+                "note": "all JIM keeps; a lost secret means a new key"},
+    "properties": [
+        {"name": "Roles", "value": "what it may do"},
+        {"name": "Expiry", "value": "a date, or none"},
+        {"name": "Enabled", "value": "on or off"},
+        {"name": "Last used", "value": "time and source IP"},
+    ],
+}
+
+ANATOMY_OBJECT = {
+    "archetype": "anatomy",
+    "title": "What a Connected System holds",
+    "desc": "A Connected System holds its connection settings, schema, Connector Space and Run Profiles.",
+    "subject": {"kind": "object", "label": "Connected System", "parts": [
+        {"label": "Connection settings", "detail": "from its Connector"},
+        {"label": "Schema", "detail": "Object Types and attributes"},
+        {"label": "Connector Space", "detail": "its Connected System Objects"},
+        {"label": "Run Profiles", "detail": "import, synchronise, export"},
+    ]},
+}
+
+
+class CodeSpanTests(unittest.TestCase):
+    def setUp(self):
+        self.m = diagrams.Metrics({"sans": {"400": {"default": 500, "chars": {}}},
+                                   "mono": {"400": {"default": 600, "chars": {}}}})
+
+    def test_a_code_span_is_measured_in_the_mono_face(self):
+        plain = self.m.measure("ab", "note")
+        code = self.m.measure("`ab`", "note")
+        self.assertAlmostEqual(code / plain, 600 / 500)
+
+    def test_a_code_span_renders_as_a_mono_tspan_without_its_backticks(self):
+        out = diagrams.Canvas().text(0, 0, "run `Get-Thing` first", "note")
+        self.assertIn('<tspan class="jimdg-dg-code">Get-Thing</tspan>', out)
+        self.assertNotIn("`", out)
+
+    def test_wrapping_never_splits_a_code_span(self):
+        lines = diagrams.wrap("check first with `Get-JIMConnectedSystemDeletionPreview`", "note", 300, self.m)
+        self.assertEqual(lines[-1], "`Get-JIMConnectedSystemDeletionPreview`")
+
+
+class LifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.html = render(LIFECYCLE, "lc")
+
+    def test_it_renders_a_wide_and_a_narrow_svg(self):
+        self.assertTrue(self.html.startswith('<div class="jim-dg jim-dg-lifecycle">'))
+        self.assertEqual(len(svgs(self.html)), 2)
+
+    def test_every_state_and_transition_appears(self):
+        for text in ("Configured", "Holding objects", "Deleted", "imported by a Run Profile",
+                     "Clear-JIMConnectedSystem", "Remove-JIMConnectedSystem", "keeps configuration, schema and rules"):
+            self.assertIn(text, self.html)
+
+    def test_the_end_state_is_drawn_as_a_terminal(self):
+        self.assertEqual(svgs(self.html)[0].count("jimdg-dg-terminal"), 1)
+
+    def test_the_start_is_a_dot(self):
+        self.assertEqual(svgs(self.html)[0].count('class="jimdg-dg-start"'), 1)
+
+    def test_a_transition_between_states_that_are_not_neighbours_is_an_error(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["states"].append({"id": "archived", "label": "Archived"})
+        spec["transitions"].append({"from": "configured", "to": "archived", "label": "skips one"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "next to each other"):
+            render(spec)
+
+    def test_two_transitions_the_same_way_between_one_pair_is_an_error(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["transitions"].append({"from": "configured", "to": "holding", "label": "again"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "already"):
+            render(spec)
+
+    def test_a_lifecycle_needs_two_to_four_states(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["states"] = spec["states"][:1]
+        spec["transitions"] = []
+        with self.assertRaisesRegex(diagrams.DiagramError, "two to four"):
+            render(spec)
+
+    def test_the_end_names_a_state_or_the_container(self):
+        spec = copy.deepcopy(LIFECYCLE)
+        spec["end"]["from"] = "nowhere"
+        with self.assertRaisesRegex(diagrams.DiagramError, "nowhere"):
+            render(spec)
+
+    def test_it_has_no_colour_literals_or_blank_lines(self):
+        self.assertNotRegex(self.html, r"#[0-9a-fA-F]{3,8}\b|rgba?\(|\n\s*\n")
+
+
+class AnatomyTests(unittest.TestCase):
+    def test_a_value_is_drawn_as_a_token_with_its_parts_callouts_and_properties(self):
+        html = render(ANATOMY_VALUE, "an")
+        self.assertTrue(html.startswith('<div class="jim-dg jim-dg-anatomy">'))
+        wide = svgs(html)[0]
+        self.assertIn("jim_ak_", wide)
+        self.assertIn("jimdg-dg-token-strong", wide)
+        for text in ("Prefix: always visible", "Secret: shown once, at creation", "SHA-256 hash", "stored as"):
+            self.assertIn(text, wide)
+        self.assertEqual(wide.count('class="jimdg-dg-chip-name"'), 4)
+
+    def test_an_object_is_drawn_as_a_card_listing_its_parts(self):
+        wide = svgs(render(ANATOMY_OBJECT, "ob"))[0]
+        self.assertIn("jimdg-dg-card", wide)
+        for text in ("Connected System", "Schema", "its Connected System Objects"):
+            self.assertIn(text, wide)
+
+    def test_derived_must_name_a_part_of_a_value(self):
+        spec = copy.deepcopy(ANATOMY_VALUE)
+        spec["derived"]["from"] = "nope"
+        with self.assertRaisesRegex(diagrams.DiagramError, "nope"):
+            render(spec)
+
+    def test_at_most_four_properties(self):
+        spec = copy.deepcopy(ANATOMY_VALUE)
+        spec["properties"].append({"name": "Five", "value": "too many"})
+        with self.assertRaisesRegex(diagrams.DiagramError, "four"):
+            render(spec)
+
+    def test_the_subject_kind_must_be_value_or_object(self):
+        spec = copy.deepcopy(ANATOMY_OBJECT)
+        spec["subject"]["kind"] = "blob"
+        with self.assertRaisesRegex(diagrams.DiagramError, "blob"):
+            render(spec)
 
 
 class HookTests(unittest.TestCase):

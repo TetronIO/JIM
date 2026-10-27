@@ -95,11 +95,16 @@ const VIEWS = [
         if (!svg.classList.contains(`jim-dg-${expected}`)) out.push(`${name}: the ${svg.classList.contains('jim-dg-wide') ? 'wide' : 'narrow'} layout shows, not the ${expected} one`);
         const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
         const texts = [...svg.querySelectorAll('text')];
-        const svgBox = box(svg);
         for (const t of texts) {
           const px = parseFloat(getComputedStyle(t).fontSize) * scale;
           if (px < 10 - 0.05) out.push(`${name}: "${t.textContent}" renders at ${px.toFixed(1)}px, under 10px`);
-          if (!inside(box(t), svgBox, 1)) out.push(`${name}: "${t.textContent}" runs outside the diagram`);
+          // Painted over by a shape drawn after it (a container's fill, say): still laid out, never seen.
+          // Scrolled into view first, because elementFromPoint only sees the viewport.
+          t.scrollIntoView({ block: 'center' });
+          const r = box(t);
+          if (!inside(r, box(svg), 1)) out.push(`${name}: "${t.textContent}" runs outside the diagram`);
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!top || !(top === t || t.contains(top))) out.push(`${name}: "${t.textContent}" is hidden under another shape`);
         }
         svg.querySelectorAll('.jimdg-dg-node').forEach(node => {
           const r = box(node.querySelector('rect'));

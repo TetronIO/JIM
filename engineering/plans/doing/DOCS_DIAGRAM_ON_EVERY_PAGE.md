@@ -1,6 +1,6 @@
 # A Diagram on Every Docs Page: Implementation Plan
 
-- **Status:** Doing (Phase 1, the renderer and the flow archetype)
+- **Status:** Doing (Phase 1 done; Phase 2: lifecycle and anatomy built, decision, comparison and relationship map in review)
 - **Issue:** [#2564](https://github.com/TetronIO/JIM/issues/2564)
 - **PRD:** [`PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md`](../../prd/doing/PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md)
 
@@ -103,7 +103,7 @@ docs/configuration/api-keys.md          docs/hooks/diagrams.py               bui
 
 Each phase is its own pull request. Phases 1 to 3 land before any page gets a diagram, so the Configuration batch is pure authoring.
 
-### Phase 1: Renderer foundation and the first archetype
+### Phase 1: Renderer foundation and the first archetype ✅
 
 - `docs/hooks/diagrams.py` with the fence parser, spec validation, the metrics loader, text wrapping and the **flow** archetype (wide and narrow).
 - `scripts/Update-DiagramFontMetrics.ps1` and the committed `docs/hooks/diagram_metrics.json`.

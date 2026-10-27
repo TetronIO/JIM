@@ -89,7 +89,7 @@ Nothing else is needed. They are clickable automatically (see "Diagram lightbox"
 
 ## Generated diagrams (`jim-diagram`)
 
-A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. **Flow** is the archetype available now:
+A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. Three archetypes are available: **flow**, **lifecycle** and **anatomy**. A flow is something that processes, with steps and branches:
 
 ````markdown
 ```jim-diagram
@@ -113,7 +113,47 @@ detours:                                                              # optional
 - **Every key is checked.** An unknown or misspelt key, a missing label, or a detour between steps that do not exist fails the build with the page and line. So does a label that cannot fit its box on two lines, or a flow too wide for the 800-unit layout: shorten the label or split the diagram; there is no setting to squeeze it. A step a detour leaves or rejoins cannot carry a `note`, because the detour's line would cross it.
 - **Two layouts are drawn,** wide and narrow, and `custom.css` ("Generated diagrams") shows the narrow one below 600px. The lightbox wraps each, and hides the trigger of the one not showing.
 - **Labels are sized from committed font metrics** (`docs/hooks/diagram_metrics.json`). If the site's fonts change, regenerate them with `pwsh -File ./scripts/Update-DiagramFontMetrics.ps1`.
-- **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains.
+- **Code in a label:** wrap a cmdlet, attribute or value in backticks (`` `Get-JIMConnectedSystem` ``) and it is set, and measured, in Plex Mono. A code span is never split across lines.
+
+A **lifecycle** is something that moves between states, with what moves it:
+
+````markdown
+```jim-diagram
+archetype: lifecycle
+title: The Connected System lifecycle, one cmdlet per step
+desc: ...
+start: { label: "`New-JIMConnectedSystem`" }          # optional: a dot and the arrow that creates it
+container: { label: Connected System, note: "`Get-JIMConnectedSystem` reads it ..." }   # optional frame
+states:                                                # two to four, in order
+  - { id: configured, label: Configured, sub: no objects yet }
+  - { id: holding, label: Holding objects, sub: Connector Space filled }
+transitions:                                           # only between neighbouring states, one each way
+  - { from: configured, to: holding, label: imported by a Run Profile }
+  - { from: holding, to: configured, label: "`Clear-JIMConnectedSystem`", note: keeps configuration, schema and rules }
+end: { from: container, label: "`Remove-JIMConnectedSystem`", note: "check first with `Get-...DeletionPreview`",
+       state: { label: Deleted, sub: with all its data } }   # optional: from a state's id, or the container
+```
+````
+
+An **anatomy** takes something apart. Its subject is either a `value` (a string, drawn as a token, as an API key is) or an `object` (a card listing its parts):
+
+````markdown
+```jim-diagram
+archetype: anatomy
+title: What an API key is made of
+desc: ...
+subject:
+  kind: value                                          # or: kind: object, label: ..., parts: [{ label, detail }]
+  parts:                                               # one to four, left to right
+    - { text: jim_ak_, strong: true, callout: "Prefix: always visible" }
+    - { id: secret, text: "••••••••••••••••••", callout: "Secret: shown once, at creation" }
+derived: { from: secret, label: stored as, box: SHA-256 hash, note: all JIM keeps }   # optional, a value's part only
+properties:                                            # optional, up to four chips
+  - { name: Roles, value: what it may do }
+```
+````
+
+- **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, a label hidden under another shape, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains.
 
 ## Diagram lightbox
 

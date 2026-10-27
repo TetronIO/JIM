@@ -950,6 +950,20 @@ body:has(.jim-home) .md-content__button {
 .jim-diagram .jimdg-dg-tag   { font-size: 12px; fill: var(--jimdg-sub-text); }
 .jim-diagram .jimdg-dg-badge { fill: var(--jimdg-core-fill); stroke: var(--jimdg-hub-fill); stroke-width: 2; }
 .jim-diagram .jimdg-dg-badge-text { font-size: 12px; font-weight: 700; fill: var(--jimdg-core-text); }
+.jim-diagram .jimdg-dg-code { font-family: "IBM Plex Mono", Consolas, monospace; font-weight: 400; }
+.jim-diagram .jimdg-dg-label-on { font-size: 13px; font-weight: 700; fill: var(--jimdg-core-text); }
+.jim-diagram .jimdg-dg-start { fill: var(--jimdg-edge); }
+.jim-diagram .jimdg-dg-terminal { fill: var(--jimdg-muted-fill); stroke: var(--jimdg-muted-stroke); stroke-width: 2; stroke-dasharray: 5 4; }
+.jim-diagram .jimdg-dg-chip { font-size: 12px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-chip-name { font-weight: 700; fill: var(--jimdg-chip-text); }
+.jim-diagram .jimdg-dg-token-pill { fill: var(--jimdg-layer-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; }
+.jim-diagram .jimdg-dg-token, .jim-diagram .jimdg-dg-token-sm { font-family: "IBM Plex Mono", Consolas, monospace; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-token { font-size: 22px; }
+.jim-diagram .jimdg-dg-token-sm { font-size: 15px; }
+.jim-diagram .jimdg-dg-token-strong, .jim-diagram .jimdg-dg-token-sm-strong { font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-dg-leader { stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.jim-diagram .jimdg-dg-card { fill: var(--jimdg-node-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; }
+.jim-diagram .jimdg-dg-row { fill: none; stroke: none; }
 
 /* ========================================
    Diagram lightbox
