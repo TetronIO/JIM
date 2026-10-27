@@ -441,3 +441,37 @@ Describe 'Register-JIMIdentityProvider -Provider Keycloak' {
         }
     }
 }
+
+Describe 'Invoke-JIMKeycloakAdminApi' {
+
+    It 'Hands back each item of a list, which Invoke-RestMethod returns as one array' {
+        InModuleScope JIM {
+            Mock Invoke-RestMethod { , @([PSCustomObject]@{ clientId = 'account' }, [PSCustomObject]@{ clientId = 'jim' }) }
+            $connection = @{
+                ServerUrl = 'https://sso.example.com'; Realm = 'jim'; AdminRealm = 'master'
+                Token = [PSCustomObject]@{ AccessToken = 'token'; ExpiresAt = [datetime]::UtcNow.AddMinutes(5) }
+            }
+
+            $clients = Invoke-JIMKeycloakAdminApi -Connection $connection -Path '/clients' | Where-Object clientId -ceq 'jim'
+
+            @($clients) | Should -HaveCount 1
+            Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter { $Uri -eq 'https://sso.example.com/admin/realms/jim/clients' }
+        }
+    }
+
+    It 'Signs in again when the token is about to expire' {
+        InModuleScope JIM {
+            Mock Invoke-RestMethod { }
+            Mock Get-JIMKeycloakAdminToken { [PSCustomObject]@{ AccessToken = 'fresh'; ExpiresAt = [datetime]::UtcNow.AddMinutes(1) } }
+            $connection = @{
+                ServerUrl = 'https://sso.example.com'; Realm = 'jim'; AdminRealm = 'master'
+                Token = [PSCustomObject]@{ AccessToken = 'stale'; ExpiresAt = [datetime]::UtcNow.AddSeconds(5) }
+            }
+
+            $null = Invoke-JIMKeycloakAdminApi -Connection $connection -Path '/clients'
+
+            Should -Invoke Get-JIMKeycloakAdminToken -Times 1
+            Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter { $Headers.Authorization -eq 'Bearer fresh' }
+        }
+    }
+}

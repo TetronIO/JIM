@@ -45,7 +45,8 @@ BeforeAll {
             $request.Body = ConvertTo-Json -InputObject $Body -Depth 10
             $request.ContentType = 'application/json'
         }
-        Invoke-RestMethod @request
+        $response = Invoke-RestMethod @request
+        $response
     }
 
     function script:Get-Client {
@@ -84,7 +85,8 @@ BeforeAll {
         }
         $queryString = ($query.GetEnumerator() | ForEach-Object { "$($_.Key)=$([uri]::EscapeDataString($_.Value))" }) -join '&'
 
-        $login = Invoke-WebRequest -Uri "$($script:Authority)/protocol/openid-connect/auth?$queryString" -SessionVariable browser
+        $login = Invoke-WebRequest -Uri "$($script:Authority)/protocol/openid-connect/auth?$queryString" -SessionVariable browser -MaximumRedirection 0 -SkipHttpErrorCheck
+        $login.StatusCode | Should -Be 200 -Because "Keycloak shows its login form, not $($login.Headers.Location) $($login.Content)"
         $action = [System.Net.WebUtility]::HtmlDecode([regex]::Match($login.Content, 'id="kc-form-login"[^>]*action="([^"]+)"').Groups[1].Value)
         if (-not $action) { $action = [System.Net.WebUtility]::HtmlDecode([regex]::Match($login.Content, '<form[^>]*action="([^"]+)"').Groups[1].Value) }
         $action | Should -Not -BeNullOrEmpty -Because 'Keycloak shows its login form'
@@ -92,7 +94,7 @@ BeforeAll {
         $redirect = Invoke-WebRequest -Method Post -Uri $action -WebSession $browser -MaximumRedirection 0 -SkipHttpErrorCheck -Body @{
             username = $script:PersonName; password = $script:PersonPassword; credentialId = ''
         }
-        $redirect.StatusCode | Should -Be 302 -Because "Keycloak accepts the sign-in and returns to $RedirectUri"
+        $redirect.StatusCode | Should -Be 302 -Because "Keycloak accepts the sign-in and returns to $RedirectUri, not: $([regex]::Match($redirect.Content, "kc-feedback-text[^>]*>([^<]+)").Groups[1].Value)"
         $location = [string]$redirect.Headers.Location[0]
         $location | Should -BeLike "$RedirectUri*"
         $code = [regex]::Match($location, '[?&]code=([^&]+)').Groups[1].Value

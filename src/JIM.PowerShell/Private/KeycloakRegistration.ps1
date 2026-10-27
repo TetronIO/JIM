@@ -133,7 +133,9 @@ function Invoke-JIMKeycloakAdminApi {
     }
 
     try {
-        Invoke-RestMethod @request
+        # Invoke-RestMethod returns a JSON array as one object; hand back its items, as callers filter them.
+        $response = Invoke-RestMethod @request
+        $response
     }
     catch {
         $status = [int]$_.Exception.Response.StatusCode
