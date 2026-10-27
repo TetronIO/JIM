@@ -3652,6 +3652,9 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemId", "TypeId", "Id")
                         .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id");
 
+                    b.HasIndex(new[] { "ConnectedSystemId" }, "IX_ConnectedSystemObjects_ConnectedSystemId_ScopeReviewPending")
+                        .HasFilter("\"ScopeReviewPending\"");
+
                     b.HasIndex(new[] { "ConnectedSystemId" }, "IX_ConnectedSystemObjects_ConnectedSystemId_SynchronisationPending")
                         .HasFilter("\"SynchronisationPending\"");
 

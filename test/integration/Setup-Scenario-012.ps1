@@ -297,6 +297,7 @@ Write-TestStep "Step 11" "Creating run profiles"
 
 New-JIMRunProfile -Name "Full Import" -ConnectedSystemId $hrSystem.id -RunType "FullImport" -FilePath $hrCsvFilePath | Out-Null
 New-JIMRunProfile -Name "Full Synchronisation" -ConnectedSystemId $hrSystem.id -RunType "FullSynchronisation" | Out-Null
+New-JIMRunProfile -Name "Delta Synchronisation" -ConnectedSystemId $hrSystem.id -RunType "DeltaSynchronisation" | Out-Null
 Write-Host "  OK HR run profiles: Full Import, Full Synchronisation" -ForegroundColor Green
 
 Write-TestSection "Scenario 012 Setup Complete"

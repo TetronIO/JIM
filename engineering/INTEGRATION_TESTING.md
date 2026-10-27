@@ -988,7 +988,7 @@ The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/9
 4. Wait for the wall clock to pass the boundary.
 5. Negative control: a delta sync with no data changes must deprovision nothing (it selects only changed objects; a full sync would not miss the transition, since it evaluates every object).
 6. Manually trigger the built-in reconciler schedule, which flags the whole cohort in one sweep.
-7. A full sync then disconnects exactly the cohort (asserts `DisconnectedOutOfScope` equals the cohort size); the User deletion rule deletes the Metaverse Objects, and Target deprovisioning plus group membership removals are exported.
+7. A delta sync then selects the flagged cohort and disconnects exactly it (asserts `DisconnectedOutOfScope` equals the cohort size); the User deletion rule deletes the Metaverse Objects, and Target deprovisioning plus group membership removals are exported.
 8. Assertions: cohort accounts are removed from the Target directory; per-group Target member sets equal the Source member sets minus the cohort (compared by uid; full verification when the template has 150 or fewer groups, sampled otherwise); Source groups are untouched; no unresolved references; no `[ERR]` lines.
 
 **Design constraint**: the membership removals must be JIM-driven. OpenLDAP has no referential-integrity overlay in this stack, so deleting a Target account never strips member values; any removal observed in Target groups can only have come from JIM's export path.

@@ -1124,6 +1124,13 @@ public class JimDbContext : DbContext
             .HasIndex(cso => cso.ConnectedSystemId, "IX_ConnectedSystemObjects_ConnectedSystemId_SynchronisationPending")
             .HasFilter("\"SynchronisationPending\"");
 
+        // Partial index on the Temporal Scope Reconciler's flag (#892), the third marked arm of Delta Synchronisation's
+        // OR. The reconciler flags only objects whose scope the clock has moved, and the synchronisation that
+        // re-evaluates one clears it, so keying on ConnectedSystemId keeps the arm an O(flagged) index scan.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => cso.ConnectedSystemId, "IX_ConnectedSystemObjects_ConnectedSystemId_ScopeReviewPending")
+            .HasFilter("\"ScopeReviewPending\"");
+
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created
         // which is used in GetConnectedSystemObjectsModifiedSinceAsync

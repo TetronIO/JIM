@@ -1866,13 +1866,13 @@ try {
             Assert-ScheduleExecutionSuccess -ExecutionId $reconExec.id -Name "Temporal Scope Reconciler"
             Write-Host "    OK Reconciler sweep completed" -ForegroundColor Green
 
-            # Step 7.8: Apply. The sweep flagged the cohort's CSOs (ScopeReviewPending); this sync
-            # evaluates every object (#891), disconnects the cohort out of scope, and the User
-            # deletion rule (WhenAuthoritativeSourceDisconnected, zero grace) deletes their
-            # Metaverse Objects synchronously, staging Target deprovisioning.
-            Write-Host "  Running full sync to process the flagged cohort..." -ForegroundColor Gray
-            $applySync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $applySync.activityId -Name "LeaverCohort apply Full Sync"
+            # Step 7.8: Apply. The sweep flagged the cohort's CSOs (ScopeReviewPending); a delta sync
+            # selects them by the flag (the run a schedule makes most often), disconnects them out of
+            # scope, and the User deletion rule (WhenAuthoritativeSourceDisconnected, zero grace)
+            # deletes their Metaverse Objects synchronously, staging Target deprovisioning.
+            Write-Host "  Running delta sync to process the flagged cohort..." -ForegroundColor Gray
+            $applySync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $applySync.activityId -Name "LeaverCohort apply Delta Sync"
             $applyDisconnected = Get-ActivityChangeCount -ActivityId $applySync.activityId -ChangeType "DisconnectedOutOfScope"
             if ($applyDisconnected -ne $cohortUids.Count) {
                 throw "LeaverCohort apply sync disconnected $applyDisconnected object(s) but the cohort has $($cohortUids.Count). The reconciler must flag the whole cohort in one sweep and the sync must process every flagged object."
