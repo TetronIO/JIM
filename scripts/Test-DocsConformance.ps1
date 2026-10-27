@@ -162,7 +162,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
-    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'EXC-1')
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'STY-3', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
@@ -599,6 +599,31 @@ function Test-PageName {
         if (-not $isSuffix) {
             $line = if ($h1) { $h1.Line } else { 1 }
             New-Finding 'STR-3' $line "the nav label '$label' differs from the page's name '$name'; use the name, or the name without its leading words."
+        }
+    }
+}
+
+# STY-3: a section's index page (index.md, the home page included) opens every H2 with a Material
+# Design icon, which custom.css draws as a tile; no other heading anywhere carries an icon. An icon is
+# an emoji shortcode such as :material-layers-outline:, so any leading shortcode counts.
+function Test-HeadingIcons {
+    param($Page)
+
+    $isIndex = ($Page.RelativePath -split '/')[-1] -eq 'index.md'
+    foreach ($h in $Page.Headings) {
+        $icon = [regex]::Match($h.Text, '^:(?<name>[a-z0-9]+(?:-[a-z0-9]+)*):\s*(?<title>.*)$')
+        $title = if ($icon.Success) { $icon.Groups['title'].Value } else { $h.Text }
+        if ($isIndex -and $h.Level -eq 2) {
+            if (-not $icon.Success) {
+                New-Finding 'STY-3' $h.Line "the H2 '$title' has no icon; on a section's index page every H2 opens with a Material Design icon, such as '## :material-layers-outline: $title'."
+            }
+            elseif (-not $icon.Groups['name'].Value.StartsWith('material-')) {
+                New-Finding 'STY-3' $h.Line "the H2 '$title' opens with ':$($icon.Groups['name'].Value):'; use a Material Design icon (:material-...:), preferring an -outline variant."
+            }
+        }
+        elseif ($icon.Success -and $h.Level -gt 1) {
+            $where = if ($isIndex) { 'only H2 headings on a section''s index page carry an icon' } else { 'only a section''s index page carries heading icons; article headings stay plain' }
+            New-Finding 'STY-3' $h.Line "the heading '$title' carries an icon; $where."
         }
     }
 }
@@ -1187,6 +1212,7 @@ foreach ($file in $files) {
         Test-FrontMatter -Page $page -Config $config
         Test-PageName -Page $page -NavLabels $navLabels
         Test-HeadingStructure -Page $page
+        Test-HeadingIcons -Page $page
         Test-CodeFences -Page $page
         Test-Stub -Page $page -Config $config
         Test-Opening -Page $page
