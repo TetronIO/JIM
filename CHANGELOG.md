@@ -171,6 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A run queued behind a parallel Schedule step now waits for the step to finish. It used to start alongside it, so a hand-queued Full Import could run at the same time as the Schedule's Full Import of the same Connected System.
 - 🐛 Sorting or searching an Activity's execution items by name no longer times out on large runs; a 40,000-item Display Name sort took 48 seconds and showed an error page.
 - 🐛 The Add Attribute Flow dialog widens when an Expression or Generated Value is chosen, so **Try it** sits beside the settings rather than beneath them.
 - 🐛 A new Generated Value no longer opens with "Add a number only if the value is already taken" selected but unavailable and a save error showing: it starts on a sequence number and moves to "only if taken" once a base expression is typed, unless you have chosen a token yourself.

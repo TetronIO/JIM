@@ -227,27 +227,35 @@ public class TaskingRepository : ITaskingRepository
             .FirstOrDefaultAsync();
     }
 
+    /// <summary>
+    /// Takes the next batch of queued Worker Tasks and marks them Processing. The tasks in a batch run at the same
+    /// time, so a batch is the first task in queue order on its own, or, where that task belongs to a parallel
+    /// Schedule step, every queued task of that same step. Nothing else may join: a task queued behind the step (a
+    /// hand-queued run, another Schedule's step) waits for the next batch, or it would run alongside the step and
+    /// could work on the same Connected System at the same moment.
+    /// </summary>
+    /// <remarks>
+    /// The portal's queue describes batches by the same rule (<c>QueueRunSlot</c> in JIM.Web), so its "Next" and its
+    /// estimated start times describe what this does. Change both together.
+    /// </remarks>
     public async Task<List<WorkerTask>> GetNextWorkerTasksToProcessAsync()
     {
-        var tasks = new List<WorkerTask>();
-        foreach (var task in await Repository.Database.WorkerTasks
-                     .Include(st => st.Activity)
-                     .Where(st => st.Status == WorkerTaskStatus.Queued)
-                     .OrderBy(st => st.ScheduleStepIndex ?? int.MaxValue)
-                     .ThenBy(st => st.Timestamp)
-                     .ToListAsync())
-        {
-            if (task.ExecutionMode == WorkerTaskExecutionMode.Sequential)
-            {
-                tasks.Add(task);
-                break;
-            }
+        var queued = await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .Where(st => st.Status == WorkerTaskStatus.Queued)
+            .OrderBy(st => st.ScheduleStepIndex ?? int.MaxValue)
+            .ThenBy(st => st.Timestamp)
+            .ToListAsync();
 
-            if (task.ExecutionMode == WorkerTaskExecutionMode.Parallel)
-                tasks.Add(task);
-            else
-                break;
-        }
+        var first = queued.FirstOrDefault();
+        if (first == null)
+            return [];
+
+        var tasks = first is { ExecutionMode: WorkerTaskExecutionMode.Parallel, ScheduleExecutionId: { } scheduleExecutionId }
+            ? queued.Where(t => t.ExecutionMode == WorkerTaskExecutionMode.Parallel
+                                && t.ScheduleExecutionId == scheduleExecutionId
+                                && t.ScheduleStepIndex == first.ScheduleStepIndex).ToList()
+            : [first];
 
         await UpdateWorkerTasksAsProcessingAsync(tasks);
         return tasks;
