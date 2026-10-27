@@ -10,7 +10,7 @@ validated: v0.16.0
 
 JIM needs a container runtime, an OpenID Connect identity provider, a TLS certificate, a PostgreSQL database and a host to run them on. Have each in place before you deploy.
 
-## Container Runtime
+## :material-docker: Container Runtime
 
 JIM runs in containers, on either of two runtimes. You will need one of:
 
@@ -19,7 +19,7 @@ JIM runs in containers, on either of two runtimes. You will need one of:
 
 A production server runs Linux. For evaluation, Docker Desktop also runs JIM on macOS and Windows.
 
-## Identity Provider
+## :material-shield-key-outline: Identity Provider
 
 JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. You will need access to an OIDC-compliant Identity Provider, such as:
 
@@ -30,11 +30,11 @@ JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. You will need 
 
 Before deploying, configure your identity provider with a client registration for JIM. See the [SSO Setup Guide](../administration/sso-setup.md) for detailed instructions.
 
-## TLS Certificate
+## :material-certificate-outline: TLS Certificate
 
 JIM serves HTTPS, which browsers need in order to sign in. Use a certificate for JIM's host name from your organisation's certificate authority, or let the setup script create one; creating one needs OpenSSL on the JIM host. See [TLS and Reverse Proxy](../administration/tls-and-reverse-proxy.md).
 
-## Hardware Requirements
+## :material-memory: Hardware Requirements
 
 | Component | Minimum    | Recommended                                      |
 |-----------|------------|--------------------------------------------------|
@@ -67,7 +67,7 @@ These figures are for the **host machine** (or VM) running JIM (on Docker or Pod
 !!! info "Large group memberships drive memory more than object count"
     A group is loaded with its full member list during processing, so a single large group can dominate memory use: a group with 495,000 members loads 495,000 member references. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
 
-## Network Requirements
+## :material-lan: Network Requirements
 
 JIM's services communicate internally over a private container network (`jim-network` on Docker, `jim` on Podman). The only port that needs to be exposed externally is the HTTPS port on `jim.web` (container port `8443`), which the installation publishes on host port `443`.
 
@@ -78,13 +78,13 @@ JIM's services communicate internally over a private container network (`jim-net
 
 In air-gapped environments, no outbound connectivity is required after initial deployment.
 
-## Database
+## :material-database-outline: Database
 
 JIM uses PostgreSQL as its database. You have two options:
 
 - **Bundled PostgreSQL:** A PostgreSQL container is included with JIM, on Docker or Podman, for simple deployments. No additional setup is required.
 - **External PostgreSQL:** Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable. Port 5432 is assumed; where your server listens elsewhere, append the port to the hostname (`db.example.org:5433`). Create JIM's user and its database on the server first, as [Before You Install](../administration/deployment.md#before-you-install) shows.
 
-## Building on JIM
+## :material-puzzle-outline: Building on JIM
 
 Contributing to JIM needs none of the above: the development environment brings its own database and identity provider. The contributor guides in the repository's [engineering documentation](https://github.com/TetronIO/JIM/tree/main/engineering) set it up.

@@ -104,13 +104,28 @@ public sealed record VirtualisedListUrlState
     public string Write(string? query, string defaultSortBy, string? parameterPrefix = null, bool defaultSortDescending = false)
     {
         var parameters = HttpUtility.ParseQueryString(query ?? string.Empty);
-
-        Set(parameters, parameterPrefix + SearchTextParameter, string.IsNullOrWhiteSpace(SearchText) ? null : SearchText);
-        Set(parameters, parameterPrefix + SortByParameter, string.Equals(SortBy, defaultSortBy, StringComparison.Ordinal) ? null : SortBy);
-        Set(parameters, parameterPrefix + SortDescendingParameter, SortDescending == defaultSortDescending ? null : SortDescending ? "1" : "0");
-        Set(parameters, parameterPrefix + FirstVisibleRowParameter, FirstVisibleRow > 0 ? FirstVisibleRow.ToString(CultureInfo.InvariantCulture) : null);
+        foreach (var (name, value) in ToQueryParameters(defaultSortBy, parameterPrefix, defaultSortDescending))
+            Set(parameters, name, value?[0]);
 
         return parameters.ToString() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// The list's own parameters, each with its value or null where it is at its default, for applying in the browser
+    /// (<c>jimInterop.updateQueryString</c>). Stating only its own keys is what lets the list share the URL with the
+    /// page's parameters: rebuilding the whole query from a copy held here drops whatever the page wrote since.
+    /// </summary>
+    public IReadOnlyDictionary<string, string[]?> ToQueryParameters(string defaultSortBy, string? parameterPrefix = null, bool defaultSortDescending = false)
+    {
+        static string[]? One(string? value) => value == null ? null : [value];
+
+        return new Dictionary<string, string[]?>
+        {
+            [parameterPrefix + SearchTextParameter] = One(string.IsNullOrWhiteSpace(SearchText) ? null : SearchText),
+            [parameterPrefix + SortByParameter] = One(string.Equals(SortBy, defaultSortBy, StringComparison.Ordinal) ? null : SortBy),
+            [parameterPrefix + SortDescendingParameter] = One(SortDescending == defaultSortDescending ? null : SortDescending ? "1" : "0"),
+            [parameterPrefix + FirstVisibleRowParameter] = One(FirstVisibleRow > 0 ? FirstVisibleRow.ToString(CultureInfo.InvariantCulture) : null)
+        };
     }
 
     /// <summary>

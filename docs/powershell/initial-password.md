@@ -11,7 +11,7 @@ These cmdlets read and change whether JIM sets an initial password on the Connec
 
 ---
 
-## Get-JIMSyncRuleInitialPassword
+## :material-form-textbox-password: Get-JIMSyncRuleInitialPassword
 
 Gets whether JIM sets an initial password on the Connected System Objects a Synchronisation Rule provisions, how it
 generates one, and which Connected System Objects are waiting on a person.
@@ -81,7 +81,7 @@ Get-JIMSyncRule | ForEach-Object {
 }
 ```
 
-## Set-JIMSyncRuleInitialPassword
+## :material-lock-reset: Set-JIMSyncRuleInitialPassword
 
 Changes the settings `Get-JIMSyncRuleInitialPassword` reports. Saving a change that alters what would be delivered releases every Connected System Object
 parked against the rule, and the Password Delivery Service attempts them again within seconds, with no export run
@@ -169,7 +169,7 @@ Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Ro
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Initial Password](../configuration/initial-password.md): what the settings do, and following a Connected System Object to its first sign-in
 - [Passwords](../concepts/passwords.md): how JIM handles passwords, and the rules that hold on every surface

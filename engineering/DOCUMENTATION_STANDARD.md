@@ -207,7 +207,7 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 
 ## Style conventions
 
-STY-1 blocks (`Test-DocsConformance.ps1`); STY-2 and STY-3 are Review tier.
+STY-1 blocks: `Test-DocsConformance.ps1` checks each page's Markdown, and `Test-DocsSite.ps1` checks the built site, which also covers text a build hook or an inlined diagram puts on a page. STY-3 blocks on where heading icons go (`Test-DocsConformance.ps1`) and is Review tier for the rest. STY-2 is Review tier.
 
 **STY-1. No emoji on a page; icons come from Material Design Icons, which the theme ships.** Emoji bring their own palettes and a casual register into every heading and table, and an emoji set cannot match the site's colours. A yes, no or caution in a table or list is a status mark, always with its spoken label, because a screen reader reads nothing for an unlabelled icon:
 
@@ -227,7 +227,7 @@ The classes colour the mark green, red or amber in both themes (`custom.css`). E
 
 Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 
-**STY-3. Icons mark landing pages and cards, not articles.** On the home page and a section's `index.md`, every H2 opens with one icon (`## :material-layers-outline: Architecture`), and every grid card opens with one (`:material-sync:{ .lg .middle }`); `custom.css` draws both as a tile in the brand colour. Article headings carry no icon: the table of contents and the headings do the navigating, and an icon picked per heading adds noise. Use the `-outline` variant wherever Material Design Icons has one, so the set reads as line icons rather than a mix of line and solid shapes; a brand's own logo (`:material-microsoft:`) is the exception. Never an icon mid-sentence, and never one as a checklist (use `- [ ]` / `- [x]`, which `pymdownx.tasklist` renders as styled checkboxes). The changelog's leading emoji are the changelog's own convention (`engineering/CLAUDE.md`), not this site's.
+**STY-3. Every H2 carries an icon; nothing below it does.** On every page, every H2 opens with one Material Design icon (`## :material-layers-outline: Architecture`), and every grid card opens with one (`:material-sync:{ .lg .middle }`); `custom.css` draws both as a tile in the brand colour, which marks each section break on a long page. H3 and lower stay plain, so the tile always means a section. The check fails an H2 without a Material Design icon and an icon on any other heading; the Changelog page's release headings get theirs from the build hook. Pick for the section's subject, and reuse one icon per recurring concept and heading across the site: Connected System `server-network-outline`, Metaverse `hub-outline`, Synchronisation Rule `link-variant`, Run Profile `play-circle-outline`, Schedule `calendar-clock-outline`, settings `tune-variant`, troubleshooting `wrench-outline`, "See also" and "Related" `book-open-variant-outline`, "Check it worked" `check-decagram-outline`, "Before you begin" `clipboard-list-outline`; never the status-mark icons (STY-1) on a heading. Use the `-outline` variant wherever Material Design Icons has one, so the set reads as line icons rather than a mix of line and solid shapes; a brand's own logo (`:material-microsoft:`) is the exception. Never an icon mid-sentence, and never one as a checklist (use `- [ ]` / `- [x]`, which `pymdownx.tasklist` renders as styled checkboxes). `CHANGELOG.md` keeps its leading emoji per entry (its own convention, `engineering/CLAUDE.md`), and the build hook that publishes it as the Changelog page strips them (`docs/hooks/changelog.py`).
 
 ## Priority pages and tutorials
 
@@ -309,8 +309,9 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | A11Y-1 | Mermaid diagrams carry accTitle and accDescr | Block | `Test-DocsConformance.ps1` |
 | A11Y-2 | Images and diagrams carry text alternatives | Block | `Test-DocsConformance.ps1` |
 | A11Y-3 | Meaningful link text | Review | |
-| STY-1 | No emoji; status marks and icons from Material Design Icons | Block | `Test-DocsConformance.ps1` |
-| STY-2, STY-3 | Term-and-description bullets; icons on landing pages and cards only | Review | |
+| STY-1 | No emoji; status marks and icons from Material Design Icons | Block | `Test-DocsConformance.ps1`, `Test-DocsSite.ps1` |
+| STY-2 | Term-and-description bullets | Review | |
+| STY-3 | An icon on every H2 and grid card, and on no other heading | Block (heading placement); Review (the rest) | `Test-DocsConformance.ps1` |
 | PRI-1 | Priority pages record their last validation | Block | `Test-DocsConformance.ps1`; listed for each release by `Get-DocsDueForValidation.ps1` |
 | PRI-2 | Review findings arrive as review threads (every page's, under the Review tier) | Retired | |
 | TUT-1 | Tutorials are tested | Block | `Test-DocsConformance.ps1` (TYP-1, the scenario named); the tutorial's scenario in the pre-release suite (the steps executed) |

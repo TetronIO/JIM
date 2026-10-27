@@ -316,11 +316,6 @@ else if (ReservesHeight)
     private bool _preferencesLoaded;
     private string? _appliedStateKey;
 
-    // The query string this grid last wrote in place. history.replaceState is invisible to NavigationManager, so
-    // its Uri still holds the query from the last real navigation; reading that back would undo the previous
-    // in-place write (a page filter set or cleared, then a scroll reset putting it back). Forgotten on navigation.
-    private string? _writtenQuery;
-
     private string ScrollContainerSelector => $"#{ContainerId} .mud-table-container";
 
     // Whether this grid's state belongs in the address bar at all; see TrackUrlState and Embedded.
@@ -390,7 +385,6 @@ else if (ReservesHeight)
 
     protected override void OnInitialized()
     {
-        NavManager.LocationChanged += OnLocationChanged;
         _loading.VisibilityChanged += OnLoadingVisibilityChanged;
     }
 
@@ -599,25 +593,11 @@ else if (ReservesHeight)
     /// </summary>
     public async Task SetQueryParameterAsync(string name, string? value)
     {
-        var query = System.Web.HttpUtility.ParseQueryString(GetCurrentQuery());
-        if (value == null)
-            query.Remove(name);
-        else
-            query[name] = value;
-        await ReplaceQueryAsync(query.ToString() ?? string.Empty);
-    }
-
-    private string GetCurrentQuery() => _writtenQuery ?? NavManager.ToAbsoluteUri(NavManager.Uri).Query;
-
-    private async Task ReplaceQueryAsync(string query)
-    {
-        _writtenQuery = BuildUrlState().Write(query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending);
-        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", _writtenQuery);
-    }
-
-    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
-    {
-        _writtenQuery = null;
+        var parameters = new Dictionary<string, string[]?>(BuildUrlState().ToQueryParameters(DefaultSortBy, UrlParameterPrefix, DefaultSortDescending))
+        {
+            [name] = value == null ? null : [value]
+        };
+        await InvokeInteropAsync<object>("jimInterop.updateQueryString", parameters);
     }
 
     private async Task OnSearchAsync(string text)
@@ -656,7 +636,8 @@ else if (ReservesHeight)
     /// </summary>
     private async Task WriteUrlStateAsync()
     {
-        await ReplaceQueryAsync(GetCurrentQuery());
+        await InvokeInteropAsync<object>("jimInterop.updateQueryString",
+            BuildUrlState().ToQueryParameters(DefaultSortBy, UrlParameterPrefix, DefaultSortDescending));
     }
 
     private VirtualisedListUrlState BuildUrlState() => new()
@@ -717,7 +698,6 @@ else if (ReservesHeight)
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        NavManager.LocationChanged -= OnLocationChanged;
         _loading.Dispose();
         await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
         await InvokeInteropAsync<object>("jimVirtualList.unfit", ScrollContainerSelector);

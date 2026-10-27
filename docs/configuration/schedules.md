@@ -11,14 +11,14 @@ A **schedule** defines an automated sequence of operations that JIM executes on 
 
 Schedules are the primary mechanism for automating identity synchronisation workflows. A typical example is a nightly schedule that imports from each Connected System, runs synchronisation, and exports the results.
 
-## Triggers
+## :material-flash-outline: Triggers
 
 A schedule is one of two trigger types:
 
 - **Cron**<br /> Runs automatically on a recurring pattern.
 - **Manual**<br /> Runs only when explicitly triggered.
 
-## Pattern types
+## :material-shape-outline: Pattern types
 
 Cron schedules support three authoring modes:
 
@@ -28,7 +28,7 @@ Cron schedules support three authoring modes:
 
 The first two modes cover the vast majority of cases without requiring administrators to think in cron syntax. Custom is the escape hatch for the unusual schedules they don't.
 
-## Steps
+## :material-format-list-numbered: Steps
 
 Each step has an execution mode and a step type.
 
@@ -79,7 +79,7 @@ From automation, the Schedule's setting is `-OnStepFailure` on `New-JIMSchedule`
 
 Nothing is lost when a schedule stops or cannot start: the steps that did not run are attempted again on its next run, and a cron schedule stays on its timetable rather than retrying every few seconds. Fix the cause before the next scheduled run (for example, remove the step for a Connected System that is being deleted, or select the partition its Run Profile targets again), or run the schedule manually once it is fixed.
 
-## Executions
+## :material-play-circle-outline: Executions
 
 Each schedule run produces a **Schedule Execution** record with per-step progress. Active and historical executions can be listed, retrieved, and (for active ones) cancelled.
 
@@ -125,7 +125,7 @@ The same reasons are available to automation: each step returned by `Get-JIMSche
 
 ### Watching one run
 
-While a schedule is running, its tasks are grouped under a header in **Admin > Operations > Queue**, and that header draws the whole schedule as a rail: one marker per step, in the order they run, with the step names underneath and the step it has reached named beside them ("Step 2 of 5").
+While a schedule is running, its tasks are grouped under a header in **Admin > Operations > Activity** (in Queued for the steps still to come, and in In Progress for the step running now), and that header draws the whole schedule as a rail: one marker per step, in the order they run, with the step names underneath and the step it has reached named beside them ("Step 2 of 5").
 
 The rail shows the whole schedule, not just the part still queued. A task is removed from the queue the moment it finishes, so steps already done would otherwise disappear as the run progressed; their outcomes are read from their Activities instead. A step that failed stays visible as a failed marker, including when the group is collapsed to a single row.
 
@@ -133,11 +133,11 @@ A step running several tasks at once is drawn as one divided marker, a wedge per
 
 A step's position counts step *groups*: steps that run concurrently share one position, so a schedule of six steps where two run together is five steps long.
 
-## Enabled flag
+## :material-toggle-switch-outline: Enabled flag
 
 Disabled schedules don't fire on their cron trigger and don't appear as eligible for manual run. This is useful for temporarily pausing a schedule during maintenance without losing its definition.
 
-## Built-in schedules
+## :material-lock-outline: Built-in schedules
 
 JIM ships with a small number of **built-in schedules** that are part of the product rather than something you create. They behave like any other schedule with one difference: their name is fixed and they cannot be deleted. You can still change **when** they run and enable or disable them.
 
@@ -156,11 +156,11 @@ What you can and can't do with a built-in schedule:
 
 The portal reflects this: a built-in schedule's name and steps are read-only in the editor, and its delete action is replaced with a lock. These rules are enforced everywhere, not just in the portal: the PowerShell module and REST API reject a rename, delete, step change or change to what happens when a step fails, and the underlying application layer is the authoritative backstop.
 
-## Auditing
+## :material-history: Auditing
 
 Every configuration change to a schedule is recorded in the immutable audit log (Activities): creating, editing, enabling, disabling, re-timing and deleting are each captured as an Activity attributed to whoever made the change, the same audit trail JIM keeps for Connected Systems and Synchronisation Rules. Running a schedule is tracked separately, as a schedule execution and its per-step Activities.
 
-## Change history
+## :material-history: Change history
 
 Every change to a Schedule's configuration (including its Steps) is recorded as a versioned snapshot, the same way as for [Synchronisation Rules and Connected Systems](activities.md#configuration-change-history). The **History** tab in the Schedule editor shows the timeline of changes, each as a field-by-field "before and after", and lets you compare any two versions. A step's SQL connection string is treated as a secret here: a change to it is recorded, but the history never holds or shows its value.
 
@@ -168,7 +168,7 @@ The same history is available from the `Get-JIMConfigurationChangeHistory` [cmdl
 
 When changing a schedule from automation you can record a reason alongside the change, exactly as for Synchronisation Rules and Connected Systems: pass `-ChangeReason` on the Schedule write cmdlets (`New-`, `Set-`, `Remove-`, `Enable-`, `Disable-JIMSchedule` and the step cmdlets), or the optional `changeReason` field/query parameter on the REST write endpoints. The reason shows with the change and on its Activity.
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Setting up an automated nightly sync:**
 
@@ -189,13 +189,13 @@ When changing a schedule from automation you can record a reason alongside the c
 2. Do the maintenance work
 3. Re-enable the schedule; the next scheduled fire-time picks up automatically
 
-## Manage Schedules
+## :material-tune-variant: Manage Schedules
 
 - **JIM portal**<br /> Schedules area of the admin UI
 - **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) to configure a Schedule (`Get-JIMSchedule`, `New-JIMSchedule` and the rest), and [Schedule Execution cmdlets](../powershell/schedule-executions.md) to run one and follow its runs (`Start-JIMSchedule`, `Get-JIMScheduleExecution`, `Stop-JIMScheduleExecution`)
 - **REST API**<br /> Schedules and schedule execution endpoints in the [interactive API reference](../../api/reference/)
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Run Profiles](run-profiles.md): the operations executed by Run Profile steps
 - [Activities](activities.md): the Activity each step produces, and filtering Activities by Schedule

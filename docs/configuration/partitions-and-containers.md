@@ -25,7 +25,7 @@ Inside a partition, or directly inside the Connector Space of a connector that d
 
 In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the Connector Space for connectors that have no partitions).
 
-## How many objects each container holds
+## :material-chart-box-outline: How many objects each container holds
 
 Each container row shows how many objects it holds, so you can tell a container worth managing from an empty one before you tick anything.
 
@@ -41,7 +41,7 @@ Counts are gathered as part of **Retrieve Hierarchy**, so refreshing the hierarc
 !!! note "This reads your directory"
     Counting means retrieving the matching entries, because LDAP has no count operation. JIM asks for names only, which is far lighter than an import, and runs one search per partition rather than one per container. It is still a read against your production directory, so it happens when you retrieve the hierarchy and at no other time.
 
-## What your selections mean
+## :material-gesture-tap-hold: What your selections mean
 
 Selection is how you tell JIM which parts of a system it manages, and it binds everywhere:
 
@@ -49,7 +49,7 @@ Selection is how you tell JIM which parts of a system it manages, and it binds e
 - Exports are refused outside the selected containers, honouring each container's [Container Scope](../connectors/jim-ldap-connector-topology.md#container-scope). Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. A container set to One Level is not a licence to write anywhere beneath it, only directly within it, because that is exactly what the next import will return. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
 - Objects in a deselected partition or container fall out of import scope. A Full Import treats anything it does not find as deleted from the system, so narrowing scope makes the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls the attribute values they contributed. Widen scope again before running a Full Import if that is not what you intended.
 
-## Stating Container Scope as text (Advanced Mode)
+## :material-text-box-edit-outline: Stating Container Scope as text (Advanced Mode)
 
 The Scope tab offers two ways to edit the same Container Scope, switched with **Simple** and **Advanced**:
 
@@ -85,7 +85,7 @@ Nothing is applied by halves. Each of these is refused, naming the line at fault
 
 Automation has the same surface: [`Get-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md) in PowerShell, or `GET`/`PUT connected-systems/{id}/container-scope-text` in the [REST API](../../api/reference/).
 
-## Previewing a partition or container change
+## :material-eye-outline: Previewing a partition or container change
 
 Because narrowing scope is silently destructive, the Scope tab offers a **Preview Changes** button beside **Save Changes**. It answers what your edited selection would do, without saving it.
 
@@ -111,7 +111,7 @@ The same evaluation is available to automation: [`New-JIMConfigurationChangePrev
 
 See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
 
-## Renames and moves in the source system
+## :material-swap-horizontal: Renames and moves in the source system
 
 JIM identifies partitions and containers by the system's own immutable identifier where one exists (`objectGUID` on Active Directory, `entryUUID` on OpenLDAP), not by their Distinguished Name. Renaming an organisational unit, or moving one to a different parent, therefore keeps your selection intact: the next hierarchy refresh reports it as a rename or a move rather than as one container disappearing and another appearing.
 

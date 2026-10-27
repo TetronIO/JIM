@@ -11,7 +11,7 @@ To deploy JIM across RHEL servers with Ansible, use Red Hat's podman system role
 
 Read [Running JIM on Podman](podman.md) first: it explains the files, and the choice between rootful and rootless.
 
-## Before you begin
+## :material-clipboard-list-outline: Before you begin
 
 - **Ansible** with the RHEL System Roles (`dnf install rhel-system-roles`), or `ansible-galaxy collection install fedora.linux_system_roles`.
 - **JIM's Podman files** from the [release](https://github.com/TetronIO/JIM/releases) you are deploying, in the playbook's `files/` folder: `jim.yaml`, `jim-database.yaml` (for the bundled PostgreSQL), `jim.network`, and `jim-config.yaml` with your settings filled in (see the [Configuration Reference](configuration.md#podman)).
@@ -19,7 +19,7 @@ Read [Running JIM on Podman](podman.md) first: it explains the files, and the ch
 - **The secrets in Ansible Vault**: the database password, your identity provider's client secret, and the certificate's private key. For the bundled PostgreSQL, choose a strong database password: the database is created with it on first start.
 - **For an air-gapped server**, JIM's images loaded into root's Podman (rootless, the `jim` account's) before the play, from the release bundle's `docker-images` folder (see [Installing on Podman by Hand](podman-by-hand.md), step 3). The role otherwise downloads them.
 
-## The Playbook
+## :material-file-document-outline: The Playbook
 
 ```yaml
 - name: Deploy JIM on Podman
@@ -169,18 +169,18 @@ To run JIM rootless, as an account named `jim`, add the account to the play's `v
 
 For a port other than 443, change the port threshold too.
 
-## Run the play
+## :material-play-circle-outline: Run the play
 
 1. Put JIM's files and certificate in the playbook's `files/` folder, and the secrets in Ansible Vault, as [Before you begin](#before-you-begin) lists.
 2. Save the playbook above, with your servers in the inventory group `jim_servers`.
 3. Run it, giving the vault password: `ansible-playbook -i <inventory> <playbook>.yml --ask-vault-pass`.
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 1. Wait for JIM, which prepares its database on first start. It is ready when `sudo podman healthcheck run jim-web` succeeds on each server (rootless, see [Rootless commands](podman.md#rootless-commands)).
 2. Register JIM's redirect URIs at your identity provider, as the [Deployment Guide](deployment.md#after-installing) describes, then open JIM in a browser and sign in.
 
-## Next steps
+## :material-arrow-right-circle-outline: Next steps
 
 - **Distribute your certificate authority**, as the [Deployment Guide](deployment.md#after-installing) describes.
 - **Operate JIM** as on any Podman installation (see [Operating JIM](podman.md#operating-jim)).

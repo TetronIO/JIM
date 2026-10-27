@@ -11,7 +11,7 @@ Run Profile cmdlets manage and execute synchronisation Run Profiles on Connected
 
 ---
 
-## Get-JIMRunProfile
+## :material-play-circle-outline: Get-JIMRunProfile
 
 Retrieves one or more Run Profiles for a Connected System, identified either by Connected System ID or Connected System name, with an optional name filter.
 
@@ -75,7 +75,7 @@ Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMRunProfile
 
 ---
 
-## New-JIMRunProfile
+## :material-plus-circle-outline: New-JIMRunProfile
 
 Creates a new Run Profile on a Connected System.
 
@@ -172,7 +172,7 @@ New-JIMRunProfile -ConnectedSystemId 1 -Name "Delta Import" -RunType DeltaImport
 
 ---
 
-## Set-JIMRunProfile
+## :material-pencil-outline: Set-JIMRunProfile
 
 Modifies an existing Run Profile. Only the settings you give change.
 
@@ -278,7 +278,7 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -MaxDetectedDeletions $nu
 
 ---
 
-## Remove-JIMRunProfile
+## :material-trash-can-outline: Remove-JIMRunProfile
 
 Deletes a Run Profile.
 
@@ -345,7 +345,7 @@ Write-Host "Removed Run Profile: $($deleted.Name)"
 
 ---
 
-## Start-JIMRunProfile
+## :material-rocket-launch-outline: Start-JIMRunProfile
 
 Queues a Run Profile for execution on the JIM worker service. The operation is asynchronous by default; use `-Wait` to block until execution completes.
 
@@ -451,7 +451,7 @@ try {
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Run Profiles](../configuration/run-profiles.md): what Run Profiles are, run types, and how they fit alongside schedules and activities
 - [Activities](activities.md): cmdlets for monitoring and inspecting activity execution history

@@ -9,20 +9,20 @@ audience: administrator
 
 **Service settings** control runtime behaviour for JIM: instance identity, single sign-on, synchronisation options, recovering work from a crashed Worker, and history retention. Each setting has a key (in dot notation), a typed value, and a default.
 
-## Default vs override
+## :material-compare-horizontal: Default vs override
 
 Every setting has a built-in default. If you set a value through the admin UI or API, that value takes effect; otherwise the default applies. Two flags help you reason about state at a glance:
 
 - **Effective value**<br /> The value currently in force (override if set, otherwise default).
 - **Is overridden**<br /> Whether anyone has set an explicit value for this setting.
 
-## Read-only settings
+## :material-lock-outline: Read-only settings
 
 Some settings are mirrored from environment variables; typically the bootstrap settings such as the database connection and initial encryption configuration. These are returned by the admin surfaces for visibility but cannot be changed at runtime; updating them is rejected. Change the underlying environment variable and restart JIM instead.
 
 By design, JIM keeps the set of environment-variable-driven settings small and prefers service settings, so this read-only category is intentionally narrow.
 
-## Categories
+## :material-shape-outline: Categories
 
 Settings are grouped by concern:
 
@@ -39,25 +39,25 @@ The category is mostly a UI grouping; it does not change semantics.
 
 **Preview Features is a category apart.** JIM's feature flags are stored as Service Settings under the hood, and the portal's Service Settings table shows them as ordinary rows under this category, exactly like any other setting (a row's value, status and edit/revert actions work the same way; see [Preview features](../administration/preview-features.md) for what the tier chip beside a flag's name means). Everywhere else, a flag is treated apart from the generic settings surfaces: `api/v1/service-settings` and `Get-JIMServiceSetting`/`Set-JIMServiceSetting`/`Reset-JIMServiceSetting` all exclude and refuse Preview Features rows, because a flag changes only through the dedicated feature-flag surfaces (the portal table included), which enforce rules the generic surfaces do not know about, such as a flag's tier and who is allowed to turn it on. Reverting a flag to default (in the portal, or via `Disable-JIMFeature`) turns it explicitly off, rather than clearing it back to an unset state, since every flag's default is off.
 
-## Reverting
+## :material-undo-variant: Reverting
 
 Removing the override (resetting the value back to null so the effective value reverts to the default) is a separate operation from updating. It conveys intent (return to default) more clearly than an update with a null body would, and is also useful for backing out a configuration change without needing to remember the original default.
 
-## Confirming a change
+## :material-content-save-check-outline: Confirming a change
 
 Nearly every Service Setting is operational and saves in silence. The few that steer synchronisation are confirmed first, listing what is changing and reminding you that a Full Synchronisation is what puts it into effect. See [Configuration changes](configuration-changes.md).
 
-## Change history
+## :material-history: Change history
 
 Every update and revert records a versioned entry in the setting's [Configuration Change History](activities.md#configuration-change-history): who changed it, when, the value before and after, and whether the setting is overridden or back on its default. Open a setting's history from the history button on its row in the Service Settings area, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id '<setting key>'` or the REST API.
 
 When you save or revert a setting in the admin portal, an optional "Reason for change" prompt lets you record why (a change ticket number, for example); automation can pass the same reason via `-ChangeReason` or the REST request. Encrypted setting values are never stored in the history: a changed secret is shown as changed, never by value.
 
-## Value types
+## :material-format-list-text: Value types
 
 Settings are typed: string, boolean, integer, or timespan. The type is enforced on update.
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Looking up a setting:**
 
@@ -73,12 +73,12 @@ Settings are typed: string, boolean, integer, or timespan. The type is enforced 
 
 1. Revert the setting; the override clears, and the effective value returns to the default
 
-## Manage Service Settings
+## :material-tune-variant: Manage Service Settings
 
 - **JIM portal**<br /> Service Settings area of the admin UI
 - **PowerShell**<br /> [Service Settings cmdlets](../powershell/service-settings.md) (`Get-JIMServiceSetting`, `Set-JIMServiceSetting`, etc.)
 - **REST API**<br /> Service Settings endpoints in the [interactive API reference](../../api/reference/)
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Administration: Configuration Reference](../administration/configuration.md#service-settings): every Service Setting, what it does and its default

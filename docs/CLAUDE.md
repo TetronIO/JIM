@@ -112,6 +112,15 @@ The script wraps each diagram in a `<button class="jim-dgz-trigger">` so it is k
 
 **Verifying changes:** Material loads Mermaid from `unpkg.com`, so Mermaid diagrams silently never render in an offline sandbox (the `<pre class="mermaid">` is consumed and nothing replaces it). To test that path, download the bundle once and intercept the CDN request in Playwright; otherwise you are only testing the concept-SVG half.
 
+## Reader layout controls
+
+`docs/assets/javascripts/docs-layout.js` adds two controls readers can use on every page; styling lives in the "Reader layout controls" section of `custom.css`. No external dependencies.
+
+- **Width toggle.** A header button beside the light/dark toggle switches between the reading width and the full window width. At full width, tables, code and diagrams take the room while paragraphs, lists and notes keep a 36rem reading measure. The choice is kept in `localStorage` (`jim-docs-width`), and an inline script in `docs/overrides/main.html` (`extrahead`) applies it before the page draws. Below 76.25em Material's layout is already full width, so the button is hidden.
+- **Resizable table columns.** Every header cell but the last gets a handle on its right edge. It can be dragged, moved with the arrow keys (Shift for bigger steps), or double-clicked to reset the table. A resize moves width between the two columns either side of the handle, so the table keeps its width and never starts to scroll; neither column goes below 64px. The first resize fixes the table at its drawn width and each column at its share of the space inside the border, then switches to a fixed layout. That needs two overrides on resized tables in `custom.css`: `display: table`, because Material draws content tables as `inline-block` on screen and `table-layout` only applies to a table box, and `min-width: 0` on header cells, because the browser would otherwise draw a column at Material's 5rem minimum whatever it was set to and take the difference from its neighbour. Widths are not remembered. **Never put a class on a content table**: Material styles tables as `table:not([class])`, and even an emptied `class` attribute opts one out of every rule. The drag state is a data attribute for that reason.
+
+`scripts/Test-DocsLayout.ps1` drives both in a real browser against `custom.css` and the script, and runs in `changelog-lint` whenever either changes, alongside the diagram checks. Run it after changing either, and after a Material upgrade.
+
 ## GLightbox (image files)
 
 GLightbox is configured as a plugin in `mkdocs.yml` and wraps all `<img>` tags automatically. No per-image markup is needed. It handles raster images and any `<img>`-referenced SVG; vector diagrams inlined in the page are handled by `diagram-zoom.js` instead.

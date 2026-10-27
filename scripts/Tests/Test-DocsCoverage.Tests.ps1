@@ -244,6 +244,20 @@ Describe 'Test-DocsCoverage: LNK-3 links from the product into the docs' {
     }
 }
 
+Describe 'Test-DocsCoverage: headings that open with an icon (STY-3)' {
+    It 'reads a heading''s anchor and cmdlet name without its icon, as MkDocs does' {
+        $page = Get-Page 'Things' "## :material-console: Get-JIMThing`n`nGets a thing.`n`n## :material-tune-variant: Set-JIMThing`n`nSets.`n`n## :material-delete-outline: Remove-JIMThing`n`nRemoves.`n"
+        $files = @{
+            'docs/powershell/things.md' = $page
+            'src/JIM.PowerShell/JIM.psd1' = "@{`n    FunctionsToExport = @(`n        'Get-JIMThing',`n        'Set-JIMThing',`n        'Remove-JIMThing'`n    )`n}`n"
+            'src/JIM.Web/Hint.cs' = "var a = `"https://docs.junctional.io/powershell/things/#get-jimthing`";`n"
+        }
+        $r = Invoke-Coverage -Root (New-Repository -Files $files)
+        $r.Output | Should -Not -Match 'LNK-3|COV-1'
+        $r.ExitCode | Should -Be 0
+    }
+}
+
 Describe 'Test-DocsCoverage: LNK-3 links followed by a shell variable' {
     It 'checks a link with a colour reset straight after it, rather than skipping it as templated' {
         $files = @{ 'deploy/setup.sh' = "#!/usr/bin/env bash`n#     JIM_SETUP_AUTO_START  - start`nset -euo pipefail`nDOCS_BASE=`"https://docs.junctional.io`"`necho `"`${DOCS_BASE}/administration/missing/`${RESET}`"`n" }

@@ -9,7 +9,7 @@ audience: automation-author
 
 JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the Metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
 
-## Where to find what
+## :material-map-search-outline: Where to find what
 
 | Looking for | Go to |
 |-------------|-------|
@@ -21,7 +21,7 @@ JIM exposes a REST API for programmatic access to all identity management operat
 
 The interactive API reference is the canonical, up-to-date specification of every endpoint. The pages in this section cover the cross-cutting concerns of using the API itself; the per-object behaviour (what a Connected System is, how a Schedule works) lives in the Configuration section.
 
-## Resource groups
+## :material-folder-multiple-outline: Resource groups
 
 The interactive API reference groups its endpoints by resource. Each group, and the page that explains what it manages:
 
@@ -53,11 +53,11 @@ The interactive API reference groups its endpoints by resource. Each group, and 
 | UserInfo | The signed-in user (`/api/v1/userinfo`) |
 | WorkerTasks | The worker's task queue, and cancelling a task (`/api/v1/worker-tasks`) |
 
-## Versioning
+## :material-tag-multiple-outline: Versioning
 
 The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. A new major version gets its own prefix (`/api/v2/` and so on), and the version before it stays available through a deprecation period.
 
-## Breaking changes
+## :material-alert-decagram-outline: Breaking changes
 
 JIM is pre-v1.0, so breaking changes to the API can still occur between releases. Changes that affect existing integrations are called out here.
 
@@ -82,7 +82,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 - **`ActivityTargetType` serialised name change.** The `ActivityTargetType` enum member for a Synchronisation Rule is serialised as `"SynchronisationRule"` (`"SyncRule"` in v0.12.0 and earlier) in REST API responses and the OpenAPI schema. Its numeric value is unchanged (`4`). Consumers that string-match an Activity's target type against `"SyncRule"` must update to `"SynchronisationRule"`; consumers that compare the numeric value need no change. This is a pre-v1.0 breaking change.
 
-## Authentication
+## :material-shield-key-outline: Authentication
 
 All endpoints require authentication except a small number of system endpoints (health probes, version, auth config). Most endpoints additionally require the **Administrator** role. JIM supports two methods, both detailed in [Authentication](authentication.md):
 
@@ -91,7 +91,7 @@ All endpoints require authentication except a small number of system endpoints (
 
 Both are sent the same way, as a bearer token: `Authorization: Bearer <credential>`.
 
-## Conventions
+## :material-format-list-checks: Conventions
 
 These behaviours are common across the API. The interactive API reference is authoritative for any specific endpoint; the summary here is for orientation.
 
@@ -107,7 +107,7 @@ These behaviours are common across the API. The interactive API reference is aut
 
 **Rate limiting.** Requests are throttled per client (see [Rate Limiting](rate-limiting.md)); an exceeded limit returns `429 Too Many Requests` with a `Retry-After` header.
 
-## System endpoints
+## :material-server-outline: System endpoints
 
 A small set of system-level endpoints (health, readiness, liveness, version, auth config, user info) are useful for orchestrators, load balancers, and client bootstraps rather than identity management workflows. They are documented in the interactive API reference alongside everything else.
 

@@ -188,8 +188,8 @@ Every password feature (policy discovery, Initial Password, park then release, P
 - [ ] `docs/connectors/jim-ldap-connector.md` states what was verified and against which Windows Server version
 - [ ] `engineering/COMPLIANCE_MAPPING.md` and `engineering/RELEASE_PROCESS.md` describe the gate
 - [ ] `JIM_AD_LAB_GATE_ENFORCED` is set to `true` after the first green run, and the compliance and release docs no longer describe the gate as pending
-- [ ] The AD FS sign-in checks pass in a nightly, and a failure in any one turns `jim-ad-lab-adfs` red without touching `jim-ad-lab`
-- [ ] `JIM_AD_LAB_ADFS_GATE_ENFORCED` is set to `true` after the checks' first green run
+- [x] The AD FS sign-in checks pass in a nightly, and a failure in any one turns `jim-ad-lab-adfs` red without touching `jim-ad-lab`
+- [x] `JIM_AD_LAB_ADFS_GATE_ENFORCED` is set to `true` after the checks' first green run
 
 ## Additional Context
 

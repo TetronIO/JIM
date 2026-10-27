@@ -11,7 +11,7 @@ The auxiliary class cmdlets choose which auxiliary object classes an LDAP Connec
 
 ---
 
-## Get-JIMConnectedSystemAuxiliaryClass
+## :material-shape-outline: Get-JIMConnectedSystemAuxiliaryClass
 
 Lists the auxiliary classes that can be merged into a Connected System Object Type, and which of them are merged already.
 
@@ -75,7 +75,7 @@ Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -Merge
 
 ---
 
-## Set-JIMConnectedSystemAuxiliaryClass
+## :material-pencil-outline: Set-JIMConnectedSystemAuxiliaryClass
 
 Sets which auxiliary classes a Connected System Object Type carries.
 
@@ -145,7 +145,7 @@ Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -Clear
 
 ---
 
-## Set-JIMConnectedSystemStructuralCarrierClass
+## :material-link-variant: Set-JIMConnectedSystemStructuralCarrierClass
 
 Sets the Structural Carrier Class of an auxiliary Connected System Object Type: the structural class JIM writes alongside the auxiliary one when creating an entry.
 
@@ -198,7 +198,7 @@ Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 |
 
 ---
 
-## Start-JIMConnectedSystemAuxiliaryClassDiscovery
+## :material-play-circle-outline: Start-JIMConnectedSystemAuxiliaryClassDiscovery
 
 Starts a run that reads a Connected System's entries to find which auxiliary classes they carry.
 
@@ -253,7 +253,7 @@ Get-JIMActivity -Id $run.ActivityId
 
 ---
 
-## Get-JIMConnectedSystemAuxiliaryClassDiscovery
+## :material-text-search: Get-JIMConnectedSystemAuxiliaryClassDiscovery
 
 Gets the last auxiliary class discovery run for a Connected System, whatever its outcome. Returns nothing when none has been started.
 
@@ -307,7 +307,7 @@ Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [LDAP Connector: Auxiliary Object Classes](../connectors/jim-ldap-connector-auxiliary-classes.md): what merging an auxiliary class does on a directory, and how JIM composes each entry's class membership on export
 - [Connected System Schema](connected-system-schema.md): import the schema the auxiliary classes come from

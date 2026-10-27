@@ -214,7 +214,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     public async Task ServiceHealthBanner_OnTheOperationsPage_RendersNothingEvenWhenUnhealthy()
     {
         Arrange(Heartbeat(JimService.WorkerSync, 4 * 60), Heartbeat(JimService.Scheduler, 2));
-        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/operations?t=queue");
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/operations?t=activity");
 
         var cut = await RenderAndReadAsync();
 

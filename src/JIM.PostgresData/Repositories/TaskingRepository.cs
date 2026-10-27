@@ -106,15 +106,30 @@ public class TaskingRepository : ITaskingRepository
             .ToListAsync();
 
         var stepsByActivity = await GetStepsForActivitiesAsync(workerTasks);
+        var runProfiles = await GetRunProfilePartsAsync(workerTasks);
 
         foreach (var workerTask in workerTasks)
         {
+            var runProfileId = (workerTask as SynchronisationWorkerTask)?.ConnectedSystemRunProfileId;
+            var runProfile = runProfileId.HasValue ? runProfiles.GetValueOrDefault(runProfileId.Value) : null;
+
             workerTaskHeaders.Add(new WorkerTaskHeader
             {
                 Id = workerTask.Id,
                 Status = workerTask.Status,
                 Timestamp = workerTask.Timestamp,
-                Name = await GetWorkerHeaderNameAsync(workerTask),
+                Name = runProfile != null
+                    ? $"{runProfile.ConnectedSystemName} - {runProfile.Name}"
+                    : await GetWorkerHeaderNameAsync(workerTask),
+                ExecutionMode = workerTask.ExecutionMode,
+                // Executed is stamped by the worker as it starts a task; until then it only says when the Activity
+                // was created.
+                Started = workerTask.Status is WorkerTaskStatus.Processing or WorkerTaskStatus.CancellationRequested
+                    ? workerTask.Activity?.Executed
+                    : null,
+                ConnectedSystemRunProfileId = runProfileId,
+                ConnectedSystemName = runProfile?.ConnectedSystemName,
+                RunProfileName = runProfile?.Name,
                 Type = GetWorkerTaskType(workerTask),
                 InitiatedByType = workerTask.InitiatedByType,
                 InitiatedById = workerTask.InitiatedById,
@@ -133,6 +148,32 @@ public class TaskingRepository : ITaskingRepository
         }
         return workerTaskHeaders;
     }
+
+    /// <summary>
+    /// The Run Profile and Connected System names for every Run Profile the queue executes, keyed by Run Profile, in
+    /// one read rather than one per row (#2549). A Run Profile deleted since its task was queued is simply absent.
+    /// </summary>
+    private async Task<Dictionary<int, RunProfileParts>> GetRunProfilePartsAsync(List<WorkerTask> workerTasks)
+    {
+        var runProfileIds = workerTasks
+            .OfType<SynchronisationWorkerTask>()
+            .Select(t => t.ConnectedSystemRunProfileId)
+            .Distinct()
+            .ToList();
+
+        if (runProfileIds.Count == 0)
+            return [];
+
+        var db = Repository.Database;
+        var parts = await db.ConnectedSystemRunProfiles
+            .Where(rp => runProfileIds.Contains(rp.Id))
+            .Select(rp => new RunProfileParts(rp.Id, rp.Name, db.ConnectedSystems.Single(cs => cs.Id == rp.ConnectedSystemId).Name))
+            .ToListAsync();
+
+        return parts.ToDictionary(p => p.Id);
+    }
+
+    private sealed record RunProfileParts(int Id, string Name, string ConnectedSystemName);
 
     /// <summary>
     /// The run steps (#454) for every task in the queue that has any, keyed by Activity.
@@ -186,27 +227,35 @@ public class TaskingRepository : ITaskingRepository
             .FirstOrDefaultAsync();
     }
 
+    /// <summary>
+    /// Takes the next batch of queued Worker Tasks and marks them Processing. The tasks in a batch run at the same
+    /// time, so a batch is the first task in queue order on its own, or, where that task belongs to a parallel
+    /// Schedule step, every queued task of that same step. Nothing else may join: a task queued behind the step (a
+    /// hand-queued run, another Schedule's step) waits for the next batch, or it would run alongside the step and
+    /// could work on the same Connected System at the same moment.
+    /// </summary>
+    /// <remarks>
+    /// The portal's queue describes batches by the same rule (<c>QueueRunSlot</c> in JIM.Web), so its "Next" and its
+    /// estimated start times describe what this does. Change both together.
+    /// </remarks>
     public async Task<List<WorkerTask>> GetNextWorkerTasksToProcessAsync()
     {
-        var tasks = new List<WorkerTask>();
-        foreach (var task in await Repository.Database.WorkerTasks
-                     .Include(st => st.Activity)
-                     .Where(st => st.Status == WorkerTaskStatus.Queued)
-                     .OrderBy(st => st.ScheduleStepIndex ?? int.MaxValue)
-                     .ThenBy(st => st.Timestamp)
-                     .ToListAsync())
-        {
-            if (task.ExecutionMode == WorkerTaskExecutionMode.Sequential)
-            {
-                tasks.Add(task);
-                break;
-            }
+        var queued = await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .Where(st => st.Status == WorkerTaskStatus.Queued)
+            .OrderBy(st => st.ScheduleStepIndex ?? int.MaxValue)
+            .ThenBy(st => st.Timestamp)
+            .ToListAsync();
 
-            if (task.ExecutionMode == WorkerTaskExecutionMode.Parallel)
-                tasks.Add(task);
-            else
-                break;
-        }
+        var first = queued.FirstOrDefault();
+        if (first == null)
+            return [];
+
+        var tasks = first is { ExecutionMode: WorkerTaskExecutionMode.Parallel, ScheduleExecutionId: { } scheduleExecutionId }
+            ? queued.Where(t => t.ExecutionMode == WorkerTaskExecutionMode.Parallel
+                                && t.ScheduleExecutionId == scheduleExecutionId
+                                && t.ScheduleStepIndex == first.ScheduleStepIndex).ToList()
+            : [first];
 
         await UpdateWorkerTasksAsProcessingAsync(tasks);
         return tasks;

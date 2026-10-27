@@ -12,7 +12,7 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 
 **Capabilities:** Full Import, Delta Import, Export, Probe
 
-## Supported Directories
+## :material-server-outline: Supported Directories
 
 | Directory | Notes |
 |-----------|-------|
@@ -25,7 +25,7 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 
 JIM automatically detects the directory type during schema discovery by inspecting the Root DSE and adjusts its behaviour accordingly. No manual directory type configuration is required.
 
-## Features
+## :material-star-four-points-outline: Features
 
 ### Import
 
@@ -105,7 +105,7 @@ These are read from data JIM already captured during a previous connection; view
 
 Available to automation via `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
-## Connection Settings
+## :material-lan-connect: Connection Settings
 
 ### Connectivity
 
@@ -179,11 +179,11 @@ A naming context or crossRef partition the service account cannot read (a least-
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 [Troubleshooting the LDAP Connector](jim-ldap-connector-troubleshooting.md) covers connection, sign-in, import, Delta Import and export failures, each by the message it shows.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [LDAP Connector Delta Import](jim-ldap-connector-delta-import.md): how each directory type reports its changes, and the checks a Delta Import makes first.
 - [LDAP Connector Values Already in Use](jim-ldap-connector-values-in-use.md): values already in place, and probing for values already in use.

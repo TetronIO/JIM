@@ -11,7 +11,7 @@ Log cmdlets provide read-only access to JIM's structured service logs (Web, Work
 
 ---
 
-## Get-JIMLogEntry
+## :material-text-box-search-outline: Get-JIMLogEntry
 
 Gets log entries, with optional filtering. Also exposes the available log level and service names, so you can discover valid `-Level`/`-Service` values.
 
@@ -77,7 +77,7 @@ Get-JIMLogEntry -ListLevels
 
 ---
 
-## Get-JIMLogFile
+## :material-file-document-multiple-outline: Get-JIMLogFile
 
 Lists the log files JIM currently has on disk, across all services.
 
@@ -117,7 +117,7 @@ Get-JIMLogFile | Where-Object Service -eq 'worker'
 
 ---
 
-## Watch-JIMLog
+## :material-monitor-eye: Watch-JIMLog
 
 Streams log entries to the console as they arrive, colour-coded by level (red for `Error`/`Fatal`, yellow for `Warning`, dark grey for `Debug`/`Verbose`). Polls the Logs API on an interval, displaying only entries newer than the last one seen, and runs until interrupted with ++ctrl+c++. Transient API failures are reported as warnings and polling continues.
 
@@ -161,6 +161,6 @@ Watch-JIMLog -IntervalSeconds 5
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](activities.md): the audit trail for synchronisation operations, complementary to raw service logs

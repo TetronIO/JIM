@@ -11,7 +11,7 @@ The Metaverse Attribute cmdlets manage the attributes a Metaverse Object can hol
 
 ---
 
-## Get-JIMMetaverseAttribute
+## :material-tag-outline: Get-JIMMetaverseAttribute
 
 Gets Metaverse Attributes: one page of them by default, or one by ID or name.
 
@@ -85,7 +85,7 @@ Get-JIMMetaverseAttribute -Page 1 -PageSize 50
 
 ---
 
-## New-JIMMetaverseAttribute
+## :material-tag-plus-outline: New-JIMMetaverseAttribute
 
 Creates a custom Metaverse Attribute, optionally bound to Metaverse Object Types.
 
@@ -131,7 +131,7 @@ New-JIMMetaverseAttribute -Name "Department" -Type Text -ObjectTypeIds @($userTy
 
 ---
 
-## Set-JIMMetaverseAttribute
+## :material-tag-edit-outline: Set-JIMMetaverseAttribute
 
 Changes a custom Metaverse Attribute: its name, rendering hint, Standard Mappings, data type or plurality. A built-in attribute cannot be changed.
 
@@ -196,7 +196,7 @@ Set-JIMMetaverseAttribute -Id 42 -StandardMappings @(
 
 ---
 
-## Remove-JIMMetaverseAttribute
+## :material-tag-remove-outline: Remove-JIMMetaverseAttribute
 
 Deletes a custom Metaverse Attribute. A built-in attribute cannot be deleted.
 
@@ -245,7 +245,7 @@ Get-JIMMetaverseAttribute -Name "legacyCode" | Remove-JIMMetaverseAttribute -For
 
 ---
 
-## Test-JIMMetaverseAttributeName
+## :material-text-box-check-outline: Test-JIMMetaverseAttributeName
 
 Checks whether a name is free for a Metaverse Attribute. The check ignores case, so CostCentre is taken if costCentre exists.
 
@@ -284,7 +284,7 @@ Test-JIMMetaverseAttributeName -Name "costCentre" -ExcludeId 42
 
 ---
 
-## Get-JIMMetaverseAttributeDeletionPreview
+## :material-delete-sweep-outline: Get-JIMMetaverseAttributeDeletionPreview
 
 Shows what deleting a custom Metaverse Attribute would do, without deleting it: whether stored values block it, which Object Types hold them, and the configuration that would be removed with it. [`Remove-JIMMetaverseAttribute`](#remove-jimmetaverseattribute) makes the same assessment before it deletes.
 
@@ -333,7 +333,7 @@ Get-JIMMetaverseAttribute -Name "costCentre" | Get-JIMMetaverseAttributeDeletion
 
 ---
 
-## Add-JIMMetaverseObjectTypeAttribute
+## :material-link-plus: Add-JIMMetaverseObjectTypeAttribute
 
 Binds a custom Metaverse Attribute to a Metaverse Object Type, so that type's Metaverse Objects can hold it. Binding an attribute that is already bound does nothing. A built-in attribute's bindings cannot be changed.
 
@@ -372,7 +372,7 @@ Get-JIMMetaverseAttribute -Name "costCentre" | Add-JIMMetaverseObjectTypeAttribu
 
 ---
 
-## Remove-JIMMetaverseObjectTypeAttribute
+## :material-link-off: Remove-JIMMetaverseObjectTypeAttribute
 
 Unbinds a custom Metaverse Attribute from a Metaverse Object Type. A built-in attribute cannot be unbound.
 
@@ -413,7 +413,7 @@ Remove-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 1 -Force
 
 ---
 
-## Get-JIMMetaverseAttributePriority
+## :material-sort-variant: Get-JIMMetaverseAttributePriority
 
 Gets a Metaverse Attribute's priority order on one Metaverse Object Type: the Attribute Flows that contribute its value, highest priority first. How the order decides which value wins, and what **Null is a value** changes, are explained in [Attribute Priority](../concepts/attribute-priority.md). An Attribute Flow whose Synchronisation Rule is disabled keeps its place but never contributes.
 
@@ -455,7 +455,7 @@ Get-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1
 
 ---
 
-## Set-JIMMetaverseAttributePriority
+## :material-order-numeric-ascending: Set-JIMMetaverseAttributePriority
 
 Replaces a Metaverse Attribute's whole priority order on one Metaverse Object Type. List every contributing Attribute Flow once, highest priority first; an Attribute Flow whose Synchronisation Rule is still being deleted may be left out, and stays at the bottom. JIM refuses an order that misses a contributor or names a mapping that is not one, and says which. To move a single Attribute Flow, use [`Move-JIMMetaverseAttributePriority`](#move-jimmetaverseattributepriority).
 
@@ -495,7 +495,7 @@ Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45,
 
 ---
 
-## Move-JIMMetaverseAttributePriority
+## :material-arrow-up-down: Move-JIMMetaverseAttributePriority
 
 Moves one Attribute Flow to a new position in a Metaverse Attribute's priority order, renumbering the others so the order stays without gaps.
 
@@ -532,7 +532,7 @@ Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Metaverse Object Types](metaverse-object-types.md): the Object Types an attribute is bound to
 - [Metaverse](../configuration/metaverse.md): built-in and custom attributes, Standard Mappings, and deleting attributes

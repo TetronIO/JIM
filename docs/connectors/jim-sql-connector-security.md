@@ -9,7 +9,7 @@ audience: administrator
 
 What the [SQL Connector](jim-sql-connector.md)'s database account needs, how its connection is encrypted, and what an administrator who configures it is trusted with.
 
-## Database account permissions
+## :material-account-lock-outline: Database account permissions
 
 Create a dedicated database account for JIM and grant it only what the Run Profiles you configure will use:
 
@@ -42,7 +42,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON HR.EMPLOYEE_PHONES TO jim_sync;
 
 On Oracle, grant per object rather than `SELECT ANY TABLE`. The account then sees exactly what JIM should, and a schema import that reports a table "cannot be seen" means a grant is missing, not that something is wrong with JIM.
 
-## Encryption in transit
+## :material-lock-outline: Encryption in transit
 
 - **SQL Server** connections are encrypted by default and fail rather than fall back to plain text. The server's certificate is always validated; JIM never accepts an unvalidated certificate.
 - **Oracle** connections use Native Network Encryption by default (AES, with SHA-2 integrity checking), or TLS over a TCPS listener if you choose it. Choose **None** only in a lab.
@@ -58,15 +58,15 @@ An expired certificate, or one issued for a different name from the host you con
 
 For Oracle over TCPS, JIM shows the same detail, but the certificate must be one your operating system already trusts; the Oracle driver does not accept additional trust anchors. Native Network Encryption needs no certificate at all, which is one reason it is the default.
 
-## Credentials and logging
+## :material-shield-lock-outline: Credentials and logging
 
 The password is stored encrypted and is used only to open the connection. It does not appear in any log, Activity or configuration history, and the database driver's error messages never include it.
 
-## What you are trusting
+## :material-scale-balance: What you are trusting
 
 The Object Types document, including any `select` statement, is administrator configuration: it decides which tables JIM reads and writes, just as a Synchronisation Rule decides what flows where. Everything JIM sends to the database as data is sent as a parameter, never pasted into a statement, and every table and column name is validated and quoted.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [JIM SQL Connector](jim-sql-connector.md): the Transport Security and Credentials settings.
 - [Troubleshooting the SQL Connector](jim-sql-connector-troubleshooting.md)

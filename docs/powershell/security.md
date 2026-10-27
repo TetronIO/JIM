@@ -9,7 +9,7 @@ audience: automation-author
 
 Cmdlets for managing security roles and role membership in JIM. Roles define permissions that can be assigned to users or API keys.
 
-## Get-JIMRole
+## :material-account-lock-outline: Get-JIMRole
 
 Retrieves security role definitions from JIM.
 
@@ -77,7 +77,7 @@ New-JIMApiKey -Name "Admin Key" -RoleIds @($adminRole.Id) -PassThru
 
 ---
 
-## Get-JIMRoleMember
+## :material-account-multiple-outline: Get-JIMRoleMember
 
 Retrieves Metaverse Objects assigned to a security role.
 
@@ -133,7 +133,7 @@ Get-JIMRole | ForEach-Object {
 
 ---
 
-## Get-JIMMetaverseObjectRole
+## :material-account-key-outline: Get-JIMMetaverseObjectRole
 
 Lists the security roles a Metaverse Object is a member of.
 
@@ -183,7 +183,7 @@ Get-JIMRole -Name "Administrator" |
 
 ---
 
-## Add-JIMRoleMember
+## :material-account-plus-outline: Add-JIMRoleMember
 
 Adds a Metaverse Object to a security role.
 
@@ -233,7 +233,7 @@ Add-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -ChangeReason "Onb
 
 ---
 
-## Remove-JIMRoleMember
+## :material-account-remove-outline: Remove-JIMRoleMember
 
 Removes a Metaverse Object from a security role.
 
@@ -293,7 +293,7 @@ Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -Force -ChangeR
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Roles](../configuration/roles.md): role definitions, static membership, administrator-lockout safety, and Configuration Change History
 - [API Keys](api-keys.md)

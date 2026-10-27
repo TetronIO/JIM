@@ -15,7 +15,7 @@ The JIM SCIM 2.0 Service Provider Connector lets an identity provider push Users
 !!! note "Direction matters"
     This Connector is for systems that **push** to JIM. To have JIM read from and write to a system that publishes a SCIM interface of its own, use the [JIM SCIM 2.0 Client Connector](jim-scim-connector.md).
 
-## From request to Metaverse
+## :material-transit-connection-variant: From request to Metaverse
 
 Every request an identity provider sends is answered straight away, from a store JIM keeps for that Connected System: a create, change or delete is checked against the Connected System's SCIM schemas, kept, and acknowledged in the same request. Nothing the identity provider sends touches the Connector Space or the Metaverse directly.
 
@@ -27,7 +27,7 @@ The Connector imports from that store through ordinary Full Import and Delta Imp
 
 Because the store holds everything the identity provider sent, the Connector Space can be rebuilt from it at any time without the identity provider sending anything again.
 
-## Scenarios
+## :material-file-document-outline: Scenarios
 
 ### Reach systems an identity provider cannot
 
@@ -53,7 +53,7 @@ Each identity provider holds its own key, so one can be revoked without touching
 
 A JIM using the [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) can push to another JIM's SCIM endpoint like any other identity provider: between organisations that each run JIM, or across a network boundary that only one of them can cross. The sending JIM also reads back what it sent, and cannot overwrite a change the receiving side made in the meantime ([From another JIM](jim-scim-service-provider-connector-identity-providers.md#from-another-jim)).
 
-## Features
+## :material-star-four-points-outline: Features
 
 | Capability | Supported | Notes |
 |---|---|---|
@@ -73,7 +73,7 @@ The External ID is always `id`, which JIM assigns when the identity provider cre
 
 The store keeps everything the identity provider sends that the schemas declare, whichever attributes you select. Selecting another attribute later and running a Full Import fills it in for every User and Group, without the identity provider sending them again.
 
-## What the endpoint accepts
+## :material-check-all: What the endpoint accepts
 
 The endpoint's base URL is `https://<your JIM host>/scim/v2/<Connected System ID>`. The SCIM tab of the Connected System shows it with a **Copy** button.
 
@@ -101,7 +101,7 @@ Identity providers do not all follow the specification to the letter, so the end
 
 An attribute the schemas do not declare is ignored rather than refused, so a mapping an administrator has added at the identity provider cannot fail every create. Ignored is never silent: the history of each request names the attributes it ignored (see [See what an identity provider sent](#see-what-an-identity-provider-sent)).
 
-## What happens to each change
+## :material-history: What happens to each change
 
 | The identity provider | The store | JIM, after the next Delta Import and Delta Synchronisation |
 |---|---|---|
@@ -116,7 +116,7 @@ A change that changes nothing (the same values sent again, members in another or
 
 To keep a Metaverse Object when an identity provider deletes a User and creates it again, give its object type a [grace period](../configuration/metaverse.md#grace-period).
 
-## Create a Connected System for an identity provider
+## :material-server-network-outline: Create a Connected System for an identity provider
 
 Create one Connected System for each identity provider, and for each tenant of one. Each has its own base URL, keys, uniqueness of `userName` and Connector Space, so two identity providers can never overwrite each other. The same person arriving from both becomes two Users that join one Metaverse Object through an Object Matching Rule, as an HR source and a directory do.
 
@@ -138,13 +138,13 @@ New-JIMScimKey -ConnectedSystemId $system.Id -Name "Entra provisioning 2026"
 !!! warning "A different tenant needs a different Connected System"
     Never point an existing Connected System at another identity provider or tenant. JIM cannot rebuild what the first one sent, so until the new one has sent everything, the first one's Users and Groups look deleted. Create a new Connected System instead, and delete the old one once nothing depends on it.
 
-## Schedule the import
+## :material-calendar-clock-outline: Schedule the import
 
 Add the Connected System's **Delta Import** and **Delta Synchronisation** to a [Schedule](../configuration/schedules.md), as Sequential steps in that order, followed by the exports of the Connected Systems they feed. An interval of a few minutes keeps the delay between an identity provider's change and the Metaverse to about that interval; the import of an unchanged store reads nothing and finishes in moments.
 
 A Delta Import reads every deletion since the last import, so a regular Schedule needs no Full Import. In the rare case that a Delta Import cannot be sure it would see every deletion, it fails and asks for a Full Import, rather than leaving deleted Users behind; run the Full Import, then let the Schedule carry on.
 
-## Rotate a key
+## :material-key-outline: Rotate a key
 
 A key works only on the SCIM endpoint of its own Connected System, carries no Roles, and always expires, at most two years after it is created. A Connected System can have two usable keys, so a key can be replaced without a gap:
 
@@ -154,19 +154,19 @@ A key works only on the SCIM endpoint of its own Connected System, carries no Ro
 
 A disabled key can be enabled again; a deleted one cannot. The same steps from PowerShell are on [SCIM Service Provider](../powershell/scim-service-provider.md#set-jimscimkey).
 
-## See what an identity provider sent
+## :material-eye-outline: See what an identity provider sent
 
 - **SCIM requests, as Activities**<br /> Each key's requests are summarised in one Activity per 15 minutes: how many Users and Groups it created, updated and deleted, and how many requests JIM refused, with the latest refusal named in the Activity's warning. Filter the Activity list by **SCIM Requests**, or run `Get-JIMActivity -Operation Receive`. Reads are not counted, and neither are requests refused for their key, which are [security audit events](../administration/security-audit-events.md).
 - **The store**<br /> The **Store** panel on the SCIM tab counts the Users and Groups held, the changes awaiting import, the deletions held, the requests refused in the last 24 hours, and the last write. `Get-JIMScimStoreSummary` returns the same.
 - **The requests behind a change**<br /> On a Connected System Object's change history, the details of an imported change list the SCIM requests that made it: when, what each changed or ignored, which key sent it and from where. `Get-JIMScimJournal -ChangeId` returns the same, and `Get-JIMScimJournal -ResourceId` returns every request for one User or Group. This history is kept for the [History Retention Period](../administration/configuration.md#service-settings).
 
-## Rebuild the Connector Space from the store
+## :material-database-refresh-outline: Rebuild the Connector Space from the store
 
 [Clearing the Connector Space](../configuration/connector-space.md#clearing-the-connector-space) of this Connected System leaves the store untouched: every User and Group the identity provider sent is still there. Run a **Full Import** and a **Full Synchronisation** afterwards, and the Connector Space is rebuilt from the store without the identity provider sending anything. Run the Full Import before the next Delta Import, which reads only changes and would not bring back what was cleared.
 
 Deleting the Connected System, by contrast, deletes its store and its keys with it. Nothing the identity provider sent can be recovered, and the identity provider's requests are refused from that moment.
 
-## Settings
+## :material-tune-variant: Settings
 
 The Connector has no settings of its own. The rules that govern its endpoint:
 
@@ -178,7 +178,7 @@ The Connector has no settings of its own. The rules that govern its endpoint:
 | Page size | 100 unless the client asks; at most 1,000 | Fixed |
 | Deletions held after an import has read them | 7 days | Fixed |
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 **The identity provider gets `401` with "A valid API key for this SCIM endpoint is required."**
 : The key is wrong, disabled, expired, deleted, or belongs to another Connected System; JIM gives the same answer for each, so the identity provider learns nothing about which. The [security audit events](../administration/security-audit-events.md) record the real reason. Check the key's status and expiry on the SCIM tab, and that the base URL ends in this Connected System's ID; create a new key if it is lost. Nothing the identity provider sent before is affected.
@@ -207,7 +207,7 @@ The Connector has no settings of its own. The rules that govern its endpoint:
 **The identity provider's changes take a long time to reach the Metaverse.**
 : Changes are imported on the Connected System's Schedule, not as they arrive. Check **Awaiting Import** on the SCIM tab: above zero, the Schedule has not run since the change; shorten its interval or check that it is enabled.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Identity Providers](jim-scim-service-provider-connector-identity-providers.md): where the base URL and key go in each identity provider
 - [SCIM Service Provider cmdlets](../powershell/scim-service-provider.md): keys, the store summary and the request history from PowerShell

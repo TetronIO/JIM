@@ -12,7 +12,7 @@ set of defence-in-depth security headers. This is an application-layer control (
 Misconfiguration) that reduces the impact of cross-site scripting, clickjacking, and MIME-sniffing attacks, and
 requires no configuration.
 
-## Headers sent
+## :material-shield-lock-outline: Headers sent
 
 | Header | Value | Purpose |
 |--------|-------|---------|
@@ -25,7 +25,7 @@ requires no configuration.
 If something earlier in the pipeline (a controller action, for example) has already set one of these headers,
 JIM does not overwrite it; the more specific value wins.
 
-## Content Security Policy
+## :material-lock-check-outline: Content Security Policy
 
 JIM's Content Security Policy (CSP) is currently in **stage one**: a restrictive, same-origin-only policy
 compatible with Blazor Server and MudBlazor as they stand today.
@@ -54,7 +54,7 @@ documented stage-one compromise; a future stage-two release will move to a nonce
 keeps the UI live) works identically whether JIM is reached over plain HTTP (local development) or HTTPS
 (a real deployment).
 
-## Reverse proxies and corporate networks
+## :material-lan: Reverse proxies and corporate networks
 
 If you put a reverse proxy in front of JIM (see [TLS and Reverse Proxy](tls-and-reverse-proxy.md)),
 JIM's headers pass through unchanged unless your proxy is explicitly configured to strip or rewrite them. A
@@ -62,7 +62,7 @@ corporate web proxy or browser security extension that inspects or blocks unreco
 directives may need an allowance for JIM's origin; the policy above is the complete list of directives JIM sends,
 useful if you need to document it for a network security review.
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Rate Limiting](../api/rate-limiting.md): the other REST API hardening control from the same security assessment
 - [Deployment](deployment.md): HTTPS certificates and reverse proxy configuration

@@ -12,7 +12,7 @@ Use this guide to let people sign in to JIM with their Active Directory accounts
 !!! info "Read the overview first"
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the [confidential and public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, [how JIM recognises people](../sso-setup.md#how-jim-recognises-people), and the [testing steps](../sso-setup.md#testing-your-configuration) you can run once configuration is complete.
 
-## Before you begin
+## :material-clipboard-list-outline: Before you begin
 
 You need:
 
@@ -22,7 +22,7 @@ You need:
 - **JIM trusting AD FS's HTTPS certificate,** which usually comes from your own certificate authority. See [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
 - **The people who will sign in, synchronised from Active Directory.** JIM signs someone in only when it has a Metaverse Object whose `Object GUID` holds their `objectGUID`. The import Synchronisation Rule for your Active Directory users needs a mapping from `objectGUID` to the built-in `Object GUID` attribute (see [Attribute Mappings](../../configuration/attribute-mappings.md)). Your first administrator is the exception: JIM creates them at their first sign-in.
 
-## Step 1: Register JIM with AD FS
+## :material-numeric-1-circle-outline: Step 1: Register JIM with AD FS
 
 `Register-JIMIdentityProvider` creates JIM's Application Group on AD FS and returns the values JIM needs. The group holds an application for the portal, one for the PowerShell module, and one for JIM's API, whose claim rule issues each person's `objectGUID` as the `oid` claim with their name and email. What each application contains is on the cmdlet's page: [Register-JIMIdentityProvider](../../powershell/identity-providers.md#register-jimidentityprovider).
 
@@ -51,7 +51,7 @@ You need:
 
     If the secret is lost, run the command again with `-ResetClientSecret` for a new one. The old secret stops working, so JIM signs nobody in until `JIM_SSO_SECRET` holds the new one.
 
-## Step 2: Find your first administrator's objectGUID
+## :material-numeric-2-circle-outline: Step 2: Find your first administrator's objectGUID
 
 JIM gives the Administrator role to the person whose `objectGUID` is `JIM_SSO_INITIAL_ADMIN`, at their first sign-in, and creates their Metaverse Object if synchronisation has not. Read the `objectGUID` of the account they sign in to AD FS with, for example with the Active Directory PowerShell module on a domain controller:
 
@@ -61,7 +61,7 @@ JIM gives the Administrator role to the person whose `objectGUID` is `JIM_SSO_IN
 
 The value is a GUID, such as `3f2504e0-4f89-11d3-9a0c-0305e82c3301`.
 
-## Step 3: Configure JIM
+## :material-numeric-3-circle-outline: Step 3: Configure JIM
 
 Set these environment variables to the values from Steps 1 and 2, then restart JIM (see [Configuration Reference](../configuration.md)):
 
@@ -93,7 +93,7 @@ JIM_SSO_INITIAL_ADMIN=3f2504e0-4f89-11d3-9a0c-0305e82c3301
 
 `JIM_SSO_PUBLIC_CLIENT_ID` is what lets administrators sign in with `Connect-JIM`. Scripts that run unattended cannot sign in interactively, so they use a JIM API key instead; see [API Authentication](../../api/authentication.md).
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 1. Open JIM in a browser as your first administrator. JIM sends you to AD FS to sign in, then returns you to JIM, signed in.
 2. Open `/claims` and check that `oid`, `name` and `email` carry your values.
@@ -102,13 +102,13 @@ JIM_SSO_INITIAL_ADMIN=3f2504e0-4f89-11d3-9a0c-0305e82c3301
 
 To check sign-out too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
 
-## Keep the registration right
+## :material-check-all: Keep the registration right
 
 Run `Register-JIMIdentityProvider` again, with the same `-Url`, to check and repair the registration. It changes nothing when the registration is right, and puts back whatever has drifted, such as a removed redirect URI, a changed scope, or another client given access to JIM's API. The values it returns stay the same, so JIM's settings need no change. Add `-WhatIf` to list what has drifted without changing it.
 
 If JIM's address changes, run it with the new address. It replaces the portal's redirect URIs; the client identifiers and the secret stay as they are.
 
-## AD FS Troubleshooting
+## :material-wrench-outline: AD FS Troubleshooting
 
 - **Sign-in is unavailable / JIM does not trust the certificate**: JIM fetches AD FS's discovery document and signing keys over HTTPS, so it must trust the federation service's TLS certificate, which usually comes from your own certificate authority. Trust that certificate authority for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md). The token-signing certificate needs no trust configuration: JIM reads its public keys from AD FS's published key set, and follows AD FS's automatic certificate rollover by itself (see [Signing Key Rollover](../sso-setup.md#signing-key-rollover)).
 - **Someone signs in to AD FS, but JIM says they have no JIM identity**: JIM has no Metaverse Object whose `Object GUID` holds their `objectGUID`. Check that the import Synchronisation Rule for Active Directory maps `objectGUID` to `Object GUID` and that the person is in its scope, then run the synchronisation; they can sign in once it has created their Metaverse Object. For the first administrator, check that `JIM_SSO_INITIAL_ADMIN` is their `objectGUID`.
@@ -116,6 +116,6 @@ If JIM's address changes, run it with the new address. It replaces the portal's 
 - **AD FS shows an error page with an MSIS code**: the registration is missing something or has drifted. Run `Register-JIMIdentityProvider` with `-WhatIf` to see what, then without it to repair it. The AD FS server's **AD FS/Admin** event log names the cause.
 - **PKCE / PowerShell sign-in fails**: Confirm AD FS is Windows Server 2019 or later; earlier versions do not support PKCE and cannot authenticate the PowerShell module's public client.
 
-## Next steps
+## :material-arrow-right-circle-outline: Next steps
 
 If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

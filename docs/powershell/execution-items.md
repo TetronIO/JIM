@@ -11,7 +11,7 @@ A Run Profile execution records one execution item (a Run Profile Execution Item
 
 ---
 
-## Get-JIMActivityExecutionItem
+## :material-format-list-checks: Get-JIMActivityExecutionItem
 
 Retrieves one execution item of a Run Profile activity: what happened to one object and, when it failed, why. The list returned by `Get-JIMActivity -ExecutionItems` names each failed item's error type; this cmdlet returns the error message and stack trace as well, which is usually what tells you how to fix it. For a generated value that ran out, for example, the message names the attribute, the last value tried and what already holds it.
 
@@ -274,7 +274,7 @@ Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Consequ
 
 ---
 
-## Get-JIMCausalCohortMember
+## :material-account-group-outline: Get-JIMCausalCohortMember
 
 Pages through every member of one cohort of an execution item's consequences. `Get-JIMActivityExecutionItem -Consequences` counts a cohort exactly ("4218 Groups") but returns only its first members; this returns the rest, earliest first and then by name.
 
@@ -326,7 +326,7 @@ Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Consequ
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](activities.md): cmdlets for Activities, a run's statistics, and its child Activities
 - [Causality](../configuration/causality.md): what caused a change, and what it went on to cause, in the portal

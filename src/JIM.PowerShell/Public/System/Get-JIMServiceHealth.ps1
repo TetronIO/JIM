@@ -78,8 +78,8 @@ function Get-JIMServiceHealth {
     .EXAMPLE
         Get-JIMServiceHealth | Where-Object Condition -eq 'Stalled' | Select-Object Service, CurrentWork, LastProgressAt
 
-        Names the work that has stalled. The process is up; the task is what needs looking at, and the Operations
-        page's Queue tab is where to cancel it if it is genuinely wedged.
+        Names the work that has stalled. The process is up; the task is what needs looking at, and the In Progress
+        section of the Operations page's Activity tab is where to cancel it if it is genuinely wedged.
 
     .EXAMPLE
         Get-JIMServiceHealth | Select-Object Service,

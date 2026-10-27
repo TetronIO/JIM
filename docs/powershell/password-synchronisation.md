@@ -14,7 +14,7 @@ These cmdlets set a Metaverse Object's password, and configure which Connected S
 
 ---
 
-## Set-JIMMetaverseObjectPassword
+## :material-form-textbox-password: Set-JIMMetaverseObjectPassword
 
 Sets a Metaverse Object's password, on the Connected System Objects you name or on every Connected System configured for Password Synchronisation. `Set-JIMConnectedSystemObjectPassword` ([Connected Systems](connected-system-objects.md#set-jimconnectedsystemobjectpassword)) is the same operation with one Connected System Object named; both return the same outcome for each target.
 
@@ -145,7 +145,7 @@ Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId $systems -Generate -Fo
 
 ---
 
-## Get-JIMConnectedSystemPasswordPolicy
+## :material-shield-lock-outline: Get-JIMConnectedSystemPasswordPolicy
 
 Gets what a Connected System said it will accept, as JIM read it during a previous connection. It opens no new
 connection and changes nothing.
@@ -210,7 +210,7 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
 
 ---
 
-## Get-JIMConnectedSystemPasswordSynchronisation
+## :material-sync: Get-JIMConnectedSystemPasswordSynchronisation
 
 Gets whether a Connected System receives synchronised passwords, and the settings governing how hard JIM tries
 to deliver them. A Connected System that has never been configured is reported with `Configured` set to
@@ -269,7 +269,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
-## Set-JIMConnectedSystemPasswordSynchronisation
+## :material-tune-variant: Set-JIMConnectedSystemPasswordSynchronisation
 
 Creates or updates a Connected System's Password Synchronisation configuration. Omitted parameters leave the
 stored value unchanged; `-TargetObjectType` is required when creating one.
@@ -330,7 +330,7 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 
 ---
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Password Synchronisation](../concepts/password-synchronisation.md) explains what the queue is and how a change moves through it, and [The Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) what delivers it
 - [Metaverse](metaverse.md) covers finding the Metaverse Object whose password you set, and what its Connected System Objects are

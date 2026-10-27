@@ -9,11 +9,11 @@ audience: automation-author
 
 The JIM PowerShell module provides a cross-platform command-line interface for managing and automating JIM operations. It wraps the JIM REST API in idiomatic PowerShell cmdlets with full pipeline support, so identity management workflows can be scripted.
 
-## Requirements
+## :material-clipboard-list-outline: Requirements
 
 - **[PowerShell 7.0 or later](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell)** (cross-platform: Windows, macOS, and Linux)
 
-## Installation
+## :material-download-outline: Installation
 
 ### From PowerShell Gallery
 
@@ -33,7 +33,7 @@ $env:PSModulePath -split [IO.Path]::PathSeparator
 Import-Module JIM
 ```
 
-## Authentication
+## :material-shield-key-outline: Authentication
 
 The module supports two authentication methods: interactive browser-based SSO and API keys.
 
@@ -67,7 +67,7 @@ if (Test-JIMConnection -Quiet) {
 
 See [Connection](connection.md) for full details on all connection cmdlets.
 
-## Cmdlet Categories
+## :material-view-grid-outline: Cmdlet Categories
 
 | Category | Cmdlets | Description |
 |----------|---------|-------------|
@@ -113,7 +113,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Logs](logs.md) | 3 | Query, retrieve, and tail JIM service log files for remote troubleshooting |
 | [Data Flow](data-flow.md) | 1 | List every configured attribute data flow across all Connected Systems (`Get-JIMDataFlow`) |
 
-## Quick Start
+## :material-rocket-launch-outline: Quick Start
 
 ```powershell
 # Install and connect
@@ -133,7 +133,7 @@ Get-JIMMetaverseObject -ObjectTypeName "person" -All
 Get-JIMActivity -PageSize 5
 ```
 
-## Pipeline Support
+## :material-pipe: Pipeline Support
 
 Most cmdlets accept pipeline input and produce pipeline-friendly output, enabling powerful one-liners:
 
@@ -154,7 +154,7 @@ Get-JIMApiKey | Where-Object { $_.ExpiresAt -and $_.ExpiresAt -lt (Get-Date) } |
 Get-JIMCertificate | ForEach-Object { Test-JIMCertificate -Id $_.Id }
 ```
 
-## Output Object Conventions
+## :material-code-braces: Output Object Conventions
 
 Cmdlet output objects use **PascalCase** property names, following PowerShell convention, even though JIM's REST API serialises its JSON in camelCase:
 
@@ -179,7 +179,7 @@ $person.Attributes.employeeID    # ...not 'Mail' / 'EmployeeID'
 
 The same applies to any other data-keyed map, such as a log entry's `Properties`.
 
-## Confirmation Prompts
+## :material-help-circle-outline: Confirmation Prompts
 
 Destructive operations (deletions, clears) use PowerShell's `ShouldProcess` mechanism and prompt for confirmation by default. Use `-Force` to suppress prompts in scripts:
 
@@ -191,7 +191,7 @@ Remove-JIMConnectedSystem -Id 1
 Remove-JIMConnectedSystem -Id 1 -Force
 ```
 
-## Further Reading
+## :material-book-open-variant-outline: Further Reading
 
 - [API Authentication](../api/authentication.md): authentication methods and security recommendations
 - [API Reference](../api/index.md): REST API documentation that maps to these cmdlets
