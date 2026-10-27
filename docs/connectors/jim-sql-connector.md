@@ -104,7 +104,7 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 | Setting | Required | What to enter |
 |---------|----------|---------------|
-| Object Types | Yes | The JSON document describing your tables. Step 2 explains it. |
+| Object Types | Yes | A JSON document describing your tables, typed or pasted into this multi-line field. Step 2 explains it. |
 
 #### Delta Import
 
@@ -114,7 +114,9 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 ### Step 2: Describe your tables
 
-The **Object Types** setting tells JIM which tables hold which objects. Each entry names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
+SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM in a short JSON document. Enter it in the **Object Types** field under **Object Type Configuration** on the Connected System's **Settings** tab. The field shows a complete example beneath it; select **Copy** to start from that.
+
+Each entry in the document names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
 
 ```json title="A Person with a manager reference and a related table of phone numbers"
 {

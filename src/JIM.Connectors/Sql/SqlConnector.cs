@@ -304,6 +304,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 Name = SqlConnectorConstants.SettingObjectTypes,
                 Required = true,
                 Description = ObjectTypesSettingDescription,
+                Example = SqlConnectorConstants.ObjectTypesExample,
                 Category = ConnectedSystemSettingCategory.Schema,
                 Type = ConnectedSystemSettingType.Text
             },
@@ -316,6 +317,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 // nobody has said exists.
                 Name = SqlConnectorConstants.SettingDeltaImportMode,
                 Description = DeltaImportModeSettingDescription,
+                Example = SqlConnectorConstants.DeltaConfigurationExample,
                 Category = ConnectedSystemSettingCategory.Schema,
                 Type = ConnectedSystemSettingType.DropDown,
                 DropDownValues = new List<string> { SqlConnectorConstants.DeltaImportModeChangeLogTable, SqlConnectorConstants.DeltaImportModeWatermarkColumn }
@@ -324,14 +326,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     }
 
     /// <summary>
-    /// The Object Types setting's description: what the document says, and a complete example to start
-    /// from. Long, deliberately. It is the only place an administrator writing the document by hand can
-    /// learn its shape from inside JIM, and an empty box with no example is the worst first experience
-    /// this Connector could offer.
+    /// The Object Types setting's description: what the document says. Long, deliberately. It is the only
+    /// place an administrator writing the document by hand can learn its shape from inside JIM, and an empty
+    /// box with no example is the worst first experience this Connector could offer.
     /// </summary>
     /// <remarks>
-    /// The example itself lives in <see cref="SqlConnectorConstants.ObjectTypesExample"/> and is parsed
-    /// by the Connector's own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// The example to start from is the setting's Example, from <see cref="SqlConnectorConstants.ObjectTypesExample"/>,
+    /// which the portal shows as a code block beneath the field. It is parsed by the Connector's own unit
+    /// tests, so it cannot drift out of step with what the parser accepts.
     /// </remarks>
     private static string ObjectTypesSettingDescription =>
         "Which Connected System Object Types this database holds, and where each one's objects come from, as a JSON document. " +
@@ -341,16 +343,16 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         "JIM never guesses that from a foreign key, but it does suggest one where the database declares it. " +
         "'relatedTables' turns a table of one row per value into a multi-valued attribute: name the attribute, its 'valueColumn', and the 'joinColumns' " +
         "that join a row back to its parent (one per anchor column, in the same order), plus 'referencesObjectType' where those values are references, as group membership is. " +
-        "Every other column is discovered and typed automatically. Example:" + Environment.NewLine + Environment.NewLine +
-        SqlConnectorConstants.ObjectTypesExample;
+        "Every other column is discovered and typed automatically. The example below is a complete document to start from.";
 
     /// <summary>
     /// The Delta Import Mode setting's description: what each mode reads, what each one can and cannot
     /// observe, and what each needs adding to the Object Types document.
     /// </summary>
     /// <remarks>
-    /// The example lives in <see cref="SqlConnectorConstants.DeltaConfigurationExample"/> and is parsed
-    /// by the Connector's own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// The example is the setting's Example, from <see cref="SqlConnectorConstants.DeltaConfigurationExample"/>,
+    /// shown as a code block beneath the field. It is parsed by the Connector's own unit tests, so it cannot
+    /// drift out of step with what the parser accepts.
     /// </remarks>
     private static string DeltaImportModeSettingDescription =>
         "How a Delta Import finds out what has changed. Leave this unanswered where this Connected System only runs Full Imports. " +
@@ -361,8 +363,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn', " +
         "and one on each of its related tables, named the same way, so that a phone number or a group membership changing is detected as a change to the object it belongs to. " +
         "It needs nothing extra in the database, but it detects creates and updates only: a row that has been deleted has no column left to move, " +
-        "so deletions are found only by a Full Import. Example:" + Environment.NewLine + Environment.NewLine +
-        SqlConnectorConstants.DeltaConfigurationExample;
+        "so deletions are found only by a Full Import. The example below shows both, added to an Object Types document.";
 
     /// <summary>
     /// Validates SqlConnector setting values using custom business logic. Whether the configured Delta Import

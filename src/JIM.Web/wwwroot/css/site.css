@@ -1648,6 +1648,21 @@ a.jim-system-rule-chip-part:focus-visible {
     white-space: pre;
 }
 
+/* A Connected System Text setting holds a document the administrator writes by hand (JSON, typically),
+   so its text area is monospaced like the code it contains. */
+.jim-setting-text textarea {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+/* A Connector setting's example, beneath its field. Long examples scroll within the block rather than
+   pushing the rest of the form a screen further down. */
+.jim-setting-example .jim-code-block {
+    max-height: 360px;
+    overflow-y: auto;
+}
+
 /* Shell syntax-highlighting tokens (bash / PowerShell), emitted by Helpers.HighlightShell.
    Colours are reused from the JSON and expression highlighters so code blocks share one
    palette across all themes; no per-theme variables are added here. */
