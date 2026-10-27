@@ -178,19 +178,37 @@ const server = http.createServer((req, res) => { res.writeHead(200, { 'Content-T
     const role = await handles.first().getAttribute('role');
     check(role === 'separator', `the handle's role is "${role}", not "separator"`);
 
-    // A drag past the neighbour's minimum stops there, and the table still keeps its width.
-    const box2 = await handles.first().boundingBox();
-    await p.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2);
-    await p.mouse.down();
-    // To the window's right edge, well past the neighbour's minimum (a move outside the window is not delivered).
-    await p.mouse.move(box2.x + 600, box2.y + box2.height / 2, { steps: 8 });
-    await p.mouse.up();
-    const clamped = await state();
-    check(clamped.cols[1] < keyed.cols[1] && clamped.cols[1] >= 48, `dragging far right did not shrink the neighbouring column to a minimum (${keyed.cols[1]}px to ${clamped.cols[1]}px)`);
-    check(close(clamped.cols[2], before.cols[2], 1), `dragging to the neighbour's minimum moved a column the handle does not border (${before.cols[2]}px to ${clamped.cols[2]}px)`);
+    // Dragging past the neighbour's minimum carries on into the columns beyond it, nearest
+    // first, so a column can take the whole table but the other columns' minimums.
+    const drag = async (handle, dx, back) => {
+      const hb = await handle.boundingBox();
+      const x = hb.x + hb.width / 2, y = hb.y + hb.height / 2;
+      await p.mouse.move(x, y);
+      await p.mouse.down();
+      await p.mouse.move(x + dx, y, { steps: 8 });
+      const mid = await state();
+      if (back) await p.mouse.move(x, y, { steps: 8 });
+      await p.mouse.up();
+      return { mid, end: await state() };
+    };
+    const MIN = 64;
+    // To the window's right edge, well past both columns' minimums (a move outside the window is not delivered).
+    const far = await drag(handles.first(), 600, true);
+    const wide = far.mid;
+    check(close(wide.cols[1], MIN, 2), `dragging far right did not shrink the neighbouring column to its minimum (${keyed.cols[1]}px to ${wide.cols[1]}px)`);
+    check(close(wide.cols[2], MIN, 2), `dragging far right did not carry on into the next column once the neighbour reached its minimum (${keyed.cols[2]}px to ${wide.cols[2]}px)`);
+    check(close(wide.cols[0], keyed.table - 2 - 2 * MIN, 4), `dragging far right did not let the column take the table's width less the other columns' minimums (${wide.cols[0]}px)`);
+    check(close(wide.table, before.table, 1) && wide.overflow <= 0, `a drag past the neighbour's minimum changed the table's width or made it scroll`);
     const drift = await p.evaluate(() => [...document.querySelectorAll('#t th')].filter(th => Math.abs(parseFloat(th.style.width) - th.getBoundingClientRect().width) > 1).length);
     check(drift === 0, `${drift} column(s) are drawn at a different width from the one set, so the browser is overriding the resize (a minimum width the script does not allow for)`);
-    check(close(clamped.table, before.table, 1) && clamped.overflow <= 0, `a drag past the neighbour's minimum changed the table's width or made it scroll`);
+    const restored = far.end;
+    check(restored.cols.every((w, i) => close(w, keyed.cols[i], 2)), `dragging back to the start did not restore the columns the drag squeezed (${keyed.cols.map(Math.round)} to ${restored.cols.map(Math.round)})`);
+
+    // Leftwards from the second handle: its column gives way first, then the one before it.
+    const left = (await drag(handles.nth(1), -600, false)).end;
+    check(close(left.cols[1], MIN, 2) && close(left.cols[0], MIN, 2), `dragging the second handle far left did not shrink its column, then the one before it, to their minimums (${left.cols.map(Math.round)})`);
+    check(close(left.cols[2], keyed.table - 2 - 2 * MIN, 4), `dragging the second handle far left did not give the freed width to the column on its right (${left.cols[2]}px)`);
+    check(close(left.table, before.table, 1) && left.overflow <= 0, `a leftward drag changed the table's width or made it scroll`);
 
     await handles.first().dblclick();
     const reset = await p.evaluate(() => ({
