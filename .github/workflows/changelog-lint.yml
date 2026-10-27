@@ -113,16 +113,18 @@ jobs:
         run: pwsh -File ./scripts/Test-DocsCoverage.ps1
       - name: Check every stylesheet closes its rules
         run: pwsh -File ./scripts/Test-CssBalance.ps1
-      - name: Check concept diagrams (label cuts and lightbox framing)
+      - name: Check concept diagrams and reader layout controls
         run: |
           # A label cut can only be invalidated by a diagram source or the diagram
           # tokens; the lightbox framing can also be invalidated by the overlay
           # script itself. Both need a browser download, so the cost is paid on
-          # those PRs alone. The step still runs (and passes) on every PR, so the
+          # those PRs alone. The reader layout controls (width toggle, resizable
+          # table columns) share the browser and depend on the same stylesheet.
+          # The step still runs (and passes) on every PR, so the
           # job keeps reporting and stays safe as a required check.
           CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
-          if ! printf '%s\n' "$CHANGED_FILES" | grep -qE '^docs/assets/(diagrams/.+\.svg|stylesheets/custom\.css|javascripts/diagram-zoom\.js)$'; then
-            echo "No diagram sources, diagram tokens or overlay script changed; skipping the diagram checks."
+          if ! printf '%s\n' "$CHANGED_FILES" | grep -qE '^docs/assets/(diagrams/.+\.svg|stylesheets/custom\.css|javascripts/(diagram-zoom|docs-layout)\.js)$|^docs/overrides/main\.html$'; then
+            echo "No diagram sources, stylesheet, overlay or layout script changed; skipping the browser checks."
             exit 0
           fi
           # Reuse the @playwright/mcp pin from setup.sh rather than adding a third
@@ -139,6 +141,7 @@ jobs:
           export JIM_PLAYWRIGHT_MODULE="$(dirname "$PLAYWRIGHT_CORE_CLI")"
           pwsh -File ./scripts/Update-DiagramLabelCuts.ps1 -Check
           pwsh -File ./scripts/Test-DiagramLightbox.ps1
+          pwsh -File ./scripts/Test-DocsLayout.ps1
       - name: Detect docs source changes
         id: docs-sources
         run: |

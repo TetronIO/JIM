@@ -233,8 +233,8 @@ public class SchedulerServerExecutionDetailTests
 
         SetUpExecution(NewExecution(), [step], [], []);
 
-        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemHeadersAsync())
-            .ReturnsAsync([new JIM.Models.Staging.DTOs.ConnectedSystemHeader { Id = 10, Name = "Corporate LDAP" }]);
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [10] = "Corporate LDAP" });
         _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemRunProfilesAsync(10))
             .ReturnsAsync([new JIM.Models.Staging.ConnectedSystemRunProfile { Id = 77, Name = "LDAP Delta Import" }]);
 
@@ -399,7 +399,7 @@ public class SchedulerServerExecutionDetailTests
             .ReturnsAsync(activities);
         _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(ExecutionId))
             .ReturnsAsync(tasks);
-        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemHeadersAsync())
-            .ReturnsAsync([]);
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string>());
     }
 }

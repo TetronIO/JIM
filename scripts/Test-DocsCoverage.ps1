@@ -146,6 +146,9 @@ function Get-MarkdownLine {
     }
 }
 
+# A heading's leading icon shortcode (STY-3), such as ':material-console: '.
+$script:LeadingIcon = '^:[a-z0-9]+(?:-[a-z0-9]+)+:\s*'
+
 # Headings and the first cells of table body rows: what "documented" means.
 function Get-DocumentedEntry {
     param([string]$FullPath)
@@ -153,7 +156,7 @@ function Get-DocumentedEntry {
     for ($k = 0; $k -lt $lines.Count; $k++) {
         $text = $lines[$k].Text
         if ($text -match '^\s{0,3}#{1,6}\s+(?<h>.+?)\s*$') {
-            [pscustomobject]@{ Line = $lines[$k].Line; Text = $Matches['h']; Kind = 'Heading'; Header = $null }
+            [pscustomobject]@{ Line = $lines[$k].Line; Text = ($Matches['h'] -replace $script:LeadingIcon, ''); Kind = 'Heading'; Header = $null }
             continue
         }
         if ($text -match '^\s*\|' -and $text -notmatch '^\s*\|?\s*:?-{3,}') {
@@ -182,7 +185,8 @@ function Get-PageAnchor {
         foreach ($m in [regex]::Matches($l.Text, '\{[^}]*#(?<id>[A-Za-z0-9_:.-]+)[^}]*\}')) { [void]$anchors.Add($m.Groups['id'].Value) }
         foreach ($m in [regex]::Matches($l.Text, '\bid="(?<id>[^"]+)"')) { [void]$anchors.Add($m.Groups['id'].Value) }
         if ($l.Text -match '^\s{0,3}#{1,6}\s+(?<h>.+?)\s*$') {
-            $heading = $Matches['h']
+            # A leading icon (STY-3) renders as markup, so MkDocs leaves it out of the slug.
+            $heading = $Matches['h'] -replace $script:LeadingIcon, ''
             if ($heading -match '\{[^}]*#[A-Za-z0-9_:.-]+[^}]*\}') { continue }
             $heading = $heading -replace '\s*\{[^}]*\}\s*$', '' -replace '`', '' -replace '\[([^\]]*)\]\([^)]*\)', '$1' -replace '<[^>]+>', ''
             $ascii = [System.Text.Encoding]::ASCII.GetString([System.Text.Encoding]::ASCII.GetBytes($heading.Normalize([System.Text.NormalizationForm]::FormKD))) -replace '\?', ''

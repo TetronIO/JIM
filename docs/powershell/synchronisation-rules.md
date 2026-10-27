@@ -10,7 +10,7 @@ audience: automation-author
 Synchronisation Rules decide how values flow between a Connected System and the Metaverse. The cmdlets on this page list, create, change and delete them. A rule's [Attribute Flows](attribute-mappings.md), [scoping criteria](scoping-criteria.md), [Object Matching Rules](object-matching-rules.md) and [initial password](initial-password.md) have pages of their own. What each setting does is covered in [Synchronisation Rules](../configuration/synchronisation-rules.md).
 
 ---
-## Get-JIMSyncRule
+## :material-link-variant: Get-JIMSyncRule
 
 Gets Synchronisation Rules: every rule by default, one by ID, or those matching the filters. The filters are the ones on the portal's Synchronisation Rules page: they combine with AND, and the values given to one filter combine with OR.
 
@@ -110,7 +110,7 @@ Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule -Direction Import -Status E
 
 ---
 
-## New-JIMSyncRule
+## :material-plus-circle-outline: New-JIMSyncRule
 
 Creates a Synchronisation Rule between a Connected System Object Type and a Metaverse Object Type. Add its [Attribute Flows](attribute-mappings.md#new-jimsyncrulemapping), [scoping criteria](scoping-criteria.md) and [Object Matching Rules](object-matching-rules.md) afterwards.
 
@@ -214,7 +214,7 @@ New-JIMSyncRule -Name "HR Import (Draft)" `
 
 ---
 
-## Set-JIMSyncRule
+## :material-pencil-outline: Set-JIMSyncRule
 
 Changes a Synchronisation Rule: its name and description, whether it is enabled, and how it projects, provisions and deprovisions. What you leave out stays as it is. Changes that leave a [Metaverse-Derived Attribute Flow](attribute-mappings.md#derived-attribute-flow-warnings) with a missing input, or that leave objects a Metaverse Object Type's deletion rule will never delete, go ahead with a warning rather than being refused.
 
@@ -304,7 +304,7 @@ Set-JIMSyncRule -Id 12 -Disable -ChangeReason "Pausing during HR cutover (CHG009
 
 ---
 
-## Remove-JIMSyncRule
+## :material-trash-can-outline: Remove-JIMSyncRule
 
 Deletes a Synchronisation Rule, with its Attribute Flows, scoping criteria and Object Matching Rules.
 
@@ -396,7 +396,7 @@ Deleting a rule can leave a Metaverse-Derived Attribute Flow on another rule wit
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Synchronisation Rules](../configuration/synchronisation-rules.md): direction, scoping, object matching, projection, and attribute mappings
 - [Attribute Mappings](attribute-mappings.md): the Attribute Flows on a Synchronisation Rule

@@ -278,7 +278,7 @@ public class VirtualisedDataGridTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimInterop.replaceQueryString"), Is.False,
+            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimInterop.updateQueryString"), Is.False,
                 "an embedded grid must not write its state to the shared address bar");
             Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.observe"), Is.False,
                 "with no URL state to keep current, an embedded grid has no reason to watch its own scrolling");
@@ -381,11 +381,25 @@ public class VirtualisedDataGridTests : JimComponentTestContext
             "a cancelled call must not stop disposal releasing the resize listener");
     }
 
-    // The grid rewrites the URL with history.replaceState, which NavigationManager never sees, so its Uri still
+    // The grid updates the URL with history.replaceState, which NavigationManager never sees, so its Uri still
     // holds the query from the last real navigation. A page filter changed in place must survive the grid's next
-    // write of its own state, here the scroll reset every filter change is followed by.
-    private string LastWrittenQuery() => (string)JSInterop.Invocations
-        .Last(i => i.Identifier == "jimInterop.replaceQueryString").Arguments[0]!;
+    // write of its own state, here the scroll reset every filter change is followed by. The browser merges each
+    // update into the live URL; this replays every update the grid sent, in order, the way jimInterop does.
+    private string AddressBarQuery(string initialQuery)
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(initialQuery);
+        foreach (var update in JSInterop.Invocations.Where(i => i.Identifier == "jimInterop.updateQueryString"))
+        {
+            foreach (var (name, values) in (IReadOnlyDictionary<string, string[]?>)update.Arguments[0]!)
+            {
+                query.Remove(name);
+                foreach (var value in values ?? [])
+                    query.Add(name, value);
+            }
+        }
+
+        return System.Web.HttpUtility.UrlDecode(query.ToString()) ?? string.Empty;
+    }
 
     [Test]
     public async Task SetQueryParameterAsync_FollowedByScrollReset_KeepsTheNewValueAsync()
@@ -398,8 +412,8 @@ public class VirtualisedDataGridTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(LastWrittenQuery(), Does.Contain("type=groups"));
-            Assert.That(LastWrittenQuery(), Does.Not.Contain("type=users"));
+            Assert.That(AddressBarQuery("type=users"), Does.Contain("type=groups"));
+            Assert.That(AddressBarQuery("type=users"), Does.Not.Contain("type=users"));
         }
     }
 
@@ -412,6 +426,25 @@ public class VirtualisedDataGridTests : JimComponentTestContext
         await cut.InvokeAsync(() => cut.Instance.ClearQueryParameterAsync("search"));
         await cut.InvokeAsync(() => cut.Instance.ResetScrollAsync());
 
-        Assert.That(LastWrittenQuery(), Does.Not.Contain("hasAttribute"));
+        Assert.That(AddressBarQuery("search=hasAttribute:department"), Does.Not.Contain("hasAttribute"));
+    }
+
+    [Test]
+    public async Task WriteUrlState_PageParameterWrittenSinceByAnotherWriter_IsLeftAloneAsync()
+    {
+        // The Operations Activity tab writes its section toggles and filters to the same URL as its Completed grid.
+        // Each writer names only its own parameters, so the grid's next write cannot drop the page's.
+        var cut = RenderGrid();
+
+        await cut.InvokeAsync(() => cut.Instance.ResetScrollAsync());
+
+        var written = JSInterop.Invocations.Where(i => i.Identifier == "jimInterop.updateQueryString")
+            .SelectMany(i => ((IReadOnlyDictionary<string, string[]?>)i.Arguments[0]!).Keys)
+            .ToHashSet();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written, Is.Not.Empty);
+            Assert.That(written, Is.SubsetOf(new[] { "q", "sort", "desc", "row" }));
+        }
     }
 }

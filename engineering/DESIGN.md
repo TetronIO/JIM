@@ -257,7 +257,7 @@ JIM uses a three-tier type system. Each typeface has a defined role; do not mix 
 
 Body text, UI controls, navigation, list items, table content, and heading levels H2 to H6. The default voice everywhere except code and the display-accent layer. Designed by IBM, SIL Open Font License 1.1. Sharper character disambiguation (1/l/I, 0/O) than many grotesques, which matters where GUIDs, DNs, and command snippets appear.
 
-Self-hosted in the portal at `wwwroot/fonts/ibm-plex-sans/`. Loaded via Google Fonts on the docs site.
+Self-hosted in the portal at `wwwroot/fonts/ibm-plex-sans/`. Loaded via Google Fonts on the docs site as the variable font, so docs body text sits at weight 450 (IBM's text weight; 400 reads faint on screen), with bold at 600, at 16px on every screen width (Material's root-size growth above 1600px is pinned off) and a line height of 1.65.
 
 ### IBM Plex Mono (technical)
 
@@ -273,7 +273,7 @@ Used sparingly for hero titles, the portal sidebar wordmark, and publication-sty
 
 **Where not to use:** body text, sub-headings (H2 to H6), tables, UI controls, or marketing prose. Overuse tips the brand from "considered modern" toward "developer-tool studio".
 
-Self-hosted in the portal at `wwwroot/fonts/space-grotesk/`. Loaded via CSS `@import` from Google Fonts on the docs site.
+Self-hosted in the portal at `wwwroot/fonts/space-grotesk/`. Loaded from Google Fonts on the docs site, in the same request as the Plex faces (`docs/overrides/main.html`).
 
 ### Heading weight corrections
 
@@ -296,6 +296,12 @@ Cards and elevated surfaces use subtle background shifts between `background` an
 ### Docs site
 
 The MkDocs Material docs site uses a standard two-column layout (nav plus content). Table and admonition body text is set at 0.72rem (up from Material's 0.64rem default). Default Material hover shadow on cards is removed for a flatter look consistent with the portal.
+
+The header is a neutral surface in both themes: `#f3f3f3` in light mode and the navy surface `#0d1e30` in dark, each separated from the page by a hairline. Brand purple fills only the home page hero, and both themes light it the same way: a radial glow from the top centre. In light mode the glow sits over a vertical brand-purple gradient (`#4f3c9c` to `#3b2b80`), and a faint lavender band (`#f3f0fb` fading to white) carries the purple into the page behind the system diagram. In dark mode it is purple light rising from the header into the navy page (a radial glow over a gradient from `#0d1e30` to `#051526`), so the hero has no hard edge and no violet surface sits against the navy. Grid cards are white with a cool hairline (`#e4e1ec`) in light mode and the navy surface in dark, so the icon tiles read cleanly in both.
+
+Readers choose the content width with a header toggle: the reading width by default, or the full window, where tables, code and diagrams widen while prose keeps a 36rem measure. Table columns can be resized by dragging the header cell's right edge. Both are described in `docs/CLAUDE.md` > Reader layout controls.
+
+Icons are Material Design Icons, never emoji (STY-1 in `DOCUMENTATION_STANDARD.md`). An icon opening an H2 (every H2 on every page has one; no lower heading does) or a grid card is drawn as a 4px-radius tile tinted with brand purple; table status marks use the success, error and warning colours.
 
 ## Components
 

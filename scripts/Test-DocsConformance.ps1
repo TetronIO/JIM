@@ -162,7 +162,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
-    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'EXC-1')
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'STY-3', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
@@ -170,6 +170,16 @@ $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'ST
 $script:UnmarkableRules = @('EXC-1', 'MNT-3', 'PRI-1')
 $script:Tiers = @('Block', 'Ratchet', 'Warn')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
+# An icon or emoji shortcode such as :material-format-align-center: or :octicons-arrow-right-24:, which
+# the language rules and the word count skip: its name is markup, not prose.
+$script:IconShortcode = ':[a-z0-9]+(?:-[a-z0-9]+)+:'
+# STY-1. Three kinds of emoji: the pictograph blocks (Misc Symbols, Dingbats, and the
+# supplementary pictographs as UTF-16 pairs); the scattered characters that default to emoji
+# presentation (a play button, a return arrow, an information sign); and any character a
+# variation selector (U+FE0F) asks to draw as emoji. Typographic symbols such as an arrow,
+# a trademark or a copyright sign pass unless that selector follows them.
+# scripts/Test-DocsSite.ps1 scans the built site with the same pattern; keep the two in step.
+$script:EmojiRegex = [regex]::new('(?:(?:[\u2600-\u27BF\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA\u2139\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u21A9\u21AA\u2934\u2935\u3030\u303D\u3297\u3299\u203C\u2049]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDEFF])\uFE0F?|[^\s\uFE0F]\uFE0F)')
 
 # ---------------------------------------------------------------------------
 # Configuration, baseline and nav
@@ -419,7 +429,8 @@ function Get-WordCount {
             if ($marker[0] -eq $fenceMarker[0] -and $marker.Length -ge $fenceMarker.Length -and $line.Trim() -eq $marker) { $inFence = $false; continue }
         }
         if ($inFence -or $line.TrimStart().StartsWith('<!--')) { continue }
-        $words += ([regex]::Matches($line, '\S+')).Count
+        # An icon shortcode (:material-format-align-center:) is markup, not a word.
+        $words += ([regex]::Matches(($line -replace $script:IconShortcode, ' '), '\S+')).Count
     }
     return $words
 }
@@ -463,8 +474,15 @@ function Get-PageModel {
         }
 
         if ($line -match '^ {0,3}(?<hashes>#{1,6})\s+(?<text>.*?)\s*$') {
+            $headingLevel = $Matches['hashes'].Length
             $headingText = ($Matches['text'] -replace '\s*\{[^}]*\}\s*$', '' -replace '\s+#+\s*$', '').Trim()
-            $headings.Add([pscustomobject]@{ Level = $Matches['hashes'].Length; Text = $headingText; Line = $lineNumber })
+            # A leading icon shortcode (STY-3) is kept apart, so every other rule reads the heading's words.
+            $headingIcon = $null
+            if ($headingText -match '^:(?<icon>[a-z0-9]+(?:-[a-z0-9]+)*):\s*(?<rest>.*)$') {
+                $headingIcon = $Matches['icon']
+                $headingText = $Matches['rest']
+            }
+            $headings.Add([pscustomobject]@{ Level = $headingLevel; Text = $headingText; Icon = $headingIcon; Line = $lineNumber })
         }
 
         if ($line -match '<!--\s*conformance:') {
@@ -592,6 +610,26 @@ function Test-PageName {
         if (-not $isSuffix) {
             $line = if ($h1) { $h1.Line } else { 1 }
             New-Finding 'STR-3' $line "the nav label '$label' differs from the page's name '$name'; use the name, or the name without its leading words."
+        }
+    }
+}
+
+# STY-3: every H2 opens with a Material Design icon, which custom.css draws as a tile; no other
+# heading carries one. Get-PageModel separates a heading's leading icon shortcode from its words.
+function Test-HeadingIcons {
+    param($Page)
+
+    foreach ($h in $Page.Headings) {
+        if ($h.Level -eq 2) {
+            if (-not $h.Icon) {
+                New-Finding 'STY-3' $h.Line "the H2 '$($h.Text)' has no icon; every H2 opens with a Material Design icon, such as '## :material-layers-outline: $($h.Text)'."
+            }
+            elseif (-not $h.Icon.StartsWith('material-')) {
+                New-Finding 'STY-3' $h.Line "the H2 '$($h.Text)' opens with ':$($h.Icon):'; use a Material Design icon (:material-...:), preferring an -outline variant."
+            }
+        }
+        elseif ($h.Icon) {
+            New-Finding 'STY-3' $h.Line "the heading '$($h.Text)' carries an icon; only H2 headings carry one."
         }
     }
 }
@@ -957,7 +995,7 @@ function Get-ProseLine {
         if ([string]::IsNullOrWhiteSpace($line) -or $line.Contains('--8<--') -or $line -match '^\s*\[[^\]]+\]:\s*\S') { continue }
         if (@($StubPatterns | Where-Object { $_ -and $line.IndexOf($_, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count) { continue }
 
-        $withLinks = [regex]::Replace($line, '(`+).+?\1', ' ')
+        $withLinks = [regex]::Replace($line, '(`+).+?\1', ' ') -replace $script:IconShortcode, ' '
         $text = $withLinks -replace '\]\([^)]*\)', ']' -replace '\]\[[^\]]*\]', ']' -replace '<[^>]+>', ' ' -replace 'https?://\S+', ' ' -replace '\{[^}]*\}', ' ' -replace '&#?\w+;', ' '
         $tableHeader = $text.TrimStart().StartsWith('|') -and ($i + 1 -lt $lines.Count) -and $lines[$i + 1] -match '^\s*\|?\s*:?-{3,}'
 
@@ -1061,6 +1099,11 @@ function Test-Language {
         }
         foreach ($m in [regex]::Matches($p.WithLinks, 'github\.com/[^/\s)]+/[^/\s)]+/(?:issues|pull|discussions)/\d+')) {
             New-Finding 'LANG-8' $p.Line "a link to a GitHub issue or pull request; a public page leaves JIM's own workings out (VOI-4)."
+        }
+
+        # STY-1 (the pattern is described where $script:EmojiRegex is defined).
+        foreach ($m in $script:EmojiRegex.Matches($text)) {
+            New-Finding 'STY-1' $p.Line "an emoji ('$($m.Value)'); use a Material Design icon instead, such as :material-check-circle-outline:{ .jim-yes role=`"img`" aria-label=`"Yes`" } for a tick in a table (see STY-1 and STY-3)."
         }
     }
 }
@@ -1175,6 +1218,7 @@ foreach ($file in $files) {
         Test-FrontMatter -Page $page -Config $config
         Test-PageName -Page $page -NavLabels $navLabels
         Test-HeadingStructure -Page $page
+        Test-HeadingIcons -Page $page
         Test-CodeFences -Page $page
         Test-Stub -Page $page -Config $config
         Test-Opening -Page $page

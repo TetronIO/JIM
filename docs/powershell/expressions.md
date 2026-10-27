@@ -9,7 +9,7 @@ audience: automation-author
 
 Look up the built-in expression functions, and test Synchronisation Rule expressions with sample data before deploying them to production mappings. Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` for attribute access.
 
-## Get-JIMExpressionFunction
+## :material-function-variant: Get-JIMExpressionFunction
 
 Lists the built-in functions an expression can call, with each one's signature, parameters, what it returns, a description and an example: the same list the expression editor's **Insert function** menu offers in the portal.
 
@@ -67,7 +67,7 @@ Get-JIMExpressionFunction | Where-Object { -not $_.IsRepeatable } | Select-Objec
 
 Over REST, the same list is `GET /api/v1/synchronisation/expression-functions`, optionally narrowed with `name` (any part of the name, ignoring case) and `category`.
 
-## Test-JIMExpression
+## :material-test-tube: Test-JIMExpression
 
 Tests an expression with sample Metaverse and Connected System attribute values.
 
@@ -186,7 +186,7 @@ if (-not $result.IsValid) {
 !!! warning "Test the missing-input case"
     A null result clears the target, and a concatenation with a missing operand produces a malformed value rather than null. Use `Test-JIMExpression` with the relevant attribute **omitted** from `-MvAttributes` / `-CsAttributes` (or, with an Attribute Flow, set to `$null`) to see what happens when an input is absent, before deploying the mapping. See [Nulls, Missing Inputs, and Whitespace](../concepts/expressions.md#nulls-missing-inputs-and-whitespace).
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Concepts: Expressions](../concepts/expressions.md)
 - [Synchronisation Rules](synchronisation-rules.md)

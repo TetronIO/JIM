@@ -1890,11 +1890,17 @@ try {
             # its nearest recorded cause, so the change waiting to export can be explained without opening the run.
             Write-Host "  Validating Queued by on the staged Target exports..." -ForegroundColor Gray
             $queuedByFailures = [System.Collections.Generic.List[string]]::new()
-            $stagedExports = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -All)
+            # Ask for just the two exports needed rather than every staged export: at Scale750k40kGroups the Target
+            # holds over 15,000, and listing them all walked 300+ pages.
             $groupsLosingMembers = @($verificationGroups | Where-Object { $groupBaselines[$_].CohortInGroup.Count -gt 0 })
-            $groupExport = $stagedExports | Where-Object {
-                $_.ChangeType -eq 'Update' -and $groupsLosingMembers -contains $_.SourceMetaverseObjectDisplayName } | Select-Object -First 1
-            $accountExport = $stagedExports | Where-Object { $_.ChangeType -eq 'Delete' -and $_.ConnectedSystemObjectId } | Select-Object -First 1
+            $groupExport = $null
+            foreach ($groupName in $groupsLosingMembers) {
+                $groupExport = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -ChangeType Update -Search $groupName -All) |
+                    Where-Object { $_.SourceMetaverseObjectDisplayName -eq $groupName } | Select-Object -First 1
+                if ($groupExport) { break }
+            }
+            $accountExport = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -ChangeType Delete -PageSize 100) |
+                Where-Object { $_.ConnectedSystemObjectId } | Select-Object -First 1
             foreach ($staged in @(
                     @{ Label = "the Group export"; Export = $groupExport },
                     @{ Label = "the account deletion"; Export = $accountExport })) {

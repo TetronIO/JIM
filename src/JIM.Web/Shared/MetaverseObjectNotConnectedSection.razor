@@ -20,7 +20,7 @@
         <span class="jim-not-connected-title">Not connected</span>
         <span class="jim-not-connected-count" data-testid="jim-not-connected-count">@Entries.Count.ToString("N0")</span>
         <span class="jim-not-connected-caption">
-            Connected Systems an enabled export Synchronisation Rule targets where this Metaverse Object has no object
+            Connected Systems this Metaverse Object could be exported to, and why it isn't in them
         </span>
         @if (EvaluatedAt.HasValue)
         {
@@ -34,7 +34,7 @@
         @if (Entries.Count == 0)
         {
             <div class="jim-not-connected-empty" data-testid="jim-not-connected-empty">
-                Connected to every Connected System an enabled export Synchronisation Rule targets.
+                Connected to every Connected System it could be exported to.
             </div>
         }
         else

@@ -9,7 +9,7 @@ audience: operator
 
 Every execution item's Lineage reads beyond the run it records, in both directions: up the chain to why the change happened, and down it to what the change went on to cause in later runs. Together they answer the two questions an administrator investigating an account usually has, "why did this happen?" and "what did it lead to?", from whichever item they opened, without reconstructing the story from several Activities by hand.
 
-## Why it happened
+## :material-help-circle-outline: Why it happened
 
 The Lineage's subdued cards are the item's causal chain: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it, each cause placed on the column of the object it happened to rather than listed separately.
 
@@ -43,7 +43,7 @@ Each hop links to the run that staged the change, whose own causes continue abov
 
 The queueing link is the one thing JIM cannot work out after the event, because a queued change is deleted the moment its export succeeds. It is recorded as the change is staged, so changes queued **before** you upgraded to a version carrying this show a shorter chain; once they have exported, every later export is covered. The import hop is the opposite: it is read from the Connected System Object's own history at viewing time, so it appears only while that history is still reachable, and a chain whose imports have aged out of Activity retention, or whose Connected System Object has since been removed from the Connector Space, ends at the synchronisation instead. A fully deleted account's chain therefore ends at the deletion decision, which carries the Deletion Rule context that ordered it.
 
-## What it went on to cause
+## :material-graph-outline: What it went on to cause
 
 Below each object's events, the Lineage carries on past the run under an **After this run** rule: what later runs did to that object, oldest first. An import shows the Synchronisation that processed it; a Synchronisation shows the exports it queued and the import that confirmed them. Each card names the kind of run that recorded it and when, and links that run's own execution item, so the next step can be opened directly.
 
@@ -75,7 +75,7 @@ Consequences can still be happening, so the Lineage shows a reading taken when t
 
 The summary band adds an **After this run** strip of what followed, separate from the run's own outcomes, and it shows in every view. Choosing a pill opens the Lineage, which is the one view that shows consequences; the Timeline and Table describe the run alone.
 
-## The Causality Explorer
+## :material-magnify: The Causality Explorer
 
 The Lineage answers for one execution item. The Causality Explorer answers for an object, and lets you follow a story from object to run to object without losing your place. It is for Administrators only, like the REST API reads behind it; other users see none of the ways in. Open it from wherever the question starts:
 
@@ -93,7 +93,7 @@ A deleted object stays explorable: its timeline is read through the records its 
 
 **Queued by** answers the question an export raises on its own: why is this change waiting? A Pending Export can be queued by several synchronisations before it exports, and each is listed with its own nearest cause. A Pending Export queued before your deployment recorded its queueing runs says that no run is recorded rather than showing an empty list, and runs whose records retention has removed are counted rather than listed.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Activities](activities.md): execution items and the causality panel's views.
 - [PowerShell: Execution Items](../powershell/execution-items.md): `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and `Get-JIMCausalCohortMember`, which return the same chain one row per cohort; and `-ConnectedSystemObjectId` or `-MetaverseObjectId`, which return an object's causal timeline.

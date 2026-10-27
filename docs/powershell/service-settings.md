@@ -14,7 +14,7 @@ Cmdlets for viewing and modifying JIM runtime configuration. Settings use dot-no
 
 ---
 
-## Get-JIMServiceSetting
+## :material-tune-variant: Get-JIMServiceSetting
 
 Retrieves service settings. When called without parameters, returns all settings. Specify `-Key` to retrieve a single setting by its dot-notation key.
 
@@ -73,7 +73,7 @@ Get-JIMServiceSetting -Key "Sync.PostClearReconciliation.MaxMissingPercent"
 
 ---
 
-## Set-JIMServiceSetting
+## :material-pencil-outline: Set-JIMServiceSetting
 
 Updates a service setting value. Read-only settings cannot be modified; attempting to do so produces a non-terminating error. Each change creates an audit activity. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
@@ -126,7 +126,7 @@ Set-JIMServiceSetting -Key "Sync.PostClearReconciliation.MaxMissingPercent" -Val
 
 ---
 
-## Reset-JIMServiceSetting
+## :material-restart: Reset-JIMServiceSetting
 
 Reverts a service setting to its default value by clearing the administrator override. Read-only settings cannot be reverted; attempting to do so produces a non-terminating error. Each reset creates an audit activity. Supports `ShouldProcess` (Medium impact); use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
@@ -171,7 +171,7 @@ Get-JIMServiceSetting | Where-Object { $_.IsOverridden } |
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Service Settings](../configuration/service-settings.md): what service settings are, default vs override behaviour, and read-only environment-mirrored settings
 - [Activities](activities.md): viewing audit activities created by setting changes

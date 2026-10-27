@@ -51,6 +51,15 @@ public class SchedulerServer
     }
 
     /// <summary>
+    /// The enabled Schedule due to run soonest, or null when none is due. Lets the Operations page say when work will
+    /// next join the queue (#2549).
+    /// </summary>
+    public async Task<NextDueSchedule?> GetNextDueScheduleAsync()
+    {
+        return await Application.Repository.Scheduling.GetNextDueScheduleAsync();
+    }
+
+    /// <summary>
     /// Gets a page of Schedules as lightweight headers, each carrying its step count and the outcome of its most
     /// recent execution, so a list view can show whether the last run succeeded rather than only when it happened.
     /// </summary>
@@ -566,8 +575,7 @@ public class SchedulerServer
         if (connectedSystemIds.Count == 0)
             return names;
 
-        var headers = await Application.ConnectedSystems.GetConnectedSystemHeadersAsync();
-        var headersById = headers.ToDictionary(h => h.Id, h => h.Name);
+        var namesById = await Application.ConnectedSystems.GetConnectedSystemNamesAsync();
 
         // Only the Connected Systems that actually have a Run Profile step need their Run Profiles listing; a
         // PowerShell or executable step names a Connected System without referencing a Run Profile at all.
@@ -586,7 +594,7 @@ public class SchedulerServer
                 runProfileNames = runProfiles.ToDictionary(rp => rp.Id, rp => rp.Name);
             }
 
-            names[connectedSystemId] = (headersById.GetValueOrDefault(connectedSystemId), runProfileNames);
+            names[connectedSystemId] = (namesById.GetValueOrDefault(connectedSystemId), runProfileNames);
         }
 
         return names;

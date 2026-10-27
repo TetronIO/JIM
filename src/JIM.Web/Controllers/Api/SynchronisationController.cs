@@ -73,7 +73,7 @@ public class SynchronisationController(
     public async Task<IActionResult> GetConnectedSystemsAsync([FromQuery] PaginationRequest pagination)
     {
         _logger.LogTrace("Requested Connected Systems (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        // Use GetConnectedSystemHeadersAsync which correctly computes PendingExportObjectsCount via SQL COUNT subquery.
+        // Use GetConnectedSystemHeadersAsync, which counts each system's objects and Pending Exports in the database.
         // The previous implementation used GetConnectedSystemsAsync().Select(FromEntity) which didn't load
         // the PendingExports navigation property, resulting in PendingExportObjectsCount always being 0.
         var headers = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();
@@ -1568,6 +1568,8 @@ public class SynchronisationController(
     /// <param name="pageSize">Number of items per page (1-100). Default: 50.</param>
     /// <param name="search">Optional search text to filter by target object, source MVO, or error message.</param>
     /// <param name="failing">When true, returns only the Pending Exports whose last attempt failed. Each is attempted again at every export run; its failingSince says since when it has been failing.</param>
+    /// <param name="changeType">Optional: return only the Pending Exports that make this kind of change.</param>
+    /// <param name="status">Optional: return only the Pending Exports with this status. A failing Pending Export is Pending; use failing to find those.</param>
     /// <returns>A paginated set of Pending Export headers.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports", Name = "GetPendingExports")]
     [ProducesResponseType(typeof(PaginatedResponse<PendingExportHeader>), StatusCodes.Status200OK)]
@@ -1577,14 +1579,20 @@ public class SynchronisationController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? search = null,
-        [FromQuery] bool failing = false)
+        [FromQuery] bool failing = false,
+        [FromQuery] PendingExportChangeType? changeType = null,
+        [FromQuery] PendingExportStatus? status = null)
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
         if (pageSize > 100) pageSize = 100;
 
         var result = await _application.ConnectedSystems.GetPendingExportHeadersAsync(
-            connectedSystemId, page, pageSize, searchQuery: search, failingOnly: failing);
+            connectedSystemId, page, pageSize,
+            statusFilters: status.HasValue ? [status.Value] : null,
+            searchQuery: search,
+            failingOnly: failing,
+            changeTypeFilters: changeType.HasValue ? [changeType.Value] : null);
 
         return Ok(new PaginatedResponse<PendingExportHeader>
         {

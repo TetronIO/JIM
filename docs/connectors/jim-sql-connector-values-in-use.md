@@ -17,7 +17,7 @@ When a synchronisation generates a value that is exported unchanged to a column 
 - **Case is ignored**<br /> As at every uniqueness check, `JBloggs` in the database stops JIM choosing `jbloggs`, whatever the column's collation. Where the column's collation already ignores case (Microsoft SQL Server's default), JIM compares the column as it stands, so an index on it serves the query. Everywhere else (Oracle Database, a case-sensitive or binary SQL Server collation, or a `select` statement) it compares `LOWER(column)` with the lower-cased values; on a large table, an index on `LOWER(column)` lets the database answer from the index rather than reading every row.
 - **Undetermined is not a failure**<br /> A database that cannot be reached, refuses the query (a missing `SELECT` grant, say) or does not answer in time is reported once on the synchronisation's Activity as a warning naming the reason, and the run continues with JIM's own records for that Connected System.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [JIM SQL Connector](jim-sql-connector.md)
 - [Generated Values in Target Systems](../configuration/generated-values-in-target-systems.md): probing and Collision Remediation for every Connector.

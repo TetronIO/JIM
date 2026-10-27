@@ -9,7 +9,7 @@ audience: administrator
 
 A [Generated Value](generated-values.md) must be free in every system it is exported to, not only in JIM's own records. JIM checks the target systems it can before choosing a value, and when a target still refuses a value as already in use, it corrects the value rather than leaving the export failing.
 
-## Checking availability in target systems
+## :material-magnify: Checking availability in target systems
 
 JIM's own records of a Connected System hold only the accounts JIM imports. An account outside the import scope (in an OU JIM does not manage, say, or created by hand) is invisible to them, so a value that looks free can already be in use. To catch these, JIM **probes** the target as well: before it chooses a value, it asks the target system directly whether the value is already in use, and if it is, moves on to the next candidate exactly as it would for a value it holds itself.
 
@@ -35,7 +35,7 @@ JIM's own records of a Connected System hold only the accounts JIM imports. An a
 
 **Sync Preview.** A preview is a dry run and never contacts a Connected System, so it checks JIM's own records only. It checks the [values built from](generated-values.md#values-built-from-a-generated-value) each candidate too, and says when a value would wait for an input. Where the synchronisation would also probe for a value the preview generated, or one built from it, the preview says so, naming the Connected Systems it would probe and the value: if one of them already has an account using it, the synchronisation generates a different value instead. The REST API's Sync Preview response carries the same information as `generatedValueProbes`, with `builtFromAttributeName` on a value built from the generated one.
 
-## When a target rejects a value
+## :material-alert-octagon-outline: When a target rejects a value
 
 Checking JIM's records and probing make a clash rare, not impossible: an account can be created in the target between the check and the export, or sit somewhere a probe cannot see. When that happens the target refuses the export because another object there already holds the value, and JIM corrects the value for you. This is **Collision Remediation**.
 
@@ -84,7 +84,7 @@ Both actions take effect at once (they release the export for the next export ru
 
 **When it is an ordinary export error.** A refusal JIM cannot tie to one generated value, a Connector that does not recognise "already in use" refusals, an Attribute Flow with Collision Remediation switched off, or a refused value built from a generated value with its **Keep unique** switch off: the export fails like any other, with the **Value Already in Use** error, and the value is left as it is for you to resolve.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Generated Values](generated-values.md): generating a value, and keeping it unique in JIM's own records.
 - [Connectors](../connectors/index.md): which Connectors can check availability and report a value already in use.

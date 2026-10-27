@@ -545,4 +545,44 @@ public class ServiceHealthDisplayTests
         WebVersion = "0.15.0",
         GeneratedAt = AsOf
     };
+
+    // ─── Next Schedule (#2549) ───
+
+    // 2026-09-05 is a Saturday; the strip says when the next Schedule fires in the reader's own terms.
+    [TestCase("2026-09-05T16:30:00", "today 16:30")]
+    [TestCase("2026-09-06T02:00:00", "tomorrow 02:00")]
+    [TestCase("2026-09-09T02:00:00", "Wed 02:00")]
+    [TestCase("2026-09-20T02:00:00", "20 Sep 02:00")]
+    public void NextScheduleWhen_RelativeToToday_ReadsNaturally(string next, string expected)
+    {
+        var nextRun = DateTime.SpecifyKind(DateTime.Parse(next, System.Globalization.CultureInfo.InvariantCulture), DateTimeKind.Utc);
+
+        Assert.That(ServiceHealthDisplay.NextScheduleWhen(nextRun, AsOf, TimeZoneInfo.Utc), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void NextScheduleWhen_ConvertsToTheReadersTimeZone()
+    {
+        var newYork = TimeZoneInfo.CreateCustomTimeZone("Test-5", TimeSpan.FromHours(-5), "Test-5", "Test-5");
+
+        Assert.That(ServiceHealthDisplay.NextScheduleWhen(AsOf.AddHours(14), AsOf, newYork), Is.EqualTo("today 21:00"));
+    }
+
+    [Test]
+    public void NextScheduleCountdown_SaysHowLongUntilItFires()
+    {
+        Assert.That(ServiceHealthDisplay.NextScheduleCountdown(AsOf.AddHours(83), AsOf), Is.EqualTo("in 3 d"));
+    }
+
+    [Test]
+    public void NextScheduleHeaderPhrase_ScheduleDue_NamesWhenAndNoneDue_IsNothing()
+    {
+        var next = new JIM.Models.Scheduling.DTOs.NextDueSchedule { Name = "Weekly Full Reconciliation", NextRunTime = AsOf.AddDays(1).AddHours(-10) };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.NextScheduleHeaderPhrase(next, AsOf, TimeZoneInfo.Utc), Is.EqualTo("next Schedule tomorrow 02:00"));
+            Assert.That(ServiceHealthDisplay.NextScheduleHeaderPhrase(null, AsOf, TimeZoneInfo.Utc), Is.Null);
+        }
+    }
 }

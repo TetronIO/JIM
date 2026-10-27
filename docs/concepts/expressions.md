@@ -11,7 +11,7 @@ When a Synchronisation Rule flows an attribute from one system to another, it of
 
 An expression is a short, readable formula that JIM evaluates during synchronisation to produce the value for a target attribute. If you have ever written a formula in a spreadsheet cell, this will feel familiar: you reference attributes much as a spreadsheet references cells, combine them with operators and functions, and JIM works out the result for each object as it is synchronised. No programming experience is required.
 
-## Where Expressions Fit
+## :material-swap-vertical: Where Expressions Fit
 
 Expressions live inside **Synchronisation Rules**, in what is known as the **Attribute Flow**: the part of a rule that decides which value lands in each target attribute. Most flows are a direct mapping (copy `cs["mail"]` straight into `mv["Email"]`); you only reach for an expression when a plain copy is not enough.
 
@@ -28,7 +28,7 @@ To add or edit these mappings in the admin UI, see [Synchronisation Rules](../co
 
 Expressions are also used by **example data generation templates** to construct a generated attribute's value from other attributes on the same object, for example building an email address whose domain is derived from a generated company name. Only the `mv` accessor applies in that context (generation builds Metaverse Objects directly, so there is no Connected System Object), but the same syntax and functions described below apply. To try one before generating anything, test it with [`Test-JIMExampleDataExpression`](../powershell/example-data.md#test-jimexampledataexpression) or the REST API's `/api/v1/example-data/templates/{templateId}/test-expression`: give the template attribute and sample values for the attributes it reads, and see the value it would be generated as.
 
-## Quick Examples
+## :material-file-document-outline: Quick Examples
 
 Before diving into the details, here are a few examples to give you a feel for how expressions work:
 
@@ -43,7 +43,7 @@ IIF(Eq(mv["Employee Status"], "Active"), 512, 514)
 Coalesce(mv["Preferred Name"], mv["First Name"])
 ```
 
-## Attribute Access
+## :material-code-braces: Attribute Access
 
 Expressions work with two sources of data:
 
@@ -94,7 +94,7 @@ For an object whose `proxyAddresses` holds `SMTP:priya.shah@example.org` and `sm
 
 A result with several values written to a Multi-Valued attribute writes every value; written to a Single-Valued attribute, it flows nothing and is reported as a `Multi-Valued to Single-Valued` error, the object's other attributes unaffected. The [tester](#testing-an-expression) shows the same, so try an expression against several sample values before saving it.
 
-## Operators
+## :material-calculator-variant-outline: Operators
 
 You can use standard operators to combine values, do arithmetic, and make comparisons.
 
@@ -152,7 +152,7 @@ Example: check that an employee is both active and in the IT department:
 Eq(mv["Employee Status"], "Active") && Eq(mv["Department"], "IT")
 ```
 
-## String Comparison
+## :material-format-letter-case: String Comparison
 
 `==` and `Eq()` both compare text by its characters, exactly and case-sensitively:
 
@@ -169,7 +169,7 @@ For case-insensitive comparisons (where "Active", "ACTIVE", and "active" should 
 Eq(Lower(mv["Status"]), "active")
 ```
 
-## Built-in Functions
+## :material-function-variant: Built-in Functions
 
 ### String Functions
 
@@ -290,13 +290,13 @@ These functions are primarily used with Active Directory's `userAccountControl` 
 | `ClearBit(value, bit)` | Turn off a specific flag | `ClearBit(mv["uac"], 65536)` |
 | `HasBit(value, bit)` | Check if a specific flag is turned on | `HasBit(cs["userAccountControl"], 2)` |
 
-## ⚠️ Nulls, Missing Inputs, and Whitespace
+## :material-null: Nulls, Missing Inputs, and Whitespace
 
 When an expression references an attribute the object does not have, it sees **null**, and how JIM treats that decides whether a target value is cleared, kept, or silently filled with malformed data. Read [Nulls and Missing Inputs](expression-nulls.md) before you write an expression that references an attribute which might be absent: it sets out the five rules, and the per-mapping setting that has JIM refuse an outcome rather than guess at it.
 
 ---
 
-## Common Scenarios
+## :material-lightbulb-outline: Common Scenarios
 
 This section shows practical examples of expressions you will use when setting up identity synchronisation.
 
@@ -452,7 +452,7 @@ If the attribute has the values Admin, Users, and Developers, this produces `Adm
 - Empty and missing values are filtered out
 - Uses a comma as the default delimiter if none is specified
 
-## Validation and Troubleshooting
+## :material-wrench-outline: Validation and Troubleshooting
 
 ### Testing an expression
 
@@ -517,7 +517,7 @@ When an expression does not produce the result you expect:
 4. **Test with sample data**<br /> Use the tester in the Attribute Flow dialog to try your expression with sample values, including leaving an input empty to see what an object without that attribute would produce (see [Testing an expression](#testing-an-expression)).
 5. **Check the worker logs**<br /> If expressions fail during sync, the worker service logs the error details.
 
-## Best Practices
+## :material-star-outline: Best Practices
 
 1. **Say which value of a Multi-Valued attribute you mean**<br /> Use `Where()`, `Min()`, `Max()` or `Join()`, so an object gaining a second value is handled rather than reported as an error.
 

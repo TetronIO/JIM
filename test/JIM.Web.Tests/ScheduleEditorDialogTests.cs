@@ -44,11 +44,8 @@ public class ScheduleEditorDialogTests : JimComponentTestContext
         repository.Setup(r => r.Scheduling).Returns(_schedulingRepository.Object);
         repository.Setup(r => r.ConnectedSystems).Returns(connectedSystemRepository.Object);
 
-        connectedSystemRepository.Setup(r => r.GetConnectedSystemHeadersAsync()).ReturnsAsync(
-        [
-            new ConnectedSystemHeader { Id = 1, Name = "HR", ConnectorName = "SQL Connector" },
-            new ConnectedSystemHeader { Id = 2, Name = "Active Directory", ConnectorName = "LDAP Connector" }
-        ]);
+        connectedSystemRepository.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(
+            new Dictionary<int, string> { [1] = "HR", [2] = "Active Directory" });
         connectedSystemRepository.Setup(r => r.GetConnectedSystemRunProfilesAsync(1)).ReturnsAsync(
         [
             new ConnectedSystemRunProfile { Id = 11, Name = "Full Import" },

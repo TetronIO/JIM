@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{#-
+  Replaces Material's font block with one Google Fonts request for all three
+  faces. Material's own request loads IBM Plex Sans as static 300/400/700, which
+  cannot set body text at 450, the weight IBM designed for running text; the
+  variable font here can. Space Grotesk (hero title, site name) is loaded here
+  too rather than by an @import in custom.css. The fonts themselves are still
+  named in mkdocs.yml (theme.font), which this block reads.
+-#}
+{% block fonts %}
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Space+Grotesk:wght@600;700&display=fallback">
+  <style>:root{--md-text-font:"{{ config.theme.font.text }}";--md-code-font:"{{ config.theme.font.code }}"}</style>
+{% endblock %}
+
+{#-
+  The reader's content width (docs/assets/javascripts/docs-layout.js), applied before the page
+  draws so a full-width choice does not flash at the reading width first.
+-#}
+{% block extrahead %}
+  <script>try{if(localStorage.getItem("jim-docs-width")==="full")document.documentElement.setAttribute("data-jim-width","full")}catch(e){}</script>
+{% endblock %}

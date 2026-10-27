@@ -11,7 +11,7 @@ The Connected Systems cmdlets manage the full lifecycle of Connected Systems in 
 
 ---
 
-## Get-JIMConnectedSystem
+## :material-server-network-outline: Get-JIMConnectedSystem
 
 Retrieves one or more Connected Systems, their object types, or a deletion impact preview.
 
@@ -204,7 +204,7 @@ Get-JIMConnectedSystem -Id 3 -DeletionPreview
 
 ---
 
-## New-JIMConnectedSystem
+## :material-plus-circle-outline: New-JIMConnectedSystem
 
 Creates a new Connected System.
 
@@ -248,7 +248,7 @@ $cs = New-JIMConnectedSystem "HR Database" -ConnectorDefinitionId 2 -Description
 
 ---
 
-## Set-JIMConnectedSystem
+## :material-pencil-outline: Set-JIMConnectedSystem
 
 Updates the configuration of an existing Connected System.
 
@@ -314,7 +314,7 @@ Set-JIMConnectedSystem -Id 3 -Description "Point at DR domain controller" -Chang
 
 ---
 
-## Remove-JIMConnectedSystem
+## :material-trash-can-outline: Remove-JIMConnectedSystem
 
 Deletes a Connected System and all its associated data.
 
@@ -404,7 +404,7 @@ Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -Dele
 
 ---
 
-## Get-JIMConnectedSystemCapability
+## :material-puzzle-outline: Get-JIMConnectedSystemCapability
 
 Retrieves the Connector-detected capabilities for a Connected System, e.g. an LDAP directory's type, vendor, DNS host name, and paging support. These are facts read from the target system during a previous connection and persisted by JIM; calling this cmdlet does not open a new connection.
 
@@ -447,7 +447,7 @@ Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMConnectedSystemCapabili
 
 ---
 
-## Clear-JIMConnectedSystem
+## :material-broom: Clear-JIMConnectedSystem
 
 Removes every Connected System Object and its associated data from a Connected System without deleting the system itself. The Connected System configuration, schema, and Synchronisation Rules are preserved.
 
@@ -517,7 +517,7 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 
 ---
 
-## Get-JIMConnectedSystemDeletionPreview
+## :material-delete-sweep-outline: Get-JIMConnectedSystemDeletionPreview
 
 Retrieves a preview of the impact of deleting a Connected System, including counts of affected objects and warnings.
 
@@ -564,7 +564,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the Connector Space, partitions and containers, and common workflows
 - [Connected System Schema](connected-system-schema.md): import a Connected System's schema, and choose its Object Types and attributes

@@ -62,11 +62,8 @@ public class ScheduleExecutionProgressReadTests
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystems.Object);
 
         // The detail read resolves each Run Profile step's Connected System and Run Profile names.
-        _mockConnectedSystems.Setup(r => r.GetConnectedSystemHeadersAsync()).ReturnsAsync(
-        [
-            new ConnectedSystemHeader { Id = 1, Name = "Yellowstone APAC" },
-            new ConnectedSystemHeader { Id = 2, Name = "Glitterband EMEA" }
-        ]);
+        _mockConnectedSystems.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(
+            new Dictionary<int, string> { [1] = "Yellowstone APAC", [2] = "Glitterband EMEA" });
         _mockConnectedSystems.Setup(r => r.GetConnectedSystemRunProfilesAsync(It.IsAny<int>())).ReturnsAsync(
         [
             new ConnectedSystemRunProfile { Id = 1, Name = "Full Import" },

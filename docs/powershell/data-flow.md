@@ -9,7 +9,7 @@ audience: automation-author
 
 `Get-JIMDataFlow` lists every attribute data flow configured across all Connected Systems, in both directions, with the same filters as the portal's **Data Flow** view. One flow is one Attribute Flow on one Synchronisation Rule. What a flow is, and how to read its priority and settings, is explained in [Data Flow](../configuration/data-flow.md); this page is the cmdlet's reference.
 
-## Get-JIMDataFlow
+## :material-swap-vertical: Get-JIMDataFlow
 
 Gets attribute data flows. An Import flow reads Connected System attributes and writes a single Metaverse Attribute, so it carries a priority and a "Null is a value" flag. An Export flow reads Metaverse Attributes and writes a single Connected System attribute, so it carries the owning rule's Enforce State. Properties that do not apply to a flow's direction are `$null`, never defaulted, so a value that is present always means something.
 
@@ -98,7 +98,7 @@ Get-JIMDataFlow -Direction Import | Where-Object { $_.NullIsValue } |
 Get-JIMConnectedSystem -Name 'HR*' | Get-JIMDataFlow
 ```
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Data Flow](../configuration/data-flow.md): what a flow is, and how to read it in the portal
 - [Attribute Priority](../concepts/attribute-priority.md): how JIM decides which contribution wins

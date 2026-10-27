@@ -10,7 +10,7 @@ validated: v0.16.0
 
 This page covers installing, starting and signing in to JIM. For a synchronisation that goes wrong (a run that ends with a warning or an error, or an object that will not join, import or export), see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
 
-## Start-up
+## :material-rocket-launch-outline: Start-up
 
 ### A service logs `The database is not reachable yet`
 
@@ -63,11 +63,11 @@ On its first start against your own PostgreSQL server, JIM never becomes ready. 
 ALTER DATABASE jim OWNER TO jim;
 ```
 
-## Podman
+## :material-package-variant-closed: Podman
 
 Problems particular to running JIM on Podman, such as a rootless JIM that will not start, or Ubuntu's AppArmor profiles stopping JIM's containers, are on [Troubleshooting Podman](troubleshooting-podman.md).
 
-## HTTPS
+## :material-certificate-outline: HTTPS
 
 ### The browser cannot connect at `http://<server>`
 
@@ -114,7 +114,7 @@ proxy_buffer_size 16k;
 proxy_buffers 8 16k;
 ```
 
-## Authentication
+## :material-shield-key-outline: Authentication
 
 ### Sign-in loops between JIM and the identity provider
 
@@ -144,9 +144,9 @@ You clicked **Login** (or let `Connect-JIM` open your browser) and the identity 
 
 **How to fix.**
 
-1. Confirm your identity provider has a public client registered with at least the redirect URI `http://localhost:8400/callback/`. The per-provider guides cover this: [Entra ID Step 5b](sso-setup/microsoft-entra-id.md#step-5b-configure-powershell-module-authentication-optional-but-recommended), [AD FS Step 7](sso-setup/ad-fs.md#step-7-configure-powershell-module-authentication-optional-but-recommended), [Keycloak Step 6](sso-setup/keycloak.md#step-6-configure-powershell-module-authentication-recommended).
-2. If the public client is a **separate registration** from the web application (always the case for Keycloak), set `JIM_SSO_PUBLIC_CLIENT_ID` on the JIM server to the public client's client ID and restart JIM.
-3. If the public client **shares a registration** with the web application (Entra ID or AD FS with both platforms added to one app), you do not need to set `JIM_SSO_PUBLIC_CLIENT_ID`; make sure the web app registration has the loopback redirect URI added under its native/mobile platform.
+1. Confirm your identity provider has a public client registered with at least the redirect URI `http://localhost:8400/callback/`. The per-provider guides cover this: [Entra ID Step 5b](sso-setup/microsoft-entra-id.md#step-5b-configure-powershell-module-authentication-optional-but-recommended), [AD FS Step 1](sso-setup/ad-fs.md#step-1-register-jim-with-ad-fs), [Keycloak Step 1](sso-setup/keycloak.md#step-1-register-jim-with-keycloak).
+2. If the public client is a **separate registration** from the web application (always the case for Keycloak and AD FS), set `JIM_SSO_PUBLIC_CLIENT_ID` on the JIM server to the public client's client ID and restart JIM.
+3. If the public client **shares a registration** with the web application (Entra ID with both platforms added to one app), you do not need to set `JIM_SSO_PUBLIC_CLIENT_ID`; make sure the web app registration has the loopback redirect URI added under its native/mobile platform.
 
 Verify the config the server is advertising:
 
@@ -156,7 +156,7 @@ curl https://your-jim-url/api/v1/auth/config
 
 The `clientId` in the response must be the client that has the loopback redirect URI registered at your identity provider.
 
-## Known noisy log lines
+## :material-bell-off-outline: Known noisy log lines
 
 Some messages in the container logs look alarming but are expected and harmless. They are documented here so operators can confirm at a glance that nothing is actually wrong.
 
@@ -184,7 +184,7 @@ jim.scheduler  |       Application started. Press Ctrl+C to shut down.
 
 The container should also transition to `healthy` in `docker ps`.
 
-## Still stuck?
+## :material-lifebuoy: Still stuck?
 
 Collect these before asking for help:
 

@@ -14,7 +14,7 @@ JIM processes identity data in a three-phase pipeline: **Import**, **Sync**, and
 
 <p class="jim-diagram-caption">Data is staged either side of the Metaverse, in the Connector Space belonging to each Connected System: imports land there as Connected System Objects, synchronisation reconciles them into Metaverse Objects, and outbound changes are staged again before export. The systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
-## 📥 Phase 1: Import
+## :material-import: Phase 1: Import
 
 Import pulls data from a Connected System into its **Connector Space**. The result is a set of Connected System Objects that represent the current state of the external system.
 
@@ -75,7 +75,7 @@ On the next Full Import, JIM computes the same hash for each incoming object *be
 
 This optimisation is transparent and requires no configuration. To validate it, or to investigate a suspected discrepancy, enable **Verification Mode** on a Full Import Run Profile (see [Run Profiles](../configuration/run-profiles.md)): with Verification Mode on, JIM performs the full comparison on every object regardless of the stored hash, and reports an error if a stored hash matched but the comparison still found a change. Verification Mode is slower (it forgoes the optimisation) and is intended for occasional validation, not everyday use.
 
-## 🔀 Phase 2: Sync (Synchronisation)
+## :material-sync: Phase 2: Sync (Synchronisation)
 
 Sync is the core phase, where JIM reconciles each Connector Space with the Metaverse. It applies **Synchronisation Rules** to decide how Connected System Objects relate to Metaverse Objects, and how attributes flow between them.
 
@@ -118,7 +118,7 @@ What prevents this from looping is value-level change detection, not a special c
 
 One kind of configuration change does not wait for a Full Sync: an export rule change that moves objects into or out of its scope (a new or re-enabled rule, provisioning switched on, changed Scoping Criteria). JIM marks the affected Metaverse Objects, and the next synchronisation of any Connected System, Delta included, provisions and deprovisions them; see [When a change to an export rule takes effect](../configuration/deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
 
-## 📤 Phase 3: Export
+## :material-export: Phase 3: Export
 
 Export sends Pending Exports from the Connector Space to the target Connected System. Each one is a create, update, or delete.
 
@@ -152,7 +152,7 @@ An Export Run Profile can limit how many creates, updates and deletes one run ma
 
 When an export to a Connected System succeeds, JIM applies the exported attribute values to its own record of that Connected System Object immediately, rather than waiting for the next import to bring them back. The confirming import still runs as usual, comparing what the Connected System reports against what JIM expects, but for a successfully exported object it typically finds nothing left to do, which keeps it fast at large scale.
 
-## Putting It Together
+## :material-sitemap-outline: Putting It Together
 
 A typical synchronisation cycle follows this pattern:
 
@@ -169,7 +169,7 @@ A typical synchronisation cycle follows this pattern:
 
 Before running the real cycle for one object, [Sync Preview](../configuration/sync-preview.md) answers what steps 2 to 4 would do with it: whether it would join or project, what would flow, and what would export, without staging or changing anything.
 
-## Initialising JIM
+## :material-rocket-launch-outline: Initialising JIM
 
 Initialise JIM once in a new deployment, and again after any significant change to Synchronisation Rules, [Object Matching Rules](../configuration/object-matching-rules.md) or [Attribute Priority](attribute-priority.md). Initialising means running every Connected System through the pipeline in a fixed order before returning to delta cycles.
 
@@ -186,6 +186,6 @@ Initialise JIM once in a new deployment, and again after any significant change 
 
 **After initialisation,** return to normal delta cycles (see [Schedules](../configuration/schedules.md#common-workflows)).
 
-## Run Profiles
+## :material-play-circle-outline: Run Profiles
 
 Each phase runs as a **Run Profile**, an operation configured on a Connected System, started from the portal, the REST API or PowerShell, or by a Schedule. [Run Profiles](../configuration/run-profiles.md#run-types) lists the run types.

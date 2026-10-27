@@ -18,7 +18,7 @@ JIM requires an OIDC-compliant identity provider for authentication. This page i
 
     JIM serves both the web interface and API from a single application. The API is available at `/api/` on the same host.
 
-## Choose your identity provider
+## :material-shield-key-outline: Choose your identity provider
 
 JIM works with any OIDC-compliant identity provider. Pick the guide that matches yours for exact, click-by-click setup instructions:
 
@@ -34,9 +34,9 @@ JIM works with any OIDC-compliant identity provider. Pick the guide that matches
 
     ---
 
-    Application Group with a web application, native (PowerShell) application, and Web API, plus the claim rules to emit standard OIDC claims.
+    One PowerShell command registers JIM's Application Group, and JIM identifies people by their Active Directory `objectGUID`.
 
--   :material-account-key:{ .lg .middle } **[Keycloak](sso-setup/keycloak.md)**
+-   :material-account-key-outline:{ .lg .middle } **[Keycloak](sso-setup/keycloak.md)**
 
     ---
 
@@ -56,7 +56,7 @@ Each sign-in also keeps the person's profile in step with their token: **Display
 
 ---
 
-## Confidential vs Public Clients
+## :material-lock-open-outline: Confidential vs Public Clients
 
 JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider they may be the same registration or two separate ones. Understanding which is which makes the per-provider steps easier to follow.
 
@@ -71,8 +71,8 @@ JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider
 
 **When must they be different?**
 
-- **AD FS**: A Server application (confidential) and a Native application (public) are distinct applications with their own Client Identifiers, even inside a single Application Group. Create both and set `JIM_SSO_PUBLIC_CLIENT_ID` to the Native application's identifier.
-- **Keycloak**: A single Keycloak client cannot be both confidential and public. You must create two clients (e.g. `jim` and `jim-powershell`) and set `JIM_SSO_PUBLIC_CLIENT_ID` to the public one.
+- **AD FS**: A Server application (confidential) and a Native application (public) are distinct applications with their own Client Identifiers, even inside a single Application Group. `Register-JIMIdentityProvider` creates both, and returns the Native application's identifier for `JIM_SSO_PUBLIC_CLIENT_ID`.
+- **Keycloak**: A single Keycloak client cannot be both confidential and public. `Register-JIMIdentityProvider` creates two, `jim` and `jim-powershell`, and returns the public one for `JIM_SSO_PUBLIC_CLIENT_ID`.
 - **Any IdP where your security policy forbids adding loopback redirects to a confidential client**: create a dedicated public client and point `JIM_SSO_PUBLIC_CLIENT_ID` at it.
 
 **What does JIM do with these values?**
@@ -91,14 +91,14 @@ Backend token validation (the JWT bearer middleware that protects `/api/**` endp
 | A bare `api://{id}`, such as AD FS's identifier | The value as it stands |
 | Anything else (Keycloak's `jim-api`, say), or unset | `JIM_SSO_CLIENT_ID` |
 
-As long as the public and confidential clients belong to the same realm or tenant and both request the same API scope, tokens from either are valid. JIM does not check which client a token was issued to, so give the audience only to the clients meant to call JIM's API. The [Keycloak guide](sso-setup/keycloak.md#step-4-create-the-api-client-scope) shows how; with Entra ID or AD FS, review which applications your identity provider permits to request JIM's API scope.
+As long as the public and confidential clients belong to the same realm or tenant and both request the same API scope, tokens from either are valid. JIM does not check which client a token was issued to, so give the audience only to the clients meant to call JIM's API. For AD FS and Keycloak, `Register-JIMIdentityProvider` gives it only to JIM's two clients, and takes it from any other; with Entra ID, review which applications your identity provider permits to request JIM's API scope.
 
 !!! info "Why `offline_access`?"
     JIM requests the `offline_access` scope so the identity provider issues a **refresh token**. The PowerShell module uses this for two things: silent in-session token renewal (so long-running sessions don't expire mid-task), and optional cross-session token persistence (so opening a new terminal doesn't require re-authenticating in the browser). The refresh token is the only credential persisted, and it is stored in the operating system's credential store (Credential Manager on Windows, login Keychain on macOS, libsecret on Linux); never in plain text. Your public client must be permitted to receive `offline_access`. Most identity providers grant it to public clients by default; the per-provider guides note where it must be enabled explicitly.
 
 ---
 
-## Testing Your Configuration
+## :material-test-tube: Testing Your Configuration
 
 Once you have completed the setup for your provider, use these steps to verify sign-in, claims, sign-out, and API access.
 
@@ -175,7 +175,7 @@ Test-JIMConnection
 
 ---
 
-## Sign-Out Troubleshooting
+## :material-logout: Sign-Out Troubleshooting
 
 Sign-out uses OIDC [RP-initiated logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html): JIM clears its local session cookie, then redirects the browser to the identity provider's `end_session_endpoint` with an `id_token_hint` and a `post_logout_redirect_uri`. The identity provider ends its session and redirects the browser back to JIM.
 
@@ -185,7 +185,7 @@ The most common failure modes and how to fix them:
 : The post-logout URI (`https://your-jim-url/signout-callback-oidc`) is not registered against the app. Add it to **Authentication** > **Platform configurations** > **Web** > **Redirect URIs** and save. See [Entra ID Step 1](sso-setup/microsoft-entra-id.md#step-1-register-the-application).
 
 **"Invalid post_logout_redirect_uri"** or similar (AD FS, Keycloak)
-: Same root cause as above: the URI is not in the application's registered redirect URI list. For AD FS, add `https://your-jim-url/signout-callback-oidc` to the Server application's Redirect URIs (see [AD FS Step 2](sso-setup/ad-fs.md#step-2-configure-the-server-application)). For Keycloak, add it to **Valid post logout redirect URIs** on the client (see [Keycloak Step 2](sso-setup/keycloak.md#step-2-create-a-client-for-jim)).
+: Same root cause as above: the URI is not in the application's registered redirect URI list. Run `Register-JIMIdentityProvider` again with JIM's address: it puts back the portal's redirect URIs, `/signout-callback-oidc` among them (see Keep the registration right for [AD FS](sso-setup/ad-fs.md#keep-the-registration-right) and [Keycloak](sso-setup/keycloak.md#keep-the-registration-right)).
 
 **"Missing parameters: id_token_hint"** (Keycloak and other strict providers)
 : Keycloak and other strict OIDC providers require `id_token_hint` on the end-session request per the OIDC specification. JIM persists the ID token during sign-in automatically so the middleware can include it on sign-out. If you see this error, verify your identity provider is actually issuing an ID token (the `openid` scope must be requested, which JIM does by default) and that your client configuration is not stripping it.
@@ -198,7 +198,7 @@ The most common failure modes and how to fix them:
 
 ---
 
-## Security Considerations
+## :material-shield-lock-outline: Security Considerations
 
 ### Token Lifetimes
 

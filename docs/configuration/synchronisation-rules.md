@@ -12,7 +12,7 @@ A **Synchronisation Rule** defines the complete relationship between a [Connecte
 
 Synchronisation Rules are the central configuration mechanism for identity synchronisation in JIM. Every Connected System needs at least one Synchronisation Rule to participate in synchronisation.
 
-## What a Synchronisation Rule ties together
+## :material-link-variant: What a Synchronisation Rule ties together
 
 1. **Direction**<br /> Whether data flows inbound (a source system into the Metaverse) or outbound (the Metaverse out to a target system).
 2. **Scoping criteria**<br /> Which objects the rule applies to.
@@ -30,7 +30,7 @@ A saved rule's Connected System, direction and Object Types are stated in a stri
 
 Where a tab introduces a term you might not already know (Projection, Scoping, Object Matching Rules, Attribute Flow and others across JIM's configuration pages), an info icon sits beside it. Selecting it shows a short definition and a link to the full entry in the [glossary](../reference/glossary.md).
 
-## Direction
+## :material-swap-horizontal: Direction
 
 Each rule has a direction that determines the flow of data.
 
@@ -60,15 +60,15 @@ When **enforce state** is set on an export rule, JIM additionally detects and re
 
 A change made in the Connected System is not drift when it can flow back in: that is, when the same Connected System holds the winning import Attribute Flow for the Metaverse attribute and that flow **reads the changed attribute**. For example, an import flow of `mail` into Email and an export of Email to `mail` let an edit to `mail` update Email. If the import flow reads a different attribute (Display Name built from `givenName` and `sn`, but exported to `displayName`), an edit to `displayName` could never reach the Metaverse, so it is treated as drift and corrected.
 
-## Scoping criteria
+## :material-filter-outline: Scoping criteria
 
 Scoping criteria decide which objects a rule applies to: only objects that match are processed. [Scoping Criteria](scoping-criteria.md) covers how criteria are evaluated, multi-valued attributes, relative dates, and previewing a scope change.
 
-## Object Matching Rules
+## :material-vector-link: Object Matching Rules
 
 Object Matching Rules decide how a Connected System Object is matched to an existing Metaverse Object, by comparing a Connected System attribute, or an [expression](object-matching-rules.md#matching-on-an-expression) worked out from the Connected System Object, with a Metaverse attribute. [Object Matching Rules](object-matching-rules.md) covers the outcomes, simple and advanced matching, and previewing a matching change.
 
-## Projection and provisioning
+## :material-ray-start-arrow: Projection and provisioning
 
 These determine what happens when no match is found.
 
@@ -86,19 +86,19 @@ If a Metaverse Object attribute changes again while its Create export is still a
 
 If a Full Import completes without reporting the object back at all, the Create itself is retried on the next export, up to the ordinary retry limit; a Delta Import never triggers this, since it only reports changes and an object missing from its payload is not evidence that it no longer exists.
 
-## Deprovisioning Action
+## :material-account-arrow-down-outline: Deprovisioning Action
 
 Each export rule's **Deprovisioning Action** decides what happens to its object in the Connected System when the Metaverse Object leaves the rule's scope or is deleted. [Deprovisioning](deprovisioning.md) covers the actions, when a change to an export rule takes effect, seeing what a run deprovisioned, and previewing a destructive change.
 
-## Initial password
+## :material-form-textbox-password: Initial password
 
 An export rule's **Initial Password** tab sets a password on every Connected System Object the rule creates. [Initial Password](initial-password.md) covers what you configure, and what happens after provisioning.
 
-## Attribute mappings
+## :material-swap-vertical: Attribute mappings
 
 Attribute mappings define which attributes to synchronise and how to transform them: each maps a source attribute or an expression to a target attribute. [Attribute Mappings](attribute-mappings.md) covers each kind of mapping, value processing, Initial Export Only, previewing a change, and Attribute Priority; [Generated Values](generated-values.md) and [Deriving Metaverse Attributes](derived-attributes.md) cover the two kinds that build a value rather than copy one.
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Setting up an import rule:**
 
@@ -115,7 +115,7 @@ Attribute mappings define which attributes to synchronise and how to transform t
 4. Configure Object Matching Rules for the export direction
 5. Decide whether to enforce state, i.e. detect and correct drift in the target system
 
-## Example: a complete import rule
+## :material-file-document-outline: Example: a complete import rule
 
 A complete import rule for an HR system might look like:
 
@@ -135,7 +135,7 @@ A complete import rule for an HR system might look like:
 
 This rule imports full-time employees from the HR system, joins them to existing Metaverse Objects by employee ID, creates new Metaverse Objects for new starters, and flows their attributes into the Metaverse.
 
-## Finding a Synchronisation Rule
+## :material-magnify: Finding a Synchronisation Rule
 
 Once a deployment has more than a handful of rules, the Synchronisation Rules list carries filters above the table so you can narrow it to the rules you care about:
 
@@ -152,7 +152,7 @@ The search box in the table's toolbar narrows whatever the filters left, matchin
 
 The same filters are available to automation: see `Get-JIMSyncRule`'s `-Direction`, `-ActionType` and `-Status` parameters, and the matching query parameters on the Synchronisation Rules list endpoint in the REST API.
 
-## Confirming a change before you save it
+## :material-content-save-check-outline: Confirming a change before you save it
 
 Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit side by side on the same page: renaming a rule is beside the Deprovisioning Action that decides whether leavers' accounts are deleted. JIM judges each save by the properties that actually changed:
 
@@ -162,7 +162,7 @@ Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit s
 
 The same rules apply across every configuration surface; see [Configuration changes](configuration-changes.md) for the full picture, including when JIM stays silent.
 
-## Deleting a Synchronisation Rule
+## :material-delete-outline: Deleting a Synchronisation Rule
 
 Deleting a rule removes all of its configuration: Attribute Flow mappings, scoping criteria and Object Matching Rules. The deletion lives on the rule's **Danger Zone** tab, and what the confirmation asks depends on whether the rule contributed Metaverse attribute values that are still in place.
 
@@ -177,13 +177,13 @@ The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-J
 
 For the full recall semantics (re-election, Value cleared outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
 
-## Manage Synchronisation Rules
+## :material-tune-variant: Manage Synchronisation Rules
 
 - **JIM portal**<br /> Synchronisation Rules area of the admin UI
 - **PowerShell**<br /> [Synchronisation Rules cmdlets](../powershell/synchronisation-rules.md) (`Get-JIMSyncRule`, `New-JIMSyncRule`, etc.)
 - **REST API**<br /> Synchronisation Rules endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Configuration changes](configuration-changes.md): how JIM classifies and confirms configuration changes
 - [Connected Systems](connected-systems.md): the systems a Synchronisation Rule connects to

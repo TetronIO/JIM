@@ -168,6 +168,14 @@ public interface IActivityRepository
     /// </summary>
     public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 
+    /// <summary>
+    /// The execution durations of each requested Run Profile's most recent successful runs (Complete or
+    /// CompleteWithWarning), newest first and at most <paramref name="perRunProfile"/> each. A Run Profile with no
+    /// successful run is absent from the result. Feeds the Operations page's estimated start times (#2549).
+    /// </summary>
+    public Task<Dictionary<int, List<TimeSpan>>> GetRecentSuccessfulRunProfileDurationsAsync(
+        IReadOnlyCollection<int> runProfileIds, int perRunProfile);
+
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,
         int page,

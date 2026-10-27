@@ -11,20 +11,20 @@ This guide connects the [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) t
 
 Keycloak's SCIM API differs from the SCIM specification in several ways that change how a Connected System has to be set up: it does not stamp every change with a new last-modified date, it normalises some values, and it hides some objects. Each step below says which difference it accounts for.
 
-## Before you begin
+## :material-clipboard-list-outline: Before you begin
 
 - **Keycloak 26.8.0 or later.** 26.8.0 made the SCIM API supported. Earlier versions differ in the roles discovery needs, in how they check a token's audience, and in how many changes one request may carry, so this guide does not apply to them.
 - **An administrator account on the realm** JIM will connect to, to turn the SCIM API on and create a client.
 - **HTTPS.** The Connector refuses a plain HTTP Base URL for anything but a loopback address. If Keycloak's certificate is issued by a private certificate authority, have that certificate to hand; the connection test offers to trust it.
 - **The address Keycloak calls itself.** Keycloak checks that a token was issued for its SCIM API at the address it knows itself by: its frontend hostname (`KC_HOSTNAME`). If JIM reaches Keycloak through another name, you need both.
 
-## 1. Turn on the realm's SCIM API
+## :material-toggle-switch-outline: 1. Turn on the realm's SCIM API
 
 In the Keycloak Admin Console, select the realm, open **Realm settings**, and on the **General** tab turn **SCIM API** on.
 
 The realm's SCIM Base URL is then `https://<host>/realms/<realm>/scim/v2`, where `<host>` is Keycloak's frontend hostname.
 
-## 2. Create a client for JIM
+## :material-key-outline: 2. Create a client for JIM
 
 In **Clients**, create an OpenID Connect client for JIM:
 
@@ -36,7 +36,7 @@ In **Clients**, create an OpenID Connect client for JIM:
 
 Note the client's **Client ID**, and its **Client Secret** from the **Credentials** tab.
 
-## 3. Create the Connected System
+## :material-server-network-outline: 3. Create the Connected System
 
 Create a Connected System with the JIM SCIM 2.0 Client Connector and these settings:
 
@@ -51,7 +51,7 @@ Create a Connected System with the JIM SCIM 2.0 Client Connector and these setti
 
 Test the connection, then import the schema and select the `User` and `Group` Object Types. The schema import warns that Keycloak's schema does not say what is inside a Group's `members`, or a User's `groups` and `emails`, and that JIM used the SCIM specification's definition instead. That is expected, and is what makes those attributes available.
 
-## 4. Shape the Attribute Flows to what Keycloak keeps
+## :material-swap-vertical: 4. Shape the Attribute Flows to what Keycloak keeps
 
 Keycloak changes or drops some values it is sent. JIM confirms every export by reading the value back, so a value Keycloak alters is never confirmed: JIM sends it again at every export run and reports it as not confirmed on every import. Flow values Keycloak will keep:
 
@@ -61,23 +61,23 @@ Keycloak changes or drops some values it is sent. JIM confirms every export by r
 - **Take membership from Groups.** Import and export group membership through the Group's `members` attribute, never the User's `groups`: a User's `groups` includes memberships inherited through subgroups.
 - **`externalId` on Users** needs a User Profile attribute mapped to it in Keycloak before Keycloak keeps it.
 
-## 5. Scope out accounts Keycloak protects
+## :material-filter-outline: 5. Scope out accounts Keycloak protects
 
 Keycloak protects every user and group that holds an administrative role (any `realm-management` role) from changes made through SCIM: each write to one is refused with 403, and an import returns it with only its `userName`. Scope those objects out of the Synchronisation Rules that export to this Connected System, so JIM does not attempt changes Keycloak will always refuse.
 
-## 6. Run a Full Import
+## :material-import: 6. Run a Full Import
 
 Run a Full Import Run Profile.
 
 JIM asks Keycloak for a Group's `members` by name, because Keycloak returns them no other way; groups therefore arrive with their members.
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 - The Full Import's Activity lists the realm's users and groups, and a group's Connected System Object shows its members.
 - The Activity carries no warning about the service provider, apart from the expected one about Change Detection if you left it on Auto-detect.
 - Export a test group with a member. Keycloak refuses a group created with members, so JIM creates the group first and adds its members with a second request; the Pending Export confirms at the next import.
 
-## What Keycloak's SCIM API cannot do
+## :material-alert-octagon-outline: What Keycloak's SCIM API cannot do
 
 These are limits of Keycloak, not of the Connector, and no setting changes them:
 
@@ -86,7 +86,7 @@ These are limits of Keycloak, not of the Connector, and no setting changes them:
 - **Realms that write users to LDAP are unsupported for provisioning.** Where the realm's LDAP provider syncs registrations, a user created through SCIM can be stored only in LDAP, after which Keycloak cannot find it through SCIM again, and the confirming import never sees it.
 - **Clearing a group's whole membership in one step does nothing.** Keycloak answers success to a request removing every member at once, or replacing the members with none, and changes nothing. JIM removes members one at a time, which works.
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 **401 "Invalid token audience"**<br />
 The Audience mapper from step 2 is missing, or its value is not exactly the Base URL as Keycloak's frontend hostname gives it.
@@ -106,7 +106,7 @@ Keycloak protects them. See step 5.
 **Exports of users never confirm**<br />
 A `userName` or email address is being flowed in mixed case. See step 4.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [JIM SCIM 2.0 Client Connector](jim-scim-connector.md)
 - [SSO Setup: Keycloak](../administration/sso-setup/keycloak.md), for signing in to JIM with Keycloak accounts

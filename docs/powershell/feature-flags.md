@@ -14,7 +14,7 @@ Cmdlets for viewing and toggling JIM's [Preview features](../administration/prev
 
 ---
 
-## Get-JIMFeature
+## :material-flag-outline: Get-JIMFeature
 
 Retrieves feature flags. Returns every Preview-tier flag by default; specify `-IncludeInDevelopment` to also return In Development flags, and `-Name` to filter to a single flag by key.
 
@@ -68,7 +68,7 @@ Get-JIMFeature -IncludeInDevelopment | Where-Object { $_.Enabled }
 
 ---
 
-## Enable-JIMFeature
+## :material-toggle-switch-outline: Enable-JIMFeature
 
 Switches a feature flag on. Enabling an In Development flag requires `-AllowInDevelopment`; without it, the server refuses the request. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
@@ -115,7 +115,7 @@ Enable-JIMFeature -Name "Features.SomePreviewFeature" -PassThru
 
 ---
 
-## Disable-JIMFeature
+## :material-toggle-switch-variant: Disable-JIMFeature
 
 Switches a feature flag off. Disabling never requires acknowledgement, whatever the flag's tier. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
@@ -156,7 +156,7 @@ Get-JIMFeature -IncludeInDevelopment | Disable-JIMFeature
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Preview Features](../administration/preview-features.md): what a Preview feature is, and where to turn one on in the portal
 - [Service Settings](service-settings.md): the underlying store, and why the generic Service Settings cmdlets refuse feature-flag keys

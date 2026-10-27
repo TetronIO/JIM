@@ -37,11 +37,11 @@
                                Variant="Variant.Outlined"
                                Dense="true"
                                Clearable="true">
-                        @if (_connectedSystems != null)
+                        @if (_connectedSystemNames != null)
                         {
-                            @foreach (var cs in _connectedSystems)
+                            @foreach (var (id, name) in _connectedSystemNames.OrderBy(n => n.Value))
                             {
-                                <MudSelectItem T="int?" Value="@cs.Id">@cs.Name</MudSelectItem>
+                                <MudSelectItem T="int?" Value="@id">@name</MudSelectItem>
                             }
                         }
                     </MudSelect>
@@ -121,7 +121,7 @@
                     </HeaderTemplate>
                     <CellTemplate>
                         @{
-                            var csName = _connectedSystems?.FirstOrDefault(c => c.Id == context.Item.ConnectedSystemId)?.Name ?? $"ID: {context.Item.ConnectedSystemId}";
+                            var csName = GetConnectedSystemName(context.Item.ConnectedSystemId) ?? $"ID: {context.Item.ConnectedSystemId}";
                         }
                         <span @onclick:stopPropagation="true">
                             <MudLink Href="@($"/admin/connected-systems/{context.Item.ConnectedSystemId}")">@csName</MudLink>
@@ -396,7 +396,7 @@
     private readonly DialogOptions _historyDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Large };
 
     // Reference data
-    private List<ConnectedSystemHeader>? _connectedSystems;
+    private Dictionary<int, string>? _connectedSystemNames;
     private List<MetaverseObjectType>? _objectTypes;
 
     // CSO tab state. The form fields are live; the applied fields are snapshots taken when Search is pressed,
@@ -440,8 +440,7 @@
     {
         using var jim = JimFactory.Create();
         // Load reference data
-        var csHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
-        _connectedSystems = csHeaders?.ToList();
+        _connectedSystemNames = await jim.ConnectedSystems.GetConnectedSystemNamesAsync();
 
         var otHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
         _objectTypes = otHeaders?.Select(h => new MetaverseObjectType { Id = h.Id, Name = h.Name }).ToList();
@@ -650,16 +649,18 @@
     /// </summary>
     private string GetCsoPlace(ConnectedSystemObjectChange change)
     {
-        var systemName = _connectedSystems?.FirstOrDefault(c => c.Id == change.ConnectedSystemId)?.Name;
-        return ObjectDescription.ForConnectedSystemObjectPlace(change.DeletedObjectType?.Name, systemName);
+        return ObjectDescription.ForConnectedSystemObjectPlace(change.DeletedObjectType?.Name, GetConnectedSystemName(change.ConnectedSystemId));
     }
+
+    private string? GetConnectedSystemName(int? connectedSystemId) =>
+        connectedSystemId is { } id && _connectedSystemNames != null && _connectedSystemNames.TryGetValue(id, out var name) ? name : null;
 
     private List<ChangeHistoryTimeline.ChangeGroup> GetCsoHistoryAsChangeGroups()
     {
         if (_selectedCsoHistory == null)
             return new List<ChangeHistoryTimeline.ChangeGroup>();
 
-        var csName = _connectedSystems?.FirstOrDefault(c => c.Id == _selectedCsoChange?.ConnectedSystemId)?.Name;
+        var csName = GetConnectedSystemName(_selectedCsoChange?.ConnectedSystemId);
 
         return _selectedCsoHistory
             .OrderByDescending(c => c.ChangeTime)

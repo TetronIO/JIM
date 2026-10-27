@@ -12,7 +12,7 @@ Step-by-step instructions for configuring Single Sign-On with JIM using Microsof
 !!! info "Read the overview first"
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the prerequisites, the [confidential vs public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, and the [testing steps](../sso-setup.md#testing-your-configuration) you run once configuration is complete.
 
-## Step 1: Register the Application
+## :material-numeric-1-circle-outline: Step 1: Register the Application
 
 1. Sign in to the [Azure Portal](https://portal.azure.com)
 2. Navigate to **Microsoft Entra ID** > **App registrations**
@@ -28,14 +28,14 @@ Step-by-step instructions for configuring Single Sign-On with JIM using Microsof
 5. Click **Register**
 6. After registration, go to **Authentication** and add a second Web redirect URI for the sign-out callback: `https://your-jim-url/signout-callback-oidc`, then click **Save**. Entra ID validates the `post_logout_redirect_uri` parameter against the same Redirect URIs list as sign-in, so this entry is required for sign-out to work.
 
-## Step 2: Note the Application Details
+## :material-numeric-2-circle-outline: Step 2: Note the Application Details
 
 After registration, note these values from the **Overview** page:
 
 - **Application (client) ID**: e.g. `12345678-1234-1234-1234-123456789abc`
 - **Directory (tenant) ID**: e.g. `87654321-4321-4321-4321-cba987654321`
 
-## Step 3: Create a Client Secret
+## :material-numeric-3-circle-outline: Step 3: Create a Client Secret
 
 1. Go to **Certificates & secrets**
 2. Click **New client secret**
@@ -44,7 +44,7 @@ After registration, note these values from the **Overview** page:
 5. Click **Add**
 6. **Copy the secret value immediately**; it will not be shown again
 
-## Step 4: Configure API Permissions
+## :material-numeric-4-circle-outline: Step 4: Configure API Permissions
 
 1. Go to **API permissions**
 2. Verify `User.Read` (Delegated) is present; it is added by default and provides the OpenID Connect scopes needed for authentication
@@ -52,7 +52,7 @@ After registration, note these values from the **Overview** page:
 !!! note
     The standard OIDC scopes (`openid`, `profile`, `email`, `offline_access`) are requested at runtime and do not need to be added as Graph API permissions.
 
-## Step 5: Expose an API
+## :material-numeric-5-circle-outline: Step 5: Expose an API
 
 This step creates the API scope that JIM uses for JWT Bearer token validation (for API access).
 
@@ -71,7 +71,7 @@ This step creates the API scope that JIM uses for JWT Bearer token validation (f
     - **State**: Enabled
 5. Click **Add scope**
 
-## Step 5a: Configure Scalar API Reference Authentication (Development only, Optional)
+## :material-api: Step 5a: Configure Scalar API Reference Authentication (Development only, Optional)
 
 JIM's interactive [Scalar](https://scalar.com/) API reference is only exposed in development environments (it is disabled in production to reduce the attack surface), so this step is only relevant if you are configuring SSO against a non-production JIM instance where you want to use the Scalar "try it out" flow with OAuth.
 
@@ -86,7 +86,7 @@ To enable OAuth authentication in the Scalar API reference:
 !!! note
     For production deployments, use the JIM PowerShell module for interactive API testing instead. See Step 5b below.
 
-## Step 5b: Configure PowerShell Module Authentication (Optional but recommended)
+## :material-console: Step 5b: Configure PowerShell Module Authentication (Optional but recommended)
 
 Configuring the PowerShell module now means administrators can connect to JIM interactively with their SSO account. Unattended scripts cannot sign in interactively, so they use a JIM API key; see [API Authentication](../../api/authentication.md). You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
 
@@ -113,7 +113,7 @@ Because the web and PowerShell platforms share the same **Application (client) I
 !!! note "Refresh tokens"
     The refresh token is issued because JIM requests the `offline_access` scope at runtime; it is a standard OIDC scope and does not need to be added as an API permission. Setting **Allow public client flows** to **Yes** (step 8 above) is a separate requirement: it marks the registration as a public client so the module can redeem the authorization code via PKCE without a client secret. This matters when the module shares the web application's registration, which already has a secret and would otherwise be treated as confidential. The refresh token enables silent in-session renewal and optional cross-session token persistence.
 
-## Step 6: Configure JIM Environment Variables
+## :material-numeric-6-circle-outline: Step 6: Configure JIM Environment Variables
 
 Add these to your `.env` file:
 
@@ -143,7 +143,7 @@ JIM_SSO_SECRET=abc123~secretvalue
 JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 ```
 
-## Step 7: Find Your Admin User's Subject Identifier
+## :material-numeric-7-circle-outline: Step 7: Find Your Admin User's Subject Identifier
 
 1. Start JIM with the configuration above
 2. Log in with your admin account
@@ -151,7 +151,7 @@ JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 4. Find the `sub` claim value
 5. Update `JIM_SSO_INITIAL_ADMIN` with this value
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 1. Open JIM in a browser. JIM sends you to Microsoft Entra ID to sign in, then returns you to JIM, signed in.
 2. Open `/claims` and check that `sub`, `name` and `email` carry your values.
@@ -159,10 +159,10 @@ JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 
 To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
 
-## Microsoft Entra ID Troubleshooting
+## :material-wrench-outline: Microsoft Entra ID Troubleshooting
 
 - **Sign-in is unavailable / JIM does not trust the certificate**: Microsoft Entra ID's certificates come from public certificate authorities the operating system trusts, so this usually means a proxy between JIM and Microsoft inspects TLS and presents your organisation's certificate instead. Trust the proxy's certificate authority for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
 
-## Next steps
+## :material-arrow-right-circle-outline: Next steps
 
 If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

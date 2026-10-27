@@ -13,7 +13,7 @@ Upgrading JIM means replacing the `jim.web`, `jim.worker` and `jim.scheduler` co
 !!! danger "Take a backup first, and make sure it includes the encryption keys"
     A JIM backup is **two artefacts**: the PostgreSQL database *and* the encryption key set (`jim-keys-volume`, or the path in `JIM_ENCRYPTION_KEY_PATH`). Restored without its matching keys, a database cannot decrypt any secret it stores, such as a Connected System's credentials. If an upgrade goes wrong and you fall back to your pre-upgrade backup, you need both halves; see [Backup & Disaster Recovery](backup-recovery.md).
 
-## 📋 Before you upgrade {#before-you-upgrade}
+## :material-clipboard-check-outline: Before you upgrade {#before-you-upgrade}
 
 - [ ] **Read the release notes.** Check the `CHANGELOG.md` for the target release (on the [releases page](https://github.com/TetronIO/JIM/releases), or under `docs/` in an air-gapped bundle) for breaking changes, new configuration variables, and security fixes.
 - [ ] **Rehearse in staging** against a copy of production data where practical.
@@ -48,7 +48,7 @@ If you do stop the worker part-way through a Run Profile execution anyway, the w
 
 Draining first avoids noise in your Activity history and a long first run afterwards; an interrupted upgrade does not put your data at risk.
 
-## ⬆️ Upgrading with the installer {#with-the-installer}
+## :material-download-outline: Upgrading with the installer {#with-the-installer}
 
 On Docker, the installer upgrades an installation it made, connected or air-gapped, keeping its settings. Do the steps in [Before you upgrade](#before-you-upgrade) first, then:
 
@@ -79,7 +79,7 @@ It upgrades `/opt/jim`, or the folder `JIM_INSTALL_DIR` names. In order, it:
 
 Anything that fails before the restart puts the previous compose files and `.env` back, leaving JIM running as it was, and an earlier upgrade's `.previous` files intact. Then carry on at [Check it worked](#verifying).
 
-## 🔄 Upgrading a connected deployment
+## :material-cloud-outline: Upgrading a connected deployment
 
 The same upgrade by hand. On Podman, see [Upgrading on Podman](upgrading-podman.md).
 
@@ -113,7 +113,7 @@ The same upgrade by hand. On Podman, see [Upgrading on Podman](upgrading-podman.
 
 6. **Verify**, per [Check it worked](#verifying) below.
 
-## 📦 Upgrading an air-gapped deployment
+## :material-lan-disconnect: Upgrading an air-gapped deployment
 
 The same upgrade as [the installer's](#with-the-installer), by hand.
 
@@ -164,11 +164,11 @@ The same upgrade as [the installer's](#with-the-installer), by hand.
 
 6. **Verify**, per [Check it worked](#verifying) below.
 
-## 🦭 Upgrading on Podman {#upgrading-on-podman}
+## :material-package-variant-closed: Upgrading on Podman {#upgrading-on-podman}
 
 On Podman, an upgrade replaces the pod files and restarts JIM: see [Upgrading on Podman](upgrading-podman.md). Do the steps in [Before you upgrade](#before-you-upgrade) first, and [Check it worked](#verifying) afterwards.
 
-## ⚙️ What happens during the upgrade window
+## :material-timer-sand: What happens during the upgrade window
 
 The web interface is briefly unavailable after an upgrade while JIM starts:
 
@@ -182,7 +182,7 @@ Most database upgrades are near-instant; one that rewrites a large table scales 
 !!! warning "If the database upgrade fails"
     The worker logs the full error and JIM stays unready, so the web interface never opens up. Fix the underlying cause (a permissions problem on the database user is the usual culprit) and restart the services. Do not restore a backup unless the upgrade has left the schema in a state you cannot move forwards from.
 
-## Check it worked {#verifying}
+## :material-check-decagram-outline: Check it worked {#verifying}
 
 1. **All services are healthy:**
 
@@ -232,7 +232,7 @@ JIM never moves a password through an Attribute Flow: attributes holding credent
 2. **Remove the source of the value.** The password came from somewhere, usually an import Attribute Flow into a Metaverse Attribute. Remove that flow and clear the Metaverse Attribute, or the password stays in the Metaverse. To deliver passwords to the system, set up [Password Synchronisation](../configuration/connected-system-passwords.md#password-synchronisation) instead, where its Connector supports it (the SCIM Connector does not yet).
 3. **Clear the change history.** Change history recorded before the upgrade can still show the value. It is removed once it passes the `History.RetentionPeriod` [Service Setting](../configuration/service-settings.md) (90 days by default); shorten that setting for a pass if it must go sooner, then restore it.
 
-## 🧩 Upgrading the PowerShell module
+## :material-console: Upgrading the PowerShell module
 
 The JIM PowerShell module versions in step with the product. Upgrade it wherever it is installed so that automation matches the API it is calling.
 
@@ -246,7 +246,7 @@ Copy-Item -Recurse -Force ./powershell/JIM "$env:USERPROFILE\Documents\PowerShel
 
 For the other ways to install it, see [PowerShell Module](deployment.md#powershell-module).
 
-## ↩️ Rolling back {#rolling-back}
+## :material-backup-restore: Rolling back {#rolling-back}
 
 Rolling back means putting **both** halves of JIM back to their pre-upgrade state: the application version, and the database it runs against. A release can upgrade the database, leaving the schema ahead of what the older version understands, so reverting the images alone is not a rollback. This is what the pre-upgrade backup is for.
 
@@ -300,7 +300,7 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
 !!! tip "Roll back promptly, or not at all"
     A rollback discards everything JIM has written since the upgrade. If the upgraded instance has been synchronising for hours, restoring the pre-upgrade backup rolls the Connector Space back with it, and the next run will re-evaluate a large amount of drift. Decide quickly, and prefer fixing forwards once real synchronisation work has happened on the new version.
 
-## ✅ Upgrade checklist
+## :material-clipboard-list-outline: Upgrade checklist
 
 - [ ] Release notes reviewed for breaking changes and new configuration.
 - [ ] Upgrade rehearsed in staging.
@@ -315,7 +315,7 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
 - [ ] **Previously-enabled Schedules re-enabled**, and the next run confirmed to fire.
 - [ ] PowerShell module upgraded to match.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Upgrading on Podman](upgrading-podman.md): the upgrade and rollback on Podman.
 - [Backup & Disaster Recovery](backup-recovery.md): what to back up, how, and how to restore it.

@@ -44,6 +44,10 @@
         'LANG-7' = 'Ratchet'
         'LANG-8' = 'Block'
         'TERM-1' = 'Block'
+        # No emoji: icons come from Material Design Icons, which the theme ships (STY-1, STY-3).
+        'STY-1'  = 'Block'
+        # Heading icons on a section's index page, every H2, and nowhere else (STY-3).
+        'STY-3'  = 'Block'
     }
 
     RequiredFrontMatter     = @('title', 'description', 'type', 'audience')

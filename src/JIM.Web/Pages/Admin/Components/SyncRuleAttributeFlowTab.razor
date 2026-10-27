@@ -516,6 +516,8 @@
         </MudText>
     </TitleContent>
     <DialogContent>
+        @* The dialog widens once the Source Type has something to try; this applies that while it is open. *@
+        <DialogOptionsSync Options="DialogOptions" />
         @* A Generated Value lays out both panes itself, since its tester's values live in its own tree (#2471). *@
         @if (_attributeFlowMappingSourceType == "Generated" && _attributeFlowMapping != null && _attributeFlowMappingSource != null
              && SyncRule.MetaverseObjectType != null && GeneratedTargetType.HasValue)
