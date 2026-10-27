@@ -10,6 +10,38 @@ validated: v0.16.0
 
 JIM serves HTTPS itself, on both runtimes. In production, `jim.web` listens for HTTPS on container port `8443`, which the installation publishes on the standard HTTPS port, 443, so a fresh install can be signed into from any machine at `https://jim.example.com` with no reverse proxy.
 
+```jim-diagram
+archetype: comparison
+title: Where TLS ends in each supported setup
+desc: "Three setups are supported. With no proxy, the default, browsers connect over HTTPS straight to JIM, which terminates TLS itself; its certificate names every name users reach it at. With a re-encrypting proxy, the recommended way to use one, the proxy terminates the browser's HTTPS and opens its own HTTPS connection to JIM, checking JIM's certificate against a CA it trusts, so traffic is encrypted end to end; JIM's certificate carries both the name users type and the name the proxy connects to. With plain HTTP to JIM, a proxy on the JIM host terminates TLS and forwards plain HTTP to JIM on the host's loopback interface: that hop is unencrypted but never leaves the host, and JIM needs no certificate. With no proxy, JIM_TRUSTED_PROXIES is not needed. With either proxy, set it to the address the proxy connects from, which for a proxy on the JIM host is the gateway address of JIM's container network; with plain HTTP, sign-in fails without it. JIM accepts TLS 1.2 and 1.3."
+columns:
+  - { label: No proxy, sub: the default }
+  - { label: Re-encrypting proxy, sub: recommended }
+  - { label: Plain HTTP to JIM, sub: proxy on the JIM host }
+rows:
+  - label: Browser to the server
+    cells:
+      - { text: "HTTPS to JIM", sub: JIM terminates TLS }
+      - { text: "HTTPS to the proxy", sub: the proxy terminates TLS }
+      - { text: "HTTPS to the proxy", sub: the proxy terminates TLS }
+  - label: Proxy to JIM
+    cells:
+      - { text: no second hop }
+      - { text: "HTTPS", sub: "checked against a CA the proxy trusts" }
+      - { text: plain HTTP, sub: "loopback only, never leaves the host" }
+  - label: "JIM's certificate"
+    cells:
+      - { text: every name users reach JIM at }
+      - { text: both names, sub: "the one users type, and the proxy's" }
+      - { text: not needed }
+  - label: Trusted proxies
+    cells:
+      - { text: not needed }
+      - { text: "the address the proxy connects from" }
+      - { text: "the network gateway's address", sub: sign-in fails without it }
+footer: "Trusted proxies is the setting `JIM_TRUSTED_PROXIES`; JIM accepts TLS 1.2 and 1.3"
+```
+
 !!! warning "Browsers on other machines must use HTTPS"
     JIM's sign-in cookies are HTTPS-only in a production deployment, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: JIM stops it on a **Sign-in could not complete** page rather than send the browser back to your identity provider again (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
 

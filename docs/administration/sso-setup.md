@@ -9,6 +9,18 @@ audience: implementer
 
 JIM requires an OIDC-compliant identity provider for authentication. This page is the high-level guide to configuring Single Sign-On (SSO): what JIM needs from your identity provider, how the client model works, and how to test and troubleshoot the result. The provider-specific, step-by-step setup lives on its own page per provider (see [Choose your identity provider](#choose-your-identity-provider) below).
 
+```jim-diagram
+archetype: flow
+title: How a person signs in to the JIM portal
+desc: "A person opens JIM in a browser, and JIM sends them to the identity provider, where they sign in. The identity provider returns them to JIM with an authorisation code, which JIM's backend exchanges at the identity provider's token endpoint, sending the confidential client's secret; the browser never sees the secret. JIM then reads one claim from the token, JIM_SSO_CLAIM_TYPE (usually sub), and finds the User whose Metaverse Attribute JIM_SSO_MV_ATTRIBUTE holds the same value. The person is signed in as that Metaverse Object."
+in: { label: Browser opens JIM }
+steps:
+  - { id: idp, label: Identity provider, sub: the person signs in }
+  - { id: token, label: Token endpoint, sub: "code and client secret", note: from JIM's backend only }
+  - { id: match, label: Match the claim, sub: "usually `sub`", note: to a Metaverse Attribute }
+out: { label: Signed in, note: as a Metaverse Object }
+```
+
 !!! info "Before you begin"
     Ensure you have:
 

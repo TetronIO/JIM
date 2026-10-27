@@ -10,6 +10,35 @@ validated: v0.16.0
 
 This page covers problems particular to running JIM on Podman, each titled by what you see. For one that is not particular to Podman, see [Troubleshooting](troubleshooting.md). The commands are for the default, rootful installation; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
+```jim-diagram
+archetype: decision
+title: Finding the fix for a Podman installation of JIM
+desc: "Work down four questions. First, does jim.service start? Check it with systemctl, or for a rootless JIM with jim-systemctl. If a rootless jim.service is not found, remove the XDG folder settings made for every account; if it cannot expose privileged port 443, lower the unprivileged-port threshold. If it starts, does JIM become ready? Look at its containers as the account that runs JIM: sudo podman ps, or jim-podman ps. On Ubuntu, Permission denied in its logs means adding the AppArmor network rule. If it becomes ready, does it stay running? A rootless JIM that stops at log-out or after a reboot needs lingering enabled; on Ubuntu, services that keep restarting need the AppArmor signal rule, then a server restart. If it stays running but other machines cannot reach it, open its port in firewalld."
+start: { label: JIM is not working }
+questions:
+  - { id: starts, label: "Does `jim.service` start?", sub: "rootless: ask `jim-systemctl`" }
+  - { id: ready, label: "Does JIM become ready?", sub: "`sudo podman ps` or `jim-podman ps`" }
+  - { id: up, label: "Does it stay running?" }
+  - { id: reach, label: "Can other machines reach it?" }
+outcomes:
+  - { id: xdg, label: Remove the XDG folder settings, sub: rootless only }
+  - { id: port, label: Lower the port threshold, sub: rootless only }
+  - { id: net, label: Add the AppArmor network rule, sub: Ubuntu 24.04 }
+  - { id: linger, label: Enable lingering, sub: rootless only }
+  - { id: signal, label: Add the AppArmor signal rule, sub: "Ubuntu 24.04, then restart the server" }
+  - { id: fw, label: Open the port in firewalld, sub: RHEL and its derivatives }
+answers:
+  - { from: starts, to: xdg, label: "`not found`" }
+  - { from: starts, to: port, label: privileged port 443 }
+  - { from: starts, to: ready, label: "yes" }
+  - { from: ready, to: net, label: "`Permission denied`" }
+  - { from: ready, to: up, label: "yes" }
+  - { from: up, to: linger, label: "stops at log-out or reboot" }
+  - { from: up, to: signal, label: keeps restarting }
+  - { from: up, to: reach, label: "yes" }
+  - { from: reach, to: fw, label: "no, only the server itself" }
+```
+
 ## :material-wrench-outline: `podman ps` shows none of JIM's containers
 
 **What it means.** Each account has its own Podman containers. A rootful JIM's belong to root, so `podman ps` run as yourself sees none of them; a rootless JIM's belong to the `jim` account, so root's Podman sees none either. Nothing is wrong with JIM.

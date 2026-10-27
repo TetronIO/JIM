@@ -9,6 +9,20 @@ audience: implementer
 
 JIM connects to your identity provider over HTTPS to read its configuration and signing keys, and to complete each sign-in. When the identity provider's certificate comes from your organisation's own certificate authority, as it usually does for AD FS and for Keycloak run on premises, JIM does not trust it out of the box and nobody can sign in. Trust that certificate authority for sign-in in JIM's certificate store and sign-in works straight away: no image rebuild, no restart.
 
+```jim-diagram
+archetype: lifecycle
+title: "The identity provider's certificate, untrusted and trusted"
+desc: "When the identity provider's certificate comes from your organisation's own certificate authority, JIM starts with it Untrusted, and sign-in is unavailable. Trusting the certificate for sign-in, with Add-JIMCertificate -FromIdentityProvider, Review and trust in the portal, or the REST API, makes it Trusted, and sign-in is available. If the certificate is later renewed onto a certificate authority JIM does not trust, or the certificate sign-in depends on is removed, it is Untrusted again. JIM checks the identity provider shortly after it starts and every 15 minutes after that."
+start: { label: Issued by your own CA }
+container: { label: "The identity provider's certificate", note: "JIM checks it after starting, then every 15 minutes" }
+states:
+  - { id: untrusted, label: Untrusted, sub: Sign-in is unavailable }
+  - { id: trusted, label: Trusted, sub: Sign-in is available }
+transitions:
+  - { from: untrusted, to: trusted, label: trusted for sign-in, note: "`Add-JIMCertificate`, the portal or REST" }
+  - { from: trusted, to: untrusted, label: renewed onto an untrusted CA, note: or its certificate removed }
+```
+
 You'll know you need this page when any of these happen:
 
 - JIM's log says `Sign-in is unavailable: JIM does not trust <host>'s certificate`, naming the certificate authority to trust.

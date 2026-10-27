@@ -9,6 +9,24 @@ audience: implementer
 
 Use this guide to let people sign in to JIM with their Active Directory accounts through AD FS (Active Directory Federation Services), both in the portal and in the PowerShell module with `Connect-JIM`. One command registers JIM on AD FS, and you give JIM the values it returns. JIM identifies each person by their Active Directory `objectGUID`, so they sign in as the Metaverse Object that synchronisation from Active Directory created for them, and stay that person when they are renamed. This configuration is verified against AD FS on Windows Server 2025 before every JIM release.
 
+```jim-diagram
+archetype: map
+title: How AD FS and synchronisation meet at the objectGUID
+desc: "A person's Active Directory account carries an objectGUID, which reaches JIM by two routes. At sign-in, the claim rule of JIM's API application on AD FS issues it as the oid claim in their token. Beforehand, the import Synchronisation Rule for your Active Directory users maps it to the Metaverse Object's built-in Object GUID attribute. JIM matches the oid claim to Object GUID (JIM_SSO_CLAIM_TYPE=oid and JIM_SSO_MV_ATTRIBUTE=Object GUID), so the person signs in as the Metaverse Object synchronisation created for them."
+nodes:
+  - { id: ad, label: Active Directory account, row: 0, col: 0 }
+  - { id: rule, label: AD FS claim rule, row: 0, col: 1 }
+  - { id: oid, label: "`oid` claim in the token", row: 0, col: 2 }
+  - { id: sync, label: Synchronisation Rule, row: 1, col: 0 }
+  - { id: mvo, label: "Metaverse Object", row: 1, col: 2 }
+edges:
+  - { from: ad, to: rule, label: "`objectGUID` read by" }
+  - { from: rule, to: oid, label: issues it as }
+  - { from: ad, to: sync, label: imported by }
+  - { from: sync, to: mvo, label: "maps it to `Object GUID` of" }
+  - { from: oid, to: mvo, label: matched to }
+```
+
 !!! info "Read the overview first"
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the [confidential and public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, [how JIM recognises people](../sso-setup.md#how-jim-recognises-people), and the [testing steps](../sso-setup.md#testing-your-configuration) you can run once configuration is complete.
 
