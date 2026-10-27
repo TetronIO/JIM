@@ -10,6 +10,31 @@ validated: v0.16.0
 
 This page covers installing, starting and signing in to JIM. For a synchronisation that goes wrong (a run that ends with a warning or an error, or an object that will not join, import or export), see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
 
+```jim-diagram
+archetype: decision
+title: A service that waits for the database, diagnosed
+desc: "When a service logs The database is not reachable yet, first see whether it connects in the end: if it logs Connected to the database, the wait was normal at start-up and nothing was lost. If it keeps waiting, check that PostgreSQL is running; if it is not, start it, or for an external server ask whoever runs it. If it is running, read the reason the line gives. Name or service not known means the name does not resolve: check JIM_DB_HOSTNAME. Connection refused means nothing is listening at that address and port: check the host name and its port. No route to host means nothing answered or something refused the connection on the way: check the firewall or, on Podman, JIM's network."
+start: {label: Database not reachable yet}
+questions:
+- {id: connects, label: 'Connects in the end?', sub: '`Connected to the database` logged'}
+- {id: running, label: 'Is PostgreSQL running?'}
+- {id: reason, label: 'What reason does the line give?'}
+outcomes:
+- {id: normal, label: Normal at start-up, sub: nothing lost while it waited, good: true}
+- {id: start, label: Start PostgreSQL, sub: 'external: ask whoever runs it'}
+- {id: name, label: Name does not resolve, sub: 'check `JIM_DB_HOSTNAME`'}
+- {id: port, label: Nothing listening there, sub: 'check the host and `:port`'}
+- {id: route, label: Nothing answered, sub: 'firewall, or Podman''s network'}
+answers:
+- {from: connects, to: normal, label: 'yes'}
+- {from: connects, to: running, label: 'no, it keeps waiting'}
+- {from: running, to: start, label: 'no'}
+- {from: running, to: reason, label: 'yes'}
+- {from: reason, to: name, label: '`Name or service not known`'}
+- {from: reason, to: port, label: '`Connection refused`'}
+- {from: reason, to: route, label: '`No route to host`'}
+```
+
 ## :material-rocket-launch-outline: Start-up
 
 ### A service logs `The database is not reachable yet`

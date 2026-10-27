@@ -14,6 +14,27 @@ Every run of a Run Profile is an Activity. When a run goes wrong, open its Activ
 - **Complete with error** means at least one object hit an error JIM did not anticipate.
 - **Failed with error** means the run itself stopped, or every object in it failed.
 
+```jim-diagram
+archetype: decision
+title: Where to look, by how the run ended
+desc: "Open the run's Activity and read its status. Complete with warning means some objects hit a problem JIM recognises, and the entries below that protect your data come first; each object's execution item names its error. Complete with error means at least one object hit an error JIM did not anticipate, again named on its execution item. Failed with error means the run itself stopped, or every object failed: if the message says the Worker restarted or ran short of memory, see Troubleshooting Worker Restarts and Memory; otherwise read the Activity's message, such as a Connected System JIM could not reach."
+start: {label: The run's Activity}
+questions:
+- {id: status, label: 'How did it end?', sub: the Activity's status}
+- {id: worker, label: 'Worker restart or memory?', sub: in the Activity's message}
+outcomes:
+- {id: warning, label: A problem JIM recognises, sub: 'see each execution item''s error'}
+- {id: error, label: An unanticipated error, sub: 'at least one object; see its item'}
+- {id: workerpage, label: Troubleshooting Worker Restarts and Memory}
+- {id: message, label: 'Stopped, or every object failed', sub: "read the Activity's message"}
+answers:
+- {from: status, to: warning, label: Complete with warning}
+- {from: status, to: error, label: Complete with error}
+- {from: status, to: worker, label: Failed with error}
+- {from: worker, to: workerpage, label: 'yes'}
+- {from: worker, to: message, label: 'no'}
+```
+
 The Activity's [execution items](../configuration/activity-execution-items.md) name each object that hit a problem, with the error recorded against it (`Get-JIMActivityExecutionItem` returns the same). The entries below are titled by that error, or by the message on the Activity. The ones that protect your data come first.
 
 A run that ended because the Worker restarted, or ran short of memory, is covered in [Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md).
