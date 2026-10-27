@@ -80,6 +80,14 @@ public class ActivitySectionStateTests
     }
 
     [Test]
+    public void Selected_ListsTheShownSectionsInPageOrder()
+    {
+        var state = new ActivitySectionState(Queued: true, InProgress: false, Completed: true);
+
+        Assert.That(state.Selected(), Is.EqualTo(new[] { ActivitySection.Queued, ActivitySection.Completed }));
+    }
+
+    [Test]
     public void Toggle_FlipsOnlyTheNamedSection()
     {
         var state = ActivitySectionState.All.Toggle(ActivitySection.InProgress);

@@ -162,6 +162,36 @@ public class TaskingRepositoryQueueReadTests
     }
 
     [Test]
+    public async Task GetWorkerTaskHeadersAsync_ProcessingTask_CarriesWhenItStartedButAQueuedOneDoesNotAsync()
+    {
+        // The worker stamps the Activity's Executed time when it starts the task; before that the value is only
+        // when the Activity was created, which is not a start at all.
+        var started = new DateTime(2026, 10, 27, 14, 25, 0, DateTimeKind.Utc);
+        var processingActivity = NewActivity();
+        processingActivity.Executed = started;
+        var queuedActivity = NewActivity();
+        queuedActivity.Executed = started.AddMinutes(-30);
+        var processing = new ClearConnectedSystemObjectsWorkerTask(7)
+        {
+            Id = Guid.NewGuid(), InitiatedByType = ActivityInitiatorType.System, Status = WorkerTaskStatus.Processing, Activity = processingActivity
+        };
+        var queued = new ClearConnectedSystemObjectsWorkerTask(7)
+        {
+            Id = Guid.NewGuid(), InitiatedByType = ActivityInitiatorType.System, Status = WorkerTaskStatus.Queued, Activity = queuedActivity
+        };
+
+        using var jim = BuildApplication([processing, queued], [new ConnectedSystem { Id = 7, Name = "HR Database" }]);
+
+        var headers = await jim.Tasking.GetWorkerTaskHeadersAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(headers.Single(h => h.Id == processing.Id).Started, Is.EqualTo(started));
+            Assert.That(headers.Single(h => h.Id == queued.Id).Started, Is.Null);
+        }
+    }
+
+    [Test]
     public async Task GetWorkerTaskHeadersAsync_SynchronisationTaskWhoseRunProfileHasGone_KeepsTheIdWithoutNamesAsync()
     {
         var workerTasks = new List<WorkerTask>

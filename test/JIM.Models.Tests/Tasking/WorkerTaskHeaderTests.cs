@@ -47,6 +47,7 @@ public class WorkerTaskHeaderTests
         ProgressMessage = "Saving changes",
         Steps = Steps(2, ActivityPhaseStatus.Completed),
         ExecutionMode = WorkerTaskExecutionMode.Parallel,
+        Started = new DateTime(2026, 10, 24, 21, 1, 0, DateTimeKind.Utc),
         ConnectedSystemRunProfileId = 12,
         ConnectedSystemName = "HR System",
         RunProfileName = "Full Import",

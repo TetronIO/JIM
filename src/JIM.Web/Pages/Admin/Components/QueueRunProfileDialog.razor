@@ -1,0 +1,121 @@
+@using JIM.Models.Staging
+@using JIM.Models.Tasking
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Adds a Run Profile execution to the worker queue (#2549). It ran as a form at the top of the Operations page's Queue
+   tab; with Queue and History combined into the Activity tab it is one action among several, so it opens on demand. *@
+<MudDialog>
+    <DialogContent>
+        @if (_connectedSystemNames == null)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_connectedSystemNames.Count == 0)
+        {
+            <MudAlert Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
+        }
+        else
+        {
+            <MudText Class="mb-4">The run joins the end of the queue. If nothing else is queued or running, it starts straight away.</MudText>
+            <MudStack Spacing="4">
+                <MudSelect T="int?" ValueChanged="HandleConnectedSystemChangedAsync" Value="_selectedConnectedSystemId"
+                           Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true"
+                           RequiredError="Please select a Connected System">
+                    @foreach (var (id, name) in _connectedSystemNames.OrderBy(n => n.Value))
+                    {
+                        <MudSelectItem T="int?" Value="@id">@name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedRunProfile"
+                           Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true"
+                           RequiredError="A Run Profile is required" Disabled="@(_runProfiles == null)">
+                    @if (_runProfiles != null)
+                    {
+                        @foreach (var runProfile in _runProfiles)
+                        {
+                            <MudSelectItem Value="@runProfile" />
+                        }
+                    }
+                </MudSelect>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanQueue())" OnClick="QueueAsync">Queue</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private Dictionary<int, string>? _connectedSystemNames;
+    private List<ConnectedSystemRunProfile>? _runProfiles;
+    private int? _selectedConnectedSystemId;
+    private ConnectedSystemRunProfile? _selectedRunProfile;
+    private bool _queueing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        _connectedSystemNames = await jim.ConnectedSystems.GetConnectedSystemNamesAsync();
+    }
+
+    private bool CanQueue() => !_queueing && _selectedConnectedSystemId != null && _selectedRunProfile != null;
+
+    private async Task HandleConnectedSystemChangedAsync(int? connectedSystemId)
+    {
+        _selectedConnectedSystemId = connectedSystemId;
+        _selectedRunProfile = null;
+        if (connectedSystemId is not { } id)
+        {
+            _runProfiles = null;
+            return;
+        }
+
+        using var jim = JimFactory.Create();
+        _runProfiles = await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(id);
+    }
+
+    private async Task QueueAsync()
+    {
+        if (_selectedConnectedSystemId is not { } connectedSystemId || _selectedRunProfile == null)
+            return;
+
+        _queueing = true;
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        var task = SynchronisationWorkerTask.ForUser(connectedSystemId, _selectedRunProfile.Id, user.Id, user.NameOrId);
+        var result = await jim.Tasking.CreateWorkerTaskAsync(task);
+        _queueing = false;
+
+        if (!result.Success)
+        {
+            Snackbar.Add(result.ErrorMessage ?? "Failed to create task.", Severity.Error);
+            return;
+        }
+
+        foreach (var warning in result.Warnings)
+            Snackbar.Add(warning, Severity.Warning);
+
+        Snackbar.Add("Synchronisation task added.", Severity.Success);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>Opens the dialog; true when a run was queued.</summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService)
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<QueueRunProfileDialog>("Queue a Run Profile", options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

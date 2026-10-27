@@ -108,6 +108,66 @@ public class QueueStartEstimatorTests
     }
 
     [Test]
+    public void Remaining_TypicalDurationKnown_IsWhatIsLeftOfIt()
+    {
+        var remaining = QueueStartEstimator.Remaining(Now.AddMinutes(-7), TimeSpan.FromMinutes(30), stepSecondsRemaining: null, Now);
+
+        Assert.That(remaining, Is.EqualTo(TimeSpan.FromMinutes(23)));
+    }
+
+    [Test]
+    public void Remaining_CurrentStepAloneNeedsLonger_TakesTheStepEstimate()
+    {
+        // The step estimate covers only the step running now, so it is a floor, never the whole answer; but a run
+        // going slower than usual should not be promised to finish before its current step can.
+        var remaining = QueueStartEstimator.Remaining(Now.AddMinutes(-7), TimeSpan.FromMinutes(30), stepSecondsRemaining: 60 * 40, Now);
+
+        Assert.That(remaining, Is.EqualTo(TimeSpan.FromMinutes(40)));
+    }
+
+    [Test]
+    public void Remaining_RunOverrunningItsTypicalDuration_FallsBackToTheStepEstimate()
+    {
+        var remaining = QueueStartEstimator.Remaining(Now.AddMinutes(-50), TimeSpan.FromMinutes(30), stepSecondsRemaining: 120, Now);
+
+        Assert.That(remaining, Is.EqualTo(TimeSpan.FromMinutes(2)));
+    }
+
+    [Test]
+    public void Remaining_RunOverrunningWithNoStepEstimate_IsUnknown()
+    {
+        var remaining = QueueStartEstimator.Remaining(Now.AddMinutes(-50), TimeSpan.FromMinutes(30), stepSecondsRemaining: null, Now);
+
+        Assert.That(remaining, Is.Null);
+    }
+
+    [Test]
+    public void Remaining_NoTypicalDuration_IsUnknownEvenWithAStepEstimate()
+    {
+        // A step estimate alone would understate a run with steps still to come.
+        var remaining = QueueStartEstimator.Remaining(Now.AddMinutes(-7), null, stepSecondsRemaining: 600, Now);
+
+        Assert.That(remaining, Is.Null);
+    }
+
+    [Test]
+    public void Remaining_NotStarted_IsUnknown()
+    {
+        Assert.That(QueueStartEstimator.Remaining(null, TimeSpan.FromMinutes(30), null, Now), Is.Null);
+    }
+
+    [Test]
+    public void LongestRemaining_SeveralRunning_IsTheLongestAndUnknownIfAnyIs()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(QueueStartEstimator.LongestRemaining([TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(9)]), Is.EqualTo(TimeSpan.FromMinutes(9)));
+            Assert.That(QueueStartEstimator.LongestRemaining([TimeSpan.FromMinutes(5), null]), Is.Null);
+            Assert.That(QueueStartEstimator.LongestRemaining([]), Is.EqualTo(TimeSpan.Zero));
+        }
+    }
+
+    [Test]
     public void Estimate_TaskThatIsNotARunProfile_BlanksEverythingAfterIt()
     {
         var clear = Task(null, minutesAfterBase: 0);

@@ -65,6 +65,11 @@ public class WorkerTaskHeader
     public WorkerTaskExecutionMode ExecutionMode { get; set; } = WorkerTaskExecutionMode.Sequential;
 
     /// <summary>
+    /// When the worker started this task (UTC), or null while it has not started.
+    /// </summary>
+    public DateTime? Started { get; set; }
+
+    /// <summary>
     /// The Run Profile this task executes, or null where the task is not a Run Profile execution.
     /// </summary>
     public int? ConnectedSystemRunProfileId { get; set; }
@@ -144,6 +149,7 @@ public class WorkerTaskHeader
             ProgressMessage != latest.ProgressMessage ||
             !StepsEqual(Steps, latest.Steps) ||
             ExecutionMode != latest.ExecutionMode ||
+            Started != latest.Started ||
             ConnectedSystemRunProfileId != latest.ConnectedSystemRunProfileId ||
             ConnectedSystemName != latest.ConnectedSystemName ||
             RunProfileName != latest.RunProfileName ||
@@ -166,6 +172,7 @@ public class WorkerTaskHeader
         ProgressMessage = latest.ProgressMessage;
         Steps = latest.Steps;
         ExecutionMode = latest.ExecutionMode;
+        Started = latest.Started;
         ConnectedSystemRunProfileId = latest.ConnectedSystemRunProfileId;
         ConnectedSystemName = latest.ConnectedSystemName;
         RunProfileName = latest.RunProfileName;

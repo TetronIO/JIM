@@ -49,6 +49,16 @@ public sealed record ActivitySectionState(bool Queued, bool InProgress, bool Com
         return string.Join(',', words);
     }
 
+    /// <summary>The sections shown, in the order the page shows them.</summary>
+    public IReadOnlyCollection<ActivitySection> Selected()
+    {
+        var selected = new List<ActivitySection>();
+        if (Queued) selected.Add(ActivitySection.Queued);
+        if (InProgress) selected.Add(ActivitySection.InProgress);
+        if (Completed) selected.Add(ActivitySection.Completed);
+        return selected;
+    }
+
     /// <summary>This state with one section switched.</summary>
     public ActivitySectionState Toggle(ActivitySection section) => section switch
     {

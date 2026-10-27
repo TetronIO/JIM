@@ -30,11 +30,9 @@
 @* TabPanelsClass is pa-0 rather than pt-5 because the Schedules tab opens straight onto a virtualised grid, which
    supplies its own top margin; stacking both double-counts the gap. Each tab's own first block carries it. *@
 <NavigableMudTabs TabPanelsClass="pa-0" Class="mt-6">
-    <MudTabPanel Text="Queue" Icon="@Icons.Material.Filled.Queue">
-        <OperationsQueueTab />
-    </MudTabPanel>
-    <MudTabPanel Text="History" Icon="@Icons.Material.Filled.History">
-        <OperationsHistoryTab />
+    @* Queued, running and finished work on one tab, in time order (#2549); it replaced the Queue and History tabs. *@
+    <MudTabPanel Text="Activity" Icon="@Icons.Material.Filled.DynamicFeed">
+        <OperationsActivityTab />
     </MudTabPanel>
     <MudTabPanel Text="Schedules" Icon="@Icons.Material.Filled.Schedule">
         <OperationsSchedulesTab />

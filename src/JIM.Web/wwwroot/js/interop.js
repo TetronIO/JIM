@@ -283,6 +283,42 @@ window.jimVirtualList = {
     }
 };
 
+// Measures the Operations Activity tab's Queued section (#2549) so it can show as many rows as fit while In progress
+// stays in view. Reports on attach and again after the window is resized, never as data arrives, so rows do not come
+// and go under a reader. Positions are measured from the top of the document, not the viewport: the question is how
+// the page lays out on arrival, whatever the reader has scrolled to since.
+window.jimQueueRows = {
+    _observed: new Map(),
+    observe: function (element, dotNetRef, debounceMs) {
+        if (!element) return;
+        window.jimQueueRows.stop(element);
+
+        var report = function () {
+            var rows = element.querySelectorAll('tr.jim-activity-row');
+            var rowHeight = rows.length ? rows[rows.length - 1].getBoundingClientRect().height : 0;
+            var top = element.getBoundingClientRect().top + window.scrollY;
+            dotNetRef.invokeMethodAsync('OnQueueMeasured', window.innerHeight, top, rowHeight).catch(function () { });
+        };
+        var entry = { timer: null };
+        entry.handler = function () {
+            if (entry.timer) window.clearTimeout(entry.timer);
+            entry.timer = window.setTimeout(report, debounceMs || 150);
+        };
+
+        window.addEventListener('resize', entry.handler, { passive: true });
+        window.jimQueueRows._observed.set(element, entry);
+        report();
+    },
+    stop: function (element) {
+        var entry = window.jimQueueRows._observed.get(element);
+        if (!entry) return;
+
+        if (entry.timer) window.clearTimeout(entry.timer);
+        window.removeEventListener('resize', entry.handler);
+        window.jimQueueRows._observed.delete(element);
+    }
+};
+
 // The causality Table view's drag-resizable nav column. The live width lives entirely in the DOM (a
 // --tv-nav-width custom property on the panel element the grid reads via var(--tv-nav-width, 240px)),
 // never round-tripped through Blazor: a per-pixel SignalR message while dragging would lag visibly.

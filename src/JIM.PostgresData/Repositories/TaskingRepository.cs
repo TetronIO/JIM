@@ -122,6 +122,11 @@ public class TaskingRepository : ITaskingRepository
                     ? $"{runProfile.ConnectedSystemName} - {runProfile.Name}"
                     : await GetWorkerHeaderNameAsync(workerTask),
                 ExecutionMode = workerTask.ExecutionMode,
+                // Executed is stamped by the worker as it starts a task; until then it only says when the Activity
+                // was created.
+                Started = workerTask.Status is WorkerTaskStatus.Processing or WorkerTaskStatus.CancellationRequested
+                    ? workerTask.Activity?.Executed
+                    : null,
                 ConnectedSystemRunProfileId = runProfileId,
                 ConnectedSystemName = runProfile?.ConnectedSystemName,
                 RunProfileName = runProfile?.Name,

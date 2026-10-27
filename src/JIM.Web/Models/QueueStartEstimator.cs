@@ -38,6 +38,52 @@ public static class QueueStartEstimator
         return starts;
     }
 
+    /// <summary>
+    /// How much longer a running task is expected to take: what is left of its Run Profile's typical duration, but
+    /// never less than its current step still needs. Null where that cannot be said honestly.
+    /// </summary>
+    /// <remarks>
+    /// The step estimate (from the Activity's live rate) describes the step running now and nothing after it, so it
+    /// is a floor rather than an answer: without a typical duration to say how much run remains beyond the step, the
+    /// result is unknown. Once a run has outlasted its typical duration, the step estimate is all there is to go on.
+    /// </remarks>
+    /// <param name="started">When the worker started the task (UTC), or null if it has not.</param>
+    /// <param name="typicalDuration">The Run Profile's typical (median) duration, or null if it has none.</param>
+    /// <param name="stepSecondsRemaining">The current step's estimated seconds remaining, or null if unknown.</param>
+    /// <param name="now">The current time (UTC).</param>
+    public static TimeSpan? Remaining(DateTime? started, TimeSpan? typicalDuration, double? stepSecondsRemaining, DateTime now)
+    {
+        if (started is not { } startedAt || typicalDuration is not { } typical)
+            return null;
+
+        var step = stepSecondsRemaining is { } seconds ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
+        var left = typical - (now - startedAt);
+
+        if (left <= TimeSpan.Zero)
+            return step;
+
+        return step is { } stepLeft && stepLeft > left ? stepLeft : left;
+    }
+
+    /// <summary>
+    /// When the work running now is expected to be done: the longest of the running tasks' remaining times, zero when
+    /// nothing is running, and unknown if any of them is.
+    /// </summary>
+    public static TimeSpan? LongestRemaining(IEnumerable<TimeSpan?> remaining)
+    {
+        var longest = TimeSpan.Zero;
+        foreach (var value in remaining)
+        {
+            if (value is not { } known)
+                return null;
+
+            if (known > longest)
+                longest = known;
+        }
+
+        return longest;
+    }
+
     /// <summary>The slot's slowest task's typical duration, or null if any of its tasks has none.</summary>
     private static TimeSpan? SlotDuration(QueueRunSlot slot, IReadOnlyDictionary<int, TimeSpan> medianDurations)
     {
