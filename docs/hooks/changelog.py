@@ -27,7 +27,9 @@ CHANGELOG = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
 FIRST_RELEASE = re.compile(r"^## \[\d", re.MULTILINE)
 
 # An entry's leading emoji: a list marker, then one emoji (with its variation
-# selector, if any) and the space after it. The marker and indent are kept.
+# selector, if any) and the space after it. The marker and indent are kept. The
+# emoji pattern is STY-1's, from scripts/Test-DocsConformance.ps1 (described
+# there) and scripts/Test-DocsSite.ps1; keep the three in step.
 LEADING_EMOJI = re.compile(
     r"^([ \t]*[-*] )"
     r"(?:[\u2600-\u27BF\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA"
