@@ -336,9 +336,20 @@
 }
 
 /* Once resized, a column's width is its measured border-box width, so the
-   cell's padding must count inside it or every column grows by its padding. */
+   cell's padding must count inside it or every column grows by its padding.
+   Material's header min-width is lifted too: in a fixed layout the browser
+   would draw a column at that minimum whatever width it was set to, taking the
+   difference from its neighbour. docs-layout.js keeps its own minimum. */
 .md-typeset table[data-jim-resized] th {
   box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Material draws content tables as inline-block on screen, and table-layout
+   only applies to a table box: without this, the set widths are hints and
+   every column is still floored at its longest word. */
+.md-typeset table[data-jim-resized] {
+  display: table;
 }
 
 .jim-col-resize {
