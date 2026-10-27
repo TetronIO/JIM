@@ -18,7 +18,7 @@ namespace JIM.PostgresData.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.13")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1290,9 +1290,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("SessionsValidFromUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SyncRuleLastDeletedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
@@ -3412,9 +3409,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("ConfigurationLastFullyAppliedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("ConnectorDefinitionId")
                         .HasColumnType("integer");

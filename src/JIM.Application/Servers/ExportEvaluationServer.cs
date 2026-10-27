@@ -1346,7 +1346,7 @@ public class ExportEvaluationServer
     /// Stages membership-removal Pending Exports for Metaverse Objects that referenced now-deleted
     /// Metaverse Objects (reference recall, #908). Without this, a target system without referential
     /// integrity keeps the deleted object (for example a leaver) as a group member forever: the
-    /// referencing group's CSOs never change, so the unchanged-skip means no sync ever re-evaluates
+    /// referencing group's CSOs never change, so no Delta Synchronisation ever re-evaluates
     /// them. Each referencing Metaverse Object is evaluated ONCE with every reference it lost in this
     /// batch, so a group losing many members in one run gets one Pending Export carrying all removals.
     /// Recall only updates existing target objects; provisioning remains the job of normal sync.

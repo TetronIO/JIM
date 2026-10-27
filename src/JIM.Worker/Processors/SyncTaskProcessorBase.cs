@@ -71,10 +71,6 @@ public abstract class SyncTaskProcessorBase
     // disconnecting Metaverse Object's type. Created lazily at first disconnection; caches the rule map for the run.
     protected RemainingImportSourceEvaluator? _remainingImportSourceEvaluator;
 
-    // Object type IDs that have inbound import rules with reference attribute mappings.
-    // Used to skip reference attribute queueing for unchanged CSOs whose types have no reference rules.
-    protected HashSet<int>? _objectTypesWithReferenceRules;
-
     // Aggregate no-net-change counts for the entire sync run
     // Note: Target CSO attribute values for no-net-change detection are now pre-loaded in ExportEvaluationCache
     // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
@@ -1146,18 +1142,6 @@ public abstract class SyncTaskProcessorBase
 
         // Skip obsolete CSOs - already fully handled in Pass 1
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
-            return;
-
-        // Skip unchanged CSOs — their attributes haven't changed since the last completed sync,
-        // so Attribute Flow would produce zero changes. This avoids the overhead of loading and
-        // comparing attribute values for the majority of CSOs in large-scale repeat syncs.
-        // Exception: a CSO flagged by the Temporal Scope Reconciler (ScopeReviewPending, #892) has drifted in or
-        // out of scope with the clock despite static source data; it must be re-evaluated even though unchanged.
-        // (The loader already forces a full attribute load for such CSOs so Attribute Flow has real values.)
-        // Likewise a CSO marked because another system changed a Metaverse attribute that a derived flow on this
-        // system's rules reads (DerivedInputChangePending, #1750): its own data is unchanged, but its derived flows
-        // must be re-evaluated. (The loader already treats a marked CSO as changed and loads its attribute values.)
-        if (connectedSystemObject.IsUnchangedSinceLastSync && !connectedSystemObject.ScopeReviewPending && !connectedSystemObject.DerivedInputChangePending)
             return;
 
         // Skip if no Synchronisation Rules defined AND not in simple mode — nothing to join/project/flow.
@@ -3089,9 +3073,8 @@ public abstract class SyncTaskProcessorBase
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
 
-        // Keep the message's promise (#2309): nothing about the loser's own data changed, so without a mark neither
-        // Delta Synchronisation nor Full Synchronisation's unchanged-object skip would process it again, and two objects
-        // would keep the same value. This page's join-state write and guarded clears have already run (inside
+        // Keep the message's promise (#2309): nothing about the loser's own data changed, so without a mark no Delta
+        // Synchronisation would process it again, and two objects would keep the same value until a Full Synchronisation. This page's join-state write and guarded clears have already run (inside
         // PersistPendingMetaverseObjectsAsync), so the mark survives to the next run.
         var loserMarks = losers
             .Select(loser => new SynchronisationPendingMark(((MetaverseObject)loser.Request.CallerState!).Id, _connectedSystem.Id))
@@ -5772,8 +5755,8 @@ public abstract class SyncTaskProcessorBase
 
         // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
         // that referenced the deleted objects. Without this, referencing groups' target CSOs never
-        // change, the unchanged-skip means no sync re-evaluates them, and a target without
-        // referential integrity keeps the deleted object as a member forever.
+        // change, so no Delta Synchronisation re-evaluates them, and a target without referential
+        // integrity keeps the deleted object as a member until a Full Synchronisation.
         if (deletedMvoIds.Count > 0)
         {
             using (Diagnostics.Sync.StartSpan("MvoDeletionStageRecallExports")
@@ -7624,23 +7607,6 @@ public abstract class SyncTaskProcessorBase
         }
 
         return new TypeOrderedCsoPager(loadPage, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
-    }
-
-    /// <summary>
-    /// Builds a set of object type IDs that have inbound import rules with reference attribute mappings.
-    /// Used to determine whether unchanged CSOs need reference attribute processing.
-    /// </summary>
-    protected void BuildReferenceObjectTypeCache(List<SyncRule> activeSyncRules)
-    {
-        _objectTypesWithReferenceRules = activeSyncRules
-            .Where(sr => sr.Direction == SyncRuleDirection.Import)
-            .Where(sr => sr.AttributeFlowRules.Any(afr =>
-                afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference))
-            .Select(sr => sr.ConnectedSystemObjectTypeId)
-            .ToHashSet();
-
-        Log.Debug("BuildReferenceObjectTypeCache: {Count} object types have reference attribute rules",
-            _objectTypesWithReferenceRules.Count);
     }
 
     /// <summary>

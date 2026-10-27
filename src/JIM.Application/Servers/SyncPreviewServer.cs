@@ -387,10 +387,6 @@ public class SyncPreviewServer
                     AddOutboundToCounts(result.Counts, item.Preview!);
                     break;
 
-                case FullSyncPreviewItemKind.Unchanged:
-                    result.UnchangedObjectCount++;
-                    break;
-
                 case FullSyncPreviewItemKind.Evaluated:
                     result.EvaluatedObjectCount++;
                     var category = item.Category!.Value;
@@ -420,11 +416,11 @@ public class SyncPreviewServer
             }
         }
 
-        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Obsolete} obsolete, {Unchanged} unchanged), " +
+        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Obsolete} obsolete), " +
             "{Project} would project, {Join} would join, {Flow} attribute flow, {OutOfScope} out of scope, {NotConnected} not connected, {Blocked} blocked; " +
             "{Reviewed} Metaverse Object(s) export scope reviewed; " +
             "{Creates} creates, {Updates} updates, {Deletes} deletes proposed; truncated: {Truncated} ({Reason}); {Elapsed:0.0}s.",
-            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.ObsoleteObjectCount, result.UnchangedObjectCount,
+            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.ObsoleteObjectCount,
             result.Counts.WouldProject, result.Counts.WouldJoin, result.Counts.AttributeFlow, result.Counts.OutOfScope,
             result.Counts.NotConnected, result.Counts.BlockedByErrors, result.Counts.ExportScopeReviewed,
             result.Counts.ObjectsToCreate, result.Counts.ObjectsToUpdate, result.Counts.ObjectsToDelete,
@@ -480,17 +476,6 @@ public class SyncPreviewServer
                 connectedSystemId);
             yield return new FullSyncPreviewItem { Kind = FullSyncPreviewItemKind.Refused, Preview = refusal };
             yield break;
-        }
-
-        // The unchanged-object optimisation, decided as the run decides it (SyncFullSyncTaskProcessor): while no
-        // configuration has changed since it was last fully applied, the run skips every object unchanged since the
-        // system's last synchronisation, drift and all, so the preview proposes nothing for one either (#1530).
-        DateTime? unchangedWatermark = null;
-        var watermarks = await guardedRepository.GetConnectedSystemSynchronisationWatermarksAsync(connectedSystemId);
-        if (watermarks?.LastSyncCompletedAt != null)
-        {
-            unchangedWatermark = ConnectedSystem.GetUnchangedObjectWatermark(watermarks.Value.LastSyncCompletedAt,
-                watermarks.Value.ConfigurationLastFullyAppliedAt, await guardedRepository.GetLatestSyncRuleConfigurationChangeAsync());
         }
 
         // Keyset pagination from the zero GUID, matching the sync processors' population walk.
@@ -558,12 +543,6 @@ public class SyncPreviewServer
                     };
                     continue;
                 }
-                if (unchangedWatermark.HasValue && cso.IsUnchangedSince(unchangedWatermark.Value))
-                {
-                    yield return Skipped(FullSyncPreviewItemKind.Unchanged, cso);
-                    continue;
-                }
-
                 var preview = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: false, asTheRunWould: true);
                 evaluated++;
                 yield return new FullSyncPreviewItem
@@ -588,14 +567,6 @@ public class SyncPreviewServer
 
     private static FullSyncPreviewItem Truncation(FullSyncPreviewTruncationReason reason) =>
         new() { Kind = FullSyncPreviewItemKind.Truncated, TruncationReason = reason };
-
-    private static FullSyncPreviewItem Skipped(FullSyncPreviewItemKind kind, ConnectedSystemObject cso) => new()
-    {
-        Kind = kind,
-        ConnectedSystemObjectId = cso.Id,
-        DisplayName = cso.NameOrId,
-        ObjectTypeName = cso.Type?.Name
-    };
 
     #endregion
 

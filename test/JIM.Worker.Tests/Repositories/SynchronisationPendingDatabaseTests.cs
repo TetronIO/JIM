@@ -374,25 +374,6 @@ public class SynchronisationPendingDatabaseTests
         }
     }
 
-    [Test]
-    public async Task GetConnectedSystemObjectsAsync_WithWatermarkUnchangedButMarkedObject_IsPartitionedAsChangedAsync()
-    {
-        var s = await SeedAsync();
-        var watermark = DateTime.UtcNow.AddHours(-1);
-        await SetMarkDirectlyAsync(s.JoinedCsoId, true);
-
-        await using var ctx = NewContext();
-        var page = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemObjectsAsync(
-            s.SystemId, 1, 100, knownTotalCount: 2, lastSyncTimestamp: watermark, afterId: Guid.Empty);
-
-        var marked = page.Results.Single(c => c.Id == s.JoinedCsoId);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(marked.IsUnchangedSinceLastSync, Is.False, "Full Synchronisation's unchanged skip must not skip a marked object");
-            Assert.That(marked.AttributeValues, Has.Count.EqualTo(1), "a marked object's attribute values are loaded");
-        }
-    }
-
     /// <summary>
     /// Paging is by keyset until a page comes back empty, so a row that entered the selection after the count was
     /// taken must still be returned beyond the page count that count implies.
@@ -419,7 +400,7 @@ public class SynchronisationPendingDatabaseTests
 
         await using var ctx = NewContext();
         var page = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemObjectsAsync(
-            s.SystemId, page: 3, pageSize: 1, knownTotalCount: 1, lastSyncTimestamp: null, afterId: Guid.Empty);
+            s.SystemId, page: 3, pageSize: 1, knownTotalCount: 1, afterId: Guid.Empty);
 
         Assert.That(page.Results, Has.Count.EqualTo(1), "a keyset page is returned whatever the count taken at the start implied");
     }

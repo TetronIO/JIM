@@ -43,11 +43,6 @@ internal static class FullSynchronisationPreviewDeltas
         (delta.ConnectedSystemObjectId ?? delta.MetaverseObjectId) is { } objectId ? (objectId, delta.ConnectedSystemId) : null;
 
     /// <summary>
-    /// The row for an object the run would skip as unchanged since the last synchronisation.
-    /// </summary>
-    internal static PreviewDelta Unchanged(FullSyncPreviewItem item, int connectedSystemId) => WouldNotChange(item, connectedSystemId);
-
-    /// <summary>
     /// The rows for an object the run would process or tear down: one per consequence, or a single would-not-change
     /// row where the run would leave it as it is.
     /// </summary>

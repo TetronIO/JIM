@@ -105,49 +105,10 @@ public class ConnectedSystem : IAuditable
 
     /// <summary>
     /// Timestamp of when the last synchronisation (full or delta) completed successfully.
-    /// Used by delta sync to determine which CSOs have been modified since the last run,
-    /// and by full sync to identify unchanged CSOs that can skip attribute processing.
+    /// Used by Delta Synchronisation to determine which CSOs have been modified since the last run. A Full
+    /// Synchronisation advances it but never reads it: it evaluates every object (#891).
     /// </summary>
     public DateTime? LastSyncCompletedAt { get; set; }
-
-    /// <summary>
-    /// The start instant of the last successfully completed Full Synchronisation, i.e. the moment up to which
-    /// Synchronisation Rule configuration is known to have been applied to every object of this system.
-    /// Full Synchronisation compares the newest rule/mapping configuration change against this to decide whether
-    /// the unchanged-object optimisation must be disabled for the run (a configuration change must reach every
-    /// object, not just objects whose source data changed). Distinct from <see cref="LastSyncCompletedAt"/>,
-    /// which ANY completed synchronisation advances and which tracks source data staleness only: a no-change
-    /// Delta Synchronisation advances that watermark without applying configuration, so it must not advance this.
-    /// The run's START time is recorded (not its completion) so a configuration change made mid-run is still
-    /// detected as newer and re-applied by the next Full Synchronisation.
-    /// </summary>
-    public DateTime? ConfigurationLastFullyAppliedAt { get; set; }
-
-    /// <summary>
-    /// The watermark a Full Synchronisation of this system loads its objects with, skipping those unchanged since it
-    /// (<see cref="ConnectedSystemObject.IsUnchangedSince"/>), or null when the unchanged-object optimisation is off for
-    /// the run. It is on only while no Synchronisation Rule configuration has changed since configuration was last
-    /// fully applied (<see cref="ConfigurationLastFullyAppliedAt"/>): a configuration change must reach every object.
-    /// One rule for the run and the Full Synchronisation preview (#1530).
-    /// </summary>
-    /// <param name="latestConfigurationChange">The newest Synchronisation Rule or mapping change across every
-    /// Connected System, since another system's priority affects this system's resolution; null when none is recorded.</param>
-    public DateTime? GetUnchangedObjectWatermark(DateTime? latestConfigurationChange) =>
-        GetUnchangedObjectWatermark(LastSyncCompletedAt, ConfigurationLastFullyAppliedAt, latestConfigurationChange);
-
-    /// <summary>
-    /// <see cref="GetUnchangedObjectWatermark(DateTime?)"/> from the two watermarks alone, for a reader that loads
-    /// them without the rest of the Connected System.
-    /// </summary>
-    public static DateTime? GetUnchangedObjectWatermark(DateTime? lastSyncCompletedAt, DateTime? configurationLastFullyAppliedAt,
-        DateTime? latestConfigurationChange)
-    {
-        if (!lastSyncCompletedAt.HasValue || configurationLastFullyAppliedAt == null)
-            return null;
-        if (latestConfigurationChange.HasValue && latestConfigurationChange.Value > configurationLastFullyAppliedAt.Value)
-            return null;
-        return lastSyncCompletedAt;
-    }
 
     /// <summary>
     /// Maximum number of export batches to process concurrently.

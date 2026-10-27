@@ -113,7 +113,7 @@ What prevents this from looping is value-level change detection, not a special c
 
 ### Full Sync vs Delta Sync
 
-- **Full Synchronisation** re-evaluates every Connected System Object against the Synchronisation Rules, except a joined one unchanged since the last synchronisation, which it skips unless Synchronisation Rule configuration has changed since the last Full Synchronisation. Use it after changing Synchronisation Rule configuration, or for periodic reconciliation.
+- **Full Synchronisation** re-evaluates every Connected System Object, changed or not. Use it for a new Connected System, after changing Synchronisation Rule configuration or upgrading JIM, and to correct anything a Delta Synchronisation missed. It is slower, so schedule Delta Synchronisation for routine runs.
 - **Delta Synchronisation** processes only the Connected System Objects that have changed since they were last synchronised. It is faster, and is the normal operational mode. A change an import commits while a synchronisation of the same Connected System is running, for example in the same Schedule parallel group, is never lost: if the running synchronisation does not process it, the next one does.
 
 One kind of configuration change does not wait for a Full Sync: an export rule change that moves objects into or out of its scope (a new or re-enabled rule, provisioning switched on, changed Scoping Criteria). JIM marks the affected Metaverse Objects, and the next synchronisation of any Connected System, Delta included, provisions and deprovisions them; see [When a change to an export rule takes effect](../configuration/deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
