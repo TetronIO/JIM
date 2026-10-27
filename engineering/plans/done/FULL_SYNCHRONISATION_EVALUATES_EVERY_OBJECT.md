@@ -1,9 +1,10 @@
 # Full Synchronisation Evaluates Every Object - Implementation Plan
 
-- **Status:** Doing (Phases 1-5 and 7 complete; Phase 6 measurement outstanding)
+- **Status:** Done
+- **Note:** Phase 6 was not run before merge. By the user's choice the change landed first, and the repeat Full Synchronisation cost is measured on `main` by the Scale750k integration run, which also covers the multi-page run Phase 5 still owed.
 - **Issue:** [#891](https://github.com/TetronIO/JIM/issues/891)
 - **Related Issues:** [#2092](https://github.com/TetronIO/JIM/issues/2092) (changes committed mid-run skipped by every later Delta and Full Synchronisation), [#2309](https://github.com/TetronIO/JIM/issues/2309) (objects needing re-processing skipped until their own data changes), [#892](https://github.com/TetronIO/JIM/issues/892) (Temporal Scope Reconciler), [#1750](https://github.com/TetronIO/JIM/issues/1750) (Metaverse-Derived Attribute Flows), [#1530](https://github.com/TetronIO/JIM/issues/1530) (Full Synchronisation preview)
-- **Related Plans:** [`CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md`](CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md) (shares the unchanged-object rule this plan removes)
+- **Related Plans:** [`CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md`](../doing/CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md) (shares the unchanged-object rule this plan removes)
 - **Last Updated:** 2026-10-27
 
 ## Overview
