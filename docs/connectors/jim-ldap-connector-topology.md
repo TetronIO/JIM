@@ -9,6 +9,20 @@ audience: administrator
 
 Where JIM reads a directory from, and which part of it, matter as much as how. This page covers finding and pinning a domain controller, multi-domain forests and referrals, Container Scope and excluding a container, and tuning OpenLDAP for large groups.
 
+```jim-diagram
+archetype: lifecycle
+title: How JIM pins a domain controller, and when it lets go
+desc: "On Active Directory and Samba AD, with Preferred Domain Controller blank, the first connection goes through Host and the Connected System is not pinned. JIM reads the domain controller it reached from the rootDSE and, once a throwaway connection proves that name reachable, pins every later connection, within a run and across Run Profile executions, to that domain controller by FQDN. If the name cannot be reached, nothing is pinned and the Activity carries a warning. If the pinned domain controller becomes unavailable, the run fails outright and the pin is cleared; the next run resolves via Host again and re-pins, and a Full Import re-establishes the Delta Import baseline. A Preferred Domain Controller, when set, always takes priority over any pin."
+start: { label: Host }
+container: { label: Active Directory and Samba AD, note: "a Preferred Domain Controller, when set, always takes priority over any pin" }
+states:
+  - { id: unpinned, label: Not pinned, sub: connects via Host }
+  - { id: pinned, label: Pinned, sub: every connection to one FQDN }
+transitions:
+  - { from: unpinned, to: pinned, label: "discovered, and reachable by name", note: "if not: stays unpinned, with a warning" }
+  - { from: pinned, to: unpinned, label: pinned domain controller unavailable, note: "the run fails; a Full Import re-baselines" }
+```
+
 ## :material-magnify: Discovering Domain Controllers
 
 Administrators often do not know which domain controller to enter in Preferred Domain Controller. Rather than typing a hostname blind, use the **Discover...** action beside the field on the Connected System's settings page: it lists every domain controller in the forest, with the Active Directory Site each belongs to, and clicking one fills the field with your choice. Read-only domain controllers appear in the list and are not marked as such. Choose a writable one: JIM exports to the domain controller it connects to, and a read-only one cannot accept the changes.

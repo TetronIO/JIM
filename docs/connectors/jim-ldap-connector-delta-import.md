@@ -9,6 +9,33 @@ audience: administrator
 
 A Delta Import reads only what changed since the last import, from wherever the directory records its changes. Each directory type keeps that record differently, and each Delta Import fails safe rather than miss a change: it stops and asks for a Full Import when it cannot be sure it would see them all.
 
+```jim-diagram
+archetype: comparison
+title: Where each directory type records its changes
+desc: "Active Directory and Samba AD: a Delta Import reads objects whose uSNChanged has passed the watermark, against the domain controller JIM pinned, and finds deletions by a tombstone search of the Deleted Objects container. It fails fast when the domain controller changed or was restored. OpenLDAP: it reads cn=accesslog, only the selected partitions' writes, and matches each deletion to its object by reqEntryUUID. It fails fast when the overlay's purge, or a restore, has removed the entry its watermark names. 389 Directory Server and generic directories: it reads the changelog the Root DSE advertises, otherwise cn=changelog, and identifies a deletion from the copy of the deleted entry the changelog keeps, which 389 Directory Server keeps only with nsslapd-log-deleted on. It fails fast when the changelog no longer continues from the watermark, because it was trimmed or the directory restored. Whatever the type, before it reads a change a Delta Import confirms that the account JIM connects as can read the source, and a run that fails fast asks for a Full Import."
+columns:
+  - { label: Active Directory, sub: and Samba AD }
+  - { label: OpenLDAP, sub: the accesslog overlay }
+  - { label: 389 and generic, sub: changelog directories }
+rows:
+  - label: Reads changes from
+    cells:
+      - { text: "`uSNChanged`", sub: on the pinned domain controller }
+      - { text: "`cn=accesslog`", sub: "the selected partitions' writes" }
+      - { text: the changelog, sub: "the Root DSE's, else `cn=changelog`" }
+  - label: Finds deletions by
+    cells:
+      - { text: a tombstone search, sub: of the Deleted Objects container }
+      - { text: "`reqEntryUUID`", sub: logged with every deletion }
+      - { text: the deleted entry's copy, sub: "389: needs `nsslapd-log-deleted` on" }
+  - label: Fails fast when
+    cells:
+      - { text: the domain controller changed, sub: or was restored }
+      - { text: the purge passed the watermark, sub: or a restore removed it }
+      - { text: the changelog no longer continues, sub: "trimmed, or the directory restored" }
+footer: "Every type: before it reads a change, a Delta Import confirms the account JIM connects as can read the source"
+```
+
 ## :material-microsoft-windows: Active Directory
 
 Uses USN (Update Sequence Number) change tracking. USNs are only meaningful when read back against the same domain controller that issued them, so JIM also records the domain controller's identity (its invocationId, falling back to its hostname where an invocationId is not available for comparison) and verifies it on every Delta Import before querying for changes. If the pinned domain controller changed since the last run, or was restored from a backup or snapshot, the Delta Import fails fast with an error naming what changed, before it reads a single change, rather than silently skipping or re-importing changes. See [Domain Controller Discovery and Pinning](jim-ldap-connector-topology.md#domain-controller-discovery-and-pinning) and [Delta import fails with a domain controller mismatch error](jim-ldap-connector-troubleshooting.md#delta-import-fails-with-a-domain-controller-mismatch-error) below. JIM has not been tested against a domain with the Active Directory Recycle Bin enabled.
