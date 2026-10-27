@@ -101,6 +101,17 @@ internal static class PendingExportBulkColumns
     ];
 
     /// <summary>
+    /// Update columns for the deferred export pass's save of a chunk's reference resolutions
+    /// (ConnectedSystemRepository.PersistResolvedReferencesAsync): only what resolution changes, the
+    /// resolved value, the cleared unresolved marker and the resolved target CSO (#1079). Everything
+    /// else on the change is written by the export-result update once the change has been sent.
+    /// </summary>
+    internal static readonly string[] PendingExportAttributeValueChangesReferenceResolutionUpdate =
+    [
+        "StringValue", "UnresolvedReferenceValue", "ResolvedReferenceCsoId"
+    ];
+
+    /// <summary>
     /// Columns deliberately excluded from every Pending Export attribute value change update list:
     /// the identity, target attribute, change classification and the staged non-string value
     /// carriers are immutable once staged. SyncRuleId/SyncRuleName join them: they record which rule's

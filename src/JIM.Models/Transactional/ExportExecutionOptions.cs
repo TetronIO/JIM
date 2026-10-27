@@ -22,6 +22,14 @@ public class ExportExecutionOptions
     public int MaxParallelism { get; set; } = 1;
 
     /// <summary>
+    /// How many deferred exports (those waiting on references when the first pass reached them) the
+    /// deferred pass loads, resolves and saves at a time before writing them. Bounds the pass's memory
+    /// to one chunk and keeps its progress moving; at scale the whole set ran to millions of member
+    /// values. Default is 2,000.
+    /// </summary>
+    public int DeferredChunkSize { get; set; } = 2_000;
+
+    /// <summary>
     /// Run Profile Safeguards (#1618): the maximum number of creates this run may attempt.
     /// Null means no limit. Copied from the Run Profile's <see cref="Staging.ConnectedSystemRunProfile.MaxCreates"/>.
     /// </summary>
