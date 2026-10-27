@@ -98,9 +98,12 @@ jobs:
       run: pwsh -File ./scripts/Lint-CopyrightHeaders.ps1
 
     # PowerShell Pester Tests for the JIM PowerShell module
+    # Runner images can come up with no PowerShell repository registered at all ("No repository with the name
+    # 'PSGallery' was found"), so register the default one when it is missing rather than assuming it.
     - name: Install Pester
       shell: pwsh
       run: |
+        if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
         Set-PSRepository PSGallery -InstallationPolicy Trusted
         Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
     - name: Run Pester Tests
