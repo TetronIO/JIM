@@ -594,6 +594,55 @@ Describe 'Test-DocsConformance: conformant and priority pages' {
     }
 }
 
+Describe 'Test-DocsConformance: a Ratchet rule that keeps its baseline on conformant pages' {
+    BeforeAll {
+        # VIS-1 arrived after every folder was conformant, so it is listed in BaselineOnConformant:
+        # the pages that predate it keep their baseline, and a new page has none.
+        function New-RatchetFixture {
+            param([hashtable]$Pages, [string]$Baseline = '', [string[]]$Keep = @('VIS-1'), [string]$Tier = 'Ratchet')
+            $rules = (Get-DefaultConfig).Rules
+            $rules['VIS-1'] = $Tier
+            New-Fixture -Pages $Pages -Baseline $Baseline -ConfigOverrides @{
+                Rules = $rules; ConformantFolders = @('concepts'); BaselineOnConformant = $Keep
+            }
+        }
+    }
+
+    It 'allows a conformant page the debt its baseline records' {
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = (New-Page) } -Baseline "VIS-1`tconcepts/a.md`t1`n"
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a conformant page the baseline does not cover, so a new page needs a diagram' {
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = (New-Page) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'VIS-1'
+    }
+
+    It 'still fails a conformant page on a Ratchet rule that is not listed' {
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = (New-Page) } -Baseline "VIS-1`tconcepts/a.md`t1`n" -Keep @()
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+    }
+
+    It 'asks for the entry to be removed once the page has its diagram' {
+        $page = New-Page -Body "A Connected System is an external system JIM synchronises identities with.`n`n``````mermaid`nflowchart LR`n    accTitle: t`n    accDescr: d`n    A --> B`n```````n"
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = $page } -Baseline "VIS-1`tconcepts/a.md`t1`n"
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'no VIS-1 findings remain'
+    }
+
+    It 'refuses a listed rule that is not a Ratchet rule' {
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = (New-Page) } -Tier 'Block'
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Not -Be 0
+        $r.Output | Should -Match 'BaselineOnConformant'
+    }
+}
+
 Describe 'Test-DocsConformance: PRI-1 priority pages record the release they were checked against' {
     BeforeAll {
         $script:Priority = @{ PriorityPages = @('cs.md'); ConformantPages = @('cs.md') }

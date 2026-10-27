@@ -66,7 +66,10 @@
       Warn     findings are reported, never fail.
 
     A page in a conformant folder, or listed as a conformant page, carries no
-    baseline: its Ratchet findings fail outright. A conformant priority page
+    baseline: its Ratchet findings fail outright. The exception is a Ratchet
+    rule listed in BaselineOnConformant, introduced after its pages were
+    conformant (VIS-1): it keeps its baseline everywhere, so the pages that
+    predate it are held at their debt while a new page has none. A conformant priority page
     also fails on warnings, and has the smaller priority size budget.
 
     Exceptions live in the page, where the next author reads them, and must
@@ -208,6 +211,13 @@ function Read-Configuration {
     }
     # EXC-1 guards the exception mechanism itself, so it can be neither relaxed nor suppressed.
     $config.Rules['EXC-1'] = 'Block'
+    # Ratchet rules that keep their baseline on conformant pages (optional; see the help above).
+    if (-not $config.ContainsKey('BaselineOnConformant')) { $config.BaselineOnConformant = @() }
+    foreach ($r in $config.BaselineOnConformant) {
+        if ($config.Rules[$r] -ne 'Ratchet') {
+            throw "Configuration '$Path' lists '$r' in BaselineOnConformant, but only a Ratchet rule can keep a baseline."
+        }
+    }
     return $config
 }
 
@@ -1291,7 +1301,7 @@ foreach ($file in $files) {
     foreach ($finding in @($kept) + $markerFindings) {
         if (-not $finding) { continue }
         $mode = $config.Rules[$finding.Rule]
-        if ($conformant -and $mode -eq 'Ratchet') { $mode = 'Block' }
+        if ($conformant -and $mode -eq 'Ratchet' -and $finding.Rule -notin $config.BaselineOnConformant) { $mode = 'Block' }
         if ($conformant -and $priority -and $mode -eq 'Warn') { $mode = 'Block' }
         $findings.Add([pscustomobject]@{
                 Rule        = $finding.Rule
@@ -1339,7 +1349,8 @@ foreach ($f in $findings | Where-Object Mode -eq 'Ratchet') {
 function Test-BaselineEntryApplies {
     param([string]$Key)
     $ruleId, $pagePath = $Key.Split("`t")
-    return $pageSet.ContainsKey($pagePath) -and -not $conformantSet.ContainsKey($pagePath) -and $config.Rules[$ruleId] -eq 'Ratchet'
+    return $pageSet.ContainsKey($pagePath) -and $config.Rules[$ruleId] -eq 'Ratchet' -and
+        (-not $conformantSet.ContainsKey($pagePath) -or $ruleId -in $config.BaselineOnConformant)
 }
 
 if ($SeedBaseline) {
@@ -1410,7 +1421,7 @@ foreach ($key in $baseline.Keys) {
     $ruleId, $pagePath = $key.Split("`t")
     $display = "$docsDisplayPrefix/$pagePath"
     $reason = if (-not $pageSet.ContainsKey($pagePath)) { "$pagePath is not a page this check covers" }
-    elseif ($conformantSet.ContainsKey($pagePath)) { "$pagePath is conformant, so it carries no baseline" }
+    elseif ($conformantSet.ContainsKey($pagePath) -and $ruleId -notin $config.BaselineOnConformant) { "$pagePath is conformant, so it carries no baseline" }
     elseif ($config.Rules[$ruleId] -ne 'Ratchet') { "$ruleId is no longer a Ratchet rule" }
     else { "no $ruleId findings remain on $pagePath" }
     $errors.Add([pscustomobject]@{

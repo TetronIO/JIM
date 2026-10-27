@@ -119,6 +119,10 @@
     # A folder or page is added once every page in it declares its type and has no baseline
     # entries, and is never taken off again.
     ConformantFolders       = @('getting-started', 'api', 'reference', 'administration', 'configuration', 'concepts', 'connectors', 'powershell')
+    # Ratchet rules introduced after their pages were conformant: they keep a baseline on
+    # conformant pages too, so the pages that predate them are held at their debt and a new
+    # page has none. Remove a rule from here when its baseline is empty, and promote it to Block.
+    BaselineOnConformant    = @('VIS-1')
     ConformantPages         = @(
         'index.md'
         'concepts/index.md'

@@ -346,6 +346,21 @@ The diagram design system covers the docs site (`docs.junctional.io`) and market
 
 Diagrams use the **brand colours**, not the portal `--mud-palette-*` tokens, consistent with the brand-vs-theme rule above. The semantic roles mirror the causality-visualisation roles: purple for JIM/metaverse-side concepts, navy for Connected-System-side concepts.
 
+### Generated diagrams
+
+Most docs pages carry a **generated diagram**: a short `jim-diagram` spec in the page, rendered at build time by `docs/hooks/diagrams.py` in the same token language as the hand-drawn concept diagrams (authoring: `docs/CLAUDE.md` > Generated diagrams). The renderer owns layout, so every page's diagram is unique in content but consistent in form. Six archetypes cover what docs pages explain:
+
+| Archetype | Shape | Use it for |
+|-----------|-------|------------|
+| Flow | Input, steps in a frame, detours, output | Something that processes (a Synchronisation Rule) |
+| Lifecycle | States with labelled transitions, a start dot, a dashed terminal | Something that moves between states (a Connected System and its cmdlets) |
+| Anatomy | A value as a token with callouts, or an object as a card of parts; property chips | Something made of parts (an API key) |
+| Decision | Questions down the left, outcomes on the right; the wanted outcome solid | A branching outcome or diagnosis (matching, troubleshooting) |
+| Comparison | Options side by side against shared rows; a twelve-dot meter | "Which one do I use" (Full against Delta) |
+| Map | Nodes on a grid joined along rows and columns; nodes may be links | How several things connect (the glossary) |
+
+Each is drawn twice, wide (800 units) and narrow (360 units, for phones), and one shows per breakpoint. The visual vocabulary is shared: the hub frame for "inside this", stage boxes for steps and states, navy-outlined system boxes for what lies outside, solid purple (`--jimdg-core-*`) for the one thing to notice, lavender (`--jimdg-layer-*`) for questions and headers, purple edge labels and flows, and Plex Mono for code (`` `backticked` `` in a spec). Text renders at no less than 10px on screen at the reading width and on a phone; `scripts/Test-Diagrams.ps1` enforces that, along with labels inside their boxes, no overlaps and no line through text.
+
 ### Element tokens
 
 | Element | Light | Dark |

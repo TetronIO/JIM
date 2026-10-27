@@ -75,7 +75,7 @@ A rule that is wrong for one place is excused in that place, with a reason the n
 
 ### Conformant pages, priority pages, promotion
 
-- A page listed under `ConformantPages`, or inside a folder listed under `ConformantFolders`, has been migrated to this standard. It carries no baseline: its Ratchet findings fail outright. A page or folder is added once every page declares its type and has no baseline entries, and is never taken off again.
+- A page listed under `ConformantPages`, or inside a folder listed under `ConformantFolders`, has been migrated to this standard. It carries no baseline: its Ratchet findings fail outright. A page or folder is added once every page declares its type and has no baseline entries, and is never taken off again. The one exception is a Ratchet rule introduced after its pages were conformant, listed under `BaselineOnConformant` (VIS-1): it keeps its baseline on conformant pages too, so the pages that predate it are held at their debt while a new page must meet it from its first commit.
 - A **priority page** ([Priority pages and tutorials](#priority-pages-and-tutorials)) that is conformant is held higher still: its warnings fail too, and its size budget is 3,000 words rather than 5,000.
 - A Warn rule is promoted (to Ratchet or Block) by editing `config.psd1`, once it has run for a release without a false positive. A rule that produces a false positive it cannot be configured out of is demoted, not tolerated.
 
