@@ -27,7 +27,10 @@
       A11Y-1  every Mermaid diagram carries accTitle and accDescr
       A11Y-2  every image has alt text; every included diagram has a <title>
               and a <desc>
-      TYP-1   a page that declares a type has the shape that type requires
+      VIS-1   the page has at least one diagram: a jim-diagram spec, an
+              included concept diagram, an inline diagram SVG or a Mermaid
+              diagram, outside any other code block
+      TYP-1  a page that declares a type has the shape that type requires
       TUT-2   every bold label in a tutorial's Portal tab exists in the portal
       PRI-1   a conformant priority page records the release it was last
               checked against (validated: vX.Y.Z), no later than VERSION, and
@@ -162,7 +165,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
-    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'STY-3', 'EXC-1')
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'STY-3', 'VIS-1', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
@@ -752,6 +755,25 @@ function Test-Accessibility {
     }
 }
 
+# VIS-1: the page has at least one diagram, in any of the forms the site draws. Only a fence
+# Get-PageModel recorded counts, so a diagram shown inside another code block (a ````markdown
+# example of how to write one) is text, not a diagram; the same goes for the snippet and SVG
+# lines, which are skipped inside code blocks.
+function Test-Visuals {
+    param($Page)
+
+    if (@($Page.Fences | Where-Object { $_.Info -match '^(?:jim-diagram|mermaid)\b' }).Count -gt 0) { return }
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
+        if ($Page.InFenceLine[$i]) { continue }
+        $line = $Page.Lines[$i]
+        if ($line -match '^\s*--8<--\s*"(?:docs/)?assets/diagrams/[^"]+\.svg"') { return }
+        if ($line -match '<svg\b[^>]*\bclass\s*=\s*"(?:[^"]*\s)?jim-diagram(?:\s[^"]*)?"') { return }
+    }
+    $h1 = $Page.Headings | Where-Object Level -eq 1 | Select-Object -First 1
+    $line = if ($h1) { $h1.Line } else { 1 }
+    New-Finding 'VIS-1' $line "the page has no diagram; add one that shows this page's own subject: a jim-diagram spec (docs/CLAUDE.md > Generated diagrams), an included concept diagram, or a Mermaid diagram."
+}
+
 function Test-Validation {
     param($Page, [bool]$Priority, [bool]$Conformant, [string]$VersionPath)
 
@@ -1225,6 +1247,7 @@ foreach ($file in $files) {
         Test-SizeBudget -Page $page -Budget $budget
         Test-Growth -Page $page -Budget $budget -BaseRef $BaseRef -RepositoryRoot $repositoryFull -DocsRepoPath $docsRepoPath
         Test-Accessibility -Page $page -DocsFullPath $docsFull -RepositoryRoot $repositoryFull
+        Test-Visuals -Page $page
         Test-PageShape -Page $page -Config $config -RepositoryRoot $repositoryFull
         Test-Validation -Page $page -Priority $priority -Conformant $conformant -VersionPath (Join-Path $repositoryFull 'VERSION')
         Test-PortalLabel -Page $page -Config $config -RepositoryRoot $repositoryFull

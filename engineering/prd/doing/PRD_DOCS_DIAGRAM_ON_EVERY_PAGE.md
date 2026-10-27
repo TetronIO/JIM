@@ -1,6 +1,6 @@
 # A Diagram on Every Docs Page
 
-- **Status:** Doing (Phase 1 done; Phase 2 under way)
+- **Status:** Doing (Phases 1 to 3 done; Configuration batch next)
 - **Created:** 2026-10-27
 - **Author:** Jay Van der Zant (drafted with Claude)
 - **Issue:** [#2564](https://github.com/TetronIO/JIM/issues/2564)

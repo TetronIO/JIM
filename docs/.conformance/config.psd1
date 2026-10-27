@@ -48,6 +48,9 @@
         'STY-1'  = 'Block'
         # Heading icons on a section's index page, every H2, and nowhere else (STY-3).
         'STY-3'  = 'Block'
+        # Every page has a diagram (VIS-1). The pages that predate the rule get theirs section by
+        # section (engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md); promote to Block when none is left.
+        'VIS-1'  = 'Ratchet'
     }
 
     RequiredFrontMatter     = @('title', 'description', 'type', 'audience')

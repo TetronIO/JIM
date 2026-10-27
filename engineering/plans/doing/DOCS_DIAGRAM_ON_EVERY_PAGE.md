@@ -1,6 +1,6 @@
 # A Diagram on Every Docs Page: Implementation Plan
 
-- **Status:** Doing (Phases 1 and 2 done)
+- **Status:** Doing (Phases 1 to 3 done; Phase 4, the Configuration batch, next)
 - **Issue:** [#2564](https://github.com/TetronIO/JIM/issues/2564)
 - **PRD:** [`PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md`](../../prd/doing/PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md)
 
@@ -122,7 +122,7 @@ Each phase is its own pull request. Phases 1 to 3 land before any page gets a di
 - Lifecycle, anatomy, decision, comparison and relationship map, each with wide and narrow layouts, each with unit and browser tests.
 - The **glossary relationship map** lands here as the relationship map's showcase: JIM's core terms with each node linking to its glossary anchor.
 
-### Phase 3: The rules and the tooling
+### Phase 3: The rules and the tooling ✅
 
 - `engineering/DOCUMENTATION_STANDARD.md`: a new "Visuals" section with VIS-1 to VIS-4 and rule index rows; VOI-5 links to it.
 - VIS-1 in `Test-DocsConformance.ps1` (added to `KnownRules`, with its check and tests), tier `Ratchet`, baseline seeded, and the changelog's `allow-page` marker.
