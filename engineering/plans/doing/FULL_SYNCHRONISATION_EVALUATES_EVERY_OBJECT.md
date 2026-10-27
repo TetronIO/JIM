@@ -1,6 +1,6 @@
 # Full Synchronisation Evaluates Every Object - Implementation Plan
 
-- **Status:** Doing (Phases 1-4 and 7 complete; scenario runs and measurement outstanding)
+- **Status:** Doing (Phases 1-5 and 7 complete; Phase 6 measurement outstanding)
 - **Issue:** [#891](https://github.com/TetronIO/JIM/issues/891)
 - **Related Issues:** [#2092](https://github.com/TetronIO/JIM/issues/2092) (changes committed mid-run skipped by every later Delta and Full Synchronisation), [#2309](https://github.com/TetronIO/JIM/issues/2309) (objects needing re-processing skipped until their own data changes), [#892](https://github.com/TetronIO/JIM/issues/892) (Temporal Scope Reconciler), [#1750](https://github.com/TetronIO/JIM/issues/1750) (Metaverse-Derived Attribute Flows), [#1530](https://github.com/TetronIO/JIM/issues/1530) (Full Synchronisation preview)
 - **Related Plans:** [`CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md`](CONNECTED_SYSTEM_FULL_SYNCHRONISATION_PREVIEW.md) (shares the unchanged-object rule this plan removes)
@@ -103,7 +103,7 @@ Remove `GetLatestSyncRuleConfigurationChangeAsync`, `ConfigurationLastFullyAppli
 
 Remove the `Unchanged` kind and the watermark from `SyncPreviewServer` and `FullSyncPreviewResult`; update `SyncPreviewFidelityTests` so preview and run agree that every object is evaluated. Update the preview duration estimate's documentation (`docs/configuration/connected-systems.md:133`): its premise that "a routine run skips objects" no longer holds, though the estimate's conservative floor can stay. Confirm the change with the owners of the in-flight preview plan (#1530) so the two do not conflict.
 
-### Phase 5: Integration scenarios
+### Phase 5: Integration scenarios ✅
 
 Two scenarios use a plain Full Synchronisation as a negative control that must **miss** a clock-driven scope change. After this change a Full Synchronisation catches it, so the controls invert:
 
@@ -114,6 +114,8 @@ Two scenarios use a plain Full Synchronisation as a negative control that must *
 Run Scenarios 008, 012, 013 and 026 at `Small`, plus the full suite at `Small` before the PR.
 
 **As implemented:** both negative controls now use Delta Synchronisation. The reconciler-then-sync steps stay on Full Synchronisation, because Delta Synchronisation does not yet select a reconciler-flagged Connected System Object (see the correction under Scope); moving them onto Delta Synchronisation belongs with that fix. Full Synchronisation catching the transition without the reconciler is proven by `FullSync_RelativeDateScopeBoundaryPassedWithStaticData_DisconnectsWithoutReconcilerAsync`.
+
+**Runs (2026-10-27, OpenLDAP, `Small`, cloud sandbox):** Scenario 012 passed, all steps. Scenario 008 passed, all steps; the LeaverCohort negative control (Delta Synchronisation) disconnected 0 and the Full Synchronisation disconnected exactly the cohort. Both are single-page runs, so a run at `Medium` or above is still owed before release, per `test/CLAUDE.md`. Scenarios 013 and 026 and the full suite were not run.
 
 ### Phase 6: Measure the cost
 
