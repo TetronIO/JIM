@@ -308,9 +308,9 @@
    and resizable table columns; scripts/Test-DocsLayout.ps1 checks both.
    ======================================== */
 
-/* Full width: the grid fills the window, so tables, code and diagrams get the
-   room, while paragraphs, lists and notes keep the reading measure. Below
-   76.25em Material's layout is already full width, so the toggle is hidden. */
+/* Full width: the grid fills the window, and everything in it (text, tables,
+   code and diagrams) takes the room. Below 76.25em Material's layout is
+   already full width, so the toggle is hidden. */
 .jim-width-toggle {
   display: none;
 }
@@ -322,10 +322,6 @@
 
   :root[data-jim-width="full"] .md-grid {
     max-width: none;
-  }
-
-  :root[data-jim-width="full"] .md-typeset > :is(p, ul, ol, dl, blockquote, .admonition, details) {
-    max-width: 36rem;
   }
 }
 
