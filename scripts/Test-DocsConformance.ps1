@@ -162,7 +162,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
-    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'EXC-1')
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'STY-3', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
@@ -170,7 +170,13 @@ $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'ST
 $script:UnmarkableRules = @('EXC-1', 'MNT-3', 'PRI-1')
 $script:Tiers = @('Block', 'Ratchet', 'Warn')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
-$script:EmojiRegex = [regex]::new('(?:[\u2600-\u27BF]|[\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDEFF])\uFE0F?')
+# STY-1. Three kinds of emoji: the pictograph blocks (Misc Symbols, Dingbats, and the
+# supplementary pictographs as UTF-16 pairs); the scattered characters that default to emoji
+# presentation (a play button, a return arrow, an information sign); and any character a
+# variation selector (U+FE0F) asks to draw as emoji. Typographic symbols such as an arrow,
+# a trademark or a copyright sign pass unless that selector follows them.
+# scripts/Test-DocsSite.ps1 scans the built site with the same pattern; keep the two in step.
+$script:EmojiRegex = [regex]::new('(?:(?:[\u2600-\u27BF\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA\u2139\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u21A9\u21AA\u2934\u2935\u3030\u303D\u3297\u3299\u203C\u2049]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDEFF])\uFE0F?|[^\s\uFE0F]\uFE0F)')
 
 # ---------------------------------------------------------------------------
 # Configuration, baseline and nav
@@ -593,6 +599,31 @@ function Test-PageName {
         if (-not $isSuffix) {
             $line = if ($h1) { $h1.Line } else { 1 }
             New-Finding 'STR-3' $line "the nav label '$label' differs from the page's name '$name'; use the name, or the name without its leading words."
+        }
+    }
+}
+
+# STY-3: a section's index page (index.md, the home page included) opens every H2 with a Material
+# Design icon, which custom.css draws as a tile; no other heading anywhere carries an icon. An icon is
+# an emoji shortcode such as :material-layers-outline:, so any leading shortcode counts.
+function Test-HeadingIcons {
+    param($Page)
+
+    $isIndex = ($Page.RelativePath -split '/')[-1] -eq 'index.md'
+    foreach ($h in $Page.Headings) {
+        $icon = [regex]::Match($h.Text, '^:(?<name>[a-z0-9]+(?:-[a-z0-9]+)*):\s*(?<title>.*)$')
+        $title = if ($icon.Success) { $icon.Groups['title'].Value } else { $h.Text }
+        if ($isIndex -and $h.Level -eq 2) {
+            if (-not $icon.Success) {
+                New-Finding 'STY-3' $h.Line "the H2 '$title' has no icon; on a section's index page every H2 opens with a Material Design icon, such as '## :material-layers-outline: $title'."
+            }
+            elseif (-not $icon.Groups['name'].Value.StartsWith('material-')) {
+                New-Finding 'STY-3' $h.Line "the H2 '$title' opens with ':$($icon.Groups['name'].Value):'; use a Material Design icon (:material-...:), preferring an -outline variant."
+            }
+        }
+        elseif ($icon.Success -and $h.Level -gt 1) {
+            $where = if ($isIndex) { 'only H2 headings on a section''s index page carry an icon' } else { 'only a section''s index page carries heading icons; article headings stay plain' }
+            New-Finding 'STY-3' $h.Line "the heading '$title' carries an icon; $where."
         }
     }
 }
@@ -1064,9 +1095,7 @@ function Test-Language {
             New-Finding 'LANG-8' $p.Line "a link to a GitHub issue or pull request; a public page leaves JIM's own workings out (VOI-4)."
         }
 
-        # STY-1: emoji, matched by block (Misc Symbols, Dingbats, the supplementary pictographs as
-        # UTF-16 pairs, and the few pictographs elsewhere), each with an optional variation selector
-        # so a warning sign counts once. Typographic symbols (trademark, copyright, arrows) pass.
+        # STY-1 (the pattern is described where $script:EmojiRegex is defined).
         foreach ($m in $script:EmojiRegex.Matches($text)) {
             New-Finding 'STY-1' $p.Line "an emoji ('$($m.Value)'); use a Material Design icon instead, such as :material-check-circle-outline:{ .jim-yes role=`"img`" aria-label=`"Yes`" } for a tick in a table (see STY-1 and STY-3)."
         }
@@ -1183,6 +1212,7 @@ foreach ($file in $files) {
         Test-FrontMatter -Page $page -Config $config
         Test-PageName -Page $page -NavLabels $navLabels
         Test-HeadingStructure -Page $page
+        Test-HeadingIcons -Page $page
         Test-CodeFences -Page $page
         Test-Stub -Page $page -Config $config
         Test-Opening -Page $page

@@ -34,7 +34,7 @@ BeforeAll {
                 'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'; 'PRI-1' = 'Block'
                 'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
                 'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
-                'STY-1' = 'Block'
+                'STY-1' = 'Block'; 'STY-3' = 'Block'
             }
             RequiredFrontMatter = @('title', 'description', 'type', 'audience')
             AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario', 'validated')
@@ -897,9 +897,62 @@ Describe 'Test-DocsConformance: STY-1 no emoji' {
         @($r.Output -split "`n" | Where-Object { $_ -match 'STY-1' }).Count | Should -Be 1
     }
 
-    It 'passes Material icons, typographic symbols, and emoji in code' {
-        $body = "## :material-layers-outline: Architecture`n`n| Export | :material-check-circle-outline:{ .jim-yes } |`n|---|---|`n`nJIM$([char]0x2122) $([char]0x00A9) Tetron.`n`nRun ``echo $([char]0x2705)`` to test.`n`n``````text`n$([char]0x2705) done`n```````n"
+    It 'fails an emoji outside the pictograph blocks, such as a play button or a return arrow' {
+        $body = "## $([char]0x25B6)$([char]0xFE0F) Setting a password`n`nText.`n`n## $([char]0x21A9)$([char]0xFE0F) Rolling back`n`nText.`n"
         $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        @($r.Output -split "`n" | Where-Object { $_ -match 'STY-1' }).Count | Should -Be 2
+    }
+
+    It 'fails any character given emoji presentation by a variation selector' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Licensed $([char]0x00A9)$([char]0xFE0F) Tetron.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'STY-1'
+    }
+
+    It 'passes Material icons, typographic symbols, and emoji in code' {
+        $body = "## :material-layers-outline: Architecture`n`n| Export | :material-check-circle-outline:{ .jim-yes } |`n|---|---|`n`nJIM$([char]0x2122) $([char]0x00A9) Tetron. Import $([char]0x2192) Sync $([char]0x2194) Export.`n`nRun ``echo $([char]0x2705)`` to test.`n`n``````text`n$([char]0x2705) done`n```````n"
+        $f = New-Fixture -Pages @{ 'guide/index.md' = (New-Page -Type 'landing' -Body $body) }
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: STY-3 icons on index-page H2s, and only there' {
+    It 'fails an H2 with no icon on a section index page' {
+        $body = "Opening paragraph.`n`n## :material-layers-outline: Architecture`n`nText.`n`n## Versioning`n`nText.`n"
+        $f = New-Fixture -Pages @{ 'guide/index.md' = (New-Page -Type 'landing' -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "index\.md:16\s+STY-3.*'Versioning'"
+        @($r.Output -split "`n" | Where-Object { $_ -match 'STY-3' }).Count | Should -Be 1
+    }
+
+    It 'fails an icon that is not a Material Design icon on a section index page' {
+        $f = New-Fixture -Pages @{ 'guide/index.md' = (New-Page -Type 'landing' -Body "Opening paragraph.`n`n## :octicons-stack-24: Architecture`n`nText.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'STY-3'
+    }
+
+    It 'fails a heading icon on an article page, and on a lower heading of an index page' {
+        $f = New-Fixture -Pages @{
+            'cs.md'          = (New-Page -Body "Opening paragraph.`n`n## :material-tag-outline: The order`n`nText.`n")
+            'guide/index.md' = (New-Page -Type 'landing' -Body "Opening paragraph.`n`n## :material-sync: Synchronisation`n`n### :material-cog-outline: Run Profiles`n`nText.`n")
+        }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "cs\.md:\d+\s+STY-3.*'The order'"
+        $r.Output | Should -Match "index\.md:\d+\s+STY-3.*'Run Profiles'"
+    }
+
+    It 'passes icons on every index-page H2, plain article headings, and an index page with no H2' {
+        $f = New-Fixture -Pages @{
+            'index.md'       = (New-Page -Type 'landing' -Body "Opening paragraph.`n`n## :material-star-four-points-outline: Key Features`n`n### Details`n`nText.`n")
+            'start/index.md' = (New-Page -Type 'landing' -Body "Opening paragraph with no sections.`n")
+            'cs.md'          = (New-Page -Body "Opening paragraph.`n`n## The order`n`nText.`n")
+        }
         (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
     }
 }

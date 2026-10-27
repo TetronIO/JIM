@@ -9,6 +9,12 @@ Neither belongs in customer documentation, so docs/reference/changelog.md
 carries its own introduction and this hook replaces the placeholder there with
 the changelog from the first released version onwards. The link definitions at
 the foot of the file come along with it.
+
+Each changelog entry leads with an emoji naming its kind (a convention for the
+changelog itself, see engineering/CLAUDE.md, which the GitHub release notes
+keep). The docs site uses no emoji (STY-1 in engineering/DOCUMENTATION_STANDARD.md),
+so the hook strips each entry's leading emoji; the section headings (Added,
+Fixed and so on) already say what kind each entry is.
 """
 
 import re
@@ -20,6 +26,18 @@ CHANGELOG = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
 # A released version heading, such as "## [0.16.0] - 2026-09-29".
 FIRST_RELEASE = re.compile(r"^## \[\d", re.MULTILINE)
 
+# An entry's leading emoji: a list marker, then one emoji (with its variation
+# selector, if any) and the space after it. The marker and indent are kept. The
+# emoji pattern is STY-1's, from scripts/Test-DocsConformance.ps1 (described
+# there) and scripts/Test-DocsSite.ps1; keep the three in step.
+LEADING_EMOJI = re.compile(
+    r"^([ \t]*[-*] )"
+    r"(?:[\u2600-\u27BF\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA"
+    r"\u2139\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u21A9\u21AA\u2934\u2935"
+    r"\u3030\u303D\u3297\u3299\u203C\u2049\U0001F000-\U0001FAFF]\uFE0F?|\S\uFE0F)[ \t]*",
+    re.MULTILINE,
+)
+
 
 def on_page_markdown(markdown, page, **kwargs):
     if page.file.src_uri != "reference/changelog.md":
@@ -30,4 +48,5 @@ def on_page_markdown(markdown, page, **kwargs):
     match = FIRST_RELEASE.search(text)
     if match is None:
         raise ValueError("CHANGELOG.md has no released version heading")
-    return markdown.replace(PLACEHOLDER, text[match.start():])
+    released = LEADING_EMOJI.sub(r"\1", text[match.start():])
+    return markdown.replace(PLACEHOLDER, released)

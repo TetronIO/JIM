@@ -9,7 +9,7 @@ audience: administrator
 
 JIM is configured through a small set of objects: Connected Systems, Run Profiles, Synchronisation Rules, the Metaverse schema, Schedules, and the API Keys, Certificates, Service Settings and Roles that support them. Each page here explains one object: what it is, how it fits with the others, its common workflows, and where to manage it, in the portal, with PowerShell or through the REST API. In the portal, the info button beside a page's title links to the page here that covers it.
 
-## Synchronisation
+## :material-sync: Synchronisation
 
 The objects that move identities between your systems and the Metaverse.
 
@@ -33,14 +33,14 @@ The objects that move identities between your systems and the Metaverse.
     - [Initial Password](initial-password.md): the first password JIM gives an object it provisions
 - [Data Flow](data-flow.md): every Attribute Flow across all Connected Systems, in both directions, in one list
 
-## Changing configuration safely
+## :material-shield-check-outline: Changing configuration safely
 
 How JIM judges a save, and how to see what a change would do before you make it.
 
 - [Configuration Changes](configuration-changes.md): which edits JIM confirms, and the preview of the objects an edit would affect
 - [Sync Preview](sync-preview.md): what synchronising one object would do with the configuration already saved, changing nothing
 
-## Metaverse
+## :material-hub-outline: Metaverse
 
 The central identity store and the searches over it.
 
@@ -50,7 +50,7 @@ The central identity store and the searches over it.
 - [Deleted Objects](deleted-objects.md): the record JIM keeps of each object it deletes
 - [Example Data](example-data.md): realistic users and groups generated for a demonstration or a proof of concept
 
-## Automation and Operations
+## :material-calendar-clock-outline: Automation and Operations
 
 Scheduled runs, the record of what JIM did, and whether the services doing it are alive.
 
@@ -61,7 +61,7 @@ Scheduled runs, the record of what JIM did, and whether the services doing it ar
     - [Causality](causality.md): what caused a change, and what it went on to cause
     - [Live Progress](activity-progress.md): following a running Run Profile step by step
 
-## Security and Configuration
+## :material-shield-lock-outline: Security and Configuration
 
 The objects that control access, trust and how JIM runs.
 

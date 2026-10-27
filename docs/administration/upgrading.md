@@ -246,7 +246,7 @@ Copy-Item -Recurse -Force ./powershell/JIM "$env:USERPROFILE\Documents\PowerShel
 
 For the other ways to install it, see [PowerShell Module](deployment.md#powershell-module).
 
-## ↩️ Rolling back {#rolling-back}
+## Rolling back {#rolling-back}
 
 Rolling back means putting **both** halves of JIM back to their pre-upgrade state: the application version, and the database it runs against. A release can upgrade the database, leaving the schema ahead of what the older version understands, so reverting the images alone is not a rollback. This is what the pre-upgrade backup is for.
 
