@@ -322,6 +322,8 @@ jobs:
     - name: Install Pester
       shell: pwsh
       run: |
+        # Register the default repository when the runner image has none (see the same step in build-and-test).
+        if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
         Set-PSRepository PSGallery -InstallationPolicy Trusted
         Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
     - name: Run Keycloak registration tests
