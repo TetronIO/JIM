@@ -16,24 +16,15 @@
 
 @* The Activity tab's Completed section (#2549): what the worker has finished, newest first. The filters above the tab
    arrive as a parameter, shared with Queued and In progress; Result, and Has child activities, apply here alone. *@
-<section aria-labelledby="activity-completed-heading" data-testid="activity-completed">
-<div class="jim-activity-section-header">
-    <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Success" />
-    <MudText Typo="Typo.h6" id="activity-completed-heading">Completed</MudText>
-    <span class="jim-activity-section-when jim-activity-section-when--earlier">Earlier</span>
-    <MudSpacer />
-    <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Arrow="true" Placement="Placement.Top">
-        <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
-                       Size="Size.Small" aria-label="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")"
-                       OnClick="@(() => _pollingPaused = !_pollingPaused)"
-                       Color="@(_pollingPaused ? Color.Warning : Color.Default)" />
-    </MudTooltip>
-</div>
+<section aria-labelledby="activity-completed-heading" data-testid="activity-completed" data-collapsed="@(Expanded ? "false" : "true")">
 
-@* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
-   and the toolbar count) lives in the shared grid; this section supplies the columns, the window loader and the
-   empty states. The columns take the widths Queued and In progress use, so the three sections line up. The URL
-   parameters are prefixed so this grid's state cannot collide with the Schedules tab's on the shared page URL. *@
+@* The section's heading is the grid's toolbar, drawn above the paper: one row carrying the chevron that folds the
+   rows, the icon and the name, then the grid's own count, search box and density toggle, with the auto-refresh
+   pause beside the toggle (both say how the table behaves). The grid stays mounted under the fold, so a search or
+   scroll made before folding is still there after. The infinite-scroll machinery (URL state, scroll restore, window
+   loading) lives in the shared grid; this section supplies the columns, the window loader and the empty states. The
+   columns take the widths Queued and In progress use, so the three sections line up. The URL parameters are
+   prefixed so this grid's state cannot collide with the Schedules tab's on the shared page URL. *@
 <VirtualisedDataGrid @ref="_grid" T="Activity"
                      ContainerId="operations-history"
                      UrlParameterPrefix="h-"
@@ -41,20 +32,45 @@
                      DefaultSortDescending="true"
                      LoadWindow="LoadWindowAsync"
                      RowClicked="HandleRowClicked"
-                     SingularName="Execution"
-                     PluralName="Executions"
-                     SearchPlaceholder="Search target or initiator">
+                     SearchPlaceholder="Search target or initiator"
+                     ToolBarAboveGrid="true"
+                     Collapsed="@(!Expanded)"
+                     GridClass="mt-0">
+    <ToolBarLeading>
+        <MudTooltip Text="@(Expanded ? "Collapse Completed" : "Expand Completed")" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
+                           Class="@($"jim-activity-collapse-toggle{(Expanded ? " jim-activity-collapse-toggle--open" : string.Empty)}")"
+                           aria-label="@(Expanded ? "Collapse Completed" : "Expand Completed")"
+                           aria-expanded="@(Expanded ? "true" : "false")" aria-controls="operations-history"
+                           OnClick="@(() => ToggleRequested.InvokeAsync())" />
+        </MudTooltip>
+        <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Success" />
+        <MudText Typo="Typo.h6" id="activity-completed-heading">Completed</MudText>
+    </ToolBarLeading>
+    <ToolBarExtras>
+        <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
+                           Size="Size.Small" aria-label="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")"
+                           OnClick="@(() => _pollingPaused = !_pollingPaused)"
+                           Color="@(_pollingPaused ? Color.Warning : Color.Default)" />
+        </MudTooltip>
+    </ToolBarExtras>
     <Columns>
         <TemplateColumn T="Activity" Title="Result" Sortable="false" HeaderStyle="@ActivityTableColumns.State">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Result" Name="status" />
             </HeaderTemplate>
             <CellTemplate>
-                @{ var activity = context.Item; }
-                <MudChip T="string" Variant="Variant.Text" Class="ma-0"
-                         Color="Helpers.GetActivityMudBlazorColorForStatus(activity.Status)">
+                @{
+                    var activity = context.Item;
+                    var verdict = ResultModifier(activity.Status);
+                }
+                @* A dot in the result's colour and the result in words. Only a warning or an error colours the words,
+                   so down a column of results the ones that need reading stand out. *@
+                <span class="@($"jim-activity-result jim-activity-result--{verdict}")">
+                    <span class="@($"jim-status-dot jim-status-dot--{verdict}")" aria-hidden="true"></span>
                     @activity.Status.ToString().SplitOnCapitalLetters()
-                </MudChip>
+                </span>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Connected System" Sortable="false" HeaderStyle="@ActivityTableColumns.ConnectedSystem">
@@ -256,12 +272,7 @@
                     }
                     else
                     {
-                        <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
-                                     Icon="@Icons.Material.Outlined.CheckCircle" Class="jim-stat-chip">
-                                0
-                            </MudChip>
-                        </MudTooltip>
+                        <span class="jim-activity-no-changes" data-testid="no-changes">No changes</span>
                     }
             </CellTemplate>
         </TemplateColumn>
@@ -680,6 +691,12 @@
     /// <summary>Raised when the empty state's Clear Filters is chosen; the filters are the tab's to clear.</summary>
     [Parameter] public EventCallback OnClearFilters { get; set; }
 
+    /// <summary>Whether the grid is unfolded under the section's heading. Folded, it is left alone until it is unfolded.</summary>
+    [Parameter] public bool Expanded { get; set; } = true;
+
+    /// <summary>Raised when the heading's chevron is clicked; the tab flips the section and writes the choice to the URL.</summary>
+    [Parameter] public EventCallback ToggleRequested { get; set; }
+
     @* ─── Worker Task preset ─── *@
     @* This section shows Worker Task Activities: the operations the worker service executes. There is one
        Activity query; which Activities a caller wants is the caller's to say, so these two filters are
@@ -722,6 +739,9 @@
     // The filters the grid last loaded under, so a change can be told from a re-render.
     private OperationsActivityFilters? _appliedFilters;
 
+    // Whether the section was unfolded at the last render, so unfolding can be told from a re-render.
+    private bool _wasExpanded = true;
+
     protected override async Task OnParametersSetAsync()
     {
         if (_appliedFilters != null && _appliedFilters != Filters)
@@ -729,7 +749,22 @@
             _appliedFilters = Filters;
             await ApplyFilterChangeAsync();
         }
+
+        // Unfolding re-reads once: nothing was kept current while the rows were out of sight.
+        var unfolded = Expanded && !_wasExpanded;
+        _wasExpanded = Expanded;
+        if (unfolded)
+            await RefreshIfChangedAsync();
     }
+
+    /// <summary>The status vocabulary's verdict for a result: what colours its dot, and its words when it needs reading.</summary>
+    private static string ResultModifier(ActivityStatus status) => Helpers.GetActivityMudBlazorColorForStatus(status) switch
+    {
+        Color.Success => "ok",
+        Color.Warning => "warn",
+        Color.Error => "err",
+        _ => "neutral"
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -779,7 +814,7 @@
     /// </summary>
     private async Task RefreshIfChangedAsync()
     {
-        if (_grid == null || _panelOpen || _pollingPaused)
+        if (_grid == null || _panelOpen || _pollingPaused || !Expanded)
             return;
 
         if (!await _refreshLock.WaitAsync(0))
@@ -802,7 +837,7 @@
                 hasChildActivities: Filters.HasChildActivities ? true : null,
                 connectedSystemFilter: Filters.ConnectedSystems.Count > 0 ? Filters.ConnectedSystems : null,
                 runProfileFilter: Filters.RunProfiles.Count > 0 ? Filters.RunProfiles : null,
-                initiatedByFilter: string.IsNullOrWhiteSpace(Filters.InitiatedBy) ? null : Filters.InitiatedBy,
+                initiatedByFilter: null,
                 initiatedBySchedule: Filters.ScheduledOnly ? true : null,
                 scheduleFilter: Filters.Schedules.Count > 0 ? Filters.Schedules : null,
                 includeTotalCount: false);
@@ -844,7 +879,7 @@
             hasChildActivities: Filters.HasChildActivities ? true : null,
             connectedSystemFilter: Filters.ConnectedSystems.Count > 0 ? Filters.ConnectedSystems : null,
             runProfileFilter: Filters.RunProfiles.Count > 0 ? Filters.RunProfiles : null,
-            initiatedByFilter: string.IsNullOrWhiteSpace(Filters.InitiatedBy) ? null : Filters.InitiatedBy,
+            initiatedByFilter: null,
             initiatedBySchedule: Filters.ScheduledOnly ? true : null,
             scheduleFilter: Filters.Schedules.Count > 0 ? Filters.Schedules : null,
             includeTotalCount: request.IncludeTotalCount);

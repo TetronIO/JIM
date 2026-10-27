@@ -271,6 +271,105 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
         });
     }
 
+    [Test]
+    public void OperationsCompletedSection_ToolBar_IsTheSectionsHeadingWithItsChevronAndPauseButton()
+    {
+        // One row does the work of three: the section's heading (chevron, icon, name), the grid's count, search and
+        // density toggle, and the auto-refresh pause, all above the paper rather than a heading over a toolbar over
+        // a column header.
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var toolbar = cut.Find(".jim-virtualised-list-toolbar");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(toolbar.TextContent, Does.Contain("Completed"));
+                Assert.That(toolbar.QuerySelector("[aria-expanded]")?.GetAttribute("aria-expanded"), Is.EqualTo("true"));
+                Assert.That(toolbar.QuerySelector("[aria-label='Pause auto-refresh']"), Is.Not.Null);
+                Assert.That(toolbar.QuerySelector("input[placeholder]"), Is.Not.Null, "the search box is in the same row");
+                Assert.That(cut.FindAll(".jim-activity-section-header"), Is.Empty, "no second heading row");
+            }
+        });
+    }
+
+    [Test]
+    public async Task OperationsCompletedSection_ChevronClicked_AsksTheTabToToggleAsync()
+    {
+        ArrangeWindow([], 0);
+        var toggled = false;
+
+        var cut = Render<OperationsCompletedSection>(p => p.Add(c => c.ToggleRequested, () => toggled = true));
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll(".jim-virtualised-list-toolbar [aria-expanded]"), Has.Count.EqualTo(1)));
+
+        await cut.InvokeAsync(() => cut.Find(".jim-virtualised-list-toolbar [aria-expanded]").Click());
+
+        Assert.That(toggled, Is.True);
+    }
+
+    [Test]
+    public async Task OperationsCompletedSection_Collapsed_FoldsTheGridAndRefreshesOnlyOnceExpandedAgainAsync()
+    {
+        // Folded, the section is its heading; nothing under it can be seen, so nothing under it is re-read on every
+        // notification. Unfolding re-reads once, so what comes back into view is current.
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>(p => p.Add(c => c.Expanded, false));
+        cut.WaitForAssertion(() => Assert.That(cut.FindComponent<MudBlazor.MudCollapse>().Instance.Expanded, Is.False));
+        var readsWhileFolded = WindowReads();
+
+        _notifications.RaiseActivityProgressChanged(Guid.NewGuid());
+        await Task.Delay(200);
+        Assert.That(WindowReads(), Is.EqualTo(readsWhileFolded), "a folded section has nothing to keep current");
+
+        cut.Render(p => p.Add(c => c.Expanded, true));
+        await WaitUntilAsync(() => WindowReads() > readsWhileFolded);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindComponent<MudBlazor.MudCollapse>().Instance.Expanded, Is.True);
+            Assert.That(WindowReads(), Is.GreaterThan(readsWhileFolded), "unfolding checks for what changed meanwhile");
+        }
+    }
+
+    [Test]
+    public async Task OperationsCompletedSection_SearchTyped_SurvivesBeingFoldedAndUnfoldedAsync()
+    {
+        // The grid stays mounted under the fold. A grid rebuilt on unfolding would re-read the URL as it stood on
+        // arrival (its own writes go through history.replaceState, which NavigationManager never sees) and lose
+        // the search.
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Full Import")));
+        var search = cut.FindComponent<SearchField>();
+        await cut.InvokeAsync(() => search.Instance.ValueChanged.InvokeAsync("Full"));
+
+        cut.Render(p => p.Add(c => c.Expanded, false));
+        cut.Render(p => p.Add(c => c.Expanded, true));
+
+        Assert.That(cut.FindComponent<VirtualisedDataGrid<Activity>>().Instance.SearchText, Is.EqualTo("Full"));
+    }
+
+    [Test]
+    public void OperationsCompletedSection_RunThatChangedNothing_SaysSoInsteadOfACountOfZero()
+    {
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.FindAll("[data-testid='no-changes']"), Has.Count.EqualTo(1));
+                Assert.That(cut.FindAll(".jim-stat-chip"), Is.Empty, "a zero wears no chip");
+            }
+        });
+    }
+
     private sealed class FakeJimApplicationFactory(JimApplication jimApplication) : IJimApplicationFactory
     {
         public JimApplication Create() => jimApplication;

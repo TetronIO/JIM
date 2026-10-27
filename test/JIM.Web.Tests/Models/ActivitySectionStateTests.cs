@@ -7,8 +7,8 @@ using NUnit.Framework;
 namespace JIM.Web.Tests.Models;
 
 /// <summary>
-/// Which of the Activity tab's sections are shown (#2549), and how that choice is kept in the URL so a filtered view
-/// can be bookmarked. Everything is shown by default, and the default keeps the URL clean.
+/// Which of the Activity tab's sections are expanded (#2549), and how that choice is kept in the URL so a view can be
+/// bookmarked. Everything is expanded by default, and the default keeps the URL clean.
 /// </summary>
 [TestFixture]
 public class ActivitySectionStateTests
@@ -53,9 +53,9 @@ public class ActivitySectionStateTests
     }
 
     [Test]
-    public void Parse_Empty_ShowsNothing()
+    public void Parse_Empty_CollapsesEverySection()
     {
-        Assert.That(ActivitySectionState.Parse("").NothingSelected, Is.True);
+        Assert.That(ActivitySectionState.Parse(""), Is.EqualTo(new ActivitySectionState(Queued: false, InProgress: false, Completed: false)));
     }
 
     [Test]
@@ -77,14 +77,6 @@ public class ActivitySectionStateTests
     {
         // Null would read back as "everything", which is the opposite of what was chosen.
         Assert.That(new ActivitySectionState(false, false, false).ToQueryValue(), Is.EqualTo(""));
-    }
-
-    [Test]
-    public void Selected_ListsTheShownSectionsInPageOrder()
-    {
-        var state = new ActivitySectionState(Queued: true, InProgress: false, Completed: true);
-
-        Assert.That(state.Selected(), Is.EqualTo(new[] { ActivitySection.Queued, ActivitySection.Completed }));
     }
 
     [Test]
