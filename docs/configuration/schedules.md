@@ -147,12 +147,12 @@ JIM ships with a small number of **built-in schedules** that are part of the pro
 
 What you can and can't do with a built-in schedule:
 
-- ✅ **Re-time it**<br /> Change the trigger pattern or interval (for example, run the reconciler every 15 minutes instead of hourly).
-- ✅ **Enable or disable it**<br /> Pause it during a maintenance window and re-enable it afterwards.
-- ❌ **Rename it**<br /> The name is fixed so the schedule stays recognisable and JIM can keep it maintained across upgrades.
-- ❌ **Delete it**<br /> Built-in schedules are part of the product; disable one instead if you don't want it to run.
-- ❌ **Change its steps**<br /> The step composition is defined and maintained by JIM; the Steps tab is read-only for a built-in schedule.
-- ❌ **Change what happens when a step fails**<br /> A built-in Schedule stops when a step fails, and its steps follow it; JIM manages both, so **When a step fails** is read-only in the editor.
+- :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } **Re-time it**<br /> Change the trigger pattern or interval (for example, run the reconciler every 15 minutes instead of hourly).
+- :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } **Enable or disable it**<br /> Pause it during a maintenance window and re-enable it afterwards.
+- :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } **Rename it**<br /> The name is fixed so the schedule stays recognisable and JIM can keep it maintained across upgrades.
+- :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } **Delete it**<br /> Built-in schedules are part of the product; disable one instead if you don't want it to run.
+- :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } **Change its steps**<br /> The step composition is defined and maintained by JIM; the Steps tab is read-only for a built-in schedule.
+- :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } **Change what happens when a step fails**<br /> A built-in Schedule stops when a step fails, and its steps follow it; JIM manages both, so **When a step fails** is read-only in the editor.
 
 The portal reflects this: a built-in schedule's name and steps are read-only in the editor, and its delete action is replaced with a lock. These rules are enforced everywhere, not just in the portal: the PowerShell module and REST API reject a rename, delete, step change or change to what happens when a step fails, and the underlying application layer is the authoritative backstop.
 

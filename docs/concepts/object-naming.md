@@ -11,7 +11,7 @@ Wherever JIM shows you an object (a search result, a Pending Export, a causality
 
 JIM resolves this the same way everywhere: **try an ordered list of naming attributes, then fall back to an identifier.** One rule, applied consistently, so the same object reads the same way on every screen.
 
-## 🏷️ The order
+## The order
 
 ### Connected System Objects
 
@@ -37,7 +37,7 @@ An empty or whitespace-only value counts as absent, so an object whose `displayN
 
 Metaverse attribute names are matched exactly, because the [Metaverse schema](../configuration/metaverse.md) is JIM's own and its names are known.
 
-## 👥 Why groups behave differently to users
+## Why groups behave differently to users
 
 This ordering matters most for groups. A person object almost always arrives with a `displayName`, so it is named by rule 1 and nothing else applies. Group objects in LDAP and Active Directory frequently have only `cn`, so they are named by rule 2.
 
@@ -49,7 +49,7 @@ Before this ordering existed, such groups fell straight through to their Externa
 
 They now appear as, for example, `Project-GlobalGateway`.
 
-## 🔢 Names alongside identifiers
+## Names alongside identifiers
 
 Some views show an object's name **and** its External ID together, so you can confirm which object you are looking at:
 
@@ -59,13 +59,13 @@ Project-GlobalGateway (1f16ccb0-1f01-1041-8be1-eb9f4cb3f25e)
 
 Where an object carries none of the naming attributes, its name resolves to the External ID and both halves would read the same. JIM shows the value once in that case rather than repeating it.
 
-## 🔎 Sorting and searching
+## Sorting and searching
 
 Lists sort by the same resolved name they display, so the sort order matches what you see rather than an underlying attribute you do not.
 
 Searching an object list matches **any** of the naming attributes, not just the one being displayed. Typing a group's `cn` finds it even where the list is showing a `displayName`.
 
-## 💡 Getting better names
+## Getting better names
 
 JIM never invents a name; it only surfaces what your data holds. If objects are displaying as identifiers, the fix is in the data rather than in JIM:
 

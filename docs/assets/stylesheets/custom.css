@@ -45,6 +45,14 @@
   --jim-card-bg-hover: #efefef;
   --jim-card-border: rgba(0, 0, 0, 0.13);   /* a touch darker than Material's default lightest */
 
+  /* Icon tiles (landing-page headings, card icons) and table status marks */
+  --jim-icon-tile-bg: #f1eef9;               /* brand purple, about 8% on white */
+  --jim-icon-tile-border: #ddd5f1;
+  --jim-icon-tile-fg: #5A45A2;               /* brand purple */
+  --jim-mark-yes: #2e9e5a;                   /* matches the capability-pill check */
+  --jim-mark-warn: #b26a00;
+  --jim-mark-no: #c62828;
+
 }
 
 /* Light mode: search bar styling */
@@ -103,9 +111,9 @@
    ======================================== */
 
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #1d1a3d;            /* header background: purple-navy bridge to brand */
-  --md-primary-fg-color--light: #1d1a3d;
-  --md-primary-fg-color--dark: #1d1a3d;
+  --md-primary-fg-color: #0d1e30;            /* header background: the navy surface, mirroring light mode's neutral header */
+  --md-primary-fg-color--light: #0d1e30;
+  --md-primary-fg-color--dark: #0d1e30;
   --md-primary-bg-color: #e0e4ea;            /* header text (light on dark) */
   --md-default-bg-color: #051526;            /* page background */
   --md-default-bg-color--light: #0d1e30;
@@ -129,6 +137,14 @@
   --jim-card-bg-hover: #14293f;
   --jim-card-border: var(--md-default-fg-color--lightest);   /* unchanged from Material default */
 
+  /* Icon tiles and table status marks */
+  --jim-icon-tile-bg: rgba(123, 104, 184, 0.16);
+  --jim-icon-tile-border: rgba(157, 134, 232, 0.32);
+  --jim-icon-tile-fg: #c4b5fd;
+  --jim-mark-yes: #4ade80;
+  --jim-mark-warn: #ffb74d;
+  --jim-mark-no: #ff8a80;
+
 }
 
 /* Dark mode: search bar styling */
@@ -137,9 +153,19 @@
   border: 1px solid #243a52;                  /* --mud-palette-lines-default */
 }
 
-/* Dark mode: tabs bar in deep plum, bridging header to purple hero */
+/* Dark mode: header and tabs share the navy surface, separated from the page by
+   a hairline, exactly as light mode does with its grey header */
+[data-md-color-scheme="slate"] .md-header {
+  border-bottom: 1px solid #1a2d43;
+}
+
+[data-md-color-scheme="slate"] .md-header:has(+ .md-tabs) {
+  border-bottom: none;
+}
+
 [data-md-color-scheme="slate"] .md-tabs {
-  background-color: #1d1a3d;
+  background-color: #0d1e30;
+  border-bottom: 1px solid #1a2d43;
 }
 
 [data-md-color-scheme="slate"] .md-typeset a:hover,
@@ -223,6 +249,56 @@
 .md-typeset .grid > .card:hover strong a {
   color: var(--md-accent-fg-color);
 }
+
+/* ========================================
+   Icons: heading tiles, card tiles, status marks
+   Material Design Icons only, never emoji (STY-1, STY-3 in
+   engineering/DOCUMENTATION_STANDARD.md). An icon leading an H2
+   (landing pages only) or a grid card becomes a tinted tile in the
+   brand colour, so a column of them reads as one set.
+   ======================================== */
+
+.md-typeset h2 > .twemoji:first-child,
+.md-typeset .grid.cards > :is(ul, ol) > li > p:first-child > .twemoji:first-child {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--jim-icon-tile-border);
+  border-radius: 4px;
+  background-color: var(--jim-icon-tile-bg);
+  color: var(--jim-icon-tile-fg);
+}
+
+.md-typeset h2 > .twemoji:first-child {
+  width: 1.4em;
+  height: 1.4em;
+  padding: 0.25em;
+  margin-right: 0.4em;
+  vertical-align: -0.05em;                    /* centres the tile on the capitals of IBM Plex Sans (measured) */
+}
+
+.md-typeset .grid.cards > :is(ul, ol) > li > p:first-child > .twemoji:first-child {
+  width: 2em;
+  height: 2em;
+  padding: 0.38em;
+  margin-right: 0.35em;
+  vertical-align: middle;
+}
+
+.md-typeset h2 > .twemoji:first-child svg,
+.md-typeset .grid.cards > :is(ul, ol) > li > p:first-child > .twemoji:first-child svg {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  fill: currentcolor;
+}
+
+/* Status marks in tables and lists: :material-check-circle-outline:{ .jim-yes },
+   :material-alert-outline:{ .jim-warn }, :material-close-circle-outline:{ .jim-no } */
+.md-typeset .twemoji.jim-yes { color: var(--jim-mark-yes); }
+.md-typeset .twemoji.jim-warn { color: var(--jim-mark-warn); }
+.md-typeset .twemoji.jim-no { color: var(--jim-mark-no); }
 
 /* ========================================
    GLightbox theme-aware overlay
@@ -400,6 +476,36 @@
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
   transform: translateY(-1px);
+}
+
+/* Dark mode: purple light rising from the header into the navy page, rather than
+   a bright slab. The gradient starts at the header's surface colour and ends at
+   the page's, so the hero has no edge at either end. */
+[data-md-color-scheme="slate"] .jim-hero {
+  background:
+    radial-gradient(75% 130% at 50% -15%, rgba(118, 76, 232, 0.62) 0%, rgba(90, 69, 162, 0.28) 42%, transparent 74%),
+    linear-gradient(180deg, #0d1e30 0%, #051526 100%);
+  border-bottom: none;
+}
+
+[data-md-color-scheme="slate"] .jim-hero__tagline {
+  color: #c9bfe8;
+  opacity: 1;
+}
+
+[data-md-color-scheme="slate"] .jim-hero__cta--primary {
+  background: #764ce8;                        /* the portal's dark-mode primary */
+  color: #ffffff;
+}
+
+[data-md-color-scheme="slate"] .jim-hero__cta--primary:hover {
+  background: #8a63ee;
+  color: #ffffff;
+}
+
+[data-md-color-scheme="slate"] .jim-hero__cta--secondary {
+  color: #e0e4ea;
+  border-color: rgba(201, 191, 232, 0.45);
 }
 
 /* Smaller hero on mobile/tablet */

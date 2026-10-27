@@ -14,7 +14,7 @@ JIM processes identity data in a three-phase pipeline: **Import**, **Sync**, and
 
 <p class="jim-diagram-caption">Data is staged either side of the Metaverse, in the Connector Space belonging to each Connected System: imports land there as Connected System Objects, synchronisation reconciles them into Metaverse Objects, and outbound changes are staged again before export. The systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
-## 📥 Phase 1: Import
+## Phase 1: Import
 
 Import pulls data from a Connected System into its **Connector Space**. The result is a set of Connected System Objects that represent the current state of the external system.
 
@@ -75,7 +75,7 @@ On the next Full Import, JIM computes the same hash for each incoming object *be
 
 This optimisation is transparent and requires no configuration. To validate it, or to investigate a suspected discrepancy, enable **Verification Mode** on a Full Import Run Profile (see [Run Profiles](../configuration/run-profiles.md)): with Verification Mode on, JIM performs the full comparison on every object regardless of the stored hash, and reports an error if a stored hash matched but the comparison still found a change. Verification Mode is slower (it forgoes the optimisation) and is intended for occasional validation, not everyday use.
 
-## 🔀 Phase 2: Sync (Synchronisation)
+## Phase 2: Sync (Synchronisation)
 
 Sync is the core phase, where JIM reconciles each Connector Space with the Metaverse. It applies **Synchronisation Rules** to decide how Connected System Objects relate to Metaverse Objects, and how attributes flow between them.
 
@@ -118,7 +118,7 @@ What prevents this from looping is value-level change detection, not a special c
 
 One kind of configuration change does not wait for a Full Sync: an export rule change that moves objects into or out of its scope (a new or re-enabled rule, provisioning switched on, changed Scoping Criteria). JIM marks the affected Metaverse Objects, and the next synchronisation of any Connected System, Delta included, provisions and deprovisions them; see [When a change to an export rule takes effect](../configuration/deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
 
-## 📤 Phase 3: Export
+## Phase 3: Export
 
 Export sends Pending Exports from the Connector Space to the target Connected System. Each one is a create, update, or delete.
 

@@ -290,7 +290,7 @@ These functions are primarily used with Active Directory's `userAccountControl` 
 | `ClearBit(value, bit)` | Turn off a specific flag | `ClearBit(mv["uac"], 65536)` |
 | `HasBit(value, bit)` | Check if a specific flag is turned on | `HasBit(cs["userAccountControl"], 2)` |
 
-## ⚠️ Nulls, Missing Inputs, and Whitespace
+## Nulls, Missing Inputs, and Whitespace
 
 When an expression references an attribute the object does not have, it sees **null**, and how JIM treats that decides whether a target value is cleared, kept, or silently filled with malformed data. Read [Nulls and Missing Inputs](expression-nulls.md) before you write an expression that references an attribute which might be absent: it sets out the five rules, and the per-mapping setting that has JIM refuse an outcome rather than guess at it.
 

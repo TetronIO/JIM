@@ -297,6 +297,10 @@ Cards and elevated surfaces use subtle background shifts between `background` an
 
 The MkDocs Material docs site uses a standard two-column layout (nav plus content). Table and admonition body text is set at 0.72rem (up from Material's 0.64rem default). Default Material hover shadow on cards is removed for a flatter look consistent with the portal.
 
+The header is a neutral surface in both themes: `#f3f3f3` in light mode and the navy surface `#0d1e30` in dark, each separated from the page by a hairline. Brand purple fills only the home page hero. In light mode that is a solid gradient; in dark mode it is purple light rising from the header into the navy page (a radial glow over a gradient from `#0d1e30` to `#051526`), so the hero has no hard edge and no violet surface sits against the navy.
+
+Icons are Material Design Icons, never emoji (STY-1 in `DOCUMENTATION_STANDARD.md`). An icon opening an H2 (landing pages only) or a grid card is drawn as a 4px-radius tile tinted with brand purple; table status marks use the success, error and warning colours.
+
 ## Components
 
 ### Buttons

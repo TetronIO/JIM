@@ -11,7 +11,7 @@ These pages take you from an empty server to JIM synchronising its first identit
 
 <div class="grid cards" markdown>
 
--   :material-clipboard-check:{ .lg .middle } **Prerequisites**
+-   :material-clipboard-check-outline:{ .lg .middle } **Prerequisites**
 
     ---
 
@@ -19,7 +19,7 @@ These pages take you from an empty server to JIM synchronising its first identit
 
     [:octicons-arrow-right-24: Prerequisites](prerequisites.md)
 
--   :material-rocket-launch:{ .lg .middle } **Quick Start**
+-   :material-rocket-launch-outline:{ .lg .middle } **Quick Start**
 
     ---
 

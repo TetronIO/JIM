@@ -13,7 +13,7 @@ JIM stores two pieces of state that must be backed up **together as a matched pa
 !!! danger "The database alone is not a recoverable backup"
     Sensitive values in the database are encrypted at rest: each Connected System's credentials and other secret settings, initial passwords waiting to be delivered, and queued Password Synchronisation changes. They can only be decrypted with the encryption keys that were in use when they were written. Restore a database backup onto a host that does not have the matching keys and **every stored secret becomes permanently undecryptable**. The rest of the data restores fine, but JIM cannot connect to any Connected System until an administrator re-enters every affected secret by hand.
 
-## 🔐 What to back up
+## What to back up
 
 | Item | Where it lives | Backup source |
 |------|----------------|---------------|
@@ -30,7 +30,7 @@ JIM encrypts credentials with [ASP.NET Core Data Protection](https://learn.micro
 - **Keys are not themselves encrypted at rest.** This is the correct design for a self-contained, air-gappable product with no external key-management dependency, but it makes the key volume as sensitive as the database. Protect and store its backups accordingly (see [Securing key backups](#securing-key-backups)).
 - **The whole key set must be backed up, not just the active key.** Key rotation generates a new active key but retains the previous ones for decryption. A backup that captured only the current key would fail to decrypt older values. Always back up the entire key directory.
 
-## 🗄️ Taking a backup
+## Taking a backup
 
 The commands below assume the bundled PostgreSQL container and the default volume names. Confirm your actual volume name with `docker volume ls | grep keys` (Compose may prefix it with the project name). The Podman commands are for the default, rootful installation; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
@@ -90,7 +90,7 @@ If you set `JIM_ENCRYPTION_KEY_PATH` to a bind-mounted host directory instead of
 
 Keep the database dump and the key archive from the same point in time as a single labelled backup set, so a restore never mixes a database with a mismatched key set.
 
-## ♻️ Restoring {#restoring}
+## Restoring {#restoring}
 
 Restore both artefacts from the **same backup set**, then start the services.
 
@@ -167,7 +167,7 @@ Confirm the secrets decrypt: run an import from a Connected System that signs in
 !!! tip "Test your restore"
     A backup you have never restored is a hypothesis, not a backup. Periodically rehearse a full restore (database plus keys) into a scratch environment and confirm a Connected System still connects.
 
-## 🔒 Securing key backups {#securing-key-backups}
+## Securing key backups {#securing-key-backups}
 
 Because the keys are unencrypted, anyone with both the database backup and the key backup can decrypt every stored secret. Treat key backups with at least the same care as database backups:
 
@@ -187,7 +187,7 @@ The SSO secret needs nothing: JIM reads it from `JIM_SSO_SECRET` each time it st
 
 Configuration History carries on. The first change recorded for each Connected System after the key loss shows its secrets as changed, because JIM cannot compare them with values it can no longer read; the log records a warning when this happens.
 
-## ✅ Checklist
+## Checklist
 
 - [ ] Database backup scheduled and tested.
 - [ ] Encryption key set (`jim-keys-volume` / `JIM_ENCRYPTION_KEY_PATH`) backed up at the same cadence as the database. On Podman, the volume is in Podman's storage, so a file-level backup of the server must include `/var/lib/containers`, or for a rootless installation `/home/jim/.local/share/containers`.

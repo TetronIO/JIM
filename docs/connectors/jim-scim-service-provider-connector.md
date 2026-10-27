@@ -57,13 +57,13 @@ A JIM using the [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) can push 
 
 | Capability | Supported | Notes |
 |---|---|---|
-| Full Import | ✅ | Reads every User and Group the store holds. A resource the store no longer holds is found deleted by its absence. |
-| Delta Import | ✅ | Reads every change since the last completed import, deletions included. |
-| Export | ❌ | The identity provider owns what it sends. JIM writes nothing back to the store. |
-| Paging | ✅ | The Run Profile's Page Size sets how many resources each page reads. |
-| Partitions and Containers | ❌ | SCIM has no partition concept; resource types are Connected System Object Types. |
-| Passwords | ❌ | A password an identity provider sends is refused, never stored. |
-| Probe | ❌ | Nothing to probe: the values are already in the store the Connector imports. |
+| Full Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Reads every User and Group the store holds. A resource the store no longer holds is found deleted by its absence. |
+| Delta Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Reads every change since the last completed import, deletions included. |
+| Export | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | The identity provider owns what it sends. JIM writes nothing back to the store. |
+| Paging | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | The Run Profile's Page Size sets how many resources each page reads. |
+| Partitions and Containers | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | SCIM has no partition concept; resource types are Connected System Object Types. |
+| Passwords | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | A password an identity provider sends is refused, never stored. |
+| Probe | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | Nothing to probe: the values are already in the store the Connector imports. |
 
 ### Schema
 

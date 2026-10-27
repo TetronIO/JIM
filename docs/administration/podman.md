@@ -53,7 +53,7 @@ Choose on these differences:
 
 | | Rootful (default) | Rootless |
 |---|---|---|
-| The client address JIM records, for audit events and for rate-limiting unauthenticated requests | ✅ Each client's own address | ❌ One internal address for every client: Podman's rootless port forwarding does not pass on the client's address |
+| The client address JIM records, for audit events and for rate-limiting unauthenticated requests | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Each client's own address | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } One internal address for every client: Podman's rootless port forwarding does not pass on the client's address |
 | A process escaping a container | Is JIM's container user, or root if it escapes that too | Is the unprivileged `jim` account |
 | Port 443 | Nothing needed | The installer lets unprivileged programs use ports from 443 up (`net.ipv4.ip_unprivileged_port_start=443` in `/etc/sysctl.d/90-jim.conf`) |
 | Operating JIM | As root | Through the `jim` account (see [Rootless commands](#rootless-commands)) |

@@ -29,16 +29,16 @@ Both databases use the same settings and the same Object Types document, and beh
 
 | Capability | Supported | What it means for you |
 |---|---|---|
-| Full Import | ✅ | Reads every row of each table or view you have selected. Large tables are read a page at a time, so a table of half a million rows is a routine import. See [Full Import](#full-import). |
-| Delta Import | ✅ | Reads only what has changed since the last import, using either a change-log table your database maintains or a last-modified column. See [Delta Import](#delta-import). |
-| Export | ✅ | Creates, updates and deletes rows, including the rows of related tables (phone numbers, group members). See [Export](#export). |
-| Multi-valued attributes | ✅ | A table holding one row per value (a person's phone numbers, a group's members) becomes a multi-valued attribute on the parent object. |
-| References | ✅ | A column holding another row's key (a manager, a department) is synchronised as a reference to that object, not as a bare number. |
-| Paging | ✅ | The Run Profile's Page Size sets how many rows are read per query. |
-| Partitions and Containers | ❌ | Not applicable to databases. Each Object Type names its own table, which is all the scoping a database needs. |
-| Parallel Export | ❌ | Exports are written one object at a time, each in its own transaction. |
-| Password set | ❌ | JIM does not write passwords to databases. Applications that hold passwords in a table store them in their own format, which JIM cannot safely produce. |
-| Probe | ✅ | Asks the database whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](jim-sql-connector-values-in-use.md). |
+| Full Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Reads every row of each table or view you have selected. Large tables are read a page at a time, so a table of half a million rows is a routine import. See [Full Import](#full-import). |
+| Delta Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Reads only what has changed since the last import, using either a change-log table your database maintains or a last-modified column. See [Delta Import](#delta-import). |
+| Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Creates, updates and deletes rows, including the rows of related tables (phone numbers, group members). See [Export](#export). |
+| Multi-valued attributes | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | A table holding one row per value (a person's phone numbers, a group's members) becomes a multi-valued attribute on the parent object. |
+| References | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | A column holding another row's key (a manager, a department) is synchronised as a reference to that object, not as a bare number. |
+| Paging | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | The Run Profile's Page Size sets how many rows are read per query. |
+| Partitions and Containers | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | Not applicable to databases. Each Object Type names its own table, which is all the scoping a database needs. |
+| Parallel Export | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | Exports are written one object at a time, each in its own transaction. |
+| Password set | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | JIM does not write passwords to databases. Applications that hold passwords in a table store them in their own format, which JIM cannot safely produce. |
+| Probe | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Asks the database whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](jim-sql-connector-values-in-use.md). |
 
 ## Before you begin
 

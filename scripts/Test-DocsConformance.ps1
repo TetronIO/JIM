@@ -162,7 +162,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
-    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'EXC-1')
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
@@ -170,6 +170,7 @@ $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'ST
 $script:UnmarkableRules = @('EXC-1', 'MNT-3', 'PRI-1')
 $script:Tiers = @('Block', 'Ratchet', 'Warn')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
+$script:EmojiRegex = [regex]::new('(?:[\u2600-\u27BF]|[\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDEFF])\uFE0F?')
 
 # ---------------------------------------------------------------------------
 # Configuration, baseline and nav
@@ -1061,6 +1062,13 @@ function Test-Language {
         }
         foreach ($m in [regex]::Matches($p.WithLinks, 'github\.com/[^/\s)]+/[^/\s)]+/(?:issues|pull|discussions)/\d+')) {
             New-Finding 'LANG-8' $p.Line "a link to a GitHub issue or pull request; a public page leaves JIM's own workings out (VOI-4)."
+        }
+
+        # STY-1: emoji, matched by block (Misc Symbols, Dingbats, the supplementary pictographs as
+        # UTF-16 pairs, and the few pictographs elsewhere), each with an optional variation selector
+        # so a warning sign counts once. Typographic symbols (trademark, copyright, arrows) pass.
+        foreach ($m in $script:EmojiRegex.Matches($text)) {
+            New-Finding 'STY-1' $p.Line "an emoji ('$($m.Value)'); use a Material Design icon instead, such as :material-check-circle-outline:{ .jim-yes role=`"img`" aria-label=`"Yes`" } for a tick in a table (see STY-1 and STY-3)."
         }
     }
 }

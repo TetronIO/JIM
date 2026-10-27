@@ -74,10 +74,10 @@ Mappings support both single-valued and multi-valued attributes. A **Multi-Value
 
 | Source | Target | Behaviour |
 |--------|--------|-----------|
-| Single-Valued | Single-Valued | ✅ The value flows normally. |
-| Multi-Valued | Multi-Valued | ✅ Every value flows. |
-| Single-Valued | Multi-Valued | ✅ The value flows as a single-item list. On export it replaces any other values the target holds (see below). |
-| Multi-Valued | Single-Valued | ⚠️ See below. |
+| Single-Valued | Single-Valued | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } The value flows normally. |
+| Multi-Valued | Multi-Valued | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Every value flows. |
+| Single-Valued | Multi-Valued | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } The value flows as a single-item list. On export it replaces any other values the target holds (see below). |
+| Multi-Valued | Single-Valued | :material-alert-outline:{ .jim-warn role="img" aria-label="Caution" } See below. |
 
 **Values flow as a set.** On import, JIM compares the values a Connected System Object supplies with the values the Metaverse Object holds as a set, for every data type: the order the Connected System lists them in never matters, a value supplied twice is held once, and only the values gained and lost change. Dates compare to the microsecond in UTC, so the same moment written with a different time zone or a finer fraction of a second is the same value. A Connected System Object that holds values for the attribute only under another data type, because a [schema refresh changed the attribute's type](connected-system-schema.md#moving-an-attribute-to-its-new-type) and no import has read it since, changes nothing: the Metaverse Object keeps its value, no null is asserted, and JIM logs a warning until an import reads the attribute again.
 

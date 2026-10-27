@@ -36,7 +36,7 @@ JIM works with any OIDC-compliant identity provider. Pick the guide that matches
 
     One PowerShell command registers JIM's Application Group, and JIM identifies people by their Active Directory `objectGUID`.
 
--   :material-account-key:{ .lg .middle } **[Keycloak](sso-setup/keycloak.md)**
+-   :material-account-key-outline:{ .lg .middle } **[Keycloak](sso-setup/keycloak.md)**
 
     ---
 

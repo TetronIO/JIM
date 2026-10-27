@@ -34,6 +34,7 @@ BeforeAll {
                 'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'; 'PRI-1' = 'Block'
                 'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
                 'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
+                'STY-1' = 'Block'
             }
             RequiredFrontMatter = @('title', 'description', 'type', 'audience')
             AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario', 'validated')
@@ -868,6 +869,37 @@ Describe 'Test-DocsConformance: LANG-7 no minimisers' {
 
     It 'passes "just", which is usually not a minimiser' {
         $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "The Worker has just restarted.`n") }
+        (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: STY-1 no emoji' {
+    It 'fails an emoji before a heading' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "## $([char]::ConvertFromUtf32(0x1F3D7))$([char]0xFE0F) Architecture`n`nJIM follows a hub-and-spoke pattern.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'cs\.md:10\s+STY-1.*emoji'
+    }
+
+    It 'fails a tick or a cross in a table cell, naming the icon to use' {
+        $body = "| Feature | Supported |`n|---|---|`n| Export | $([char]0x2705) |`n| Paging | $([char]0x274C) |`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        @($r.Output -split "`n" | Where-Object { $_ -match 'STY-1' }).Count | Should -Be 2
+        $r.Output | Should -Match 'STY-1.*check-circle-outline'
+    }
+
+    It 'fails a warning sign and its variation selector as one emoji' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "$([char]0x26A0)$([char]0xFE0F) See below.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        @($r.Output -split "`n" | Where-Object { $_ -match 'STY-1' }).Count | Should -Be 1
+    }
+
+    It 'passes Material icons, typographic symbols, and emoji in code' {
+        $body = "## :material-layers-outline: Architecture`n`n| Export | :material-check-circle-outline:{ .jim-yes } |`n|---|---|`n`nJIM$([char]0x2122) $([char]0x00A9) Tetron.`n`nRun ``echo $([char]0x2705)`` to test.`n`n``````text`n$([char]0x2705) done`n```````n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
         (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
     }
 }
