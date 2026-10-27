@@ -22,8 +22,9 @@
       - the toggle is offered on a wide window and hidden where the layout is already full width;
       - switching widens the grid, keeps a paragraph at the reading measure while a table
         widens, sets aria-pressed and the label, and is remembered across a reload;
-      - a column handle resizes its column by drag and by keyboard, and a double-click restores
-        the table's natural layout.
+      - a column handle moves width between its column and the next by drag and by keyboard,
+        never below a minimum, without changing the table's width or making it scroll, and a
+        double-click restores the table's natural layout.
 
     Browser resolution is shared with Test-DiagramLightbox.ps1; see JimPlaywright.ps1.
 
@@ -64,11 +65,12 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 html { font-size: 125%; } body { margin: 0; font-family: sans-serif; }
 .md-grid { max-width: 61rem; margin: 0 auto; }
 .md-header__inner { display: flex; align-items: center; }
-.md-typeset table:not([class]) { display: inline-block; max-width: 100%; overflow: auto; border-collapse: collapse; }
+.md-typeset table:not([class]) { border: .05rem solid #ccc; border-spacing: 0; display: inline-block; max-width: 100%; overflow: auto; }
 .md-typeset__scrollwrap { margin: 1em -.8rem; overflow-x: auto; }
 .md-typeset__table { display: inline-block; padding: 0 .8rem; }
-.md-typeset__table table { display: table; margin: 0; overflow: hidden; width: 100%; }
+/* Material's display: table for wrapped tables is print-only; on screen they stay inline-block. */
 .md-typeset th, .md-typeset td { padding: 4px 8px; text-align: left; }
+.md-typeset table:not([class]) th { min-width: 5rem; padding: .9375em 1.25em; }
 ${css}
 </style></head><body data-md-color-scheme="default">
 <header class="md-header"><nav class="md-header__inner md-grid"><span class="md-header__title">JIM</span>
@@ -77,7 +79,7 @@ ${css}
 <p id="prose">${words.repeat(12)}</p>
 <div class="md-typeset__scrollwrap"><div class="md-typeset__table"><table id="t">
 <thead><tr><th>Question</th><th>Rule</th><th>Where JIM asks it</th></tr></thead>
-<tbody><tr><td>Has this value changed?</td><td>Exact</td><td>${words.repeat(4)}</td></tr></tbody>
+<tbody><tr><td>Has this value changed?</td><td>Exact, unless you say otherwise, for every attribute that a Connected System contributes to the Metaverse</td><td>${words.repeat(4)}</td></tr></tbody>
 </table></div></div>
 </article></div></div></main>
 <script>${js}<\/script></body></html>`;
@@ -144,30 +146,53 @@ const server = http.createServer((req, res) => { res.writeHead(200, { 'Content-T
   const cols = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const p = await cols.newPage();
   await p.goto(url);
+  // The reading-width content column of a desktop window (688px), where columns sit nearest the
+  // browser's minimum widths and a resize is likeliest to be overridden.
+  await p.addStyleTag({ content: '.md-content__inner { max-width: 34.4rem; }' });
   const handles = p.locator('#t th .jim-col-resize');
   check(await handles.count() === 2, `expected a resize handle on every header cell but the last (2), found ${await handles.count()}`);
   if (await handles.count() >= 1) {
-    const width = () => p.evaluate(() => document.querySelector('#t th').getBoundingClientRect().width);
-    const start = await width();
-    const othersBefore = await p.evaluate(() => [...document.querySelectorAll('#t th')].slice(1).map(th => Math.round(th.getBoundingClientRect().width)));
+    const state = () => p.evaluate(() => ({
+      cols: [...document.querySelectorAll('#t th')].map(th => th.getBoundingClientRect().width),
+      table: document.getElementById('t').getBoundingClientRect().width,
+      overflow: (() => { const w = document.querySelector('.md-typeset__scrollwrap'); return w.scrollWidth - w.clientWidth; })()
+    }));
+    const close = (a, b, slack) => Math.abs(a - b) <= slack;
+    const before = await state();
     const box = await handles.first().boundingBox();
     await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await p.mouse.down();
-    await p.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2, { steps: 8 });
+    await p.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2, { steps: 8 });
     await p.mouse.up();
-    const dragged = await width();
-    check(Math.abs(dragged - (start + 80)) <= 4, `dragging the first handle 80px moved the column from ${start}px to ${dragged}px`);
+    const dragged = await state();
+    check(close(dragged.cols[0], before.cols[0] + 40, 4), `dragging the first handle 40px moved its column from ${before.cols[0]}px to ${dragged.cols[0]}px`);
+    check(close(dragged.cols[1], before.cols[1] - 40, 4), `dragging the first handle 40px did not take the width from the column to its right (${before.cols[1]}px to ${dragged.cols[1]}px)`);
+    check(close(dragged.cols[2], before.cols[2], 1), `dragging the first handle changed a column it does not border (${before.cols[2]}px to ${dragged.cols[2]}px)`);
+    check(close(dragged.table, before.table, 1), `resizing a column changed the table's width (${before.table}px to ${dragged.table}px); it should stay as it was`);
+    check(dragged.overflow <= 0, `resizing a column made the table scroll sideways by ${dragged.overflow}px`);
     const classAttr = await p.evaluate(() => document.getElementById('t').hasAttribute('class'));
     check(!classAttr, 'a drag left a class attribute on the table, which takes it out of Material\'s table:not([class]) styling');
-    const others = await p.evaluate(() => [...document.querySelectorAll('#t th')].slice(1).map(th => Math.round(th.getBoundingClientRect().width)));
-    check(others.join() === othersBefore.join(), `widening the first column changed the others (${othersBefore.join(', ')}px to ${others.join(', ')}px)`);
 
     await handles.first().focus();
     await p.keyboard.press('ArrowRight');
-    const keyed = await width();
-    check(Math.abs(keyed - (dragged + 16)) <= 2, `ArrowRight moved the column from ${dragged}px to ${keyed}px, not by 16px`);
+    const keyed = await state();
+    check(close(keyed.cols[0], dragged.cols[0] + 16, 2) && close(keyed.cols[1], dragged.cols[1] - 16, 2), `ArrowRight did not move 16px from the right-hand column to this one (${dragged.cols[0]}/${dragged.cols[1]}px to ${keyed.cols[0]}/${keyed.cols[1]}px)`);
     const role = await handles.first().getAttribute('role');
     check(role === 'separator', `the handle's role is "${role}", not "separator"`);
+
+    // A drag past the neighbour's minimum stops there, and the table still keeps its width.
+    const box2 = await handles.first().boundingBox();
+    await p.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2);
+    await p.mouse.down();
+    // To the window's right edge, well past the neighbour's minimum (a move outside the window is not delivered).
+    await p.mouse.move(box2.x + 600, box2.y + box2.height / 2, { steps: 8 });
+    await p.mouse.up();
+    const clamped = await state();
+    check(clamped.cols[1] < keyed.cols[1] && clamped.cols[1] >= 48, `dragging far right did not shrink the neighbouring column to a minimum (${keyed.cols[1]}px to ${clamped.cols[1]}px)`);
+    check(close(clamped.cols[2], before.cols[2], 1), `dragging to the neighbour's minimum moved a column the handle does not border (${before.cols[2]}px to ${clamped.cols[2]}px)`);
+    const drift = await p.evaluate(() => [...document.querySelectorAll('#t th')].filter(th => Math.abs(parseFloat(th.style.width) - th.getBoundingClientRect().width) > 1).length);
+    check(drift === 0, `${drift} column(s) are drawn at a different width from the one set, so the browser is overriding the resize (a minimum width the script does not allow for)`);
+    check(close(clamped.table, before.table, 1) && clamped.overflow <= 0, `a drag past the neighbour's minimum changed the table's width or made it scroll`);
 
     await handles.first().dblclick();
     const reset = await p.evaluate(() => ({
