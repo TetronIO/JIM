@@ -915,6 +915,42 @@ body:has(.jim-home) .md-content__button {
   }
 }
 
+/* Generated diagrams: jim-diagram specs that docs/hooks/diagrams.py renders
+   at build time. Each is drawn twice, wide (800 units, capped at that size so
+   text stays near body-caption size) and narrow (360 units, for phones), and
+   one shows per breakpoint. The lightbox wraps each SVG in its own trigger,
+   so the trigger of the hidden layout is hidden with it. Text sizes match the
+   renderer's STYLES, which it measures labels with. */
+.md-typeset .jim-dg {
+  margin: 1.25rem auto 1.5rem;
+  max-width: 50rem;
+}
+.md-typeset .jim-dg .jim-diagram {
+  margin: 0;
+}
+.md-typeset .jim-dg .jim-dg-narrow,
+.md-typeset .jim-dg .jim-dgz-trigger:has(> .jim-dg-narrow) {
+  display: none;
+}
+@media screen and (max-width: 37.4375em) {
+  .md-typeset .jim-dg .jim-dg-narrow,
+  .md-typeset .jim-dg .jim-dgz-trigger:has(> .jim-dg-narrow) {
+    display: block;
+  }
+  .md-typeset .jim-dg .jim-dg-wide,
+  .md-typeset .jim-dg .jim-dgz-trigger:has(> .jim-dg-wide) {
+    display: none;
+  }
+}
+.jim-diagram .jimdg-dg-label { font-size: 13px; font-weight: 600; fill: var(--jimdg-node-text); }
+.jim-diagram .jimdg-dg-sub   { font-size: 12px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-note  { font-size: 12px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-edge  { font-size: 12px; font-weight: 600; fill: var(--jimdg-flow-text); }
+.jim-diagram .jimdg-dg-title { font-size: 14px; font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-dg-tag   { font-size: 12px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-badge { fill: var(--jimdg-core-fill); stroke: var(--jimdg-hub-fill); stroke-width: 2; }
+.jim-diagram .jimdg-dg-badge-text { font-size: 12px; font-weight: 700; fill: var(--jimdg-core-text); }
+
 /* ========================================
    Diagram lightbox
    Click-to-enlarge overlay with zoom and pan, shared by the concept SVGs

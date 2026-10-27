@@ -87,6 +87,34 @@ flowchart TD
 
 Nothing else is needed. They are clickable automatically (see "Diagram lightbox" below).
 
+## Generated diagrams (`jim-diagram`)
+
+A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/doing/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. **Flow** is the archetype available now:
+
+````markdown
+```jim-diagram
+archetype: flow
+title: What a Synchronisation Rule does to an object on its way in   # the <title>
+desc: An inbound Synchronisation Rule takes a Connected System Object ...   # the <desc>: all the picture says, in words
+in: { label: Connected System Object, note: Connector Space }         # optional box before the steps
+out: { label: Metaverse Object, note: the Metaverse }                 # optional box after them
+container: { label: Synchronisation Rule, tag: "Direction: inbound", badge: 1 }   # optional frame round the steps
+steps:                                                                # two or more, left to right
+  - { id: scope, label: Scoping criteria, badge: 2, note: "out of scope: skipped" }
+  - { id: match, label: Object Matching Rules, badge: 3, next: match }   # next: a label on the edge to the next step
+  - { id: map, label: Attribute mappings, badge: 5 }
+detours:                                                              # optional: a path round, through a step of its own
+  - { from: match, to: map, label: no match, step: { label: Projection, sub: creates one, badge: 4 } }
+```
+````
+
+- **`title` and `desc` are required** (A11Y-2). Write `desc` so it carries everything the picture says.
+- **Badges echo the page.** Where the page has a numbered list the diagram depicts, give each box the same number, so the diagram indexes the text below it.
+- **Every key is checked.** An unknown or misspelt key, a missing label, or a detour between steps that do not exist fails the build with the page and line. So does a label that cannot fit its box on two lines, or a flow too wide for the 800-unit layout: shorten the label or split the diagram; there is no setting to squeeze it. A step a detour leaves or rejoins cannot carry a `note`, because the detour's line would cross it.
+- **Two layouts are drawn,** wide and narrow, and `custom.css` ("Generated diagrams") shows the narrow one below 600px. The lightbox wraps each, and hides the trigger of the one not showing.
+- **Labels are sized from committed font metrics** (`docs/hooks/diagram_metrics.json`). If the site's fonts change, regenerate them with `pwsh -File ./scripts/Update-DiagramFontMetrics.ps1`.
+- **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains.
+
 ## Diagram lightbox
 
 `docs/assets/javascripts/diagram-zoom.js` makes **both** diagram families click-to-enlarge in one overlay with zoom and pan; styling lives in the "Diagram lightbox" section of `custom.css`. No per-diagram markup is needed. No external dependencies: it uses only the Mermaid instance MkDocs Material already loads.

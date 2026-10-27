@@ -1,8 +1,8 @@
 # A Diagram on Every Docs Page: Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1, the renderer and the flow archetype)
 - **Issue:** [#2564](https://github.com/TetronIO/JIM/issues/2564)
-- **PRD:** [`PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md`](../prd/PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md)
+- **PRD:** [`PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md`](../../prd/doing/PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md)
 
 ## Overview
 
@@ -218,4 +218,5 @@ The plan document records each batch as it lands. VIS-1 is promoted from Ratchet
 | A diagram states something the product does not do | VIS-4 in the review rubric; each spec is written against the page and checked against the product; contact sheet review per batch |
 | Renderer becomes a large bespoke layout engine | Fixed layouts per archetype, not general graph layout; specs that do not fit fail loudly rather than being laid out cleverly |
 | Two SVGs per diagram double the markup | Diagrams are small (a few KB); the hidden layout is `display: none` |
+| The planned move from Material for MkDocs to Zensical (#2058) may not run MkDocs hooks | The renderer is a plain function (`replace_fences`) with a command line; it can run as a Zensical extension or a pre-build step if hooks are not supported. The changelog hook carries the same exposure, so the migration has to answer it once for both |
 | Build hook ordering with pymdownx | The hook runs at `on_page_markdown`, before Markdown conversion, emitting raw HTML with no blank lines, as snippet includes already do |
