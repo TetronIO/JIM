@@ -6446,6 +6446,14 @@ html[lang] .jim-built-from-generated-value-inactive.mud-paper-outlined {
     white-space: nowrap;
 }
 
+/* The External ID beneath a Connections row's Secondary External ID: the same code face, a step smaller, so the readable
+   identifier above it leads. */
+.jim-connection-object-external-id {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8em;
+    margin-top: 1px;
+}
+
 /* The expansion spans the whole row on the table's recessed surface, so it reads as belonging to the row above. */
 .mud-table-root .mud-table-cell.jim-connection-detail-cell,
 td.jim-connection-detail-cell {

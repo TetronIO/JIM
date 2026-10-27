@@ -157,7 +157,7 @@ internal static class ConnectionExplanationTestData
     public static MetaverseObjectConnectionExplanation HrSystem() => new()
     {
         ConnectedSystemObjectId = Guid.NewGuid(),
-        DisplayName = "Jane Smith (E10442)",
+        ExternalId = "E10442",
         ConnectedSystemId = 1,
         ConnectedSystemName = "HR System",
         ObjectTypeName = "person",
