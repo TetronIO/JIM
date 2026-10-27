@@ -130,4 +130,73 @@ public class OperationsActivityFiltersTests
             Assert.That((OperationsActivityFilters.None with { InitiatedBy = "  " }).IsActive, Is.False);
         }
     }
+
+    [Test]
+    public void ToQueryParameters_NoFilters_RemovesEveryFilterParameter()
+    {
+        var parameters = OperationsActivityFilters.None.ToQueryParameters();
+
+        // Every key is stated, so applying them clears a filter the URL still carries from before.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parameters.Keys, Is.EquivalentTo(OperationsActivityFilters.QueryParameterNames));
+            Assert.That(parameters.Values, Is.All.Null);
+        }
+    }
+
+    [Test]
+    public void FromQuery_WhatToQueryParametersWrote_RoundTripsEveryFilter()
+    {
+        var scheduleId = Guid.NewGuid();
+        var filters = new OperationsActivityFilters
+        {
+            ConnectedSystems = ["Glitterband EMEA", "Yellowstone, APAC"],
+            RunProfiles = ["Full Import"],
+            Schedules = [scheduleId],
+            Results = [ActivityStatus.FailedWithError, ActivityStatus.Cancelled],
+            InitiatedBy = "Infrastructure",
+            HasChildActivities = true,
+            ScheduledOnly = true
+        };
+
+        var read = OperationsActivityFilters.FromQuery(ToQuery(filters.ToQueryParameters()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            // A comma inside a name must survive: names are repeated parameters, not a joined list.
+            Assert.That(read.ConnectedSystems, Is.EqualTo(filters.ConnectedSystems));
+            Assert.That(read.RunProfiles, Is.EqualTo(filters.RunProfiles));
+            Assert.That(read.Schedules, Is.EqualTo(filters.Schedules));
+            Assert.That(read.Results, Is.EqualTo(filters.Results));
+            Assert.That(read.InitiatedBy, Is.EqualTo("Infrastructure"));
+            Assert.That(read.HasChildActivities, Is.True);
+            Assert.That(read.ScheduledOnly, Is.True);
+        }
+    }
+
+    [Test]
+    public void FromQuery_NoFilterParameters_ReturnsNoFilters()
+    {
+        Assert.That(OperationsActivityFilters.FromQuery("?t=activity&s=queued"), Is.EqualTo(OperationsActivityFilters.None));
+    }
+
+    [Test]
+    public void FromQuery_ValuesTypedWrongly_IgnoresThemRatherThanFailing()
+    {
+        var read = OperationsActivityFilters.FromQuery("?schedule=not-a-guid&result=InProgress&result=cancelled&result=nonsense&children=yes");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(read.Schedules, Is.Empty);
+            // In Progress is never a finished result; case is tolerated for the rest.
+            Assert.That(read.Results, Is.EqualTo(new[] { ActivityStatus.Cancelled }));
+            Assert.That(read.HasChildActivities, Is.False);
+        }
+    }
+
+    /// <summary>Applies parameters the way the browser does: each value of a key becomes one repeated parameter.</summary>
+    private static string ToQuery(IReadOnlyDictionary<string, string[]?> parameters) =>
+        "?" + string.Join("&", parameters
+            .Where(p => p.Value != null)
+            .SelectMany(p => p.Value!.Select(v => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(v)}")));
 }

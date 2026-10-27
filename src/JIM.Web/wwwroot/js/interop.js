@@ -48,14 +48,26 @@ window.jimInterop = {
             return false;
         }
     },
-    // Rewrites the current URL's query string in place, without adding a history entry and without telling
-    // Blazor. A virtualised list keeps its search, sort and scroll position in the URL so a refresh or a shared
-    // link lands where the reader left off, and it updates that URL as the reader scrolls. NavigationManager
+    // Updates parameters in the current URL's query string in place, without adding a history entry and without
+    // telling Blazor. A virtualised list keeps its search, sort and scroll position in the URL so a refresh or a
+    // shared link lands where the reader left off, and it updates that URL as the reader scrolls. NavigationManager
     // cannot be used for this: it raises a navigation, which re-runs the page's OnParametersSetAsync and so its
     // whole database load, on every scroll. replaceState is also the right history semantics here, because
     // scrolling a list is not somewhere the back button should return you to.
-    replaceQueryString: function (query) {
-        var url = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
+    // parameters maps a name to a value, an array of values (written as repeated parameters) or null (removed).
+    // Only the names given are touched, and the merge happens here against the live URL: one page can have several
+    // writers (the Operations Activity tab's toggles and filters beside its Completed list), and a writer rebuilding
+    // the whole query from its own copy would drop whatever the others had written since.
+    updateQueryString: function (parameters) {
+        var query = new URLSearchParams(window.location.search);
+        Object.keys(parameters || {}).forEach(function (name) {
+            var value = parameters[name];
+            query.delete(name);
+            if (value === null || value === undefined) return;
+            (Array.isArray(value) ? value : [value]).forEach(function (v) { query.append(name, v); });
+        });
+        var search = query.toString();
+        var url = window.location.pathname + (search ? '?' + search : '') + window.location.hash;
         window.history.replaceState(window.history.state, '', url);
     },
     // Reads a textarea's or input's selection as [start, end] (UTF-16 offsets, the same units as a .NET string).

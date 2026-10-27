@@ -246,10 +246,9 @@
     private async Task WriteUrlStateAsync()
     {
         var state = new VirtualisedListUrlState { SearchText = SearchText, SortBy = SortBy, SortDescending = SortDescending };
-        var query = state.Write(NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix);
         try
         {
-            await JS.InvokeVoidAsync("jimInterop.replaceQueryString", query);
+            await JS.InvokeVoidAsync("jimInterop.updateQueryString", state.ToQueryParameters(DefaultSortBy, UrlParameterPrefix));
         }
         catch (JSDisconnectedException)
         {

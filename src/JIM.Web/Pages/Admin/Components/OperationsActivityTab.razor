@@ -40,7 +40,7 @@
         <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filters.ConnectedSystems"
-                   SelectedValuesChanged="@(values => SetFilters(_filters with { ConnectedSystems = values.ToList() }))"
+                   SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { ConnectedSystems = values.ToList() }))"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             @if (_filterOptions != null)
             {
@@ -55,7 +55,7 @@
         <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filters.RunProfiles"
-                   SelectedValuesChanged="@(values => SetFilters(_filters with { RunProfiles = values.ToList() }))"
+                   SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { RunProfiles = values.ToList() }))"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             @if (_filterOptions != null)
             {
@@ -70,7 +70,7 @@
         <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filters.Schedules"
-                   SelectedValuesChanged="@(values => SetFilters(_filters with { Schedules = values.ToList() }))"
+                   SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { Schedules = values.ToList() }))"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetScheduleMultiSelectText))">
             @if (_filterOptions != null)
             {
@@ -85,7 +85,7 @@
         <MudSelect T="ActivityStatus" Label="Result" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true" Disabled="@(!_sections.Completed)"
                    SelectedValues="_filters.Results"
-                   SelectedValuesChanged="@(values => SetFilters(_filters with { Results = values.ToList() }))"
+                   SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { Results = values.ToList() }))"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
             <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
@@ -96,7 +96,7 @@
     </MudItem>
     <MudItem Class="flex-grow-1">
         <SearchField Value="@_filters.InitiatedBy"
-                     ValueChanged="@(text => SetFilters(_filters with { InitiatedBy = text }))"
+                     ValueChanged="@(text => SetFiltersAsync(_filters with { InitiatedBy = text }))"
                      Label="Initiated By"
                      Placeholder="Search by name..."
                      DebounceInterval="500"
@@ -104,12 +104,12 @@
     </MudItem>
     <MudItem Class="d-flex align-end">
         <MudCheckBox T="bool" Value="_filters.HasChildActivities" Disabled="@(!_sections.Completed)"
-                     ValueChanged="@(value => SetFilters(_filters with { HasChildActivities = value }))"
+                     ValueChanged="@(value => SetFiltersAsync(_filters with { HasChildActivities = value }))"
                      Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
     </MudItem>
     <MudItem Class="d-flex align-end">
         <MudCheckBox T="bool" Value="_filters.ScheduledOnly"
-                     ValueChanged="@(value => SetFilters(_filters with { ScheduledOnly = value }))"
+                     ValueChanged="@(value => SetFiltersAsync(_filters with { ScheduledOnly = value }))"
                      Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
     </MudItem>
 </MudStack>
@@ -121,7 +121,7 @@
 
     @if (_sections.Completed)
     {
-        <OperationsCompletedSection Filters="_filters" OnClearFilters="ClearFilters" />
+        <OperationsCompletedSection Filters="_filters" OnClearFilters="ClearFiltersAsync" />
     }
 
     @if (_sections.NothingSelected)
@@ -143,16 +143,22 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var query = System.Web.HttpUtility.ParseQueryString(new Uri(NavigationManager.Uri).Query);
-        _sections = ActivitySectionState.Parse(query[SectionsQueryParameter]);
+        var query = new Uri(NavigationManager.Uri).Query;
+        _sections = ActivitySectionState.Parse(System.Web.HttpUtility.ParseQueryString(query)[SectionsQueryParameter]);
+        _filters = OperationsActivityFilters.FromQuery(query);
 
         using var jim = JimFactory.Create();
         _filterOptions = await jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
     }
 
-    private void SetFilters(OperationsActivityFilters filters) => _filters = filters;
+    /// <summary>Applies the filters and writes them to the URL in place, as the section toggles are.</summary>
+    private async Task SetFiltersAsync(OperationsActivityFilters filters)
+    {
+        _filters = filters;
+        await UpdateUrlAsync(filters.ToQueryParameters());
+    }
 
-    private void ClearFilters() => _filters = OperationsActivityFilters.None;
+    private Task ClearFiltersAsync() => SetFiltersAsync(OperationsActivityFilters.None);
 
     private void OnCountsChanged((int Queued, int Running) counts)
     {
@@ -172,10 +178,20 @@
             chosen.Contains(ActivitySection.InProgress),
             chosen.Contains(ActivitySection.Completed));
 
-        var uri = NavigationManager.GetUriWithQueryParameter(SectionsQueryParameter, _sections.ToQueryValue());
+        var value = _sections.ToQueryValue();
+        await UpdateUrlAsync(new Dictionary<string, string[]?> { [SectionsQueryParameter] = value == null ? null : [value] });
+    }
+
+    /// <summary>
+    /// Writes the given parameters to the URL in place, without the navigation that would re-run the page's load.
+    /// Only the parameters named are touched: the Completed list writes its own search and scroll position to the
+    /// same URL, and naming everything would drop what it wrote.
+    /// </summary>
+    private async Task UpdateUrlAsync(IReadOnlyDictionary<string, string[]?> parameters)
+    {
         try
         {
-            await JS.InvokeVoidAsync("jimInterop.replaceQueryString", new Uri(uri).Query.TrimStart('?'));
+            await JS.InvokeVoidAsync("jimInterop.updateQueryString", parameters);
         }
         catch (JSDisconnectedException)
         {

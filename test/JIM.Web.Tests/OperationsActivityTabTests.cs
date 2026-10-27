@@ -11,6 +11,7 @@ using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
 using JIM.Models.Utility;
+using JIM.Web.Models;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Services;
 using Microsoft.AspNetCore.Components;
@@ -140,6 +141,61 @@ public class OperationsActivityTabTests : JimComponentTestContext
                     "Scheduled only applies to queued and running work too");
             }
         });
+    }
+
+    [Test]
+    public void OperationsActivityTab_FiltersInTheUrl_AppliesThemOnArrival()
+    {
+        _navigation.NavigateTo("/admin/operations?t=activity&scheduled=1&result=Cancelled&by=Infrastructure");
+
+        var cut = Render<OperationsActivityTab>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var applied = cut.FindComponent<OperationsQueueSections>().Instance.Filters;
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(applied.ScheduledOnly, Is.True);
+                Assert.That(applied.Results, Is.EqualTo(new[] { ActivityStatus.Cancelled }));
+                Assert.That(applied.InitiatedBy, Is.EqualTo("Infrastructure"));
+            }
+        });
+    }
+
+    [Test]
+    public async Task OperationsActivityTab_FilterChanged_WritesTheFiltersToTheUrlAsync()
+    {
+        _navigation.NavigateTo("/admin/operations?t=activity");
+        var cut = Render<OperationsActivityTab>();
+        var scheduledOnly = cut.FindComponents<MudCheckBox<bool>>().Single(c => c.Instance.Label == "Scheduled only");
+
+        await cut.InvokeAsync(() => scheduledOnly.Instance.ValueChanged.InvokeAsync(true));
+
+        // Only the filters' own parameters are named, so the Completed list's search and scroll position survive.
+        // (The list resets its own scroll position after a filter change, and writes that separately.)
+        var update = JSInterop.Invocations
+            .Where(i => i.Identifier == "jimInterop.updateQueryString")
+            .Select(i => (IReadOnlyDictionary<string, string[]?>)i.Arguments[0]!)
+            .Last(p => p.ContainsKey("scheduled"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(update.Keys, Is.EquivalentTo(OperationsActivityFilters.QueryParameterNames));
+            Assert.That(update["scheduled"], Is.EqualTo(new[] { "1" }));
+        }
+    }
+
+    [Test]
+    public async Task OperationsActivityTab_SectionToggled_WritesOnlyTheSectionsParameterAsync()
+    {
+        _navigation.NavigateTo("/admin/operations?t=activity");
+        var cut = Render<OperationsActivityTab>();
+        var chips = cut.FindComponent<MudChipSet<ActivitySection>>();
+
+        await cut.InvokeAsync(() => chips.Instance.SelectedValuesChanged.InvokeAsync([ActivitySection.Queued]));
+
+        var update = (IReadOnlyDictionary<string, string[]?>)JSInterop.Invocations
+            .Last(i => i.Identifier == "jimInterop.updateQueryString").Arguments[0]!;
+        Assert.That(update, Is.EqualTo(new Dictionary<string, string[]?> { ["s"] = ["queued"] }));
     }
 
     private sealed class FakeJimApplicationFactory(JimApplication jimApplication) : IJimApplicationFactory

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Web;
 using JIM.Models.Activities;
 using JIM.Models.Tasking.DTOs;
 
@@ -19,6 +20,22 @@ public sealed record OperationsActivityFilters
 {
     /// <summary>No filter narrowed: everything shows.</summary>
     public static OperationsActivityFilters None { get; } = new();
+
+    private const string ConnectedSystemParameter = "system";
+    private const string RunProfileParameter = "profile";
+    private const string ScheduleParameter = "schedule";
+    private const string ResultParameter = "result";
+    private const string InitiatedByParameter = "by";
+    private const string HasChildActivitiesParameter = "children";
+    private const string ScheduledOnlyParameter = "scheduled";
+    private const string FlagValue = "1";
+
+    /// <summary>The URL parameters the filters are written to, so a filtered view can be bookmarked and shared.</summary>
+    public static IReadOnlyCollection<string> QueryParameterNames { get; } =
+    [
+        ConnectedSystemParameter, RunProfileParameter, ScheduleParameter, ResultParameter, InitiatedByParameter,
+        HasChildActivitiesParameter, ScheduledOnlyParameter
+    ];
 
     private static readonly ActivityStatus[] FinishedStatuses =
     [
@@ -84,6 +101,55 @@ public sealed record OperationsActivityFilters
     /// </summary>
     public IReadOnlyCollection<ActivityStatus> CompletedStatuses() =>
         Results.Count > 0 ? Results.Where(FinishedStatuses.Contains).ToList() : FinishedStatuses;
+
+    /// <summary>
+    /// Reads the filters from a URL query. Lists are repeated parameters, so a name holding a comma survives. A value
+    /// that does not parse is ignored rather than failing the page, since the URL is typed by hand as often as written
+    /// by the page.
+    /// </summary>
+    public static OperationsActivityFilters FromQuery(string? query)
+    {
+        var parameters = HttpUtility.ParseQueryString(query ?? string.Empty);
+        string[] Values(string name) => parameters.GetValues(name) ?? [];
+
+        var filters = new OperationsActivityFilters
+        {
+            ConnectedSystems = Values(ConnectedSystemParameter).Where(v => v.Length > 0).ToList(),
+            RunProfiles = Values(RunProfileParameter).Where(v => v.Length > 0).ToList(),
+            Schedules = Values(ScheduleParameter).Select(v => Guid.TryParse(v, out var id) ? id : (Guid?)null).OfType<Guid>().ToList(),
+            Results = Values(ResultParameter)
+                .Select(v => Enum.TryParse<ActivityStatus>(v, ignoreCase: true, out var status) ? status : (ActivityStatus?)null)
+                .OfType<ActivityStatus>()
+                .Where(FinishedStatuses.Contains)
+                .ToList(),
+            InitiatedBy = parameters[InitiatedByParameter],
+            HasChildActivities = parameters[HasChildActivitiesParameter] == FlagValue,
+            ScheduledOnly = parameters[ScheduledOnlyParameter] == FlagValue
+        };
+
+        return filters.IsActive ? filters : None;
+    }
+
+    /// <summary>
+    /// The filters as URL parameters: every filter parameter is stated, with null for one at its default, so applying
+    /// them removes a filter the URL still carries and leaves every other parameter on the page alone.
+    /// </summary>
+    public IReadOnlyDictionary<string, string[]?> ToQueryParameters() => new Dictionary<string, string[]?>
+    {
+        [ConnectedSystemParameter] = ListOrNull(ConnectedSystems),
+        [RunProfileParameter] = ListOrNull(RunProfiles),
+        [ScheduleParameter] = ListOrNull(Schedules.Select(id => id.ToString())),
+        [ResultParameter] = ListOrNull(Results.Select(r => r.ToString())),
+        [InitiatedByParameter] = string.IsNullOrWhiteSpace(InitiatedBy) ? null : [InitiatedBy.Trim()],
+        [HasChildActivitiesParameter] = HasChildActivities ? [FlagValue] : null,
+        [ScheduledOnlyParameter] = ScheduledOnly ? [FlagValue] : null
+    };
+
+    private static string[]? ListOrNull(IEnumerable<string> values)
+    {
+        var list = values.ToArray();
+        return list.Length > 0 ? list : null;
+    }
 
     private static bool ContainsIgnoringCase(IEnumerable<string> values, string? value) =>
         value != null && values.Any(v => string.Equals(v, value, StringComparison.OrdinalIgnoreCase));
