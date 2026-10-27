@@ -54,7 +54,7 @@ With `-PassThru`, the new Schedule Execution as it stands; with `-Wait`, the exe
 | `InitiatedById` | `guid` | The ID of the principal that initiated the execution. |
 | `InitiatedByName` | `string` | The display name of the principal that initiated the execution. |
 | `ErrorMessage` | `string` | Error message if the execution failed. For a `CompleteWithError` execution, the message naming each failed step it carried on past. |
-| `StepDisplay` | `string` | The step group the execution has reached, as one sentence naming it, for example Step 2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Queue. |
+| `StepDisplay` | `string` | The step group the execution has reached, as one sentence naming it, for example Step 2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Activity. |
 <!-- END GENERATED: Start-JIMSchedule -->
 
 When `-Wait` reaches its timeout, the cmdlet warns, but the Schedule Execution carries on in JIM. Use [`Get-JIMScheduleExecution`](#get-jimscheduleexecution) to follow it, or [`Stop-JIMScheduleExecution`](#stop-jimscheduleexecution) to cancel it.

@@ -125,7 +125,7 @@ The same reasons are available to automation: each step returned by `Get-JIMSche
 
 ### Watching one run
 
-While a schedule is running, its tasks are grouped under a header in **Admin > Operations > Queue**, and that header draws the whole schedule as a rail: one marker per step, in the order they run, with the step names underneath and the step it has reached named beside them ("Step 2 of 5").
+While a schedule is running, its tasks are grouped under a header in **Admin > Operations > Activity** (in Queued for the steps still to come, and in In Progress for the step running now), and that header draws the whole schedule as a rail: one marker per step, in the order they run, with the step names underneath and the step it has reached named beside them ("Step 2 of 5").
 
 The rail shows the whole schedule, not just the part still queued. A task is removed from the queue the moment it finishes, so steps already done would otherwise disappear as the run progressed; their outcomes are read from their Activities instead. A step that failed stays visible as a failed marker, including when the group is collapsed to a single row.
 

@@ -21,8 +21,9 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Covers the Operations History tab now that it is a virtualised grid rather than a paged table. Three things
-/// are worth pinning, because each fails silently: the tab must forward the grid's skip-the-count request rather
+/// Covers the Operations Activity tab's Completed section (#2549), which replaced the History tab. Four things are
+/// worth pinning, because each fails silently: it must never show a run still in progress, which In progress shows
+/// instead (twice on one page, at two levels of detail, is what the tab was built to end); it must forward the grid's skip-the-count request rather
 /// than deciding for itself (a hardcoded false leaves the list with no total forever, and a hardcoded true
 /// re-counts the whole match set on every scroll window); a real-time notification must reach the grid, because
 /// the rows the virtualiser holds are cached and a repaint alone leaves a running execution frozen; and the two
@@ -30,7 +31,7 @@ namespace JIM.Web.Tests;
 /// different ways out.
 /// </summary>
 [TestFixture]
-public class OperationsHistoryTabTests : JimComponentTestContext
+public class OperationsCompletedSectionTests : JimComponentTestContext
 {
     private Mock<IActivityRepository> _activityRepository = null!;
     private Mock<IMetaverseRepository> _metaverseRepository = null!;
@@ -63,7 +64,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
         _activityRepository.Setup(r => r.GetWorkerTaskActivityFilterOptionsAsync())
             .ReturnsAsync(new ActivityFilterOptions());
         _navigation = Services.GetRequiredService<NavigationManager>();
-        _navigation.NavigateTo("/admin/operations?t=history");
+        _navigation.NavigateTo("/admin/operations?t=activity");
     }
 
     /// <summary>
@@ -94,14 +95,14 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     };
 
     [Test]
-    public void OperationsHistoryTab_FirstWindow_AsksTheRepositoryForTheTotalCount()
+    public void OperationsCompletedSection_FirstWindow_AsksTheRepositoryForTheTotalCount()
     {
         // The grid decides when a count is worth paying for and says so on the request; the tab must forward that
         // decision. Hardcoding it either way is invisible in the markup: false leaves the toolbar count and the
         // scroll area sized from nothing, true re-counts the whole match set once per scroll window.
         ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
 
         cut.WaitForAssertion(() => _activityRepository.Verify(r => r.GetActivitiesRangeAsync(
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
@@ -114,11 +115,41 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsHistoryTab_WindowLoaded_RendersTheExecutionsRows()
+    public void OperationsCompletedSection_WindowLoaded_NeverAsksForRunsStillInProgress()
     {
         ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
+
+        cut.WaitForAssertion(() => Assert.That(StatusFiltersRequested(), Is.Not.Empty));
+        Assert.That(StatusFiltersRequested(), Has.All.Not.Null.And.All.Not.Contains(ActivityStatus.InProgress),
+            "every read must exclude In Progress; In progress shows those runs with their full progress");
+    }
+
+    [Test]
+    public void OperationsCompletedSection_ResultChosen_AsksForJustThatResult()
+    {
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.FailedWithError)], 1);
+        var filters = JIM.Web.Models.OperationsActivityFilters.None with { Results = [ActivityStatus.FailedWithError] };
+
+        var cut = Render<OperationsCompletedSection>(p => p.Add(c => c.Filters, filters));
+
+        cut.WaitForAssertion(() => Assert.That(StatusFiltersRequested(), Is.Not.Empty));
+        Assert.That(StatusFiltersRequested()[0], Is.EqualTo(new[] { ActivityStatus.FailedWithError }));
+    }
+
+    /// <summary>The status filter each range read asked the repository for.</summary>
+    private List<IEnumerable<ActivityStatus>?> StatusFiltersRequested() => _activityRepository.Invocations
+        .Where(i => i.Method.Name == nameof(IActivityRepository.GetActivitiesRangeAsync))
+        .Select(i => (IEnumerable<ActivityStatus>?)i.Arguments[9])
+        .ToList();
+
+    [Test]
+    public void OperationsCompletedSection_WindowLoaded_RendersTheExecutionsRows()
+    {
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
 
         cut.WaitForAssertion(() =>
         {
@@ -153,7 +184,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task OperationsHistoryTab_ActivityProgressNotification_ReloadsTheGridWithoutTheReaderActingAsync()
+    public async Task OperationsCompletedSection_ActivityProgressNotification_ReloadsTheGridWithoutTheReaderActingAsync()
     {
         // The queue changing is the whole reason this tab exists. The virtualiser caches the rows it has fetched,
         // so a notification that only repaints the component leaves the reader looking at the previous run: the
@@ -161,7 +192,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
         var executions = new List<Activity> { RunProfileExecution("HR System", "Full Import", ActivityStatus.InProgress) };
         ArrangeWindow(executions, 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Full Import")));
         var countedReadsBeforeNotification = CountedWindowReads();
 
@@ -176,13 +207,13 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task OperationsHistoryTab_UnchangedData_DoesNotReloadTheGridAsync()
+    public async Task OperationsCompletedSection_UnchangedData_DoesNotReloadTheGridAsync()
     {
         // The sibling half of the contract: notifications and the polling fallback both arrive constantly, and a
         // reload on every one of them would re-count the whole match set for nothing.
         ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Full Import")));
         var readsBeforeNotification = WindowReads();
         var countedReadsBeforeNotification = CountedWindowReads();
@@ -201,18 +232,18 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsHistoryTab_NothingHasRun_SaysSoRatherThanOfferingToClearASearch()
+    public void OperationsCompletedSection_NothingHasRun_SaysSoRatherThanOfferingToClearASearch()
     {
         ArrangeWindow([], 0);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
 
         cut.WaitForAssertion(() =>
         {
             var emptyState = cut.FindComponent<TableEmptyState>();
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(emptyState.Instance.PrimaryText, Is.EqualTo("Nothing has run yet"));
+                Assert.That(emptyState.Instance.PrimaryText, Is.EqualTo("Nothing has finished yet"));
                 Assert.That(emptyState.Instance.ActionText, Is.Null,
                     "there is nothing to clear when the list has simply never been populated");
             }
@@ -220,14 +251,14 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsHistoryTab_SearchMatchedNothing_OffersToClearTheSearch()
+    public void OperationsCompletedSection_SearchMatchedNothing_OffersToClearTheSearch()
     {
         // The grid reads its own search from the URL under this tab's parameter prefix, so a deep link into a
         // search that matches nothing must produce the search-shaped empty state, not the never-run one.
-        _navigation.NavigateTo("/admin/operations?t=history&h-q=nothing-matches-this");
+        _navigation.NavigateTo("/admin/operations?t=activity&h-q=nothing-matches-this");
         ArrangeWindow([], 0);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
 
         cut.WaitForAssertion(() =>
         {
@@ -279,7 +310,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     };
 
     [Test]
-    public void OperationsHistoryTab_MetaverseObjectActivitySelected_LinksTheObjectUnderItsTypesPluralName()
+    public void OperationsCompletedSection_MetaverseObjectActivitySelected_LinksTheObjectUnderItsTypesPluralName()
     {
         // The panel used to link /admin/metaverse/{id}, a route that does not exist (#2151).
         var metaverseObjectId = Guid.NewGuid();
@@ -287,7 +318,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
             .ReturnsAsync(new MetaverseObjectHeader { Id = metaverseObjectId, TypeName = "Person", TypePluralName = "People" });
         ArrangeWindow([MetaverseObjectActivity(metaverseObjectId)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Priya Shah")));
         cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).Click();
 
@@ -297,14 +328,14 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsHistoryTab_MetaverseObjectActivityForADeletedObject_NamesItWithoutALink()
+    public void OperationsCompletedSection_MetaverseObjectActivityForADeletedObject_NamesItWithoutALink()
     {
         var metaverseObjectId = Guid.NewGuid();
         _metaverseRepository.Setup(r => r.GetMetaverseObjectHeaderAsync(metaverseObjectId))
             .ReturnsAsync((MetaverseObjectHeader?)null);
         ArrangeWindow([MetaverseObjectActivity(metaverseObjectId)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Priya Shah")));
         cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).Click();
 

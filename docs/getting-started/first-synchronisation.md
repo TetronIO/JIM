@@ -232,8 +232,8 @@ Run the Full Import. JIM reads the file and holds each row as a Connected System
 
 === "Portal"
 
-    1. Select **Admin**, then **Operations**. On the **Queue** tab, under **Execute a Run Profile**, choose `HR System` as the **Connected System** and `Full Import` as the **Run Profile**, then select **Execute**.
-    2. When the run finishes, select its name in the queue to open its Activity. **CSOs Added** reads 25. <!-- conformance: allow LANG-4 "the label the portal shows" -->
+    1. Select **Admin**, then **Operations**. On the **Activity** tab, select **Queue a Run Profile**, choose `HR System` as the **Connected System** and `Full Import` as the **Run Profile**, then select **Queue**.
+    2. When the run finishes it moves to **Completed**; select it, then **View Full Details** to open its Activity. **CSOs Added** reads 25. <!-- conformance: allow LANG-4 "the label the portal shows" -->
 
 === "PowerShell"
 
@@ -251,7 +251,7 @@ Run the Full Synchronisation. JIM applies both Synchronisation Rules: the import
 
 === "Portal"
 
-    1. On the **Queue** tab, execute the `HR System` Connected System's `Full Synchronisation` Run Profile, and open its Activity when it finishes. **MVOs Projected** reads 25, and so does **CSOs Provisioned**. <!-- conformance: allow LANG-4 "the label the portal shows" -->
+    1. On the **Activity** tab, queue the `HR System` Connected System's `Full Synchronisation` Run Profile, and open its Activity when it finishes. **MVOs Projected** reads 25, and so does **CSOs Provisioned**. <!-- conformance: allow LANG-4 "the label the portal shows" -->
     2. Select **Users**, then **All Users**: Amara Okafor and the other 24 people are there, with the attributes the import rule flowed.
 
 === "PowerShell"
@@ -273,7 +273,7 @@ Run the Export. JIM writes each Pending Export to the staff directory file.
 
 === "Portal"
 
-    1. On the **Queue** tab, execute the `Staff Directory` Connected System's `Export` Run Profile, and open its Activity when it finishes. **CSOs Exported** reads 25. <!-- conformance: allow LANG-4 "the label the portal shows" -->
+    1. On the **Activity** tab, queue the `Staff Directory` Connected System's `Export` Run Profile, and open its Activity when it finishes. **CSOs Exported** reads 25. <!-- conformance: allow LANG-4 "the label the portal shows" -->
 
 === "PowerShell"
 

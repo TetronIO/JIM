@@ -106,15 +106,30 @@ public class TaskingRepository : ITaskingRepository
             .ToListAsync();
 
         var stepsByActivity = await GetStepsForActivitiesAsync(workerTasks);
+        var runProfiles = await GetRunProfilePartsAsync(workerTasks);
 
         foreach (var workerTask in workerTasks)
         {
+            var runProfileId = (workerTask as SynchronisationWorkerTask)?.ConnectedSystemRunProfileId;
+            var runProfile = runProfileId.HasValue ? runProfiles.GetValueOrDefault(runProfileId.Value) : null;
+
             workerTaskHeaders.Add(new WorkerTaskHeader
             {
                 Id = workerTask.Id,
                 Status = workerTask.Status,
                 Timestamp = workerTask.Timestamp,
-                Name = await GetWorkerHeaderNameAsync(workerTask),
+                Name = runProfile != null
+                    ? $"{runProfile.ConnectedSystemName} - {runProfile.Name}"
+                    : await GetWorkerHeaderNameAsync(workerTask),
+                ExecutionMode = workerTask.ExecutionMode,
+                // Executed is stamped by the worker as it starts a task; until then it only says when the Activity
+                // was created.
+                Started = workerTask.Status is WorkerTaskStatus.Processing or WorkerTaskStatus.CancellationRequested
+                    ? workerTask.Activity?.Executed
+                    : null,
+                ConnectedSystemRunProfileId = runProfileId,
+                ConnectedSystemName = runProfile?.ConnectedSystemName,
+                RunProfileName = runProfile?.Name,
                 Type = GetWorkerTaskType(workerTask),
                 InitiatedByType = workerTask.InitiatedByType,
                 InitiatedById = workerTask.InitiatedById,
@@ -133,6 +148,32 @@ public class TaskingRepository : ITaskingRepository
         }
         return workerTaskHeaders;
     }
+
+    /// <summary>
+    /// The Run Profile and Connected System names for every Run Profile the queue executes, keyed by Run Profile, in
+    /// one read rather than one per row (#2549). A Run Profile deleted since its task was queued is simply absent.
+    /// </summary>
+    private async Task<Dictionary<int, RunProfileParts>> GetRunProfilePartsAsync(List<WorkerTask> workerTasks)
+    {
+        var runProfileIds = workerTasks
+            .OfType<SynchronisationWorkerTask>()
+            .Select(t => t.ConnectedSystemRunProfileId)
+            .Distinct()
+            .ToList();
+
+        if (runProfileIds.Count == 0)
+            return [];
+
+        var db = Repository.Database;
+        var parts = await db.ConnectedSystemRunProfiles
+            .Where(rp => runProfileIds.Contains(rp.Id))
+            .Select(rp => new RunProfileParts(rp.Id, rp.Name, db.ConnectedSystems.Single(cs => cs.Id == rp.ConnectedSystemId).Name))
+            .ToListAsync();
+
+        return parts.ToDictionary(p => p.Id);
+    }
+
+    private sealed record RunProfileParts(int Id, string Name, string ConnectedSystemName);
 
     /// <summary>
     /// The run steps (#454) for every task in the queue that has any, keyed by Activity.

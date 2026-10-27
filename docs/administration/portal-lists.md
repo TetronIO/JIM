@@ -84,11 +84,15 @@ The table of one object's attributes is the exception to one line per row: a Con
 
 All three tables have a search box, which matches an attribute's name or any of its values shown on the page, and column headers you can click to sort. The search and sort are kept in the page address, so a refresh or a shared link shows the same view.
 
+<<<<<<< HEAD
+## :material-tray-full: The Operations Activity tab
+=======
 ## :material-tray-full: The Operations queue
+>>>>>>> origin/main
 
-The queue is a table per block rather than one long table: each Schedule Execution's steps scroll within their own, underneath the header that names the Schedule, draws its rail and carries **View execution** and the option to cancel it. Everything running outside a Schedule scrolls in a table of its own at the end. Each table states how many Worker Tasks it holds, and is bounded in height, so a Schedule with twenty steps in it cannot push the rest of the queue off the screen; click a Schedule's header to put its steps away entirely.
+Of the Activity tab's three sections, only **Completed** is a scrolling list: it holds everything the Worker has ever finished. **Queued** and **In Progress** are ordinary tables, because they only ever hold work in flight. Queued shows as many rows as fit the window while In Progress stays in view, keeping the rows nearest In Progress (the work about to run), and never fewer than three; **Show more** reveals the rest. A Schedule Execution's tasks sit under a header row that names the Schedule, draws its rail and carries **View execution** and the option to cancel it.
 
-There is no search box on these, because a search over one Schedule's handful of steps says nothing a glance does not.
+There is no search box on Queued or In Progress, because the filters above the tab already narrow them, and a search over a handful of rows says nothing a glance does not.
 
 ## :material-cog-play-outline: Automation
 
