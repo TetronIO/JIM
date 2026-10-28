@@ -1,6 +1,6 @@
 # Oracle TCPS: Trust a Certificate from the JIM Certificate Store
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 in review as #2590; Phases 1 and 2 under way together)
 - **Issue:** [#2581](https://github.com/TetronIO/JIM/issues/2581)
 - **Prerequisite:** [#2589](https://github.com/TetronIO/JIM/issues/2589) (TCPS host name verification)
 
@@ -36,11 +36,20 @@ What follows from the spike:
 - **The anchor must be a root.** Unlike SQL Server, whose driver accepts the server's exact certificate, ODP.NET builds a chain to a self-signed certificate in the wallet. Trusting the server's own certificate or an intermediate, both of which the certificate card offers today, will not work for Oracle. The exception is a self-signed server certificate, which is its own root.
 - **Host name verification has to be switched on.** That is #2589, a small change of its own that ships first.
 
-Still to verify in Phase 1. Each changes a detail, not the approach:
-1. A self-signed server certificate, trusted as itself, connects.
-2. Whether a wallet holding only an intermediate is refused like the leaf. If it is refused, JIM offers the root only. If it is accepted, JIM can offer the intermediate too.
-3. Whether the driver caches a wallet by its folder path. JIM writes each wallet to a new folder whatever the answer, but the answer decides whether that is necessary or merely tidy.
-4. Concurrent connections from one Worker with different `WalletLocation` values do not interfere.
+Settled against the lane's own server (a root, an intermediate and a `localhost` server certificate; the server sends all three):
+
+| Client `ewallet.pem` holds | Result |
+|---|---|
+| The root | Refused |
+| The intermediate | Refused |
+| The server's certificate | Refused |
+| **The root and the intermediate** | **Connects** |
+| The server's certificate, the intermediate and the root | Connects |
+
+- **The wallet needs the whole chain above the server's certificate,** not just the root. ODP.NET builds the chain from the wallet alone, ignoring the intermediates the server sends, and still requires it to end at a self-signed certificate. So JIM writes the root it trusts *and* the intermediates the presented (or assembled) chain carries. That widens nothing: an intermediate alone is refused, so the root remains the only anchor.
+- **No caching by folder path.** A wallet rewritten in place takes effect on the next connection, in both directions. A new folder per materialisation is still used, for tidy clean-up rather than correctness.
+- **Concurrent connections** from one process, with different `WalletLocation` values, do not interfere (eight at once, twice over). Concurrent *refused* connections sometimes report ODP.NET's own "m_safeCertContext is an invalid handle" instead of the certificate error; they are refused either way.
+- **A self-signed server certificate** is its own root, so it is the same case as a one-link chain and needs nothing special.
 
 ## Design
 
@@ -50,7 +59,7 @@ Still to verify in Phase 1. Each changes a detail, not the approach:
 
 - `None`;
 - `ServerCertificate` (SQL Server: the exact certificate);
-- `RootAuthority` (Oracle over TCPS: a self-signed certificate the chain reaches).
+- `RootAuthority` (Oracle over TCPS: a self-signed certificate the chain reaches, with the intermediates between).
 
 `SecureEndpoint` gains the same field, replacing `AcceptsJimTrustedCertificates`. That field was the yes/no answer to the same question, so there is one source of truth, not two.
 
@@ -58,13 +67,13 @@ Still to verify in Phase 1. Each changes a detail, not the approach:
 
 `SqlConnector.OpenTrustingJimCertificateStore` keeps its shape. An ordinary connection goes first, so the operating system always gets the first say and trust stays additive. Only when that is refused does JIM read the presented chain. What it then hands the driver depends on the provider:
 - **`ServerCertificate`:** the server's own certificate, as today.
-- **`RootAuthority`:** the self-signed certificate in the JIM store that the chain reaches. If the store vouches for the chain only through an intermediate or the server's own certificate, there is no retry. The refusal is diagnosed as "trust the root".
+- **`RootAuthority`:** the self-signed certificate in the JIM store that the chain reaches, together with the intermediates between it and the server's certificate. If the store vouches for the chain only through an intermediate or the server's own certificate, there is no retry. The refusal is diagnosed as "trust the root".
 
 ### Materialising the wallet
 
 A new `SqlTrustedOracleWallet` is the sibling of `SqlTrustedServerCertificateFile`:
 - a new folder per materialisation under the temporary directory, owner-only (`0700`), named with the same sweepable prefix scheme;
-- `ewallet.pem` inside it, owner-only (`0600`), holding the one root;
+- `ewallet.pem` inside it, owner-only (`0600`), holding the root and the intermediates below it;
 - deleted when the Connector is disposed, with abandoned folders swept after seven days.
 
 `SqlConnectionSettings.PinnedServerCertificatePath` becomes a general `PinnedTrustAnchorPath`. `OracleProvider.ConfigureConnection` sets `OracleConnection.WalletLocation` to it for TCPS. That is a per-connection property, so one Connected System's trust never leaks into another's. `OracleConfiguration.WalletLocation` is static and is never used.
@@ -84,6 +93,10 @@ A new `SqlTrustedOracleWallet` is the sibling of `SqlTrustedServerCertificateFil
 ### Phase 0: Host name verification (#2589)
 
 A separate, small pull request that ships first: `(SECURITY=(SSL_SERVER_DN_MATCH=TRUE))` for TCPS, with a descriptor unit test and a Security changelog entry. Its runtime proof arrives with the lane in Phase 1.
+
+### Phases 1 and 2 ship together
+
+Like the SQL Server lane, the Oracle lane's CA is trusted by nobody but the JIM store, so its "connects once trusted" case only exists once wallet trust does. A lane on its own could test refusals and nothing else, so Phases 1 and 2 are one pull request, and the lane is what proves the trust.
 
 ### Phase 1: An Oracle TCPS test lane
 
