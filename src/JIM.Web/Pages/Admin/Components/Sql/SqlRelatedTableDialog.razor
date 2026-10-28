@@ -1,0 +1,230 @@
+@using JIM.Connectors.Sql
+@using JIM.Models.Staging
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A multi-valued attribute read from a child table: one row per value, joined to its parent on the parent's
+   anchor. Edits a copy, so Cancel leaves the Object Type exactly as it was. *@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            A child table holding one row per value. Each row is joined to its @ParentName object on the columns that
+            hold the parent's anchor.
+        </MudText>
+
+        <MudTextField T="string" Label="Attribute name" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                      @bind-Value="_relatedTable.AttributeName" Required="true" RequiredError="Name the attribute"
+                      HelperText="What the attribute is called on the Object Type." Class="mb-3"
+                      data-testid="jim-sql-related-attribute-name" />
+
+        <MudGrid Spacing="2" Class="mb-1">
+            <MudItem xs="12" sm="5">
+                <SqlCatalogueNameField Label="Schema" Value="@_relatedTable.Schema" Options="@SchemaOptions"
+                                       ValueChanged="@(v => { _relatedTable.Schema = v; return Task.CompletedTask; })" />
+            </MudItem>
+            <MudItem xs="12" sm="7">
+                <SqlCatalogueNameField Label="Table" Value="@_relatedTable.Table" Options="@TableOptions"
+                                       ValueChanged="OnTableChangedAsync" TestId="jim-sql-related-table" />
+            </MudItem>
+        </MudGrid>
+
+        @if (_tableFailure != null)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@_tableFailure</MudText>
+        }
+
+        <SqlCatalogueNameField Label="Value column" Value="@_relatedTable.ValueColumn" Options="@ColumnOptions"
+                               ValueChanged="@(v => { _relatedTable.ValueColumn = v; return Task.CompletedTask; })"
+                               HelperText="The column holding each value." Class="mb-3" />
+
+        @for (var i = 0; i < ParentAnchorColumns.Count; i++)
+        {
+            var position = i;
+            <SqlCatalogueNameField Label="@($"Column holding {ParentAnchorColumns[position]}")"
+                                   Value="@JoinColumnAt(position)" Options="@ColumnOptions"
+                                   ValueChanged="@(v => SetJoinColumn(position, v))"
+                                   HelperText="@(position == 0 ? "Joins each row to its parent: one column per anchor column, in the same order." : null)"
+                                   Class="mb-3" />
+        }
+
+        <MudSelect T="string" Label="Values reference" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                   Value="@(_relatedTable.ReferencesObjectType ?? string.Empty)"
+                   ValueChanged="@(v => _relatedTable.ReferencesObjectType = string.IsNullOrEmpty(v) ? null : v)"
+                   HelperText="Choose an Object Type when each value holds that Object Type's anchor, as group members do.">
+            <MudSelectItem T="string" Value="@string.Empty">Nothing: the values are plain values</MudSelectItem>
+            @foreach (var name in ObjectTypeNames)
+            {
+                <MudSelectItem T="string" Value="@name">@name</MudSelectItem>
+            }
+        </MudSelect>
+
+        @if (ShowWatermark)
+        {
+            <SqlCatalogueNameField Label="Watermark column" Value="@_relatedTable.WatermarkColumn" Options="@ColumnOptions"
+                                   ValueChanged="@(v => { _relatedTable.WatermarkColumn = v; return Task.CompletedTask; })"
+                                   HelperText="Delta Import Mode is Watermark Column: the last-modified column on this table, so an added or removed value is seen."
+                                   TestId="jim-sql-related-watermark-column" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanSave())" OnClick="Save"
+                   data-testid="jim-sql-related-save">@(IsNew ? "Add" : "Update")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public SqlRelatedTableDocument RelatedTable { get; set; } = null!;
+
+    [Parameter]
+    public bool IsNew { get; set; }
+
+    [Parameter]
+    public string ParentName { get; set; } = "parent";
+
+    /// <summary>The parent Object Type's anchor columns, each of which the child table must hold.</summary>
+    [Parameter]
+    public IReadOnlyList<string> ParentAnchorColumns { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<string> ObjectTypeNames { get; set; } = [];
+
+    /// <summary>The tables and views to choose from, or empty where the catalogue could not be read.</summary>
+    [Parameter]
+    public IReadOnlyList<ConnectorCatalogueObject> CatalogueObjects { get; set; } = [];
+
+    /// <summary>Reads a table's columns, or null where the catalogue cannot be read.</summary>
+    [Parameter]
+    public Func<string?, string, Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>>>? LoadTable { get; set; }
+
+    [Parameter]
+    public bool ShowWatermark { get; set; }
+
+    private SqlRelatedTableDocument _relatedTable = new();
+    private ConnectorCatalogueObjectDetail? _table;
+    private string? _tableFailure;
+
+    private IEnumerable<string> SchemaOptions => CatalogueObjects.Select(o => o.SchemaName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<string> TableOptions => CatalogueObjects
+        .Where(o => string.IsNullOrWhiteSpace(_relatedTable.Schema) || string.Equals(o.SchemaName, _relatedTable.Schema, StringComparison.OrdinalIgnoreCase))
+        .Select(o => o.Name)
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<string> ColumnOptions => _table?.Columns.Select(c => c.Name) ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _relatedTable = new SqlRelatedTableDocument
+        {
+            AttributeName = RelatedTable.AttributeName,
+            Schema = RelatedTable.Schema,
+            Table = RelatedTable.Table,
+            ValueColumn = RelatedTable.ValueColumn,
+            JoinColumns = RelatedTable.JoinColumns?.ToList(),
+            ReferencesObjectType = RelatedTable.ReferencesObjectType,
+            WatermarkColumn = RelatedTable.WatermarkColumn
+        };
+
+        await LoadTableAsync();
+    }
+
+    private string? JoinColumnAt(int position) =>
+        _relatedTable.JoinColumns != null && position < _relatedTable.JoinColumns.Count ? _relatedTable.JoinColumns[position] : null;
+
+    private Task SetJoinColumn(int position, string? column)
+    {
+        var joinColumns = _relatedTable.JoinColumns ??= [];
+        while (joinColumns.Count <= position)
+            joinColumns.Add(null);
+
+        joinColumns[position] = column;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnTableChangedAsync(string? table)
+    {
+        _relatedTable.Table = table;
+
+        // A name in exactly one schema is that schema's table; saying so keeps the document unambiguous.
+        if (string.IsNullOrWhiteSpace(_relatedTable.Schema) && table != null)
+        {
+            var matches = CatalogueObjects.Where(o => string.Equals(o.Name, table, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count == 1)
+                _relatedTable.Schema = matches[0].SchemaName;
+        }
+
+        await LoadTableAsync();
+    }
+
+    private async Task LoadTableAsync()
+    {
+        _table = null;
+        _tableFailure = null;
+        if (LoadTable == null || string.IsNullOrWhiteSpace(_relatedTable.Table))
+            return;
+
+        var read = await LoadTable(_relatedTable.Schema, _relatedTable.Table);
+        _table = read.Value;
+        _tableFailure = read.Failure != null
+            ? $"The table's columns could not be read, so type their names: {read.Failure}"
+            : read.Value == null ? "The database account cannot see a table of that name, so its columns cannot be listed." : null;
+    }
+
+    /// <summary>
+    /// Everything the document needs of a related table; the parser checks the names themselves on save.
+    /// </summary>
+    private bool CanSave() =>
+        !string.IsNullOrWhiteSpace(_relatedTable.AttributeName) &&
+        !string.IsNullOrWhiteSpace(_relatedTable.Table) &&
+        !string.IsNullOrWhiteSpace(_relatedTable.ValueColumn) &&
+        Enumerable.Range(0, ParentAnchorColumns.Count).All(i => !string.IsNullOrWhiteSpace(JoinColumnAt(i)));
+
+    private void Save()
+    {
+        _relatedTable.AttributeName = _relatedTable.AttributeName?.Trim();
+        _relatedTable.JoinColumns = _relatedTable.JoinColumns?.Take(ParentAnchorColumns.Count).ToList();
+        if (string.IsNullOrWhiteSpace(_relatedTable.WatermarkColumn))
+            _relatedTable.WatermarkColumn = null;
+
+        MudDialog.Close(DialogResult.Ok(_relatedTable));
+    }
+
+    /// <summary>
+    /// Opens the dialog over a copy of <paramref name="relatedTable"/>; the edited copy, or null when cancelled.
+    /// </summary>
+    public static async Task<SqlRelatedTableDocument?> ShowAsync(
+        IDialogService dialogService,
+        SqlRelatedTableDocument relatedTable,
+        bool isNew,
+        string parentName,
+        IReadOnlyList<string> parentAnchorColumns,
+        IReadOnlyList<string> objectTypeNames,
+        IReadOnlyList<ConnectorCatalogueObject> catalogueObjects,
+        Func<string?, string, Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>>>? loadTable,
+        bool showWatermark)
+    {
+        var parameters = new DialogParameters<SqlRelatedTableDialog>
+        {
+            { x => x.RelatedTable, relatedTable },
+            { x => x.IsNew, isNew },
+            { x => x.ParentName, parentName },
+            { x => x.ParentAnchorColumns, parentAnchorColumns },
+            { x => x.ObjectTypeNames, objectTypeNames },
+            { x => x.CatalogueObjects, catalogueObjects },
+            { x => x.LoadTable, loadTable },
+            { x => x.ShowWatermark, showWatermark }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var title = isNew ? "Add Multi-Valued Attribute" : "Edit Multi-Valued Attribute";
+        var dialog = await dialogService.ShowAsync<SqlRelatedTableDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: SqlRelatedTableDocument edited } ? edited : null;
+    }
+}

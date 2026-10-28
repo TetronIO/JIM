@@ -1,0 +1,66 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A schema, table, view or column name: chosen from the catalogue where it could be read, typed where it could
+   not. One control for both, so a database JIM cannot reach never locks the field. *@
+<MudAutocomplete T="string"
+                 Label="@Label"
+                 Value="@Value"
+                 ValueChanged="OnValueChangedAsync"
+                 SearchFunc="SearchAsync"
+                 CoerceValue="true"
+                 ResetValueOnEmptyText="true"
+                 MaxItems="50"
+                 Clearable="@Clearable"
+                 HelperText="@HelperText"
+                 Variant="Variant.Outlined"
+                 Margin="Margin.Dense"
+                 Class="@Class"
+                 data-testid="@TestId" />
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = null!;
+
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>
+    /// The names to choose from; empty where the catalogue could not be read, which leaves the field free text.
+    /// </summary>
+    [Parameter]
+    public IEnumerable<string> Options { get; set; } = [];
+
+    [Parameter]
+    public string? HelperText { get; set; }
+
+    [Parameter]
+    public bool Clearable { get; set; } = true;
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public string? TestId { get; set; }
+
+    private Task<IEnumerable<string>?> SearchAsync(string? text, CancellationToken cancellationToken)
+    {
+        IEnumerable<string> matches = string.IsNullOrWhiteSpace(text)
+            ? Options
+            : Options.Where(option => option.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult<IEnumerable<string>?>(matches);
+    }
+
+    private async Task OnValueChangedAsync(string? value)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (trimmed == Value)
+            return;
+
+        Value = trimmed;
+        await ValueChanged.InvokeAsync(trimmed);
+    }
+}
