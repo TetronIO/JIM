@@ -9,6 +9,7 @@ using JIM.Models.Staging;
 using NUnit.Framework;
 using Serilog;
 using System.Data;
+using System.Data.Common;
 using ILogger = Serilog.ILogger;
 
 namespace JIM.Worker.Tests.Connectors;
@@ -578,6 +579,60 @@ public class SqlConnectorTests
             Assert.That(results[0].ErrorMessage, Does.Contain("network-related"));
             Assert.That(results[0].Exception, Is.SameAs(failure), "The administrator needs the driver's own account, not a summary of it.");
         }
+    }
+
+    [Test]
+    public void ValidateSettingValues_DriverHidesTheCauseBeneathAGenericError_ReportsTheCause()
+    {
+        var failure = new FakeDbException("ORA-50201: Failed to connect to server", new Exception("ORA-12660: parameters incompatible"));
+        var connector = CreateConnectorWith(new FakeSqlProvider
+        {
+            OpenFailure = failure,
+            ConnectionFailureDescription = _ => "ORA-12660: parameters incompatible (reported by the driver as ORA-50201)"
+        });
+
+        var results = connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].ErrorMessage, Is.EqualTo("Unable to connect. Message: ORA-12660: parameters incompatible (reported by the driver as ORA-50201)"));
+            Assert.That(results[0].Exception?.InnerException, Is.SameAs(failure), "The driver's own exception stays reachable for diagnosis.");
+        }
+    }
+
+    [Test]
+    public void OpenImportConnection_DriverHidesTheCauseBeneathAGenericError_ThrowsADatabaseFailureNamingTheCause()
+    {
+        var failure = new FakeDbException("ORA-50201: Failed to connect to server", new Exception("ORA-12660: parameters incompatible"));
+        var connector = CreateConnectorWith(new FakeSqlProvider
+        {
+            OpenFailure = failure,
+            ConnectionFailureDescription = _ => "ORA-12660: parameters incompatible (reported by the driver as ORA-50201)"
+        });
+
+        // A run's Activity records the exception's message, so the cause has to be in the message itself.
+        // And it stays a DbException, which is what every caller of an open already handles.
+        var thrown = Assert.Throws(Is.InstanceOf<DbException>(),
+            () => connector.OpenImportConnection(CreateSqlServerSettingValues(encrypt: false), null, _logger));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown!.Message, Is.EqualTo("ORA-12660: parameters incompatible (reported by the driver as ORA-50201)"));
+            Assert.That(thrown!.InnerException, Is.SameAs(failure));
+        }
+    }
+
+    [Test]
+    public void OpenImportConnection_DriverMessageAlreadyNamesTheCause_ThrowsTheDriversOwnException()
+    {
+        var failure = new FakeDbException("Login failed for user 'jim_sync'.");
+        var connector = CreateConnectorWith(new FakeSqlProvider { OpenFailure = failure });
+
+        var thrown = Assert.Throws(Is.InstanceOf<DbException>(),
+            () => connector.OpenImportConnection(CreateSqlServerSettingValues(encrypt: false), null, _logger));
+
+        Assert.That(thrown, Is.SameAs(failure), "Nothing is wrapped when there is nothing to add.");
     }
 
     [Test]

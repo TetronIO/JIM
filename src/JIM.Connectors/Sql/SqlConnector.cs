@@ -793,6 +793,33 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
 
     #region Connections
     /// <summary>
+    /// Opens a connection to the database this Connected System is configured for. A failure is reported
+    /// in terms of its cause where the driver hides that beneath a generic error, which is what a
+    /// connection test, an Activity or a log line then shows.
+    /// </summary>
+    /// <remarks>
+    /// The description is applied here, at the outermost point, so the certificate handling below still
+    /// sees the driver's own exception, as it must to diagnose it.
+    /// </remarks>
+    /// <exception cref="ServerCertificateRejectedException">The server's certificate was refused, and this says which certificate and why.</exception>
+    /// <exception cref="SqlConnectionFailedException">The connection failed, and the driver's message hid the cause; the driver's exception is the inner one.</exception>
+    private DbConnection OpenConnection(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
+        try
+        {
+            return OpenTrustingJimCertificateStore(provider, connectionSettings, settingValues, logger);
+        }
+        catch (DbException ex) when (ex is not SqlConnectionFailedException)
+        {
+            var description = provider.DescribeConnectionFailure(ex);
+            if (description == ex.Message)
+                throw;
+
+            throw new SqlConnectionFailedException(description, ex);
+        }
+    }
+
+    /// <summary>
     /// Opens a connection to the database this Connected System is configured for, supplying JIM's own
     /// certificate store as an additional trust anchor where the driver has a way of taking one.
     /// </summary>
@@ -804,7 +831,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     /// of it (validity period, the name it was issued for), is then accepted for a second attempt.
     /// </remarks>
     /// <exception cref="ServerCertificateRejectedException">The server's certificate was refused, and this says which certificate and why.</exception>
-    private DbConnection OpenConnection(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    private DbConnection OpenTrustingJimCertificateStore(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         try
         {
