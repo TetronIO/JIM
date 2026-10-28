@@ -1,0 +1,44 @@
+/* The sign-in problem page (#2443): the setting a failed sign-in names, with the value JIM expected and the value it
+   received. Builds on _ErrorPageLayout's tokens so it follows the theme. */
+
+.jim-sign-in-problem {
+    text-align: left;
+    border: 1px solid var(--mud-palette-lines-default, rgba(0, 0, 0, 0.12));
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    margin: 0 0 1.5rem 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.5rem 1rem;
+}
+
+.jim-sign-in-problem dt {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary, #6c757d);
+    padding-top: 0.125rem;
+}
+
+.jim-sign-in-problem dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.jim-sign-in-problem code {
+    font-family: "IBM Plex Mono", "Consolas", monospace;
+    font-size: 0.875rem;
+}
+
+@media (max-width: 480px) {
+    .jim-sign-in-problem {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.125rem;
+    }
+
+    .jim-sign-in-problem dd {
+        margin-bottom: 0.5rem;
+    }
+}

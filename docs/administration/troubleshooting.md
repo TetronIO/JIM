@@ -161,6 +161,31 @@ and the [security audit log](security-audit-events.md) records a failed sign-in 
 
 If JIM is already served over HTTPS and trusts its proxy but you still see the page, the browser is blocking cookies for JIM's address, or something between the browser and JIM is removing the `Set-Cookie` or `Cookie` headers. Allow cookies for the JIM site, and make sure any proxy or security appliance passes them through unchanged.
 
+### A setting stopped sign-in
+
+You sign in at your identity provider and land on a page titled **A setting stopped sign-in**, which names a setting such as `JIM_SSO_CLIENT_ID`, the value JIM expected and the value it received. Or the PowerShell module, or another client of JIM's API, is refused with `401 Unauthorized` although your identity provider signed it in. Either way, the `jim.web` log records a warning beginning `Sign-in problem` with the same details.
+
+**What it means.** A value JIM is configured with does not match what your identity provider sends. JIM recognises these:
+
+| Setting | What did not match |
+|---------|--------------------|
+| `JIM_SSO_CLIENT_ID` | The ID token is for another client, or the identity provider does not let the portal's client sign people in with an authorisation code (`unauthorized_client`). |
+| `JIM_SSO_SECRET` | The identity provider refused the portal's client ID or secret (`invalid_client`). |
+| `JIM_SSO_API_SCOPE` | The identity provider refused the scopes JIM asked for (`invalid_scope`, or `invalid_resource` from AD FS), or an access token is not for JIM's API: its audience is not the one JIM expects. |
+| `JIM_SSO_VALID_ISSUERS` | The token came from an issuer JIM does not accept. |
+| `JIM_SSO_CLAIM_TYPE` | The sign-in carried no claim of the type JIM identifies people by. JIM lists the claim types it did carry, never their values. |
+
+JIM reports an access token only once its signature shows your identity provider issued it, so nobody else can make JIM report a problem. JIM still refuses the token: an API caller sees only `401`, and the details go to the log and to administrators.
+
+**How to fix.** Change the setting JIM names, or your identity provider's configuration, so the two values match. Restart JIM after changing a setting. To list every problem JIM has met since it started, connect as an administrator, or with the infrastructure API key when nobody can sign in, and run `Get-JIMSignInDiagnostic`:
+
+```powershell
+Connect-JIM -Url https://jim.example.com -ApiKey $env:JIM_INFRASTRUCTURE_API_KEY
+(Get-JIMSignInDiagnostic).Problems | Format-Table Source, Setting, Expected, Received, Count
+```
+
+`Get-JIMSignInDiagnostic` also shows the redirect URIs JIM sends your identity provider when reached at the address you connected to. When sign-in stops on the identity provider's own error page about a redirect URI, compare them with the ones registered for the portal's client: JIM never sees that error, because the identity provider does not send the browser back.
+
 ### `Invalid parameter: redirect_uri` when running `Connect-JIM` interactively
 
 You clicked **Login** (or let `Connect-JIM` open your browser) and the identity provider returned an error page saying `Invalid parameter: redirect_uri` (Keycloak), `AADSTS50011` (Entra ID), or a similar redirect-mismatch message.
@@ -216,6 +241,6 @@ Collect these before asking for help:
 - **The JIM version,** shown at the foot of every portal page and by `Connect-JIM`, or the release you installed.
 - **How JIM is installed:** Docker or Podman, with the bundled database or your own, and behind a reverse proxy or not.
 - **The services' logs from the time of the problem:** `docker logs jim.web`, and likewise `jim.worker`, `jim.scheduler` and `jim.database`; on Podman, `sudo podman logs jim-web` and the rest (see [Troubleshooting Podman](troubleshooting-podman.md#still-stuck)).
-- **For a sign-in problem,** the `jim.web` warning beginning `Sign-in stopped`, and the failed sign-in in the [security audit log](security-audit-events.md).
+- **For a sign-in problem,** the `jim.web` warning beginning `Sign-in stopped` or `Sign-in problem`, what `Get-JIMSignInDiagnostic` shows, and the failed sign-in in the [security audit log](security-audit-events.md).
 
 Then ask in the [Q&A](https://github.com/TetronIO/JIM/discussions/categories/q-a) category of GitHub Discussions, or open a [GitHub Issue](https://github.com/TetronIO/JIM/issues) for a bug. Leave secrets out of anything you share: `.env` and `jim-config.yaml` hold them.
