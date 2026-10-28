@@ -48,11 +48,12 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
     /// <item><description><c>font-src 'self'</c>: IBM Plex Sans/Mono, Space Grotesk and Inter are all self-hosted
     /// under <c>wwwroot/fonts</c> and referenced by relative <c>url()</c> in the site's font CSS; there is no
     /// external font host to allow.</description></item>
-    /// <item><description><c>connect-src 'self' wss: ws:</c>: Blazor Server's SignalR circuit
-    /// (<c>MapBlazorHub</c>, default path <c>/_blazor</c>) is a same-origin WebSocket; both schemes are listed
-    /// explicitly so the policy behaves identically whether JIM is reached over http (local development) or
-    /// https (deployed), rather than relying on browsers' implicit ws/wss-to-http/https scheme equivalence for
-    /// <c>'self'</c>.</description></item>
+    /// <item><description><c>connect-src 'self'</c>: Blazor Server's SignalR circuit (<c>MapBlazorHub</c>,
+    /// default path <c>/_blazor</c>) is a same-origin WebSocket, and CSP Level 3 makes <c>'self'</c> match
+    /// <c>ws:</c> and <c>wss:</c> on the page's own host, over http and https alike. The policy used to add bare
+    /// <c>wss:</c> and <c>ws:</c> scheme sources to avoid relying on that matching; those allow a WebSocket to
+    /// any host, so they were removed (#2603). A browser old enough to predate that matching would refuse the
+    /// circuit's WebSocket.</description></item>
     /// <item><description><c>frame-ancestors 'none'</c>: JIM is never legitimately embedded in another site's
     /// frame; this is the modern, CSP-native replacement for (and is paired with) the
     /// <c>X-Frame-Options: DENY</c> header below for older user agents.</description></item>
@@ -72,7 +73,7 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
         "style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' data:; " +
         "font-src 'self'; " +
-        "connect-src 'self' wss: ws:; " +
+        "connect-src 'self'; " +
         "frame-ancestors 'none'; " +
         "base-uri 'self'; " +
         "form-action 'self'";

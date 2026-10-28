@@ -21,8 +21,8 @@ public sealed class ActivityEtaTracker(TimeProvider timeProvider, int maxTracked
     public const int DefaultMaxTrackedActivities = 512;
 
     /// <summary>
-    /// Samples older than this are trimmed (while at least two remain) so the rate tracks recent
-    /// throughput.
+    /// Samples older than this, counted back from the counter's last movement, are trimmed (while
+    /// at least two remain) so the rate tracks recent throughput.
     /// </summary>
     private static readonly TimeSpan RateWindow = TimeSpan.FromMinutes(2);
 
@@ -89,19 +89,28 @@ public sealed class ActivityEtaTracker(TimeProvider timeProvider, int maxTracked
                 if (_samples.Count > 0 && (objectsProcessed < _lastProcessed || objectsToProcess != _lastTotal))
                     _samples.Clear();
 
+                // Only a movement of the counter is a sample; a poll that finds it where it was adds
+                // nothing but time, which the rate reads from the clock. Were every poll a sample, a
+                // stall longer than the window (the worker counts once per page, and a page of large
+                // groups can take minutes) would leave only identical counts in the window and a
+                // rate of zero for a run still working. Keeping movements only, the window always
+                // reaches back past the last one, and the rate falls the longer the counter stalls.
+                if (_samples.Count == 0 || objectsProcessed != _lastProcessed)
+                    _samples.Enqueue((now, objectsProcessed));
+
                 _lastProcessed = objectsProcessed;
                 _lastTotal = objectsToProcess;
-                _samples.Enqueue((now, objectsProcessed));
 
                 // Trim by count, then by age; always retain at least two samples so slow phases
-                // (sampling less often than the window) still produce an estimate.
+                // (moving less often than the window) still produce an estimate. Age is measured
+                // back from the last movement rather than from now: during a stall, the window
+                // keeps the progress that preceded it, so the rate eases down as the stall lengthens
+                // instead of collapsing to whatever the last two movements happened to be.
                 while (_samples.Count > MaxSamplesPerActivity)
                     _samples.Dequeue();
-                while (_samples.Count > 2 && now - _samples.Peek().Time > RateWindow)
+                var lastMovedAt = _samples.Last().Time;
+                while (_samples.Count > 2 && lastMovedAt - _samples.Peek().Time > RateWindow)
                     _samples.Dequeue();
-
-                if (_samples.Count < 2)
-                    return new ActivityEtaEstimate(null, null);
 
                 var oldest = _samples.Peek();
                 var elapsedSeconds = (now - oldest.Time).TotalSeconds;

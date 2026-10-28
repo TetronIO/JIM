@@ -300,7 +300,7 @@ public class OperationsQueueSectionsTests : JimComponentTestContext
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(SectionText(cut, "activity-queued"), Does.Contain("Nothing is queued."));
-                Assert.That(SectionText(cut, "activity-in-progress"), Does.Contain("the worker is idle"));
+                Assert.That(SectionText(cut, "activity-in-progress"), Does.Contain("Nothing is running."));
                 Assert.That(cut.FindAll("table"), Is.Empty);
                 Assert.That(cut.Find("[data-testid='activity-queued']").GetAttribute("data-empty"), Is.EqualTo("true"));
                 Assert.That(cut.FindAll("[aria-expanded]"), Is.Empty, "an empty section is one line, with nothing to fold");
