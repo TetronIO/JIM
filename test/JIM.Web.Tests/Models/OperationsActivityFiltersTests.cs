@@ -12,14 +12,13 @@ namespace JIM.Web.Tests.Models;
 /// <summary>
 /// The Activity tab's filters (#2549) apply to queued and running work as well as to history. History is filtered by
 /// the database; queued and running work is already in memory, so it is filtered here, and must match the same way
-/// the database does (names compared without regard to case, the initiator by a partial match) or the three
-/// sections would disagree about what a filter means.
+/// the database does (names compared without regard to case) or the three sections would disagree about what a filter means.
 /// </summary>
 [TestFixture]
 public class OperationsActivityFiltersTests
 {
     private static WorkerTaskHeader Task(string? connectedSystem = "Glitterband EMEA", string? runProfile = "Full Sync",
-        string? initiator = "Infrastructure Key", string? schedule = null) => new()
+        string? schedule = null) => new()
     {
         Id = Guid.NewGuid(),
         Name = $"{connectedSystem} - {runProfile}",
@@ -27,7 +26,7 @@ public class OperationsActivityFiltersTests
         Status = WorkerTaskStatus.Queued,
         ConnectedSystemName = connectedSystem,
         RunProfileName = runProfile,
-        InitiatedByName = initiator,
+        InitiatedByName = "Infrastructure Key",
         ScheduleExecutionId = schedule != null ? Guid.NewGuid() : null,
         ScheduleExecutionName = schedule
     };
@@ -48,18 +47,6 @@ public class OperationsActivityFiltersTests
             Assert.That(filters.Matches(Task(), _ => null), Is.True);
             Assert.That(filters.Matches(Task(connectedSystem: "Yellowstone APAC"), _ => null), Is.False);
             Assert.That(filters.Matches(Task(runProfile: "Export"), _ => null), Is.False);
-        }
-    }
-
-    [Test]
-    public void Matches_InitiatedBy_IsAPartialMatch()
-    {
-        var filters = OperationsActivityFilters.None with { InitiatedBy = "infra" };
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(filters.Matches(Task(), _ => null), Is.True);
-            Assert.That(filters.Matches(Task(initiator: "Jane Smith"), _ => null), Is.False);
         }
     }
 
@@ -127,7 +114,6 @@ public class OperationsActivityFiltersTests
         {
             Assert.That(OperationsActivityFilters.None.IsActive, Is.False);
             Assert.That((OperationsActivityFilters.None with { HasChildActivities = true }).IsActive, Is.True);
-            Assert.That((OperationsActivityFilters.None with { InitiatedBy = "  " }).IsActive, Is.False);
         }
     }
 
@@ -154,7 +140,6 @@ public class OperationsActivityFiltersTests
             RunProfiles = ["Full Import"],
             Schedules = [scheduleId],
             Results = [ActivityStatus.FailedWithError, ActivityStatus.Cancelled],
-            InitiatedBy = "Infrastructure",
             HasChildActivities = true,
             ScheduledOnly = true
         };
@@ -168,9 +153,65 @@ public class OperationsActivityFiltersTests
             Assert.That(read.RunProfiles, Is.EqualTo(filters.RunProfiles));
             Assert.That(read.Schedules, Is.EqualTo(filters.Schedules));
             Assert.That(read.Results, Is.EqualTo(filters.Results));
-            Assert.That(read.InitiatedBy, Is.EqualTo("Infrastructure"));
             Assert.That(read.HasChildActivities, Is.True);
             Assert.That(read.ScheduledOnly, Is.True);
+        }
+    }
+
+    [Test]
+    public void FromQuery_InitiatedByParameter_IsNotAFilter()
+    {
+        // The Completed section's search box searches the initiator already; a second box for it was the filter row's
+        // one redundancy. A bookmarked URL that still carries it reads as unfiltered.
+        Assert.That(OperationsActivityFilters.FromQuery("?by=Infrastructure"), Is.EqualTo(OperationsActivityFilters.None));
+    }
+
+    [Test]
+    public void ActiveChips_NoFilters_IsEmpty()
+    {
+        Assert.That(OperationsActivityFilters.None.ActiveChips(_ => null), Is.Empty);
+    }
+
+    [Test]
+    public void ActiveChips_EachNarrowedFilter_IsOneChipNamingItsValuesInFilterRowOrder()
+    {
+        var nightly = Guid.NewGuid();
+        var filters = new OperationsActivityFilters
+        {
+            ConnectedSystems = ["Glitterband EMEA", "Yellowstone APAC"],
+            RunProfiles = ["Full Import"],
+            Schedules = [nightly],
+            Results = [ActivityStatus.CompleteWithWarning, ActivityStatus.FailedWithError],
+            HasChildActivities = true,
+            ScheduledOnly = true
+        };
+
+        var chips = filters.ActiveChips(id => id == nightly ? "Nightly Delta Cycle" : null);
+
+        Assert.That(chips, Is.EqualTo(new[]
+        {
+            new ActiveFilterChip(ActivityFilterKind.ConnectedSystems, "Connected System: Glitterband EMEA, Yellowstone APAC"),
+            new ActiveFilterChip(ActivityFilterKind.RunProfiles, "Run Profile: Full Import"),
+            new ActiveFilterChip(ActivityFilterKind.Schedules, "Schedule: Nightly Delta Cycle"),
+            new ActiveFilterChip(ActivityFilterKind.Results, "Result: Complete With Warning, Failed With Error"),
+            new ActiveFilterChip(ActivityFilterKind.HasChildActivities, "Has child activities"),
+            new ActiveFilterChip(ActivityFilterKind.ScheduledOnly, "Scheduled only")
+        }));
+    }
+
+    [Test]
+    public void Without_ClearsOnlyTheNamedFilter()
+    {
+        var filters = new OperationsActivityFilters { ConnectedSystems = ["Glitterband EMEA"], ScheduledOnly = true };
+
+        var without = filters.Without(ActivityFilterKind.ConnectedSystems);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(without.ConnectedSystems, Is.Empty);
+            Assert.That(without.ScheduledOnly, Is.True);
+            Assert.That(filters.Without(ActivityFilterKind.ScheduledOnly).Without(ActivityFilterKind.ConnectedSystems),
+                Is.EqualTo(OperationsActivityFilters.None), "clearing every narrowed filter is no filter at all");
         }
     }
 

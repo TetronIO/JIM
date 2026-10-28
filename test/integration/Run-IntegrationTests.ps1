@@ -4242,7 +4242,12 @@ Write-Step "Starting JIM error watcher (sentinel: $errWatcherSentinel)"
 $expectedErrorsPath = Join-Path $scriptRoot "results" "expected-errors-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').jsonl"
 Set-Content -Path $expectedErrorsPath -Value '' -NoNewline -Encoding UTF8
 $env:JIM_EXPECTED_ERRORS_PATH = $expectedErrorsPath
-$errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start -ExpectedErrorsPath $expectedErrorsPath
+# Activities the Worker warned were short of memory are passed rather than failed (see Assert-ActivitySuccess) and
+# recorded here, so the summary can say the host was near its limit beside the verdict.
+$memoryWarningsPath = Join-Path $scriptRoot "results" "memory-warnings-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+Set-Content -Path $memoryWarningsPath -Value '' -NoNewline -Encoding UTF8
+$env:JIM_MEMORY_WARNINGS_PATH = $memoryWarningsPath
+$errWatcher =Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start -ExpectedErrorsPath $expectedErrorsPath
 $env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
 
 try {
@@ -4905,6 +4910,18 @@ if ($scenarioExitCode -eq 0) {
 }
 else {
     Write-Host "${RED}✗ Some tests failed. Exit code: $scenarioExitCode${NC}"
+}
+
+# Memory warnings do not fail a run, so they are repeated beside the verdict: a pass the host only just managed is
+# worth knowing about before the next, larger, run.
+$memoryWarnings = @(if ($memoryWarningsPath -and (Test-Path $memoryWarningsPath)) {
+    Get-Content -Path $memoryWarningsPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+})
+if ($memoryWarnings.Count -gt 0) {
+    Write-Host "${YELLOW}⚠ Memory was low on this host during $($memoryWarnings.Count) Activit$(if ($memoryWarnings.Count -eq 1) { 'y' } else { 'ies' }); the Worker warned rather than failed them:${NC}"
+    foreach ($memoryWarning in $memoryWarnings) {
+        Write-Host "${YELLOW}  - $memoryWarning${NC}"
+    }
 }
 
 

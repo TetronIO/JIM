@@ -328,6 +328,13 @@ public partial class SyncRepository : ISyncRepository
         return _repo.ConnectedSystems.UpdatePendingExportsAsync(exportList);
     }
 
+    public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+    {
+        ThrowIfAnyQueued(pendingExports.Select(pe => pe.Id), nameof(PersistResolvedReferencesAsync));
+        return _repo.ConnectedSystems.PersistResolvedReferencesAsync(pendingExports, resolvedChanges);
+    }
+
     public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => IsQueuedForDeleteByCsoId(connectedSystemObjectId)
             ? null
@@ -662,6 +669,10 @@ public partial class SyncRepository : ISyncRepository
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
 
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+        => _repo.ConnectedSystems.GetReferenceAnchorsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+
     public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
         => _repo.ConnectedSystems.GetAttributeAsync(id);
 
@@ -685,8 +696,11 @@ public partial class SyncRepository : ISyncRepository
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
         => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
 
-    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
-        => _repo.ConnectedSystems.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
+    public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        => _repo.ConnectedSystems.GetRemainingDeferredExportIdsAsync(connectedSystemId, afterCreatedAt, afterId);
+
+    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+        => _repo.ConnectedSystems.GetDeferredExportsByIdsAsync(pendingExportIds);
 
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);

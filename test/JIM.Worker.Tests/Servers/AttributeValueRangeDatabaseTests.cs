@@ -238,8 +238,7 @@ public class AttributeValueRangeDatabaseTests
         {
             Assert.That(result.TotalResults, Is.EqualTo(1));
             Assert.That(result.Results.Single().ReferenceValue, Is.Not.Null);
-            Assert.That(result.Results.Single().ReferenceValue!.AttributeValues.Select(av => av.StringValue),
-                Does.Contain("Mia Mu"));
+            Assert.That(result.Results.Single().ReferenceValue!.NameOrId, Is.EqualTo("Mia Mu"));
         }
     }
 
@@ -406,6 +405,8 @@ public class AttributeValueRangeDatabaseTests
         for (var i = 0; i < referencedDisplayNames.Count; i++)
         {
             var referenced = NewMvo(type);
+            // Kept in step with the Display Name value, as MetaverseServer and the sync engine keep it.
+            referenced.CachedDisplayName = referencedDisplayNames[i];
             ctx.MetaverseObjects.Add(referenced);
             ctx.Add(new MetaverseObjectAttributeValue
             {
