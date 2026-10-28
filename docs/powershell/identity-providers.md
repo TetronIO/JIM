@@ -1,6 +1,6 @@
 ---
 title: Identity Providers
-description: "The cmdlet that registers JIM with its identity provider, so administrators sign in with their own accounts, and that repairs the registration."
+description: "The cmdlets that register JIM with its identity provider, repair the registration, and show which setting stopped a sign-in."
 type: reference
 audience: automation-author
 ---
@@ -29,7 +29,7 @@ properties:
   - { name: Changes, value: "empty when already right" }
 ```
 
-It configures the identity provider, not JIM, so it does not need `Connect-JIM`. AD FS and Keycloak are supported.
+It configures the identity provider, not JIM, so it does not need `Connect-JIM`. AD FS and Keycloak are supported. When sign-in fails because a value does not match, `Get-JIMSignInDiagnostic` names the setting involved.
 
 ---
 
@@ -143,3 +143,47 @@ $registration = Register-JIMIdentityProvider -Provider ADFS -Url 'https://jim.ex
 ```
 
 JIM cannot sign anyone in after the secret is replaced until `JIM_SSO_SECRET` holds the new one.
+
+---
+
+## :material-stethoscope: Get-JIMSignInDiagnostic
+
+Shows the sign-in problems JIM has met, and the redirect URIs it sends the identity provider.
+
+When a value JIM is configured with does not match what the identity provider sends, such as an access token's audience or a client secret, JIM records the setting involved, the value it expected and the value it received. `Get-JIMSignInDiagnostic` lists each problem met since JIM started, the one seen most recently first, with where to fix it. None holds a token, a secret or a claim's value, and an access token is listed only when the identity provider signed it. [Troubleshooting](../administration/troubleshooting.md#a-setting-stopped-sign-in) explains each setting.
+
+It also shows the redirect URIs JIM sends the identity provider when reached at the address you connected to, to compare with those registered for the portal's client. A redirect URI the identity provider does not have stops sign-in on its own error page, which JIM never sees.
+
+It needs the Administrator role. Before anyone can sign in, connect with the infrastructure API key.
+
+<!-- BEGIN GENERATED: Get-JIMSignInDiagnostic -->
+### Syntax
+
+```powershell
+Get-JIMSignInDiagnostic
+```
+
+### Parameters
+
+None.
+
+### Output
+
+The sign-in problems, and the redirect URIs.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `RedirectUri` | `string` | The redirect URI JIM sends the identity provider when reached at the address of this request. The identity provider must have it registered for the portal's client, or it shows its own error page and never returns to JIM. |
+| `PostLogoutRedirectUri` | `string` | The post-logout redirect URI JIM sends the identity provider when reached at the address of this request. |
+| `Problems` | `object[]` | The sign-in problems JIM has met since it started, the one seen most recently first. Empty when there are none. Each has `Source`, `Setting`, `Description`, `Expected`, `Received`, `Fix`, `FirstSeenUtc`, `LastSeenUtc` and `Count`. |
+<!-- END GENERATED: Get-JIMSignInDiagnostic -->
+
+### Examples
+
+```powershell title="List the sign-in problems JIM has met"
+(Get-JIMSignInDiagnostic).Problems | Format-Table Source, Setting, Expected, Received, Count
+```
+
+```powershell title="Show the redirect URIs to register for the portal"
+Get-JIMSignInDiagnostic | Select-Object RedirectUri, PostLogoutRedirectUri
+```

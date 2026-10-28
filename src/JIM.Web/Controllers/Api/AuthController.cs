@@ -127,6 +127,38 @@ public class AuthController : ControllerBase
         var isAdministrator = User.IsInRole(Constants.BuiltInRoles.Administrator);
         return Ok(IdentityProviderTrustStatusDto.FromStatus(status, includeStoreDetail: isAdministrator));
     }
+
+    /// <summary>
+    /// Get the sign-in problems JIM has met
+    /// </summary>
+    /// <remarks>
+    /// The sign-in failures a setting explains that JIM has met since it started: an ID token or access token for
+    /// another audience or from another issuer, a client or scope the identity provider refused, or a sign-in carrying
+    /// no claim of the type JIM identifies people by. Each names the setting involved, the value JIM expected, the value
+    /// it received and where to fix it, and never holds a token, a secret or a claim's value. An access token is
+    /// diagnosed only when the identity provider signed it.
+    ///
+    /// Also returns the redirect URIs JIM sends the identity provider when reached at the address of this request, to
+    /// compare with those the identity provider has registered: a redirect URI it does not have stops sign-in on its
+    /// own error page, which JIM never sees.
+    ///
+    /// Requires the Administrator role. Before anyone can sign in, use the infrastructure API key.
+    /// </remarks>
+    /// <param name="problems">The sign-in problems JIM has met.</param>
+    /// <returns>The sign-in problems, and the redirect URIs.</returns>
+    /// <response code="200">Returns the diagnostics.</response>
+    /// <response code="401">Not authenticated.</response>
+    /// <response code="403">Not an administrator.</response>
+    [HttpGet("sign-in-diagnostics", Name = "GetSignInDiagnostics")]
+    [Authorize(Roles = "Administrator")]
+    [ProducesResponseType(typeof(SignInDiagnosticsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public IActionResult GetSignInDiagnostics([FromServices] SignInProblemLog problems)
+    {
+        ArgumentNullException.ThrowIfNull(problems);
+        return Ok(SignInDiagnosticsDto.From(Request, problems.GetRecent()));
+    }
 }
 
 /// <summary>
