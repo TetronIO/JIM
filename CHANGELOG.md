@@ -389,6 +389,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 An Oracle Database connection over TCPS now checks that the server's certificate was issued for the host JIM connects to. It used to accept a certificate issued for any host that chained to a trusted authority, which left the connection open to interception. (#2589)
 - 🔒 JIM no longer accepts tokens signed by a key your identity provider has retired. It kept accepting them for up to an hour after a rollover, even one made because the key was compromised. (#2442)
 - 🔒 The REST API now refuses to let a signed-in administrator remove themselves from the Administrator role; the check was comparing the wrong identifier and never applied. (#2152)
 - 🔒 The web, worker and scheduler images now ship .NET and ASP.NET Core 10.0.13, and the worker and scheduler's own .NET packages move to 10.0.13 with them, fixing the vulnerabilities in the 10.0.11 runtime and 10.0.12 packages they carried, including CVE-2026-88092, a critical ASP.NET Core security feature bypass.
