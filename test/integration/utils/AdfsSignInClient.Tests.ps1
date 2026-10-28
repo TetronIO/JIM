@@ -164,7 +164,10 @@ initialize('/api/openapi/v1.json', true, {"authentication":{"securitySchemes":{"
                 [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/reference'; StatusCode = 302; Location = [uri]'https://jim.web:8443/api/reference/'; Content = '' }
             }
             Mock Invoke-SignInRequest -ModuleName AdfsSignInClient -ParameterFilter { "$Uri" -like '*/api/reference/' } -MockWith {
-                [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/reference/'; StatusCode = 200; Location = $null; Content = $Page }
+                [pscustomobject]@{
+                    Uri = [uri]'https://jim.web:8443/api/reference/'; StatusCode = 200; Location = $null; Content = $Page
+                    ContentSecurityPolicy = "default-src 'self'; connect-src 'self' https://adfs.panoply.local; frame-ancestors 'none'"
+                }
             }.GetNewClosure()
         }
     }
@@ -185,6 +188,23 @@ initialize('/api/openapi/v1.json', true, {"authentication":{"securitySchemes":{"
 
         (Get-TryItSignInSetting -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -JimUrl 'https://jim.web:8443').RedirectUri |
             Should -Be 'https://jim.web:8443/api/reference/'
+    }
+
+    It 'reads the sources the page''s Content Security Policy lets it connect to, which a browser enforces on the token request' {
+        & $script:Respond $script:OpenApiDocument $script:ReferencePage
+
+        (Get-TryItSignInSetting -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -JimUrl 'https://jim.web:8443').ConnectSources |
+            Should -Be @("'self'", 'https://adfs.panoply.local')
+    }
+
+    It 'has no connect sources when the page has no Content Security Policy' {
+        & $script:Respond $script:OpenApiDocument $script:ReferencePage
+        Mock Invoke-SignInRequest -ModuleName AdfsSignInClient -ParameterFilter { "$Uri" -like '*/api/reference/' } -MockWith {
+            [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/reference/'; StatusCode = 200; Location = $null; Content = $script:ReferencePage; ContentSecurityPolicy = $null }
+        }
+
+        @((Get-TryItSignInSetting -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -JimUrl 'https://jim.web:8443').ConnectSources) |
+            Should -BeNullOrEmpty
     }
 
     It 'reads a client ID Scalar names clientId' {

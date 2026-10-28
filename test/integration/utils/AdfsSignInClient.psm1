@@ -193,7 +193,10 @@ function Invoke-SignInRequest {
     if ($response.Headers.ContainsKey('Location')) {
         $location = Resolve-SignInUri -Base $Uri.AbsoluteUri -Reference ([string]@($response.Headers['Location'])[0])
     }
-    return [pscustomobject]@{ Uri = $Uri; StatusCode = [int]$response.StatusCode; Location = $location; Content = [string]$response.Content }
+    $policy = if ($response.Headers.ContainsKey('Content-Security-Policy')) { [string]@($response.Headers['Content-Security-Policy'])[0] } else { $null }
+    return [pscustomobject]@{
+        Uri = $Uri; StatusCode = [int]$response.StatusCode; Location = $location; Content = [string]$response.Content; ContentSecurityPolicy = $policy
+    }
 }
 
 function Invoke-SignInRedirects {
@@ -368,10 +371,14 @@ function Get-TryItSignInSetting {
     # older versions).
     $clientId = [regex]::Match($page.Content, '"(?:x-scalar-client-id|clientId)"\s*:\s*"([^"]+)"').Groups[1].Value
     if (-not $clientId) { throw 'The API reference page names no OAuth client ID.' }
+    # A browser makes the token request only to a source the page's connect-src allows; this client does not enforce
+    # it, so it reports the sources for the caller to check.
+    $connectSrc = @("$($page.ContentSecurityPolicy)".Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -like 'connect-src *' })
+    $connectSources = if ($connectSrc.Count -gt 0) { @($connectSrc[0].Split(' ', [StringSplitOptions]::RemoveEmptyEntries) | Select-Object -Skip 1) } else { @() }
 
     return [pscustomobject]@{
         AuthorizationUrl = [string]$flow.authorizationUrl; TokenUrl = [string]$flow.tokenUrl; ApiScope = [string]$apiScopes[0]; ClientId = $clientId
-        RedirectUri = $page.Uri.GetLeftPart([UriPartial]::Path)
+        RedirectUri = $page.Uri.GetLeftPart([UriPartial]::Path); ConnectSources = $connectSources
     }
 }
 
