@@ -27,7 +27,7 @@ public class SqlObjectTypesDocumentTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SqlObjectTypesDocument.Validate(SqlConnectorConstants.ObjectTypesExample), Is.Empty);
-            Assert.That(SqlObjectTypesDocument.Validate(SqlConnectorConstants.DeltaConfigurationExample), Is.Empty);
+            Assert.That(SqlObjectTypesDocument.Validate(SqlObjectTypesDocumentExamples.DeltaConfiguration), Is.Empty);
         }
     }
 
@@ -225,7 +225,7 @@ public class SqlObjectTypesDocumentTests
     [Test]
     public void ToJson_TheShippedExamples_RoundTripToTheSameContent()
     {
-        foreach (var example in new[] { SqlConnectorConstants.ObjectTypesExample, SqlConnectorConstants.DeltaConfigurationExample })
+        foreach (var example in new[] { SqlConnectorConstants.ObjectTypesExample, SqlObjectTypesDocumentExamples.DeltaConfiguration })
         {
             var written = SqlObjectTypesDocument.FromJson(example).ToJson();
 
@@ -241,7 +241,7 @@ public class SqlObjectTypesDocumentTests
     [Test]
     public void ToJson_WrittenTwice_IsIdentical()
     {
-        var once = SqlObjectTypesDocument.FromJson(SqlConnectorConstants.DeltaConfigurationExample).ToJson();
+        var once = SqlObjectTypesDocument.FromJson(SqlObjectTypesDocumentExamples.DeltaConfiguration).ToJson();
         var twice = SqlObjectTypesDocument.FromJson(once).ToJson();
 
         Assert.That(twice, Is.EqualTo(once), "a canonical layout changes a hand-formatted document once, never again");

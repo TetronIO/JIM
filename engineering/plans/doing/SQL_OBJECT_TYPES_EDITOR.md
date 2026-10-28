@@ -1,6 +1,6 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Doing (Phases 1-3 complete)
+- **Status:** Doing (Phases 1-4 complete)
 - **Issue:** [#2570](https://github.com/TetronIO/JIM/issues/2570)
 - **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/doing/PRD_SQL_OBJECT_TYPES_EDITOR.md)
 - **Last Updated:** 2026-10-28
@@ -120,7 +120,7 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - **Validation:** `Generate-OpenApiDoc.ps1`, `Update-PowerShellReference.ps1` regenerated and checked (the step that failed PR #2571 CI), `Test-DocsCoverage.ps1`.
 - **Docs:** `docs/connectors/jim-sql-connector.md` gains a short "Browse the database" note pointing at the cmdlet; generated API and PowerShell reference.
 
-### Phase 4: The editor, editing existing Object Types
+### Phase 4: The editor, editing existing Object Types ✅
 
 - `SqlObjectTypesEditor.razor` (plus `SqlObjectTypeCard.razor`) under `JIM.Web/Pages/Admin/Components/Sql/`, and `SqlObjectTypesEditorModel`.
 - Settings tab: render the editor for the declared setting; the example block from PR #2571 moves into the JSON view.
@@ -178,10 +178,14 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 | Making the document classes public lets other code depend on them | They are the document's published shape already (it is the REST/PowerShell format); keep them plain data with no behaviour beyond `Validate`/`Serialise`. |
 | Reformatting a hand-formatted document on first editor save surprises an administrator who keeps it in source control | Formatting is canonical and stable, so it changes once; the JSON view saves text as typed for anyone who prefers it. Say so in the docs. |
 | `DescribeStatementAsync` over REST runs administrator-supplied SQL | Same trust as the `select` field already configured through the same API; the parser's `ValidateSelectStatement` runs first, `CommandBehavior.SchemaOnly` reads no rows, and the endpoint requires the same administrator authorisation as editing the setting. |
-| Large catalogues | Object list is one narrow query (schema, name); detail loads per object on demand and is cached; pickers are searchable. Measure against a generated catalogue of 10k tables during Phase 4 and record the result here. |
+| Large catalogues | Object list is one narrow query (schema, name); detail loads per object on demand and is cached; pickers are searchable. **Measured in Phase 4** against SQL Server 2022 with 10,006 tables: the list reads in 0.13 to 0.74 s over REST (540 KB), the editor and its catalogue are ready 1.6 s after navigating to the Settings tab, and a table search answers in 0.14 to 0.28 s. Loading per schema is not needed at this scale. |
 | Oracle catalogue differences (case, synonyms) | Covered by the existing provider abstraction; Scenario 016 runs both engines. Synonyms stay out of scope, as they are for schema discovery today. |
 
 ## Deviations from the PRD
+
+- **Phase 4, JSON fallback:** until Phase 6's JSON view exists, **View as JSON** shows the setting's existing text field (with its example). A document the cards cannot show (one that is not JSON, or uses a field the document does not have) opens there with the parser's message, rather than being simplified.
+- **Phase 4, offering an Object Type for a foreign key's table:** until Phase 5's dialog exists, accepting adds an expanded card reading from that table, anchored on the column the key points at, for the administrator to name.
+- **Phase 4, Delta Import problems:** a missing watermark column or change log is shown on the card only for an Object Type selected on the Schema tab, matching the rule saving the Schema tab applies (#1424).
 
 - **PRD non-functional requirement "loaded per schema":** the object list is loaded in one call rather than per schema. It is a narrow list of (schema, name, kind) and the provider queries are not schema-filtered today; one call is simpler and fast enough at the stated scale. Column detail is still per object. Revisit if the Phase 4 measurement says otherwise.
 - **PRD open question 4:** declined for this work (see Decisions).

@@ -1697,6 +1697,109 @@ a.jim-system-rule-chip-part:focus-visible {
     line-height: 1.6;
 }
 
+/* The SQL Connector's Object Types editor (#2570): one card per Object Type. The header is the whole card
+   while collapsed, so it is the click and keyboard target, and its summary chips wrap rather than push the
+   problem marker and chevron off the end. */
+.jim-sql-object-type-card {
+    overflow: hidden;
+}
+
+.jim-sql-object-type-card-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+}
+
+.jim-sql-object-type-card-header:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.jim-sql-object-type-card-header:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.jim-sql-object-type-card-title {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+}
+
+.jim-sql-object-type-card-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.jim-sql-object-type-card-problems {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.875rem;
+}
+
+.jim-sql-object-type-card-body {
+    padding: 8px 16px 16px;
+    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+}
+
+.jim-sql-section-title {
+    font-weight: 600;
+}
+
+/* The anchor's Add column picker sits inline after its chips, so it is sized like one rather than a row. */
+.jim-sql-inline-picker {
+    flex: 0 0 220px;
+    max-width: 220px;
+}
+
+.jim-sql-wide-picker {
+    max-width: 420px;
+}
+
+/* An alert strip in the SQL Object Types editor (a foreign-key or primary-key suggestion, the catalogue
+   unavailable banner): the text on the left, its actions together on the right, all centred on the row. The
+   site-wide alert rule anchors the icon to the first text line, which suits a paragraph; these are rows whose
+   button is what the text answers to, so icon, text and buttons centre on the row instead, and a long text
+   wraps within its own column rather than around the button. html[lang] because MudBlazor's own alert layout
+   loads after this sheet. */
+html[lang] .jim-sql-inline-alert .mud-alert-position {
+    align-items: center;
+}
+
+html[lang] .jim-sql-inline-alert .mud-alert-icon {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+html[lang] .jim-sql-inline-alert .mud-alert-message {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-block: 6px;
+}
+
+.jim-sql-inline-alert-body {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+}
+
+.jim-sql-inline-alert-text {
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.jim-sql-inline-alert-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
 /* A Connector setting's example, beneath its field. Long examples scroll within the block rather than
    pushing the rest of the form a screen further down. */
 .jim-setting-example .jim-code-block {

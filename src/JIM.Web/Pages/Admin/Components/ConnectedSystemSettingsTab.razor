@@ -2,6 +2,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
 @using JIM.Models.Staging
+@using JIM.Web.Pages.Admin.Components.Sql
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -103,6 +104,22 @@
                                         <MudDivider Class="my-4" />
                                     }
                                     headingsRendered++;
+                                }
+
+                                @if (IsCatalogueDocument(settingValue))
+                                {
+                                    @* The setting the Connector's catalogue helps write, edited as a structured
+                                       document rather than as text (#2570). The Connector names it, so nothing
+                                       here knows which Connector it is or what its setting is called. *@
+                                    <SqlObjectTypesEditor @key="settingValue.Setting.Id"
+                                                          SettingValue="@settingValue"
+                                                          SettingValues="@ConnectedSystem.SettingValues"
+                                                          SelectedObjectTypeNames="@SelectedObjectTypeNames"
+                                                          Catalogue="@_catalogueSource"
+                                                          ValueChanged="OnSettingValueChanged"
+                                                          Class="@(j == categorySettings.Count - 1 ? "" : "mb-5")" />
+                                    j++;
+                                    continue;
                                 }
 
                                 <ConnectedSystemSettingField @key="settingValue.Setting.Id"
@@ -379,19 +396,51 @@
     /// </summary>
     private ConnectorDirectoryServerDiscovery? _directoryServerDiscovery;
 
+    /// <summary>
+    /// The setting this Connected System's Connector reads its catalogue to help write (#2570), or null when it
+    /// has no catalogue. Asked once per the same reasoning as <see cref="_supportsCertificateFetch"/>.
+    /// </summary>
+    private ConnectorCatalogueDeclaration? _catalogueDeclaration;
+
+    /// <summary>
+    /// Reads the catalogue with the settings on screen, for the editor of <see cref="_catalogueDeclaration"/>'s setting.
+    /// </summary>
+    private IConnectedSystemCatalogueSource? _catalogueSource;
+
     protected override async Task OnParametersSetAsync()
     {
         if (ConnectedSystem.Id <= 0)
         {
             _supportsCertificateFetch = false;
             _directoryServerDiscovery = null;
+            _catalogueDeclaration = null;
+            _catalogueSource = null;
             return;
         }
 
         using var jim = JimFactory.Create();
         _supportsCertificateFetch = await jim.Certificates.SupportsServerCertificateReadAsync(ConnectedSystem.Id);
         _directoryServerDiscovery = await jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystem.Id);
+        _catalogueDeclaration = await jim.ConnectedSystems.GetCatalogueDeclarationAsync(ConnectedSystem.Id);
+
+        // Kept across renders so the editor's catalogue reads are not repeated each time this tab re-renders. The
+        // drafts are read when each catalogue read happens, so it always reads with the settings on screen.
+        _catalogueSource = _catalogueDeclaration == null
+            ? null
+            : _catalogueSource ?? new ConnectedSystemCatalogueSource(JimFactory, ConnectedSystem.Id, DiscoveryDraftSettingValues);
     }
+
+    /// <summary>
+    /// Whether <paramref name="settingValue"/> is the document the Connector's catalogue helps write, and so is
+    /// edited with the catalogue-driven editor rather than as text.
+    /// </summary>
+    private bool IsCatalogueDocument(ConnectedSystemSettingValue settingValue) =>
+        _catalogueDeclaration != null &&
+        settingValue.Setting.Type == ConnectedSystemSettingType.Text &&
+        settingValue.Setting.Name == _catalogueDeclaration.DocumentSettingName;
+
+    private IEnumerable<string> SelectedObjectTypeNames =>
+        (ConnectedSystem.ObjectTypes ?? []).Where(objectType => objectType.Selected).Select(objectType => objectType.Name);
 
     /// <summary>
     /// Whether <paramref name="settingValue"/> is the field the Discover action targets: the one the Connector
