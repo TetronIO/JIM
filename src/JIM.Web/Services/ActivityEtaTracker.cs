@@ -21,8 +21,8 @@ public sealed class ActivityEtaTracker(TimeProvider timeProvider, int maxTracked
     public const int DefaultMaxTrackedActivities = 512;
 
     /// <summary>
-    /// Samples older than this are trimmed (while at least two remain) so the rate tracks recent
-    /// throughput.
+    /// Samples older than this, counted back from the counter's last movement, are trimmed (while
+    /// at least two remain) so the rate tracks recent throughput.
     /// </summary>
     private static readonly TimeSpan RateWindow = TimeSpan.FromMinutes(2);
 
@@ -102,10 +102,14 @@ public sealed class ActivityEtaTracker(TimeProvider timeProvider, int maxTracked
                 _lastTotal = objectsToProcess;
 
                 // Trim by count, then by age; always retain at least two samples so slow phases
-                // (moving less often than the window) still produce an estimate.
+                // (moving less often than the window) still produce an estimate. Age is measured
+                // back from the last movement rather than from now: during a stall, the window
+                // keeps the progress that preceded it, so the rate eases down as the stall lengthens
+                // instead of collapsing to whatever the last two movements happened to be.
                 while (_samples.Count > MaxSamplesPerActivity)
                     _samples.Dequeue();
-                while (_samples.Count > 2 && now - _samples.Peek().Time > RateWindow)
+                var lastMovedAt = _samples.Last().Time;
+                while (_samples.Count > 2 && lastMovedAt - _samples.Peek().Time > RateWindow)
                     _samples.Dequeue();
 
                 var oldest = _samples.Peek();

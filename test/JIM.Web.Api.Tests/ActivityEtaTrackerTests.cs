@@ -176,6 +176,32 @@ public class ActivityEtaTrackerTests
     }
 
     [Test]
+    public void RecordSample_CounterStalledAfterSteadyProgress_KeepsTheWindowOfProgressBeforeTheStall()
+    {
+        // 500 objects every 15 seconds for two minutes, then a page that holds the counter for
+        // three. Measured from the last couple of movements alone, the rate collapsed to a few
+        // objects a second and the time remaining leapt from minutes to over an hour, when the
+        // run was minutes from the end (seen live on a 790,000-object Full Synchronisation).
+        _tracker.RecordSample(_activityId, 0, 20000);
+        for (var i = 1; i <= 8; i++)
+        {
+            _clock.Advance(TimeSpan.FromSeconds(15));
+            _tracker.RecordSample(_activityId, i * 500, 20000);
+        }
+
+        for (var i = 0; i < 18; i++)
+        {
+            _clock.Advance(TimeSpan.FromSeconds(10));
+            _tracker.RecordSample(_activityId, 4000, 20000);
+        }
+
+        var estimate = _tracker.RecordSample(_activityId, 4000, 20000);
+
+        // 4,000 objects over the 120 seconds of progress plus the 180-second stall.
+        Assert.That(estimate.ObjectsPerSecond, Is.EqualTo(4000d / 300d).Within(0.001));
+    }
+
+    [Test]
     public void RecordSample_CounterStalledAfterProgress_RateKeepsFallingTheLongerItStalls()
     {
         _tracker.RecordSample(_activityId, 0, 10000);
