@@ -1,10 +1,10 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 of 7 complete)
 - **Created:** 2026-10-28
 - **Author:** Jay
 - **Issue:** #2570
-- **Plan:** [`SQL_OBJECT_TYPES_EDITOR.md`](../plans/SQL_OBJECT_TYPES_EDITOR.md)
+- **Plan:** [`SQL_OBJECT_TYPES_EDITOR.md`](../../plans/doing/SQL_OBJECT_TYPES_EDITOR.md)
 
 ## Problem Statement
 

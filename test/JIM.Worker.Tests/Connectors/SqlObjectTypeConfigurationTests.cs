@@ -263,6 +263,22 @@ public class SqlObjectTypeConfigurationTests
     }
 
     [Test]
+    public void Parse_AMisspeltField_SuggestsTheIntendedField()
+    {
+        // The save-time message is what REST and PowerShell callers see, so the suggestion belongs in the
+        // parser rather than only in the portal.
+        var exception = Assert.Throws<SqlSchemaConfigurationException>(() => SqlSchemaConfiguration.Parse("""
+            {
+              "objectTypes": [
+                { "name": "Person", "table": "EMPLOYEES", "anchorColumn": [ "EMPLOYEE_ID" ] }
+              ]
+            }
+            """));
+
+        Assert.That(exception!.Message, Does.Contain("Did you mean 'anchorColumns'?"));
+    }
+
+    [Test]
     public void Parse_AnObjectTypeWithNoName_SaysWhichPositionItIsIn()
     {
         var exception = Assert.Throws<SqlSchemaConfigurationException>(() => SqlSchemaConfiguration.Parse("""

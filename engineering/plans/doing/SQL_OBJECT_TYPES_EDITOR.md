@@ -1,8 +1,8 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete)
 - **Issue:** [#2570](https://github.com/TetronIO/JIM/issues/2570)
-- **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../prd/PRD_SQL_OBJECT_TYPES_EDITOR.md)
+- **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/doing/PRD_SQL_OBJECT_TYPES_EDITOR.md)
 - **Last Updated:** 2026-10-28
 
 ## Overview
@@ -95,7 +95,7 @@ public interface IConnectorCatalogue
 
 Each phase is test-first, builds and tests clean, and is mergeable on its own. Phases 1 to 3 deliver the REST/PowerShell capability and the better validation messages before any portal work, so they can ship ahead of the editor.
 
-### Phase 1: Public document model and structured validation
+### Phase 1: Public document model and structured validation ✅
 
 - Make the document classes public as `SqlObjectTypesDocument` and its members; `Parse` uses them unchanged.
 - Add `Validate(string)` returning all problems with locations; reimplement `Parse` on it so existing messages and every existing test hold.
