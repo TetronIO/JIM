@@ -964,8 +964,10 @@ public class SyncPreviewServer
             {
                 try
                 {
+                    // isFinalReferencePass: nothing joins another object during a preview, so a reference to an unjoined
+                    // object is final here, exactly as the run treats one it cannot resolve; it must not hold back removals.
                     foreach (var flowError in _syncEngine.FlowInboundAttributes(cso, rule, objectTypes, ExpressionEvaluator,
-                        priorityContext: context.PriorityContext))
+                        isFinalReferencePass: true, priorityContext: context.PriorityContext))
                         flowErrors.Add((rule.Id, rule.Name, flowError));
                 }
                 catch (SyncExpressionEvaluationException expressionEx)

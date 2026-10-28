@@ -55,6 +55,9 @@ public interface ISyncEngine
     /// the inline incumbent-comparison gate so a lower-priority contribution does not overwrite a higher-priority
     /// one; when null (the default), every mapping flows as before (last-writer-wins).
     /// </param>
+    /// <param name="cannotResolveThisRun">Optional: whether an unresolved reference value is final for this run, because
+    /// the object it points at will not be joined before the run ends. A final reference does not hold back the
+    /// attribute's removals. Every unresolved reference is final when <paramref name="isFinalReferencePass"/> is true.</param>
     /// <returns>A list of errors raised during Attribute Flow (for example, a multi-valued source flowing
     /// to a single-valued target), empty if none.</returns>
     List<AttributeFlowError> FlowInboundAttributes(
@@ -65,7 +68,8 @@ public interface ISyncEngine
         bool skipReferenceAttributes = false,
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false,
-        AttributePriorityContext? priorityContext = null);
+        AttributePriorityContext? priorityContext = null,
+        Func<ConnectedSystemObjectAttributeValue, bool>? cannotResolveThisRun = null);
 
     /// <summary>
     /// The derived pass of Metaverse-Derived Attribute Flows (#1750) for one level: evaluates every derived mapping

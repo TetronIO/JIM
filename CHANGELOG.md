@@ -174,6 +174,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A member removed from a group in a Connected System is now removed from its Metaverse Object when the group also references an object JIM never joins, such as a contact or a member out of every Synchronisation Rule's scope. Before, any such reference stopped every removal from that group flowing, on Full and Delta Synchronisation alike.
+- 🐛 A synchronisation's Activity and completion message count the objects it synchronised, not the reference values its cross-page reference step resolved: a run over 790,007 objects reported 4,352,113.
+- 🐛 A reference to an object JIM never joins no longer logs a warning each time a group holding it is synchronised; each run logs one summary line instead.
 - 🐛 JIM no longer offers to trust an Oracle Database TCPS server's certificate, which reported **Certificate trusted** while the next connection test failed just the same: the Oracle driver takes no certificate from JIM, so the certificate must be one the operating system trusts. The certificate card says so instead, a read judges the certificate against the operating system alone (`acceptsJimTrustedCertificates` over REST and `Get-JIMConnectedSystemServerCertificate`), and trusting it through REST or `Approve-JIMConnectedSystemServerCertificate` is refused with `NotUsedByThisConnection`.
 - 🐛 An Oracle Database connection that fails during negotiation now names the cause, such as `ORA-12660` for a server that will not encrypt the way JIM requires, instead of only the driver's generic `ORA-50201` "failed to parse connect string", which pointed at a host and service name that were right (#2584).
 - 🐛 The SQL Connector's **Oracle Encryption** setting no longer tells you to add a TCPS server certificate in Admin > Certificates: the Oracle driver accepts no additional trust anchors, so a TCPS certificate must be one the operating system already trusts.
@@ -399,6 +402,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ A group referencing an object JIM never joins, such as a contact, now synchronises in the run's main pass instead of being redone in the cross-page reference step on every run. On 790,007 directory objects this took 11 minutes off a 26-minute repeat Full Synchronisation.
 - ⚡ The Connectors and Synchronisation Rules lists load once per visit instead of three times, and pages that only name Connected Systems (pickers, Schedules, Deleted Objects) no longer count every Connected System Object to do it.
 - ⚡ The Connected Systems list opens in a fraction of the time on large deployments: it now counts each system's objects once, in a single pass, where before it counted every Connected System Object up to six times per visit. With 1.5 million objects, the counting fell from about 2.5 seconds to about 80 ms.
 - ⚡ Synchronisation processes the Object Types groups refer to before the groups themselves, so group membership resolves as each group is processed instead of being worked through a second time in **Resolving cross-page references**. On a directory of 750,000 people and 40,000 groups that step took 29 minutes. For LDAP attributes that do not declare what they point at, such as `member` and `manager`, a Full Synchronisation reads which types their values point at. (#2492)

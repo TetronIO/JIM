@@ -41,7 +41,8 @@ public partial class SyncEngine
         List<AttributeFlowError>? errors = null,
         int mvoObjectTypeId = 0,
         AttributePriorityContext? priorityContext = null,
-        IDictionary<string, object?>? metaverseAttributes = null)
+        IDictionary<string, object?>? metaverseAttributes = null,
+        Func<ConnectedSystemObjectAttributeValue, bool>? cannotResolveThisRun = null)
     {
         if (cso.MetaverseObject == null)
         {
@@ -245,7 +246,7 @@ public partial class SyncEngine
                                 break;
                             case AttributeDataType.Reference:
                                 if (!skipReferenceAttributes)
-                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, cso, csoAttributeValues, isFinalReferencePass, contributingSystemId, contributingSyncRuleId);
+                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, cso, csoAttributeValues, isFinalReferencePass, cannotResolveThisRun, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Guid:
                                 ProcessGuidAttribute(mvo, syncRuleMapping, typedValues!, contributingSystemId, contributingSyncRuleId);
@@ -1404,6 +1405,7 @@ public partial class SyncEngine
         ConnectedSystemObject cso,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
         bool isFinalReferencePass,
+        Func<ConnectedSystemObjectAttributeValue, bool>? cannotResolveThisRun,
         int? contributingSystemId,
         int? contributingSyncRuleId)
     {
@@ -1423,35 +1425,24 @@ public partial class SyncEngine
         static bool IsResolved(ConnectedSystemObjectAttributeValue csoav)
             => (csoav.ReferenceValueId.HasValue || csoav.ReferenceValue != null) && GetReferencedMvoId(csoav).HasValue;
 
-        var unresolvedReferenceValues = csoAttributeValues.Where(csoav =>
-            !IsResolved(csoav) &&
-            (csoav.ReferenceValueId != null || !string.IsNullOrEmpty(csoav.UnresolvedReferenceValue))).ToList();
+        // An unresolved reference is final when nothing later in the run can join the object it points at: always on the
+        // final pass, and earlier when the caller can tell (the referenced object's type has already been processed). A
+        // final reference flows nothing and holds nothing back; a pending one defers the removals to the cross-page pass.
+        bool IsFinal(ConnectedSystemObjectAttributeValue csoav) =>
+            isFinalReferencePass || cannotResolveThisRun?.Invoke(csoav) == true;
 
-        if (unresolvedReferenceValues.Count > 0)
+        // Debug, not Warning: a reference to an object no Synchronisation Rule joins is routine in a directory (a contact
+        // or computer in a group, a member out of scope), and the worker logs one summary line per run for them.
+        foreach (var unresolved in csoAttributeValues.Where(csoav =>
+            csoav.ReferenceValueId.HasValue && !csoav.ResolvedReferenceMetaverseObjectId.HasValue && !IsResolved(csoav)))
         {
-            foreach (var unresolved in unresolvedReferenceValues)
-            {
-                if (unresolved.ReferenceValueId.HasValue && !unresolved.ResolvedReferenceMetaverseObjectId.HasValue)
-                {
-                    // Referenced CSO exists but isn't joined to an MVO yet.
-                    if (isFinalReferencePass)
-                    {
-                        Log.Warning("SyncEngine: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not joined to an MVO. " +
-                            "Ensure referenced objects are synced before referencing objects. The reference will not flow to the MVO.",
-                            cso.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
-                    }
-                    else
-                    {
-                        Log.Debug("SyncEngine: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not yet joined to an MVO. " +
-                            "This will be retried during cross-page reference resolution.",
-                            cso.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
-                    }
-                }
-            }
+            Log.Debug("SyncEngine: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not joined to an MVO. {Outcome}",
+                cso.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId,
+                IsFinal(unresolved) ? "It will not be joined this run, so the reference does not flow." : "It is retried in the cross-page reference step.");
         }
 
         var hasUnresolvedReferences = csoAttributeValues.Any(csoav =>
-            csoav.ReferenceValueId.HasValue && !IsResolved(csoav));
+            csoav.ReferenceValueId.HasValue && !IsResolved(csoav) && !IsFinal(csoav));
 
         var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
 
@@ -1470,7 +1461,7 @@ public partial class SyncEngine
         else
         {
             Log.Debug("ProcessReferenceAttribute: Skipping MVO reference removal for CSO {CsoId} " +
-                "because some reference(s) have unresolved MetaverseObject (cross-page references). " +
+                "because some reference(s) point at objects that may still be joined later in the run (cross-page references). " +
                 "Removals will be handled in the cross-page resolution pass.",
                 cso.Id);
         }
@@ -1515,7 +1506,7 @@ public partial class SyncEngine
             mvo.PendingAttributeValueAdditions.Add(newMvoAv);
         }
 
-        // Only take provenance over when this pass saw the whole picture. With unresolved references the removals are
+        // Only take provenance over when this pass saw the whole picture. With references still pending the removals are
         // deferred to the cross-page resolution pass, so the surviving rows are not yet this contribution's set.
         if (!hasUnresolvedReferences)
             TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
