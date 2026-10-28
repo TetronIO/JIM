@@ -39,7 +39,7 @@ public static class ServerCertificateProbe
     /// <param name="serverDescription">What to call the far end in the remediation text, for example "directory server" or "SCIM service provider".</param>
     /// <param name="secureTransportName">The secure transport being attempted, for example "LDAPS" or "HTTPS", named in the remediation text.</param>
     /// <param name="handshakeFraming">How the TLS handshake has to reach the server; see <see cref="SecureEndpoint.HandshakeFraming"/>.</param>
-    /// <param name="acceptsJimTrustedCertificates">Whether the connection uses the JIM certificate store; see <see cref="SecureEndpoint.AcceptsJimTrustedCertificates"/>. When it does not, the chain is judged against the operating system alone, since that is all the connection will be.</param>
+    /// <param name="trustAnchorMustBeRoot">Whether only a root in the JIM certificate store makes the connection work; see <see cref="SecureEndpoint.TrustAnchorMustBeRoot"/>. When it does, the chain is judged as the connection will be: trusted only through a root the store holds.</param>
     /// <returns>What the server presented and why it fails, or null when the server could not be reached at all, which is a different problem.</returns>
     public static ServerCertificateDiagnostic? Probe(
         string host,
@@ -50,9 +50,9 @@ public static class ServerCertificateProbe
         string serverDescription = "directory server",
         string secureTransportName = "LDAPS",
         SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls,
-        bool acceptsJimTrustedCertificates = true)
+        bool trustAnchorMustBeRoot = false)
     {
-        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName, handshakeFraming, acceptsJimTrustedCertificates)?.Diagnostic;
+        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName, handshakeFraming, trustAnchorMustBeRoot)?.Diagnostic;
     }
 
     /// <summary>
@@ -71,7 +71,7 @@ public static class ServerCertificateProbe
         string serverDescription = "directory server",
         string secureTransportName = "LDAPS",
         SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls,
-        bool acceptsJimTrustedCertificates = true)
+        bool trustAnchorMustBeRoot = false)
     {
         X509Certificate2? presented = null;
         var sentByServer = new List<X509Certificate2>();
@@ -92,7 +92,7 @@ public static class ServerCertificateProbe
 
             var transport = OpenHandshakeTransport(client.GetStream(), handshakeFraming, host, port, logger);
             if (transport == null)
-                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName, acceptsJimTrustedCertificates);
+                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName, trustAnchorMustBeRoot);
 
             using var sslStream = new SslStream(transport, false, (_, certificate, chain, _) =>
             {
@@ -129,15 +129,14 @@ public static class ServerCertificateProbe
         try
         {
             if (presented == null)
-                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName, acceptsJimTrustedCertificates);
+                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName, trustAnchorMustBeRoot);
 
             // Downloading an issuer is bounded separately from the handshake, and more tightly: a dead address in a
             // certificate should not hold up the explanation of a failure for as long as the server itself may.
-            // A connection that cannot use the JIM certificate store is judged as it will be made: against the operating
-            // system alone. Counting the store would call a certificate trusted that the connection then refuses.
-            var judgedAgainst = acceptsJimTrustedCertificates ? trustedCertificates : [];
-            using var assembled = CertificateChainAssembler.Assemble(presented, sentByServer, judgedAgainst, Min(timeout, MaximumIssuerDownloadTime));
-            var diagnostic = Describe(presented, host, port, assembled, serverDescription, acceptsJimTrustedCertificates);
+            // A connection that accepts only a root is judged as it will be made: counting anything else in the store
+            // would call a certificate trusted that the connection then refuses.
+            using var assembled = CertificateChainAssembler.Assemble(presented, sentByServer, trustedCertificates, Min(timeout, MaximumIssuerDownloadTime), trustAnchorMustBeRoot);
+            var diagnostic = Describe(presented, host, port, assembled, serverDescription, trustAnchorMustBeRoot);
             var elements = assembled.Elements.Select(Describe).ToList();
 
             // Everything between the server's certificate and the root; a self-signed certificate is both, with
@@ -192,7 +191,7 @@ public static class ServerCertificateProbe
         return new TdsPreLoginTlsStream(network);
     }
 
-    private static ServerCertificateReading DescribeWithoutCertificate(string host, int port, string serverDescription, string secureTransportName, bool acceptsJimTrustedCertificates)
+    private static ServerCertificateReading DescribeWithoutCertificate(string host, int port, string serverDescription, string secureTransportName, bool trustAnchorMustBeRoot)
     {
         return new ServerCertificateReading
         {
@@ -200,7 +199,7 @@ public static class ServerCertificateProbe
             {
                 Host = host,
                 Port = port,
-                AcceptsJimTrustedCertificates = acceptsJimTrustedCertificates,
+                TrustAnchorMustBeRoot = trustAnchorMustBeRoot,
                 FailureReason = ServerCertificateFailureReason.NoCertificatePresented,
                 Remediation = $"The {serverDescription} offered no certificate. Check that it is configured for {secureTransportName} on this port."
             }
@@ -259,13 +258,13 @@ public static class ServerCertificateProbe
         int port,
         AssembledCertificateChain chain,
         string serverDescription,
-        bool acceptsJimTrustedCertificates)
+        bool trustAnchorMustBeRoot)
     {
         var diagnostic = new ServerCertificateDiagnostic
         {
             Host = host,
             Port = port,
-            AcceptsJimTrustedCertificates = acceptsJimTrustedCertificates,
+            TrustAnchorMustBeRoot = trustAnchorMustBeRoot,
             Subject = certificate.Subject,
             Issuer = certificate.Issuer,
             SubjectAlternativeNames = GetSubjectAlternativeNames(certificate),
@@ -314,9 +313,9 @@ public static class ServerCertificateProbe
             }
 
             diagnostic.FailureReason = ServerCertificateFailureReason.UntrustedIssuer;
-            diagnostic.Remediation = acceptsJimTrustedCertificates
-                ? DescribeWhatToTrust(diagnostic, chain, serverDescription)
-                : $"Nothing in the certificate chain is trusted by the operating system, and this connection's driver takes no certificate from the JIM certificate store, so adding one there will not help. The {serverDescription}'s certificate must be issued by an authority the operating system already trusts.";
+            diagnostic.Remediation = trustAnchorMustBeRoot
+                ? DescribeRootToTrust(diagnostic, chain, serverDescription)
+                : DescribeWhatToTrust(diagnostic, chain, serverDescription);
             return diagnostic;
         }
 
@@ -340,6 +339,21 @@ public static class ServerCertificateProbe
 
         var highest = chain.Elements[^1].Certificate;
         return $"Nothing in the certificate chain is trusted, and JIM could not find '{PresentedServerCertificate.CommonNameOf(chain.MissingIssuer)}', the certificate authority that issued '{PresentedServerCertificate.CommonNameOf(highest.Subject)}'. Trust a certificate JIM did find, or add '{PresentedServerCertificate.CommonNameOf(chain.MissingIssuer)}' to the JIM certificate store (Admin > Certificates) so that renewals are trusted too.";
+    }
+
+    /// <summary>
+    /// What to trust to accept the server where the connection accepts only a root: the root, which this connection
+    /// cannot do without, whatever else is in the store.
+    /// </summary>
+    private static string DescribeRootToTrust(ServerCertificateDiagnostic diagnostic, AssembledCertificateChain chain, string serverDescription)
+    {
+        if (diagnostic.IsSelfSigned)
+            return $"The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin > Certificates) to trust this {serverDescription}.";
+
+        if (chain.Root != null)
+            return $"The root of the chain is not trusted. Add '{PresentedServerCertificate.CommonNameOf(chain.Root.Subject)}' to the JIM certificate store (Admin > Certificates). This connection accepts only the root: an intermediate or the {serverDescription}'s own certificate in the store does not make it work.";
+
+        return $"The root of the chain is not trusted, and JIM could not find '{PresentedServerCertificate.CommonNameOf(chain.MissingIssuer)}', the certificate authority above '{PresentedServerCertificate.CommonNameOf(chain.Elements[^1].Certificate.Subject)}'. Get the root certificate from whoever runs your PKI and add it to the JIM certificate store (Admin > Certificates). This connection accepts only the root.";
     }
 
     /// <summary>

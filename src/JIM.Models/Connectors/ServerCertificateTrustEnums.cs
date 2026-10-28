@@ -74,9 +74,9 @@ public enum ServerCertificateTrustOutcome
     InvalidChain,
 
     /// <summary>
-    /// The connection does not use the JIM certificate store: its driver takes no trust anchor from JIM, as Oracle
-    /// Database's does not over TCPS. Trusting the certificate would report success and change nothing, so nothing was
-    /// trusted; the certificate has to be one the operating system already trusts.
+    /// The connection accepts only a root certificate authority as the certificate it trusts, as Oracle Database's
+    /// does over TCPS, and the certificate chosen was an intermediate or the server's own. Trusting it would report
+    /// success and change nothing, so nothing was trusted; trust the root of the chain instead.
     /// </summary>
-    NotUsedByThisConnection
+    RootRequired
 }

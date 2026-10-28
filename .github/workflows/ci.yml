@@ -278,6 +278,78 @@ jobs:
       if: always()
       run: pwsh -File ./test/scripts/Start-SqlServerTlsTestServer.ps1 -Stop
 
+  oracle-tls-tests:
+    # Runs the RequiresOracleTls NUnit tier against a real Oracle Database TCPS listener presenting a
+    # certificate under a root and an intermediate nobody trusts (#2581). These fixtures self-skip in
+    # build-and-test (JIM_TEST_ORACLETLS_HOST unset); here the fixture script stands the listener up and
+    # exports the environment variables that flip them from Assert.Ignore to run. This is the regression
+    # net for trusting an Oracle TCPS certificate through the wallet JIM writes for the connection: it
+    # must connect with the root in the JIM certificate store, and be refused with the reason reported
+    # with nothing trusted, with only an intermediate or the server's own certificate trusted, or by a
+    # name the certificate does not carry (#2589). Only ODP.NET makes those decisions, so only a real
+    # listener shows them.
+    # Pull requests that change the SQL Connector or the certificate trust it shares, and nothing else:
+    # the Oracle image is 13.6GB unpacked, too much to pull for every change. Not a required check, so a
+    # run that decides it has nothing to test blocks nothing.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      with:
+        fetch-depth: 0  # need base..head history to see what the change touches
+    - name: Decide whether this change touches the SQL Connector's certificate trust
+      id: scope
+      run: |
+        changed=$(git diff --name-only "$BASE_SHA" HEAD)
+        if echo "$changed" | grep -qE '^(src/JIM\.Connectors/(Sql/|ServerCertificate|CertificateChainAssembler|JIM\.Connectors\.csproj|packages\.lock\.json)|src/JIM\.Utilities/CertificateStoreTrust|src/JIM\.Models/Connectors/|test/JIM\.Worker\.Tests/Connectors/OracleTls|test/scripts/Start-OracleTlsTestServer\.ps1|\.github/workflows/ci\.yml$)'; then
+          echo "run=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          echo "Nothing here touches the SQL Connector's certificate trust; the Oracle TCPS tier is not needed."
+        fi
+    # The Oracle image alone is 13.6GB unpacked, more than the runner's free disk. The Android SDK is
+    # about 9 GB, and nothing here uses it.
+    - name: Free disk space
+      if: steps.scope.outputs.run == 'true'
+      run: |
+        sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift
+        df -h /
+    - name: Setup .NET
+      if: steps.scope.outputs.run == 'true'
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+      with:
+        dotnet-version: 10.0.x
+    - name: Restore dependencies
+      if: steps.scope.outputs.run == 'true'
+      run: dotnet restore JIM.sln --locked-mode
+    - name: Build
+      if: steps.scope.outputs.run == 'true'
+      run: dotnet build test/JIM.Worker.Tests/ --no-restore
+    # Pulled up front with a retry, as sql-tls-tests does, so a transient registry refusal fails here with a
+    # clear message rather than inside docker run.
+    - name: Pull Oracle Database image
+      if: steps.scope.outputs.run == 'true'
+      run: |
+        for attempt in 1 2 3; do
+          docker pull container-registry.oracle.com/database/free:23.9.0.0 && exit 0
+          sleep 30
+        done
+        echo "Failed to pull container-registry.oracle.com/database/free:23.9.0.0 after 3 attempts."
+        exit 1
+    - name: Start Oracle TCPS test server
+      if: steps.scope.outputs.run == 'true'
+      run: pwsh -File ./test/scripts/Start-OracleTlsTestServer.ps1
+    - name: Run Oracle TCPS certificate validation tests (RequiresOracleTls)
+      if: steps.scope.outputs.run == 'true'
+      run: dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresOracleTls" --verbosity normal
+    - name: Tear down Oracle TCPS test server
+      if: always() && steps.scope.outputs.run == 'true'
+      run: pwsh -File ./test/scripts/Start-OracleTlsTestServer.ps1 -Stop
+
   keycloak-registration-tests:
     # Runs Register-JIMIdentityProvider -Provider Keycloak against a real Keycloak (#2364):
     # KeycloakRegistration.Live.Tests.ps1, which self-skips in build-and-test (JIM_TEST_KEYCLOAK_URL

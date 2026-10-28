@@ -751,6 +751,7 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 | `database-tests` | CI workflow | The `RequiresPostgres` NUnit tier against a real PostgreSQL server |
 | `ldaps-tests` | CI workflow | The `RequiresLdaps` NUnit tier against real directory servers over TLS |
 | `sql-tls-tests` | CI workflow | The `RequiresSqlTls` NUnit tier against a real Microsoft SQL Server over TLS |
+| `oracle-tls-tests` | CI workflow | The `RequiresOracleTls` NUnit tier against a real Oracle Database TCPS listener, on pull requests that change the SQL Connector's certificate trust |
 | `deployment-boot` | CI workflow | JIM installed from a release bundle built from the commit, with its own installer, on Docker, rootful Podman and rootless Podman, and what the runtimes run compared (see `engineering/TESTING_STRATEGY.md` > Deployment Boot Tests) |
 | `changelog-lint` | Changelog lint workflow (`.github/workflows/changelog-lint.yml`) | Changelog entries, docs coupling for user-facing entries, and PowerShell documentation examples |
 

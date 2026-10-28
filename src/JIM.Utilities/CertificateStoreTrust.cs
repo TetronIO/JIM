@@ -47,6 +47,29 @@ public static class CertificateStoreTrust
     }
 
     /// <summary>
+    /// Whether the store vouches for the certificate through the root of its chain: the chain is otherwise valid and
+    /// ends at a self-signed certificate the store holds. The stricter rule, for a connection whose driver accepts only
+    /// a root as its trust anchor (Oracle Database over TCPS). Anything else in the store still links the chain; it just
+    /// does not count as the anchor.
+    /// </summary>
+    /// <inheritdoc cref="VouchesFor" path="/param"/>
+    public static bool VouchesForThroughRoot(
+        X509Certificate2 certificate,
+        IEnumerable<X509Certificate2> sentByServer,
+        IReadOnlyCollection<X509Certificate2> trustedCertificates)
+    {
+        var vouching = VouchingThumbprints(certificate, sentByServer, trustedCertificates);
+        if (vouching.Count == 0)
+            return false;
+
+        // The thumbprints come leaf first, so the last is the highest trusted certificate in the chain. The chain has
+        // already been built and validated, so it vouches as a root exactly when it is self-signed, which also makes it
+        // the top of the chain.
+        var highest = trustedCertificates.First(c => string.Equals(c.Thumbprint, vouching[^1], StringComparison.OrdinalIgnoreCase));
+        return string.Equals(highest.Subject, highest.Issuer, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Judges a certificate the way a TLS validation callback must: the operating system's verdict stands when it
     /// trusts the chain, the store can answer only for an unknown certificate authority, and nothing in the store
     /// waives a name mismatch or a missing certificate.

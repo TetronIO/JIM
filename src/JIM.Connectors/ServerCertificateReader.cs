@@ -24,6 +24,6 @@ public class ServerCertificateReader : IServerCertificateReader
             endpoint.ServerDescription,
             endpoint.SecureTransportName,
             endpoint.HandshakeFraming,
-            endpoint.AcceptsJimTrustedCertificates);
+            endpoint.TrustAnchorMustBeRoot);
     }
 }

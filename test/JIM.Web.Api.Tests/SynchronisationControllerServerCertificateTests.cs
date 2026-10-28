@@ -275,9 +275,9 @@ public class SynchronisationControllerServerCertificateTests
     }
 
     [Test]
-    public async Task TrustServerCertificateAsync_WhenTheConnectionCannotUseTheJimStore_ReturnsBadRequestAndTrustsNothingAsync()
+    public async Task TrustServerCertificateAsync_WhenTheConnectionNeedsARootAndSomethingElseIsChosen_ReturnsBadRequestAndTrustsNothingAsync()
     {
-        GivenTheConnectedSystemExists(StubConnector.StoreIgnoringConnectorName);
+        GivenTheConnectedSystemExists(StubConnector.RootOnlyConnectorName);
         GivenTheServerPresentsItsCertificate();
 
         var result = await _controller.TrustServerCertificateAsync(ConnectedSystemId, new TrustServerCertificateRequest { Thumbprint = _leaf.Thumbprint }) as BadRequestObjectResult;
@@ -285,7 +285,7 @@ public class SynchronisationControllerServerCertificateTests
         Assert.That(result, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(((TrustServerCertificateResponse)result!.Value!).Outcome, Is.EqualTo(ServerCertificateTrustOutcome.NotUsedByThisConnection));
+            Assert.That(((TrustServerCertificateResponse)result!.Value!).Outcome, Is.EqualTo(ServerCertificateTrustOutcome.RootRequired));
             _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
         }
     }
@@ -449,20 +449,20 @@ public class SynchronisationControllerServerCertificateTests
             return connectorName switch
             {
                 StubConnector.PlainConnectorName => new StubPlainConnector(),
-                StubConnector.StoreIgnoringConnectorName => new StubConnector(acceptsJimTrustedCertificates: false),
+                StubConnector.RootOnlyConnectorName => new StubConnector(trustAnchorMustBeRoot: true),
                 _ => new StubConnector()
             };
         }
     }
 
-    private class StubConnector(bool acceptsJimTrustedCertificates = true) : IConnector, IConnectorSecureEndpoint
+    private class StubConnector(bool trustAnchorMustBeRoot = false) : IConnector, IConnectorSecureEndpoint
     {
         public const string SecureConnectorName = "Stub Secure Connector";
         public const string PlainConnectorName = "Stub Plain Connector";
-        public const string StoreIgnoringConnectorName = "Stub Store-Ignoring Connector";
+        public const string RootOnlyConnectorName = "Stub Root-Only Connector";
         public const string SettingBaseUrl = "Base URL";
 
-        public string Name => acceptsJimTrustedCertificates ? SecureConnectorName : StoreIgnoringConnectorName;
+        public string Name => trustAnchorMustBeRoot ? RootOnlyConnectorName : SecureConnectorName;
 
         public string? Description => null;
 
@@ -475,7 +475,7 @@ public class SynchronisationControllerServerCertificateTests
                 return null;
 
             return new SecureEndpoint(uri.Host, uri.IsDefaultPort ? 443 : uri.Port, TimeSpan.FromSeconds(10), "test server", "HTTPS",
-                AcceptsJimTrustedCertificates: acceptsJimTrustedCertificates);
+                TrustAnchorMustBeRoot: trustAnchorMustBeRoot);
         }
     }
 

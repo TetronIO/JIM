@@ -101,7 +101,7 @@ JIM builds the connection string from these values; there is nothing to paste, a
 | Setting | Applies to | Default | What it does |
 |---------|------------|---------|--------------|
 | Encrypt Connection | SQL Server | On | Encrypts the connection with TLS. If the server cannot encrypt, the connection fails rather than falling back to plain text. The server's certificate is checked against your operating system's trusted authorities and any certificates you have added under **Admin > Certificates**. |
-| Oracle Encryption | Oracle | Native Network Encryption | **Native Network Encryption** encrypts the session on the ordinary listener with no certificates to manage, and is how most Oracle estates encrypt client traffic. **TCPS (TLS)** uses a TLS listener (usually port 2484) and a server certificate. **None** sends data unencrypted; use it only in a lab. |
+| Oracle Encryption | Oracle | Native Network Encryption | **Native Network Encryption** encrypts the session on the ordinary listener with no certificates to manage, and is how most Oracle estates encrypt client traffic. **TCPS (TLS)** uses a TLS listener (usually port 2484) and a server certificate; one from your own certificate authority works once the root of its chain is trusted in JIM. **None** sends data unencrypted; use it only in a lab. |
 | Connection Timeout | Both | 30 seconds | How long to wait for the server before giving up. |
 
 #### Date and Time

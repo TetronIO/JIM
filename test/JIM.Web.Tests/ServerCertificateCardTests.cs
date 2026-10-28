@@ -188,20 +188,52 @@ public class ServerCertificateCardTests : JimComponentTestContext
     }
 
     /// <summary>
-    /// An untrusted issuer on a connection that takes nothing from the JIM certificate store (Oracle Database over
-    /// TCPS): trusting would report success and the next connection would be refused just the same.
+    /// An untrusted issuer on a connection that accepts only a root (Oracle Database over TCPS), where JIM found the root:
+    /// trusting it works, so it is offered, and the card says why nothing else is.
     /// </summary>
     [Test]
-    public void ServerCertificateCard_WhereTheConnectionCannotUseTheJimStore_DoesNotOfferTheTrustAction()
+    public void ServerCertificateCard_WhereOnlyARootCanBeTrusted_OffersTheRootAndSaysSo()
     {
-        var diagnostic = Diagnostic(ServerCertificateFailureReason.UntrustedIssuer);
-        diagnostic.AcceptsJimTrustedCertificates = false;
-
         var cut = Render<ServerCertificateCard>(p => p
-            .Add(c => c.Diagnostic, diagnostic)
+            .Add(c => c.Diagnostic, RootOnlyDiagnostic(withRoot: true))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid='jim-certificate-trust']"), Has.Count.EqualTo(1));
+            Assert.That(cut.Markup, Does.Contain("Corp Root CA"));
+        }
+    }
+
+    /// <summary>
+    /// The same connection where JIM could not find the root: nothing it could offer would work, so nothing is offered,
+    /// and the remediation says where the root has to come from.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereOnlyARootCanBeTrustedAndNoneWasFound_DoesNotOfferTheTrustAction()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, RootOnlyDiagnostic(withRoot: false))
             .Add(c => c.ConnectedSystemId, 42));
 
         Assert.That(cut.FindAll("[data-testid='jim-certificate-trust']"), Is.Empty);
+    }
+
+    private static ServerCertificateDiagnostic RootOnlyDiagnostic(bool withRoot)
+    {
+        var diagnostic = Diagnostic(ServerCertificateFailureReason.UntrustedIssuer);
+        diagnostic.TrustAnchorMustBeRoot = true;
+        diagnostic.Chain =
+        [
+            new ServerCertificateChainElement { Subject = diagnostic.Subject!, Issuer = "CN=Corp Issuing CA, O=Corp", Thumbprint = "ABCDEF0123" },
+            new ServerCertificateChainElement { Subject = "CN=Corp Issuing CA, O=Corp", Issuer = "CN=Corp Root CA, O=Corp", Thumbprint = "BBBB", IsCertificateAuthority = true }
+        ];
+        if (withRoot)
+            diagnostic.Chain.Add(new ServerCertificateChainElement { Subject = "CN=Corp Root CA, O=Corp", Issuer = "CN=Corp Root CA, O=Corp", Thumbprint = "CCCC", IsCertificateAuthority = true, IsSelfSigned = true });
+
+        diagnostic.IsChainComplete = withRoot;
+        diagnostic.RootThumbprint = withRoot ? "CCCC" : null;
+        return diagnostic;
     }
 
     /// <summary>

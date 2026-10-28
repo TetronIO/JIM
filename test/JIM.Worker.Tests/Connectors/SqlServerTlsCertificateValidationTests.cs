@@ -28,8 +28,7 @@ namespace JIM.Worker.Tests.Connectors;
 /// set. The fixture is ignored when <c>JIM_TEST_SQLTLS_HOST</c> is absent.
 /// </para>
 /// <para>
-/// Oracle Database is deliberately not covered here; see the Oracle section of "SQL Server TLS Certificate
-/// Validation Tests" in <c>engineering/TESTING_STRATEGY.md</c> for why.
+/// Oracle Database over TCPS has a sibling fixture, <see cref="OracleTlsCertificateValidationTests"/>.
 /// </para>
 /// </remarks>
 [TestFixture]
