@@ -75,8 +75,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId, objectTypeId, createdOnOrAfter);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
@@ -328,6 +328,13 @@ public partial class SyncRepository : ISyncRepository
         return _repo.ConnectedSystems.UpdatePendingExportsAsync(exportList);
     }
 
+    public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+    {
+        ThrowIfAnyQueued(pendingExports.Select(pe => pe.Id), nameof(PersistResolvedReferencesAsync));
+        return _repo.ConnectedSystems.PersistResolvedReferencesAsync(pendingExports, resolvedChanges);
+    }
+
     public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => IsQueuedForDeleteByCsoId(connectedSystemObjectId)
             ? null
@@ -463,29 +470,6 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
         => _repo.ConnectedSystems.GetSyncRuleNamesByIdsAsync(syncRuleIds);
-
-    public async Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
-    {
-        var latestRuleChange = await _context.SyncRules
-            .MaxAsync(r => (DateTime?)(r.LastUpdated ?? r.Created));
-        var latestMappingChange = await _context.SyncRuleMappings
-            .MaxAsync(m => (DateTime?)(m.LastUpdated ?? m.Created));
-        // A deleted rule leaves no row to read, so its deletion is recorded on the Service Settings singleton (#2309).
-        var latestRuleDeletion = await _context.ServiceSettings
-            .MaxAsync(s => s.SyncRuleLastDeletedAt);
-
-        return new[] { latestRuleChange, latestMappingChange, latestRuleDeletion }.Max();
-    }
-
-    public async Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
-    {
-        var watermarks = await _context.ConnectedSystems
-            .AsNoTracking()
-            .Where(cs => cs.Id == connectedSystemId)
-            .Select(cs => new { cs.LastSyncCompletedAt, cs.ConfigurationLastFullyAppliedAt })
-            .SingleOrDefaultAsync();
-        return watermarks == null ? null : (watermarks.LastSyncCompletedAt, watermarks.ConfigurationLastFullyAppliedAt);
-    }
 
     public async Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
     {
@@ -685,6 +669,10 @@ public partial class SyncRepository : ISyncRepository
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
 
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+        => _repo.ConnectedSystems.GetReferenceAnchorsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+
     public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
         => _repo.ConnectedSystems.GetAttributeAsync(id);
 
@@ -708,8 +696,11 @@ public partial class SyncRepository : ISyncRepository
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
         => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
 
-    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
-        => _repo.ConnectedSystems.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
+    public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        => _repo.ConnectedSystems.GetRemainingDeferredExportIdsAsync(connectedSystemId, afterCreatedAt, afterId);
+
+    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+        => _repo.ConnectedSystems.GetDeferredExportsByIdsAsync(pendingExportIds);
 
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);

@@ -166,4 +166,15 @@ public class ConnectorDefinitionDtoTests
         // the connector binary must never be serialised onto the wire; the DTO has no property that could carry it.
         Assert.That(typeof(ConnectorDefinitionFileDto).GetProperties().Where(p => p.PropertyType == typeof(byte[])), Is.Empty);
     }
+
+    [Test]
+    public void FromEntity_SettingWithExample_MapsTheExample()
+    {
+        var definition = BuildDefinition();
+        definition.Settings.Single().Example = "{ \"objectTypes\": [] }";
+
+        var dto = ConnectorDefinitionDto.FromEntity(definition);
+
+        Assert.That(dto.Settings.Single().Example, Is.EqualTo("{ \"objectTypes\": [] }"));
+    }
 }

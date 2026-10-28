@@ -9,6 +9,33 @@ audience: operator
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
 
+```jim-diagram
+archetype: comparison
+title: The Lineage, Timeline and Table views compared
+desc: 'An execution item''s story can be read in three views. The Lineage, the default, shows the object graph as columns, answering what happened and why on one canvas, and is the one view that shows what the item went on to cause in later runs. The Timeline is a vertical narrative with attribute changes inline, for the whole story in one scroll. The Table is a flat, filterable change list, for scanning many changes at once. The Timeline and Table describe the run alone. The view you choose is remembered for your next visit.'
+columns:
+- {label: Lineage, sub: the default}
+- {label: Timeline, sub: top to bottom}
+- {label: Table, sub: 'filter chips, sortable columns'}
+rows:
+- label: Shows
+  cells:
+  - {text: 'the object graph, as columns', sub: source to Metaverse Object to target}
+  - {text: a vertical narrative, sub: attribute changes inline}
+  - {text: 'a flat, filterable change list', sub: narrowed object by object}
+- label: Best for
+  cells:
+  - {text: what happened and why, sub: on one canvas}
+  - {text: 'the whole story, every attribute', sub: in one scroll}
+  - {text: scanning many changes at once}
+- label: After this run
+  cells:
+  - {text: what the item went on to cause}
+  - {text: this run alone}
+  - {text: this run alone}
+footer: The view you choose is remembered for your next visit
+```
+
 An execution item's detail page is split over tabs. **Overview** carries the item's own story: the execution summary, the Connected System Object it processed, the causality panel and what caused it, and any error. Where the item created or failed on a Pending Export, that gets its own **Pending Export** tab, because a queued export is a separate subject with its own status, retry count and staged attribute changes. Most items have only the one tab, and the tab bar is hidden entirely in that case rather than offering a choice of one.
 
 The Overview tab opens with a causality panel that answers "what happened to this object, and what did it cause?" without any digging. A summary band leads with a single plain-English sentence describing the run's effect on the object, with every entity mentioned (Connected Systems, Metaverse Objects, Synchronisation Rules) highlighted as a clickable token, and a strip of colour-coded outcome pills beneath it summarising the outcomes at a glance (for example "Projected to the Metaverse", "11 attributes flowed", "Export queued").
@@ -52,7 +79,7 @@ An object that leaves an import Synchronisation Rule's scope while the rule's [O
 
 A Deletion Rule that evaluates and decides *not* to delete records nothing, because nothing happened, so the causality views show a **Metaverse Object not deleted** step on the Metaverse Object column with the reason beside it ("an authoritative source is still connected"). The rule that decided it is available underneath as **Deletion Rule in force at the time**, collapsed, and is the rule as it was recorded at the moment of the decision rather than the object type's current configuration.
 
-## Values JIM could not import
+## :material-alert-octagon-outline: Values JIM could not import
 
 A Connector can find a value it cannot read as its attribute's type: a date that does not exist, letters in a number column, a decimal wider than JIM can hold. JIM can also be handed a value it cannot hold: two dates of one attribute less than a microsecond apart (JIM holds a date to the microsecond), or both true and false for a true or false attribute, which holds one value. Neither is treated as no value. The object's execution item lists every such value under **Attribute Values Not Imported**: each value as received, what its attribute expected, whether the Connector or JIM found it (**Found By**), and why it could not be imported. Where the Connector says where the object was read from, the item gives that too, and it also appears as **Source** in the Execution Summary: the File Connector gives the file and row, and the LDAP Connector the entry's distinguished name.
 
@@ -62,6 +89,6 @@ JIM leaves the attribute exactly as it already held it. Nothing is removed from 
 
 When the value is an object's External ID, JIM cannot tell which object it is, so that Full Import does not check the Object Type for deleted objects, and the Activity says so: marking objects deleted on that basis could remove one the Connected System still holds. Checking resumes on the next Full Import that reads every External ID.
 
-## Causes and consequences
+## :material-arrow-decision-outline: Causes and consequences
 
 The Lineage reads beyond the run in both directions: up the chain to what caused the item, and down it to what the item went on to cause in later runs, each on the object it happened to. [Causality](causality.md) explains both, including how each branch says where it ends.

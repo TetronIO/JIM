@@ -9,7 +9,29 @@ audience: administrator
 
 Some configuration edits are harmless. Others decide whether accounts are deleted. The two sit side by side on the same pages, so JIM judges every save by the properties that actually changed, and reacts only where it matters.
 
-## How JIM classifies a change
+```jim-diagram
+archetype: comparison
+title: The three classes of configuration change
+desc: 'JIM classes each property a save changes. A Cosmetic change, such as a name, a description or an icon, goes straight through. A Sync-affecting change, such as scope, mappings or matching, asks you to confirm, listing each change from its old value to its new one. A Destructive change, such as a Deprovisioning Action or a deletion rule, asks you to confirm and also states in plain terms what the change will do. A save is judged by the properties that changed, not the page they are on.'
+columns:
+- {label: Cosmetic, sub: labels and display}
+- {label: Sync-affecting, sub: what synchronisation does}
+- {label: Destructive, sub: whether objects are removed}
+rows:
+- label: For example
+  cells:
+  - {text: 'a name, a description, an icon'}
+  - {text: 'scope, mappings, matching'}
+  - {text: 'Deprovisioning Actions, deletion rules'}
+- label: On save
+  cells:
+  - {text: goes straight through}
+  - {text: asks you to confirm, sub: 'each change, old value to new'}
+  - {text: asks you to confirm, sub: and says what it will do}
+footer: 'Judged by the properties changed: a rename saved with a Deprovisioning Action change is destructive'
+```
+
+## :material-tag-text-outline: How JIM classifies a change
 
 Every configuration property carries one of three classes:
 
@@ -21,7 +43,7 @@ Every configuration property carries one of three classes:
 
 The class is worked out from the properties you actually changed, not from the page you changed them on. Renaming a Synchronisation Rule saves in silence even though the Deprovisioning Action sits on the same form; changing both in one save is treated as destructive.
 
-## Confirming a change before you save it
+## :material-content-save-check-outline: Confirming a change before you save it
 
 Where a change is sync-affecting or destructive, JIM shows a confirmation before saving. It lists what is changing, leads with the most consequential change, and names the object being changed. Where a destructive property is involved it also says what that property governs and what your particular change will do; switching a Deprovisioning Action *to* Delete and switching it *back* are both confirmed, but they are described differently, because they are opposite consequences.
 
@@ -35,7 +57,7 @@ A change that stops a [configuration test case](configuration-tests.md#when-a-ch
 
     Metaverse Object Type deletion settings are the exception: they take effect immediately. Objects that already satisfy a new deletion rule become eligible for deletion on the next synchronisation or housekeeping pass, with no further change made to them. The confirmation says so.
 
-## Previewing a change before you make it
+## :material-eye-outline: Previewing a change before you make it
 
 A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the Metaverse and reports which of them would be affected, changing nothing.
 
@@ -85,7 +107,7 @@ In the portal, previewing leaves the change unsaved: read the result, then save 
 
 Automation gets the same evaluation. Start a preview with [`New-JIMConfigurationChangePreview`](../powershell/previews.md), or `POST` to the surface's own preview endpoint in the [REST API](../../api/reference/), then pass the preview's Activity id back on the change itself so the audit records the link.
 
-## Where the confirmation appears
+## :material-page-layout-header-footer: Where the confirmation appears
 
 | Surface | Changes that can trigger it |
 |---|---|
@@ -95,13 +117,13 @@ Automation gets the same evaluation. Start a preview with [`New-JIMConfiguration
 | [Metaverse Attributes](metaverse.md#attributes) | Data type, plurality, Object Type bindings |
 | [Service Settings](service-settings.md) | The few settings that steer synchronisation; nearly all Service Settings are operational and save in silence |
 
-## When JIM stays silent
+## :material-bell-outline: When JIM stays silent
 
 The confirmation appears only when JIM can tell what changed, which means [configuration change tracking](service-settings.md) must be switched on. With tracking off there is no recorded baseline to compare against, so JIM says nothing rather than guessing. Creating a new object is never confirmed either: there is no prior state, so nothing existing is at risk.
 
 Changes made through the REST API and PowerShell are not prompted. An automated call names the property it is setting, so consent is already explicit; the change is classified and recorded in the Configuration Change History exactly as a portal change is.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Sync Preview](sync-preview.md): previewing what synchronising one object would do with the configuration you already have, including the destructive cascade
 - [Activities](activities.md): every configuration change is recorded as an Activity, with a versioned before-and-after snapshot

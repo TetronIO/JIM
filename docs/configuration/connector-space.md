@@ -20,13 +20,13 @@ This two-stage approach gives you:
 - **Comparison**<br /> JIM can detect what has changed between imports.
 - **Rollback potential**<br /> The Metaverse is only updated in the sync phase.
 
-## Opening the Connector Space
+## :material-folder-outline: Opening the Connector Space
 
 A Connected System's page carries two buttons above its tabs, each showing how much is there: **Connector Space** opens the Connected System Objects staged for this system, and **Pending Exports** opens the changes waiting to be written back to it. Both sit above the tabs rather than on one of them, so they are reachable from wherever you are on the page; the Pending Exports count is highlighted whenever changes are waiting.
 
 The list's **State** column says where each object stands right now: **In sync**, **Update pending**, **Pending Export**, **Awaiting confirmation**, **Export not confirmed**, **Export failed**, **Delete pending** or **Obsolete**. It combines the object's status with any queued Pending Export, so an account a run could not write reads as Export failed on the row itself rather than having to be pieced together from the status and the Pending Exports page. It is the same state a Metaverse Object's [Connections tab](sync-preview.md) shows for the same object, and it is carried by `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space` and `Get-JIMConnectedSystemObject` too.
 
-## Connected System Objects
+## :material-cube-outline: Connected System Objects
 
 A **Connected System Object** is JIM's local representation of an object in an external system. Each Connected System Object holds:
 
@@ -42,7 +42,7 @@ Connected System Objects have a lifecycle:
 3. **Joined** or **projected** during synchronisation, to link with an Metaverse Object
 4. **Obsoleted** when the object no longer exists in the external system
 
-## Objects awaiting deprovisioning
+## :material-delete-clock-outline: Objects awaiting deprovisioning
 
 An obsoleted Connected System Object is not deleted straight away. It stays obsolete until a Synchronisation Run Profile runs on the same Connected System, which is what disconnects it from its Metaverse Object and deletes it, applying grace periods and [Metaverse Deletion Rules](metaverse.md#deletion-behaviour) as configured. Where an export Synchronisation Rule provisions to that system and still has the Metaverse Object in scope, the same synchronisation stages a provisioning Create for it, so an account deleted directly in the system is recreated at the next export (see [Projection and provisioning](synchronisation-rules.md#projection-and-provisioning)). On a system that is imported and synchronised on a normal schedule this is a state objects pass through in minutes.
 
@@ -50,7 +50,7 @@ A system that is imported but rarely synchronised is the case worth watching, be
 
 Only the first import to find an object missing records a deletion against it. Later imports that find it still missing change nothing and record nothing, because nothing has happened: the object was already obsolete when they started.
 
-## Clearing the Connector Space
+## :material-delete-outline: Clearing the Connector Space
 
 Clearing a Connected System's Connector Space removes every Connected System Object (and, unless you choose to keep it, their change history) without deleting the Connected System itself; its configuration, schema, and Synchronisation Rules survive. Clearing itself is a hard delete: no Metaverse Object Deletion Rule or grace period runs at the moment of the clear, so the removal of the Connected System Objects is immediate. The portal's Connector Space page, `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/clear`, and [`Clear-JIMConnectedSystem`](../powershell/connected-systems.md#clear-jimconnectedsystem) all queue the same tracked background task.
 

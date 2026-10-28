@@ -9,11 +9,24 @@ audience: administrator
 
 The LDAP Connector should reach the directory over LDAPS, so credentials and identity data are encrypted in transit. This page covers using LDAPS, how JIM validates the directory's certificate, and the network the connection needs.
 
-## Use LDAPS
+```jim-diagram
+archetype: flow
+title: What JIM checks before it sends the service account's credentials
+desc: "When LDAPS is on, the directory server presents its certificate and JIM checks three things, with no per Connected System option to relax any of them. Chain: it must chain to an issuer JIM trusts, from the operating system's trust store or added in Admin > Certificates; an untrusted one is refused, and Choose what to trust on the certificate card fixes it. Validity period: an expired or not-yet-valid certificate is refused, even when you added its issuer yourself. Name: it must be issued for the host name JIM connects to; a mismatch is refused, and mapping the name to its address in extra_hosts fixes it. Only when all three pass are the credentials sent and the bind goes ahead."
+in: { label: Server certificate, note: over LDAPS }
+out: { label: Credentials sent, note: the bind goes ahead }
+container: { label: Certificate validation, tag: "always on for LDAPS" }
+steps:
+  - { id: chain, label: Chain, sub: to an issuer JIM trusts, note: "untrusted: refused" }
+  - { id: validity, label: Validity period, sub: "in date, even for your issuer", note: "out of date: refused" }
+  - { id: name, label: Name, sub: issued for the host JIM uses, note: "mismatch: refused" }
+```
+
+## :material-lock-outline: Use LDAPS
 
 LDAP traffic is unencrypted by default. In production environments, **always enable LDAPS** (SSL/TLS) to protect credentials and identity data in transit. Set the port to 636 and enable the "Use Secure Connection (LDAPS)?" setting.
 
-## Certificate validation
+## :material-certificate-outline: Certificate validation
 
 When LDAPS is enabled, JIM validates the certificate the directory server presents. Three things are checked, and any one of them failing stops the connection before the service account's credentials are sent:
 
@@ -69,7 +82,7 @@ Set the Host setting to `dc01.corp.local`. The name now resolves inside the cont
 !!! warning "Disabling validation entirely"
     OpenLDAP's own `LDAPTLS_REQCERT=never` environment variable is honoured by the LDAP client library JIM's containers use, and switches certificate validation off. It applies to the whole container, so it affects **every** LDAPS Connected System that container serves, and it cannot be scoped to one directory. JIM's development and integration test stacks do not set it: they trust each throw-away directory's own CA through the JIM certificate store instead, so LDAPS validation is exercised for real rather than bypassed. Never set this variable in production: it exposes the service account's credentials to anyone able to intercept the connection.
 
-## Network Considerations
+## :material-lan: Network Considerations
 
 - Ensure firewall rules allow traffic from the JIM container to the directory server on the configured port (389 or 636).
 - If JIM is running in a container, the directory server must be reachable from the container network. When using Docker Compose, this may require configuring the network mode or adding the directory server to the container's DNS resolution.

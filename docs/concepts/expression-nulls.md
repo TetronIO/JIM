@@ -9,9 +9,36 @@ audience: administrator
 
 Read this before you write an [expression](expressions.md) that references an attribute which might be absent. How JIM treats a missing input decides whether a target value is **cleared**, **kept**, or **silently filled with malformed data**. Get this wrong and an expression can quietly clear good data, or write a broken value that passes straight through to the target system.
 
+```jim-diagram
+archetype: comparison
+title: Where a missing input ends up, by how the expression uses it
+desc: "An attribute the object does not have reads as null. Passed to a string function such as Trim, the null travels through unchanged, the expression returns null, and the target is cleared. Joined with + in a concatenation, the null reads as an empty string, so the expression returns a real but malformed value, such as jane.@company.com, which is stored as it is. Guarded with Coalesce, the expression returns the fallback, and the fallback is stored. The effect on the target is for an attribute with one contributing Synchronisation Rule. Missing Input Behaviour can have JIM refuse instead: contribute no value, fail the mapping or fail the object."
+columns:
+- {label: A string function, sub: '`Trim(cs["middleName"])`'}
+- {label: Concatenation, sub: '`a + "." + b`'}
+- {label: A guard, sub: '`Coalesce(a, b)`'}
+rows:
+- label: The missing input reads as
+  cells:
+  - {text: "null"}
+  - {text: an empty string}
+  - {text: "null, then the fallback"}
+- label: The expression returns
+  cells:
+  - {text: "null", sub: travels through unchanged}
+  - {text: a real value, sub: '`jane.@company.com`'}
+  - {text: the fallback's value}
+- label: The target attribute
+  cells:
+  - {text: cleared, sub: with one contributor}
+  - {text: a malformed value stored, sub: passes straight through}
+  - {text: the fallback stored}
+footer: "Missing Input Behaviour can refuse instead: contribute no value, fail the mapping, or fail the object"
+```
+
 When you reference an attribute the object does not have (for example `cs["middleName"]` on a person with no middle name), the expression sees **null**. There are four behaviours to understand, and a per-mapping setting (point 5) that lets you have JIM refuse the outcome rather than guess at it.
 
-## 1. A null result means "no value", never "leave it alone"
+## :material-null: 1. A null result means "no value", never "leave it alone"
 
 When an expression evaluates to null, JIM treats that as a **deliberate assertion that the mapping supplies no value**, not as "no opinion, leave it alone". This is intentionally different from the behaviour of some traditional ILM tools, where a function call that returned null meant "do nothing".
 
@@ -22,7 +49,7 @@ What happens to the target depends on how many Synchronisation Rules contribute 
 
 The authoring takeaway is the same either way: **a null result is never "keep the current value".** If you do not want a missing input to change the target, you must guard the expression (see point 3).
 
-## 2. Built-in string functions are null-safe and propagate null
+## :material-function-variant: 2. Built-in string functions are null-safe and propagate null
 
 The string functions (`Trim`, `Upper`, `Lower`, `Capitalise`, `Left`, `Right`, `Substring`, `Replace`, `EscapeDN`, and similar) are null-safe: given a null input, they return null rather than erroring. That is convenient, but it means **null travels through them unchanged**.
 
@@ -38,7 +65,7 @@ Coalesce(Trim(cs["middleName"]), mv["Middle Name"])
 
 To avoid an accidental clear, guard the expression so it never resolves to a bare null for a value you want to preserve: use `Coalesce()` to supply a fallback, or `IIF()` with an `IsNullOrEmpty()` / `IsNullOrWhitespace()` check (see point 3).
 
-## 3. String concatenation does NOT yield null; it yields a malformed value
+## :material-link-variant: 3. String concatenation does NOT yield null; it yields a malformed value
 
 This is the more dangerous case, because it fails **silently with wrong data** rather than clearing. In a `+` concatenation, a null operand is treated as an **empty string**, not as null. So the whole expression produces a real, non-null value that is stored as-is and bypasses the null/clear path entirely.
 
@@ -68,11 +95,11 @@ Steer around it by validating or supplying fallbacks **before** composing the va
 
 Where a component has no safe fallback, guarding is not enough and you want JIM to refuse the value outright: set the mapping's **Missing Input Behaviour** (point 5).
 
-## 4. Whitespace-only results become no value (by default)
+## :material-format-text-wrapping-wrap: 4. Whitespace-only results become no value (by default)
 
 A result that is only whitespace (spaces, tabs, newlines) is, by default, collapsed to **no value** and clears the target, exactly like null. This is governed per import mapping by the **Treat whitespace as no value** control in [inbound value processing](../configuration/attribute-mappings.md#value-processing-inbound), which is **on by default**. Switch it off for a mapping where whitespace is genuinely meaningful, and a whitespace-only result is stored as a literal value instead (the portal flags it with a `(whitespace)` indicator so it is not mistaken for an empty cell).
 
-## 5. Missing Input Behaviour: have JIM refuse rather than guess
+## :material-alert-octagon-outline: 5. Missing Input Behaviour: have JIM refuse rather than guess
 
 Points 1 to 4 are about writing an expression that copes with an absent input. **Missing Input Behaviour** is the other half: it lets you tell JIM what to do when an attribute your expression reads has no value, so a mapping you have not guarded cannot quietly produce a malformed value.
 
@@ -101,15 +128,15 @@ IIF(IsNullOrWhitespace(cs["Last Name"]), mv["Email"], Lower(cs["First Name"]) + 
 
 Set it from PowerShell with `New-JIMSyncRuleMapping -MissingInputBehaviour`, or over the REST API with `missingInputBehaviour` on the mapping source. Change it on a mapping that already exists with `Set-JIMSyncRuleMapping -MissingInputBehaviour`, or `PATCH /api/v1/synchronisation/sync-rules/{syncRuleId}/mappings/{mappingId}`.
 
-## Summary
+## :material-clipboard-list-outline: Summary
 
 | Expression evaluates to | Stored as | Effect on target |
 |-------------------------|-----------|------------------|
-| `null` (for example `Trim()` of an absent attribute) | No value | ❌ Clears any existing value |
-| Whitespace only, **Treat whitespace as no value** on (default) | No value | ❌ Clears any existing value |
-| Whitespace only, **Treat whitespace as no value** off | Literal whitespace | ✅ Stored (flagged `(whitespace)` in the portal) |
-| Concatenation with a missing operand (for example `a + "." + null`) | A real, possibly malformed value | ❌ Stored as-is, bypassing the null/clear path; the malformed value reaches the target |
-| A non-empty value | That value, in the attribute's type | ✅ Stored |
+| `null` (for example `Trim()` of an absent attribute) | No value | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } Clears any existing value |
+| Whitespace only, **Treat whitespace as no value** on (default) | No value | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } Clears any existing value |
+| Whitespace only, **Treat whitespace as no value** off | Literal whitespace | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Stored (flagged `(whitespace)` in the portal) |
+| Concatenation with a missing operand (for example `a + "." + null`) | A real, possibly malformed value | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } Stored as-is, bypassing the null/clear path; the malformed value reaches the target |
+| A non-empty value | That value, in the attribute's type | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Stored |
 | A value the attribute cannot hold (for example text, for a Number attribute) | Nothing | Kept as it was; the object is reported with an expression error |
 | More than one value, for a single-valued attribute | Nothing | Kept as it was; the object is reported with a `Multi-Valued to Single-Valued` error |
 

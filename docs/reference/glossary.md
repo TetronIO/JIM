@@ -9,6 +9,33 @@ audience: implementer
 
 Key terms and concepts used throughout JIM.
 
+```jim-diagram
+archetype: map
+title: How JIM's core terms connect
+desc: "A Connector reaches a Connected System. A Schedule runs Run Profiles; each Run Profile runs against a Connected System and is recorded as an Activity. A Connected System has its Connector Space, which holds Connected System Objects. A Connected System Object flows through a Synchronisation Rule into a Metaverse Object, which the Metaverse holds. Each term links to its entry below."
+nodes:
+  - { id: connector, label: Connector, link: "#connector", row: 0, col: 0 }
+  - { id: cs, label: Connected System, link: "#connected-system", row: 0, col: 1 }
+  - { id: rp, label: Run Profile, link: "#run-profile", row: 0, col: 2 }
+  - { id: schedule, label: Schedule, link: "#schedule", row: 0, col: 3 }
+  - { id: space, label: Connector Space, link: "#connector-space", row: 1, col: 1 }
+  - { id: activity, label: Activity, link: "#activity", row: 1, col: 2 }
+  - { id: metaverse, label: Metaverse, link: "#metaverse", row: 1, col: 3 }
+  - { id: cso, label: Connected System Object, link: "#connected-system-object", row: 2, col: 1 }
+  - { id: sr, label: Synchronisation Rule, link: "#synchronisation-rule", row: 2, col: 2 }
+  - { id: mvo, label: Metaverse Object, link: "#metaverse-object", row: 2, col: 3 }
+edges:
+  - { from: connector, to: cs, label: reaches }
+  - { from: rp, to: cs, label: runs against }
+  - { from: schedule, to: rp, label: runs }
+  - { from: cs, to: space, label: has its }
+  - { from: rp, to: activity, label: recorded as }
+  - { from: space, to: cso, label: holds }
+  - { from: metaverse, to: mvo, label: holds }
+  - { from: cso, to: sr, label: flows through }
+  - { from: sr, to: mvo, label: into }
+```
+
 Activity { #activity }
 :   A logged operation (such as import, sync, or export) with its status, timing, and outcome details. Activities provide a complete audit trail of every operation JIM performs.
 
@@ -61,7 +88,7 @@ Expression { #expression }
 :   A formula for transforming attribute values during Attribute Flow. Expressions enable string manipulation, conditional logic, and value mapping so that data arriving from one system can be adapted to the format required by another.
 
 Full Synchronisation { #full-synchronisation }
-:   The Run Profile type that processes every Connected System Object in the Connector Space, applying Object Matching Rules, Projection, Join and Attribute Flow, except a joined object unchanged since the last synchronisation, which it skips unless Synchronisation Rule configuration has changed since the last Full Synchronisation. Re-applies configuration changes that a Delta Synchronisation does not pick up.
+:   The Run Profile type that processes every Connected System Object in the Connector Space, applying Object Matching Rules, Projection, Join and Attribute Flow, whether or not the object has changed. Re-applies configuration changes and corrects anything a Delta Synchronisation does not pick up.
 
 Grace Period { #grace-period }
 :   The configurable time window before a scheduled deletion is executed. Grace periods provide a safety net, allowing administrators to recover objects that were marked for deletion before they are permanently removed.

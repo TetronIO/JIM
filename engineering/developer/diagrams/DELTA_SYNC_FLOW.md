@@ -8,11 +8,10 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 
 | Aspect | Full Sync | Delta Sync |
 |--------|-----------|------------|
-| CSO Selection | ALL CSOs (unchanged CSOs skip Attribute Flow unless Synchronisation Rule configuration changed since it was last fully applied; a CSO carrying either mark is never unchanged) | Only CSOs marked `SynchronisationPending` (#2092) or `DerivedInputChangePending` (#1750), or created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
+| CSO Selection | ALL CSOs, every run (#891) | Only CSOs marked `SynchronisationPending` (#2092), `DerivedInputChangePending` (#1750) or `ScopeReviewPending` (#892), or created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
 | Early Exit | Never | Yes, if 0 modified CSOs and no Metaverse Object awaits an export scope review (#892, #1925) |
 | Per-page pipeline | Identical | Identical |
 | Watermark Update | Yes (establishes the baseline for the next Delta Sync) | Yes (even when 0 changes) |
-| Configuration baseline (`ConfigurationLastFullyAppliedAt`) | Recorded at the end of the run | Never advanced |
 | Stranded-value sweep after a Connector Space clear (#1549, #1605) | Runs if armed and gated open | Never |
 | Use Case | Initial sync, periodic reconciliation, applying configuration changes | Incremental updates |
 
@@ -83,7 +82,7 @@ flowchart LR
 
 - **First delta sync processes everything**<br /> If `LastSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs, the same set as a full sync.
 
-- **Cross-page reference resolution (v0.10.0)**<br /> Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. New reference-attribute changes are merged under the existing MvoChange parent RPEI (rather than creating a second standalone RPEI for the same MVO), honouring the `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` unique index. The standard persist/flush pipeline runs again for the resolved references.
+- **Cross-page reference resolution (v0.10.0)**<br /> Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. New reference-attribute changes are merged under the existing MvoChange parent RPEI (rather than creating a second standalone RPEI for the same MVO), honouring the `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` unique index. The standard persist/flush pipeline runs again for the resolved references. Only a reference that could still resolve later in the run defers its object. One to an object whose Object Type has already been walked and that existed before the run began (less the sweep's clock-skew margin) is final: nothing later in the run can join it, so it flows nothing, defers nothing and does not hold back the attribute's removals. The run counts final references in one Information line instead of warning per reference, and the Activity's object counts are restored when the step ends.
 
 - **No partition filtering**<br /> Neither full nor delta sync filters CSOs by partition. A Run Profile's partition (#353) scopes the import that reads the Connected System and its deletion detection; synchronisation then processes whatever changed across the whole Connector Space.
 

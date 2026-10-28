@@ -1,6 +1,6 @@
 ---
 title: Operations
-description: "The Operations page: the queue, history, Schedules and Passwords tabs, and the Service Health of the Worker and Scheduler."
+description: "The Operations page: queued, running and completed work, Schedules, Passwords, Generated Values, and the Service Health of the Worker and Scheduler."
 type: object
 audience: operator
 ---
@@ -9,24 +9,51 @@ audience: operator
 
 **Administration > Operations** is where an administrator finds out what JIM is doing, what it has done, what it will do next, and whether the services that do it are alive. It is one page with four tabs and a Service Health strip above them.
 
-## The tabs
+```jim-diagram
+archetype: anatomy
+title: What the Operations page holds
+desc: 'Administration > Operations has a Service Health strip, with one card each for Worker · Sync, Worker · Passwords and the Scheduler, above four tabs. Activity shows the work Queued, In Progress and Completed; Schedules shows each Schedule with its last run; Passwords shows the Password Synchronisation queue; and Generated Values shows generated values held for a decision and renames waiting for their export.'
+subject:
+  kind: object
+  label: Operations
+  parts:
+  - {label: Service Health strip, detail: 'Worker · Sync, Worker · Passwords, Scheduler'}
+  - {label: Activity tab, detail: 'Queued, In Progress, Completed'}
+  - {label: Schedules tab, detail: each with its last run}
+  - {label: Passwords tab, detail: the Password Synchronisation queue}
+  - {label: Generated Values tab, detail: 'values held for a decision, waiting renames'}
+```
 
-- **Queue**<br /> The work in flight and the work waiting behind it: Run Profile executions, schema imports, deletions and the other background tasks, with live progress per row. Running Schedules are grouped under a header drawn as a rail of their steps. See [The Operations queue](../administration/portal-lists.md#the-operations-queue) and [Live progress](activity-progress.md).
-- **History**<br /> The [Activities](activities.md) record of everything JIM has done, filterable by outcome, type and Schedule, with a side panel for each one.
+## :material-view-list-outline: The tabs
+
+- **Activity**<br /> What the Worker has queued, what it is running and what it has finished, on one page. See [The Activity tab](#the-activity-tab).
 - **Schedules**<br /> The [Schedules](schedules.md) that run work automatically, each with its last run and how that run ended.
 - **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. An [initial password](../concepts/passwords.md#giving-new-connected-system-objects-their-first-password) on a newly provisioned Connected System Object travels the same queue, labelled with origin **Initial**. See [Watching the queue](../concepts/password-synchronisation.md#watching-the-queue).
+- **Generated Values**<br /> Generated values held for a decision, and allowed renames waiting for their export. See [Generated values in target systems](generated-values-in-target-systems.md).
 
-## Service Health
+## :material-timeline-clock-outline: The Activity tab
+
+The Activity tab reads in time order, with the latest at the top: **Queued**, then **In Progress**, then **Completed**. The three sections share their columns, so Connected System, Run Profile and Initiated By line up down the page. A section holding work opens with a heading that carries its count and a chevron, which folds the rows away under the heading and brings them back; a section holding nothing is a single line saying so, with no table beneath it.
+
+- **Queued**<br /> Work waiting for the Worker: Run Profile executions and the other background tasks, and the steps of any Schedule Execution still to come, grouped under a header that names the Schedule, draws its steps as a rail, and carries **View execution** and the option to cancel it. The next run is the last row, directly above In Progress; **Runs** gives each row's place ("Next", "2nd", "3rd"), and the tasks of a parallel Schedule step share one. **Est. Start** says when each is expected to start, from the median of the last five successful runs of each Run Profile ahead of it. It is left blank where there is nothing to go on, such as a Run Profile with no successful run yet, and so is every estimate after it. The section shows as many rows as fit the window while In Progress stays in view, and never fewer than three; **Show more** reveals the rest.
+- **In Progress**<br /> Everything the Worker is running now, each with its run's steps and the running step's progress (see [Live progress](activity-progress.md#the-runs-steps-on-the-activity-tab)). When a parallel Schedule step is running, its tasks appear together under the Schedule Execution's header. **Est. Finish** comes from the same median, and is never earlier than the running step needs.
+- **Completed**<br /> The [Activities](activities.md) record of what the Worker has finished, newest first, with a side panel for each one. A run moves here from In Progress as soon as it ends.
+
+**Filters** opens the filter row. **Connected System**, **Run Profile**, **Schedule** and **Scheduled only** apply to every section; **Result** and **Has child activities** apply to Completed alone, since queued and running work has no result yet. Each filter in use shows as a chip beside the button, whether or not the row is open, and closing a chip puts that one filter back; **Clear** puts them all back. To find work by who started it, use Completed's search box, which searches the target and the initiator. Which sections are folded, the filters and Completed's search are all kept in the page's address, so a filtered view can be bookmarked or shared and survives a refresh.
+
+**Queue a Run Profile** adds a Run Profile execution to the end of the queue: choose the Connected System and the Run Profile, then **Queue**. If nothing else is queued or running, it starts straight away.
+
+## :material-heart-pulse: Service Health
 
 JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service), and the **Scheduler**, which starts Schedules when they fall due. Each service writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it, so a Worker that has stopped shows as stopped rather than looking like a Worker with nothing to do. The container health check alone is invisible from the portal.
 
-The strip is a panel headed **Service Health**, with a one-line summary beside the heading ("All services healthy", or "1 service unhealthy, 1 degraded", worst first) and, on the right, whether the panel is **Updated live**: whether the portal is receiving real-time change notifications from the database. While it is reconnecting the portal falls back to polling; pages still update, more slowly. That indicator is about the portal's own connection, not a background service. The chevron at the end of the header collapses the panel to that one line, keeping the summary and the live indicator in view, and the portal remembers the choice.
+The strip is a panel headed **Service Health**, with a one-line summary beside the heading ("All services healthy", or "1 service unhealthy, 1 degraded", worst first) and, on the right, whether the panel is **Updated live**: whether the portal is receiving real-time change notifications from the database. While it is reconnecting the portal falls back to polling; pages still update, more slowly. That indicator is about the portal's own connection, not a background service. The panel opens collapsed to that one line, keeping the summary and the live indicator in view; the chevron at the end of the header opens the cards, and the portal remembers the choice.
 
 Below the header is one card per service, all built the same way so the same fact is in the same place on every card:
 
 - **Worker · Sync**<br /> The synchronisation loop. When it is running something, the card names it ("Full Import: Corporate Directory") and says how long it has been at it.
 - **Worker · Passwords**<br /> The Password Delivery Service, which delivers the Passwords tab's queue on its own clock. While it is writing to a directory the card says which ("Delivering to Corporate Directory"); its detail line reads what the queue holds ahead of it ("3 due, 1 retrying, next attempt 09:19 UTC"), and is blank when nothing is waiting. It shares a process with the synchronisation loop, so the two cards go **Unhealthy** together when the Worker is down; one alone means that half of the process has stopped while the other is still working, which is why they are reported separately.
-- **Scheduler**<br /> The Schedule runner.
+- **Scheduler**<br /> The Schedule runner. The card also names the enabled Schedule due next, when it fires and how long until then ("Next: Weekly Full Reconciliation Sun 02:00 (in 3 d)"), or says **No Schedules due**. While the panel is collapsed, the header carries the same in brief ("next Schedule Sun 02:00"). A Scheduler that is Unhealthy shows neither, since it will not start anything until it is back.
 
 Each card carries, top to bottom: the service's name with its status on a coloured pill (green, amber or red; the pill is the only coloured thing on the card); what it is doing now, or **Idle**; and its condition in plain words with the instance's uptime after it ("Heartbeat 3 seconds ago · up 54 s"). The host, version and instance id of the process reporting sit behind the card's details control (the chevron at the right of the heartbeat line); each value is in a fixed-width face with a copy button beside it, so a container id can go straight into a shell. The details also show **Memory**: how much memory the service's process holds, and how full the memory it can draw on is ("41 GB held · 66% of 62 GB in use"), where that memory is its container's limit when one is set, and otherwise the host's. A service that is Unhealthy leads with why ("No heartbeat for 4 minutes"), says what it was running when it went quiet, if anything, and keeps the uptime it had at its last heartbeat, which is how long it ran before it stopped.
 
@@ -39,7 +66,7 @@ A service has a **status**, which is the word on its pill and the thing to alert
 | **Healthy** | Heartbeating | The service reported within its interval. Nothing to do. | Last heartbeat within 15 seconds |
 | **Degraded** | Heartbeat overdue | A few heartbeats missed, but not enough to presume the process is gone. It may be paused under load, or the database may be slow. Worth a glance; not yet an alarm. | Last heartbeat more than 15 seconds ago |
 | **Degraded** | Memory low | Most of the memory the service can draw on is in use. The Worker stops its running work at 92% rather than be stopped by the operating system part-way through, and a run stopped that way says so on its Activity. Give JIM more memory, or run less at once: smaller Run Profile page sizes, or fewer runs in parallel. | 85% or more of the memory in use at the last heartbeat |
-| **Degraded** | Stalled | The service is alive and reports work in flight, but that work has not moved forward for a long time. The process is up; the task it is running may be wedged. Look at it on the Queue tab, and cancel it if it is genuinely stuck. | Current work has not progressed for 10 minutes |
+| **Degraded** | Stalled | The service is alive and reports work in flight, but that work has not moved forward for a long time. The process is up; the task it is running may be wedged. Look at it in the Activity tab's In Progress section, and cancel it if it is genuinely stuck. | Current work has not progressed for 10 minutes |
 | **Unhealthy** | No heartbeat | The service should be presumed down. Queued and scheduled work will not run until it is back. Check the container, then [the logs](../administration/troubleshooting.md). | No heartbeat for 60 seconds (Worker) or 120 seconds (Scheduler) |
 | **Unhealthy** | Never started | The service has never reported at all. A deployment that never started its Worker says so here rather than leaving the card off the strip. | No heartbeat has ever been written |
 
@@ -61,7 +88,7 @@ Every service writes its heartbeat every 5 seconds. Both Worker services are pre
 
 The strip refreshes every 10 seconds, so a change of status appears within roughly one refresh of it happening.
 
-## Watching from outside the portal
+## :material-monitor-dashboard: Watching from outside the portal
 
 The same report is available to monitoring and scripts, and comes from the same rules, so a script and an administrator at the portal always agree.
 
@@ -78,7 +105,7 @@ if ($health.Overall -ne 'Healthy') {
 
 The unauthenticated `/api/v1/health` endpoints ([Health Monitoring](../administration/deployment.md#health-monitoring)) answer for the web tier only and say nothing about the Worker, the Password Delivery Service or the Scheduler. Use them for load balancers and orchestrators; use `system/health` for anything that needs to know whether JIM's work is actually being done.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Activities](activities.md): the record of every operation, and how to watch one run
 - [Schedules](schedules.md): automated, ordered sequences of operations

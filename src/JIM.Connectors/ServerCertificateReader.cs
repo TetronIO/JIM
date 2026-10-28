@@ -23,6 +23,7 @@ public class ServerCertificateReader : IServerCertificateReader
             Log.Logger,
             endpoint.ServerDescription,
             endpoint.SecureTransportName,
-            endpoint.HandshakeFraming);
+            endpoint.HandshakeFraming,
+            endpoint.AcceptsJimTrustedCertificates);
     }
 }

@@ -9,12 +9,35 @@ audience: automation-author
 
 These cmdlets set a Metaverse Object's password, and configure which Connected Systems receive passwords through [Password Synchronisation](../concepts/password-synchronisation.md) and how hard JIM tries to deliver them. Reading the queue of password changes on their way to your Connected Systems, and releasing or cancelling stuck ones, is on [Password Queue](password-queue.md).
 
+```jim-diagram
+archetype: comparison
+title: The two ways Set-JIMMetaverseObjectPassword is aimed
+desc: "With -ConnectedSystemId, the reset case, where you chose the password for the person, the password goes to the Metaverse Object's Connected System Objects in the systems named, and the command refuses, setting nothing, where one is missing. It waits up to 10 seconds by default, requires a change at the next sign-in by default, and delivers even to a system whose Password Synchronisation is switched off. Without it, the event case, where the password changed somewhere, it goes to every Connected System configured for Password Synchronisation. It returns at once by default, leaves the password to expire by each target's own policy, and holds a change for a switched-off system until it is switched on. Either way, -Password supplies the password, or -Generate has JIM make one, returned once on GeneratedPassword."
+columns:
+  - { label: "With `-ConnectedSystemId`", sub: "the reset case: you chose the password" }
+  - { label: Without it, sub: "the event case: it changed somewhere" }
+rows:
+  - label: Goes to
+    cells:
+      - { text: the Connected System Objects in the systems named, sub: "refused, setting nothing, where one is missing" }
+      - { text: every Connected System configured for Password Synchronisation }
+  - label: Defaults
+    cells:
+      - { text: "`RequireChangeAtNextSignIn`", sub: "as `-ExpiryBehaviour`; waits up to 10 seconds" }
+      - { text: "`ExpiresAccordingToTargetPolicy`", sub: "as `-ExpiryBehaviour`; returns at once" }
+  - label: System switched off
+    cells:
+      - { text: still delivered to }
+      - { text: held until it is switched on }
+footer: "Either way, `-Password` supplies it, or `-Generate` makes one, returned once on `GeneratedPassword`"
+```
+
 !!! note "No password you supplied is ever returned"
     Nothing here returns a password you supplied, in any form: the queued value is encrypted in the database and has no representation in any response. The one password returned is one JIM generated for `Set-JIMMetaverseObjectPassword -Generate`, once, to the caller who asked for it.
 
 ---
 
-## Set-JIMMetaverseObjectPassword
+## :material-form-textbox-password: Set-JIMMetaverseObjectPassword
 
 Sets a Metaverse Object's password, on the Connected System Objects you name or on every Connected System configured for Password Synchronisation. `Set-JIMConnectedSystemObjectPassword` ([Connected Systems](connected-system-objects.md#set-jimconnectedsystemobjectpassword)) is the same operation with one Connected System Object named; both return the same outcome for each target.
 
@@ -145,7 +168,7 @@ Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId $systems -Generate -Fo
 
 ---
 
-## Get-JIMConnectedSystemPasswordPolicy
+## :material-shield-lock-outline: Get-JIMConnectedSystemPasswordPolicy
 
 Gets what a Connected System said it will accept, as JIM read it during a previous connection. It opens no new
 connection and changes nothing.
@@ -210,7 +233,7 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
 
 ---
 
-## Get-JIMConnectedSystemPasswordSynchronisation
+## :material-sync: Get-JIMConnectedSystemPasswordSynchronisation
 
 Gets whether a Connected System receives synchronised passwords, and the settings governing how hard JIM tries
 to deliver them. A Connected System that has never been configured is reported with `Configured` set to
@@ -269,7 +292,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
-## Set-JIMConnectedSystemPasswordSynchronisation
+## :material-tune-variant: Set-JIMConnectedSystemPasswordSynchronisation
 
 Creates or updates a Connected System's Password Synchronisation configuration. Omitted parameters leave the
 stored value unchanged; `-TargetObjectType` is required when creating one.
@@ -330,7 +353,7 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 
 ---
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Password Synchronisation](../concepts/password-synchronisation.md) explains what the queue is and how a change moves through it, and [The Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) what delivers it
 - [Metaverse](metaverse.md) covers finding the Metaverse Object whose password you set, and what its Connected System Objects are

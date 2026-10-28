@@ -71,5 +71,12 @@ public enum ServerCertificateTrustOutcome
     /// marked as a certificate authority, or its signature does not verify. Nothing trusted in JIM would make the
     /// connection work, so nothing was trusted; the chain has to be fixed on the server.
     /// </summary>
-    InvalidChain
+    InvalidChain,
+
+    /// <summary>
+    /// The connection does not use the JIM certificate store: its driver takes no trust anchor from JIM, as Oracle
+    /// Database's does not over TCPS. Trusting the certificate would report success and change nothing, so nothing was
+    /// trusted; the certificate has to be one the operating system already trusts.
+    /// </summary>
+    NotUsedByThisConnection
 }

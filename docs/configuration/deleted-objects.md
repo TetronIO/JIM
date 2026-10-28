@@ -9,7 +9,19 @@ audience: administrator
 
 When JIM deletes a Connected System Object or a Metaverse Object, it keeps a deletion record: the object's last values, when it went, and who or what removed it. The **Deleted Objects** page (Administration, then **Deleted Objects**) is where you find those records, to answer "where did this account go?" long after the object itself has gone. A record is for audit; JIM cannot bring a deleted object back.
 
-## What a deletion record keeps
+```jim-diagram
+archetype: lifecycle
+title: From a live object to its deletion record, and on to clean-up
+desc: "A Connected System Object or Metaverse Object has each change recorded while it is live. When JIM deletes it, a deletion record keeps its last values, when it went and who or what removed it, but only while change tracking is on; JIM cannot bring the object back. The nightly History Retention Cleanup Schedule later removes the record once it is older than the History retention period, 90 days by default."
+states:
+  - { id: live, label: Live object, sub: each change recorded }
+  - { id: deleted, label: Deletion record, sub: "last values, when, who; if tracking is on" }
+transitions:
+  - { from: live, to: deleted, label: JIM deletes it }
+end: { from: deleted, label: History Retention Cleanup, note: "after `History.RetentionPeriod`, 90 days by default", state: { label: Removed, sub: nothing left to find } }
+```
+
+## :material-file-tree-outline: What a deletion record keeps
 
 | | Connected System Object | Metaverse Object |
 |---|---|---|
@@ -22,17 +34,17 @@ A Metaverse Object deleted by housekeeping after a [grace period](metaverse.md#g
 
 The record keeps the object's earlier change history too. Opening a record shows every change JIM recorded for that object, up to and including its deletion.
 
-## When no record is kept
+## :material-delete-clock-outline: When no record is kept
 
 - **Change tracking is off.** The Service Settings **Track CSO changes** <!-- conformance: allow LANG-4 "the label the portal shows" --> and **Track MVO changes** <!-- conformance: allow LANG-4 "the label the portal shows" --> decide whether JIM records changes, deletions included, for each kind of object. Both are on by default. With one off, JIM deletes that kind of object without a record. See [Service Settings](../administration/configuration.md#service-settings).
 - **The deletion came before tracking was on.** Nothing was recorded at the time, so there is nothing to find.
 - **The change history went with the objects.** [Clearing a Connector Space](connector-space.md#clearing-the-connector-space) deletes its Connected System Objects' change history, deletion records included, unless you choose to keep it. Deleting a Connected System with **Delete change history for deleted objects** ticked does the same (over the REST API, `deleteChangeHistory=true`); left unticked, the default, the history stays. See [Removing a Connected System](removing-a-connected-system.md).
 
-## How long records are kept
+## :material-timer-outline: How long records are kept
 
 Deletion records are change history, so the **History retention period** Service Setting (`History.RetentionPeriod`, 90 days by default) applies to them. The built-in **History Retention Cleanup** Schedule removes change history older than that each night, and `Invoke-JIMHistoryCleanup` runs the same clean-up on demand. Each change ages out on its own date, so the oldest changes before a deletion can go before the deletion record itself does.
 
-## Find a deleted object
+## :material-magnify: Find a deleted object
 
 The page has a tab for each kind of object: **Deleted Connected System Objects** and **Deleted Metaverse Objects**.
 
@@ -45,15 +57,15 @@ Both lists show the most recent deletions first and load more as you scroll. The
 
 A [Causality](causality.md) view that reaches a deleted object links straight to its record here.
 
-## Who can use it
+## :material-account-lock-outline: Who can use it
 
 Only administrators can open the page, and the REST API that serves it requires the Administrator role too.
 
-## Read records from a script
+## :material-console: Read records from a script
 
 `Get-JIMDeletedObject` returns the same records, filtered the same way; see [History](../powershell/history.md#get-jimdeletedobject). The REST API serves them from `GET /api/v1/history/deleted-objects/cso` and `GET /api/v1/history/deleted-objects/mvo`.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Metaverse](metaverse.md#deletion-behaviour): when JIM deletes a Metaverse Object
 - [Deprovisioning](deprovisioning.md): when JIM deletes an object in a Connected System

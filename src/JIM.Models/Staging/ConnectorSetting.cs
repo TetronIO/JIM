@@ -13,6 +13,13 @@ public class ConnectorSetting
 
     public string? Description { get; set; }
 
+    /// <summary>
+    /// An example value to show the administrator beneath the setting, such as a complete JSON document to copy
+    /// from. Kept apart from <see cref="Description"/> so the portal can render it as a code block with its line
+    /// breaks and indentation intact, rather than folded into the description's paragraph.
+    /// </summary>
+    public string? Example { get; set; }
+
     public ConnectedSystemSettingCategory Category { get; set; }
 
     public ConnectedSystemSettingType Type { get; set; }

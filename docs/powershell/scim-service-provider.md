@@ -9,6 +9,18 @@ audience: automation-author
 
 A Connected System that uses the SCIM 2.0 Service Provider Connector has a SCIM endpoint of its own, which identity providers push Users and Groups to. These cmdlets manage the keys those identity providers call it with, and read the endpoint's base URL, what it holds and the resource types and schemas it serves. The SCIM 2.0 Service Provider is a [Preview feature](../administration/preview-features.md); every cmdlet here fails while it is turned off.
 
+```jim-diagram
+archetype: flow
+title: Rotating a SCIM key with an overlap
+desc: "A Connected System can have at most two usable SCIM keys, so a key is rotated with an overlap. Create the new key with New-JIMScimKey, which shows its secret once. Give the new key to the identity provider. Watch the old key with Get-JIMScimKey until its LastUsedAt stops moving. Then disable the old key with Set-JIMScimKey, or remove it with Remove-JIMScimKey."
+container: { label: Rotating a key, tag: "at most two usable keys per Connected System" }
+steps:
+  - { id: create, label: Create the new key, sub: secret shown once, note: "`New-JIMScimKey`" }
+  - { id: give, label: Give it to the identity provider }
+  - { id: watch, label: Watch the old key, sub: "until `LastUsedAt` stops moving", note: "`Get-JIMScimKey`" }
+  - { id: retire, label: Retire the old key, sub: disable or remove, note: "`Set-JIMScimKey` or `Remove-JIMScimKey`" }
+```
+
 !!! warning
     A key's secret is shown once, by `New-JIMScimKey`, and cannot be shown again. Keep it somewhere safe; if it is lost, create a new key.
 
@@ -16,7 +28,7 @@ A key works only on the SCIM endpoint of the Connected System it was created for
 
 ---
 
-## Get-JIMScimKey
+## :material-key-outline: Get-JIMScimKey
 
 Retrieves the keys of a Connected System's SCIM endpoint, usable or not. The secret is never returned; `KeyPrefix` identifies a key.
 
@@ -67,7 +79,7 @@ Get-JIMScimKey -ConnectedSystemId 12 | Select-Object Name, IsEnabled, ExpiresAt,
 
 ---
 
-## New-JIMScimKey
+## :material-key-plus: New-JIMScimKey
 
 Creates a key for an identity provider to call the Connected System's SCIM endpoint with, and returns it with its secret.
 
@@ -122,7 +134,7 @@ New-JIMScimKey -ConnectedSystemId 12 -Name "Entra provisioning trial" -ExpiresAt
 
 ---
 
-## Set-JIMScimKey
+## :material-key-change: Set-JIMScimKey
 
 Renames, re-describes, re-dates, disables or re-enables a key. Only what is given changes.
 
@@ -164,7 +176,7 @@ Get-JIMScimKey -ConnectedSystemId 12 -Name "Entra provisioning 2025" | Set-JIMSc
 
 ---
 
-## Remove-JIMScimKey
+## :material-key-minus: Remove-JIMScimKey
 
 Permanently deletes a key. An identity provider still using it is refused from that moment; to keep a record of the key, disable it instead.
 
@@ -203,7 +215,7 @@ Get-JIMScimKey -ConnectedSystemId 12 | Where-Object { -not $_.IsEnabled } | Remo
 
 ---
 
-## Get-JIMScimStoreSummary
+## :material-chart-box-outline: Get-JIMScimStoreSummary
 
 Returns the base URL to give an identity provider and what the Connected System's SCIM endpoint holds: resources of each type, deleted resources kept until an import reads them, the changes the next import will read, and when an identity provider last wrote.
 
@@ -244,7 +256,7 @@ Get-JIMConnectedSystem -Name "Entra provisioning" | Get-JIMScimStoreSummary | Se
 
 ---
 
-## Get-JIMScimResourceType
+## :material-shape-outline: Get-JIMScimResourceType
 
 Returns the resource types the Connected System's SCIM endpoint serves. They are read-only.
 
@@ -286,7 +298,7 @@ Get-JIMScimResourceType -ConnectedSystemId 12 | Select-Object Name, Endpoint, Sc
 
 ---
 
-## Get-JIMScimSchema
+## :material-file-tree-outline: Get-JIMScimSchema
 
 Returns the schemas the Connected System's SCIM endpoint serves, with every attribute's characteristics. They are read-only.
 
@@ -324,7 +336,7 @@ Each schema.
 
 ---
 
-## Get-JIMScimJournal
+## :material-history: Get-JIMScimJournal
 
 Returns the requests an identity provider made to one resource, oldest first: what each did, the attributes it changed or ignored (by name, never by value), and the key and address that made it. With `-ChangeId`, returns the requests behind one imported change in a Connected System Object's change history.
 

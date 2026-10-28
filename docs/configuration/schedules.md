@@ -9,16 +9,37 @@ audience: administrator
 
 A **schedule** defines an automated sequence of operations that JIM executes on a trigger (cron-based or manual). Each schedule contains ordered steps that can run sequentially or in parallel, and each step runs a [Run Profile](run-profiles.md).
 
+```jim-diagram
+archetype: decision
+title: What a Schedule does when a step fails
+desc: 'When a step fails, its own When this step fails setting decides first. Stop the Schedule or Continue the Schedule there is set on this step. Follow the Schedule, the default for new steps, defers to the Schedule''s When a step fails setting: Stop the Schedule, its default, or Continue the Schedule. A Schedule that stops runs none of the later steps and its execution ends Failed; one that continues runs the remaining steps and ends Complete With Error.'
+start: {label: A step fails}
+questions:
+- {id: step, label: When this step fails, sub: the step's own setting}
+- {id: schedule, label: When a step fails, sub: the Schedule's setting}
+outcomes:
+- {id: stopstep, label: Stops on failure, sub: set on this step; ends Failed}
+- {id: contstep, label: Continues on failure, sub: set on this step; ends Complete With Error}
+- {id: stopsched, label: Stops on failure, sub: from the Schedule; ends Failed}
+- {id: contsched, label: Continues on failure, sub: from the Schedule; ends Complete With Error}
+answers:
+- {from: step, to: stopstep, label: Stop the Schedule}
+- {from: step, to: contstep, label: Continue the Schedule}
+- {from: step, to: schedule, label: Follow the Schedule}
+- {from: schedule, to: stopsched, label: 'Stop the Schedule (default)'}
+- {from: schedule, to: contsched, label: Continue the Schedule}
+```
+
 Schedules are the primary mechanism for automating identity synchronisation workflows. A typical example is a nightly schedule that imports from each Connected System, runs synchronisation, and exports the results.
 
-## Triggers
+## :material-flash-outline: Triggers
 
 A schedule is one of two trigger types:
 
 - **Cron**<br /> Runs automatically on a recurring pattern.
 - **Manual**<br /> Runs only when explicitly triggered.
 
-## Pattern types
+## :material-shape-outline: Pattern types
 
 Cron schedules support three authoring modes:
 
@@ -28,7 +49,7 @@ Cron schedules support three authoring modes:
 
 The first two modes cover the vast majority of cases without requiring administrators to think in cron syntax. Custom is the escape hatch for the unusual schedules they don't.
 
-## Steps
+## :material-format-list-numbered: Steps
 
 Each step has an execution mode and a step type.
 
@@ -79,7 +100,7 @@ From automation, the Schedule's setting is `-OnStepFailure` on `New-JIMSchedule`
 
 Nothing is lost when a schedule stops or cannot start: the steps that did not run are attempted again on its next run, and a cron schedule stays on its timetable rather than retrying every few seconds. Fix the cause before the next scheduled run (for example, remove the step for a Connected System that is being deleted, or select the partition its Run Profile targets again), or run the schedule manually once it is fixed.
 
-## Executions
+## :material-play-circle-outline: Executions
 
 Each schedule run produces a **Schedule Execution** record with per-step progress. Active and historical executions can be listed, retrieved, and (for active ones) cancelled.
 
@@ -125,7 +146,7 @@ The same reasons are available to automation: each step returned by `Get-JIMSche
 
 ### Watching one run
 
-While a schedule is running, its tasks are grouped under a header in **Admin > Operations > Queue**, and that header draws the whole schedule as a rail: one marker per step, in the order they run, with the step names underneath and the step it has reached named beside them ("Step 2 of 5").
+While a schedule is running, its tasks are grouped under a header in **Admin > Operations > Activity** (in Queued for the steps still to come, and in In Progress for the step running now), and that header draws the whole schedule as a rail: one marker per step, in the order they run, with the step names underneath and the step it has reached named beside them ("Step 2 of 5").
 
 The rail shows the whole schedule, not just the part still queued. A task is removed from the queue the moment it finishes, so steps already done would otherwise disappear as the run progressed; their outcomes are read from their Activities instead. A step that failed stays visible as a failed marker, including when the group is collapsed to a single row.
 
@@ -133,34 +154,34 @@ A step running several tasks at once is drawn as one divided marker, a wedge per
 
 A step's position counts step *groups*: steps that run concurrently share one position, so a schedule of six steps where two run together is five steps long.
 
-## Enabled flag
+## :material-toggle-switch-outline: Enabled flag
 
 Disabled schedules don't fire on their cron trigger and don't appear as eligible for manual run. This is useful for temporarily pausing a schedule during maintenance without losing its definition.
 
-## Built-in schedules
+## :material-lock-outline: Built-in schedules
 
 JIM ships with a small number of **built-in schedules** that are part of the product rather than something you create. They behave like any other schedule with one difference: their name is fixed and they cannot be deleted. You can still change **when** they run and enable or disable them.
 
-- **Temporal Scope Reconciliation**<br /> Keeps [relative-date scope filters](synchronisation-rules.md) live for objects whose source data isn't changing. Both the import and export hot paths skip an object that hasn't changed since the last run, so a leaver whose end date has just passed, or a joiner whose start date has just arrived, would otherwise never be re-evaluated until something else about them changed. This schedule periodically re-checks those time-driven scope transitions and routes the affected objects back through the normal synchronisation engine, so date-driven deprovisioning and staged provisioning happen on their own. It runs hourly by default; lower the interval for tighter timing, or raise it to reduce background work. Each run re-checks the time since the last run that ended **Complete**, so a run that ended any other way, including **Complete With Error**, is covered again by the next one. A rule whose [expression criterion compares against a relative date](scoping-criteria.md#relative-dates-in-scope-filters) has no stored date to narrow by, so each run evaluates every object of that rule's type, in batches, and its Activity says how many. An object whose scope a criterion cannot decide is left as it is, and the run ends **Complete With Warning**, naming how many such objects there were.
+- **Temporal Scope Reconciliation**<br /> Keeps [relative-date scope filters](synchronisation-rules.md) live for objects whose source data isn't changing. A Delta Synchronisation reaches only objects that have changed since the last run, so a leaver whose end date has just passed, or a joiner whose start date has just arrived, would otherwise not be re-evaluated until something else about them changed or a Full Synchronisation ran. This schedule periodically re-checks those time-driven scope transitions and flags the affected objects, and the next synchronisation of their Connected System, Delta Synchronisation included, processes them, so date-driven deprovisioning and staged provisioning happen on their own. It runs hourly by default; lower the interval for tighter timing, or raise it to reduce background work. Each run re-checks the time since the last run that ended **Complete**, so a run that ended any other way, including **Complete With Error**, is covered again by the next one. A rule whose [expression criterion compares against a relative date](scoping-criteria.md#relative-dates-in-scope-filters) has no stored date to narrow by, so each run evaluates every object of that rule's type, in batches, and its Activity says how many. An object whose scope a criterion cannot decide is left as it is, and the run ends **Complete With Warning**, naming how many such objects there were.
 
 - **History Retention Cleanup**<br /> Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, Configuration Change Previews, Activities, [initial-password records](../concepts/passwords.md), and [Pending Password Changes](../concepts/passwords.md) that reached a terminal state. Each kind is governed by its own `History.*` [Service Setting](../administration/configuration.md#service-settings), so audit history that must be kept for years is not aged out alongside high-volume synchronisation history. Records still being worked are never removed, however old. It runs daily at 02:30 by default; each pass is capped by `History.CleanupBatchSize`, so a deployment with a large backlog drains over several runs rather than in one long transaction. The Activity for each run says exactly what it removed, so "is retention working?" is answered by looking, not inferring.
 
 What you can and can't do with a built-in schedule:
 
-- ✅ **Re-time it**<br /> Change the trigger pattern or interval (for example, run the reconciler every 15 minutes instead of hourly).
-- ✅ **Enable or disable it**<br /> Pause it during a maintenance window and re-enable it afterwards.
-- ❌ **Rename it**<br /> The name is fixed so the schedule stays recognisable and JIM can keep it maintained across upgrades.
-- ❌ **Delete it**<br /> Built-in schedules are part of the product; disable one instead if you don't want it to run.
-- ❌ **Change its steps**<br /> The step composition is defined and maintained by JIM; the Steps tab is read-only for a built-in schedule.
-- ❌ **Change what happens when a step fails**<br /> A built-in Schedule stops when a step fails, and its steps follow it; JIM manages both, so **When a step fails** is read-only in the editor.
+- :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } **Re-time it**<br /> Change the trigger pattern or interval (for example, run the reconciler every 15 minutes instead of hourly).
+- :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } **Enable or disable it**<br /> Pause it during a maintenance window and re-enable it afterwards.
+- :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } **Rename it**<br /> The name is fixed so the schedule stays recognisable and JIM can keep it maintained across upgrades.
+- :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } **Delete it**<br /> Built-in schedules are part of the product; disable one instead if you don't want it to run.
+- :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } **Change its steps**<br /> The step composition is defined and maintained by JIM; the Steps tab is read-only for a built-in schedule.
+- :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } **Change what happens when a step fails**<br /> A built-in Schedule stops when a step fails, and its steps follow it; JIM manages both, so **When a step fails** is read-only in the editor.
 
 The portal reflects this: a built-in schedule's name and steps are read-only in the editor, and its delete action is replaced with a lock. These rules are enforced everywhere, not just in the portal: the PowerShell module and REST API reject a rename, delete, step change or change to what happens when a step fails, and the underlying application layer is the authoritative backstop.
 
-## Auditing
+## :material-history: Auditing
 
 Every configuration change to a schedule is recorded in the immutable audit log (Activities): creating, editing, enabling, disabling, re-timing and deleting are each captured as an Activity attributed to whoever made the change, the same audit trail JIM keeps for Connected Systems and Synchronisation Rules. Running a schedule is tracked separately, as a schedule execution and its per-step Activities.
 
-## Change history
+## :material-history: Change history
 
 Every change to a Schedule's configuration (including its Steps) is recorded as a versioned snapshot, the same way as for [Synchronisation Rules and Connected Systems](activities.md#configuration-change-history). The **History** tab in the Schedule editor shows the timeline of changes, each as a field-by-field "before and after", and lets you compare any two versions. A step's SQL connection string is treated as a secret here: a change to it is recorded, but the history never holds or shows its value.
 
@@ -168,7 +189,7 @@ The same history is available from the `Get-JIMConfigurationChangeHistory` [cmdl
 
 When changing a schedule from automation you can record a reason alongside the change, exactly as for Synchronisation Rules and Connected Systems: pass `-ChangeReason` on the Schedule write cmdlets (`New-`, `Set-`, `Remove-`, `Enable-`, `Disable-JIMSchedule` and the step cmdlets), or the optional `changeReason` field/query parameter on the REST write endpoints. The reason shows with the change and on its Activity.
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Setting up an automated nightly sync:**
 
@@ -189,13 +210,13 @@ When changing a schedule from automation you can record a reason alongside the c
 2. Do the maintenance work
 3. Re-enable the schedule; the next scheduled fire-time picks up automatically
 
-## Manage Schedules
+## :material-tune-variant: Manage Schedules
 
 - **JIM portal**<br /> Schedules area of the admin UI
 - **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) to configure a Schedule (`Get-JIMSchedule`, `New-JIMSchedule` and the rest), and [Schedule Execution cmdlets](../powershell/schedule-executions.md) to run one and follow its runs (`Start-JIMSchedule`, `Get-JIMScheduleExecution`, `Stop-JIMScheduleExecution`)
 - **REST API**<br /> Schedules and schedule execution endpoints in the [interactive API reference](../../api/reference/)
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Run Profiles](run-profiles.md): the operations executed by Run Profile steps
 - [Activities](activities.md): the Activity each step produces, and filtering Activities by Schedule

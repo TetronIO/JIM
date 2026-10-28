@@ -9,11 +9,25 @@ audience: automation-author
 
 A Schedule Execution is one run of a Schedule, from its first step to its last. These cmdlets start one on demand, follow it while it runs, read back what happened, and stop one that is queued or running. To create or change a Schedule itself, see [Schedules](schedules.md).
 
+```jim-diagram
+archetype: lifecycle
+title: A Schedule Execution, from start to finish
+desc: "Start-JIMSchedule starts a Schedule Execution now, whatever the Schedule's trigger and whether or not it is enabled; its trigger starts one too. The execution is Queued until it starts, then InProgress while it works through its step groups. It ends Complete; CompleteWithError when a failed step let it carry on; or Failed when a failed step stopped it. While it is Queued or InProgress, Get-JIMScheduleExecution -Active lists it and Stop-JIMScheduleExecution cancels it, which ends it Cancelled. Start-JIMSchedule -Wait checks every 5 seconds and returns the execution once it has finished."
+start: { label: "`Start-JIMSchedule` or its trigger" }
+container: { label: Schedule Execution, note: "`Stop-JIMScheduleExecution` cancels it in either state: `Cancelled`" }
+states:
+  - { id: queued, label: "`Queued`", sub: waiting to start }
+  - { id: running, label: "`InProgress`", sub: one step group at a time }
+transitions:
+  - { from: queued, to: running, label: it starts }
+end: { from: running, label: it ends, state: { label: Finished, sub: "`Complete` or `Failed` or `CompleteWithError`" } }
+```
+
 Every Schedule Execution these cmdlets return carries `StepDisplay`, the step group it has reached as one sentence, so a script reads the same position the portal shows.
 
 ---
 
-## Start-JIMSchedule
+## :material-calendar-clock-outline: Start-JIMSchedule
 
 Runs a Schedule now, whatever its trigger type and whether or not it is enabled: useful for testing a Schedule, or for running one on demand.
 
@@ -54,7 +68,7 @@ With `-PassThru`, the new Schedule Execution as it stands; with `-Wait`, the exe
 | `InitiatedById` | `guid` | The ID of the principal that initiated the execution. |
 | `InitiatedByName` | `string` | The display name of the principal that initiated the execution. |
 | `ErrorMessage` | `string` | Error message if the execution failed. For a `CompleteWithError` execution, the message naming each failed step it carried on past. |
-| `StepDisplay` | `string` | The step group the execution has reached, as one sentence naming it, for example Step 2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Queue. |
+| `StepDisplay` | `string` | The step group the execution has reached, as one sentence naming it, for example Step 2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Activity. |
 <!-- END GENERATED: Start-JIMSchedule -->
 
 When `-Wait` reaches its timeout, the cmdlet warns, but the Schedule Execution carries on in JIM. Use [`Get-JIMScheduleExecution`](#get-jimscheduleexecution) to follow it, or [`Stop-JIMScheduleExecution`](#stop-jimscheduleexecution) to cancel it.
@@ -81,7 +95,7 @@ Get-JIMSchedule -Name "On-Demand Full Sync" | Start-JIMSchedule -Wait
 
 ---
 
-## Get-JIMScheduleExecution
+## :material-history: Get-JIMScheduleExecution
 
 Retrieves Schedule Executions: to follow one that is running, review past runs, or check how a particular one went.
 
@@ -188,7 +202,7 @@ Get-JIMSchedule -Name "Weekday Sync" | Get-JIMScheduleExecution -Active
 
 ---
 
-## Stop-JIMScheduleExecution
+## :material-stop-circle-outline: Stop-JIMScheduleExecution
 
 Cancels a Schedule Execution that is queued or running.
 
@@ -233,7 +247,7 @@ Get-JIMScheduleExecution -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Act
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Schedules](schedules.md): create, change and remove Schedules and their steps
 - [Schedules](../configuration/schedules.md): what a step failing means, and how a Schedule Execution appears in the portal

@@ -9,7 +9,27 @@ audience: administrator
 
 JIM records each change it makes to a Metaverse Object: which attributes changed, the values added and removed, and the Synchronisation Rule, user or API key that made the change. A Metaverse Object's own **Changes** tab shows that history for one object. The **Object Changes** page (Activity, then **Object Changes**) searches it across every object, to answer questions such as "who was disabled this month?" or "who moved out of Finance last week?" without knowing which objects to open.
 
-## What you can search by
+```jim-diagram
+archetype: anatomy
+title: What one recorded change holds, and what finds it
+desc: "Each recorded change names the Metaverse Object, shown dimmed once deleted; the kind of change, such as Attribute Flow, Created or Deleted; the attributes it touched, with values added and removed; who made it, a Synchronisation Rule, user or API key; and the Activity it was made in. The Object Changes page finds changes by the days they were made between, by Metaverse Object Type, including objects since deleted, by display name, and by attribute conditions that match a value an attribute changed to or from."
+subject:
+  kind: object
+  label: One recorded change
+  parts:
+    - { label: Metaverse Object, detail: dimmed once deleted }
+    - { label: Change, detail: "such as Attribute Flow, Created or Deleted" }
+    - { label: Attributes, detail: values added and removed }
+    - { label: Made by, detail: "Synchronisation Rule, user or API key" }
+    - { label: Activity, detail: the one it was made in }
+properties:
+  - { name: Changed between, value: a range of days }
+  - { name: Metaverse Object Type, value: deleted objects too }
+  - { name: Search box, value: display name contains }
+  - { name: Attribute conditions, value: changed to or from }
+```
+
+## :material-text-box-search-outline: What you can search by
 
 | Filter | What it matches |
 |---|---|
@@ -18,7 +38,7 @@ JIM records each change it makes to a Metaverse Object: which attributes changed
 | Search box | Changes to objects whose display name contains the text; not case-sensitive |
 | Attribute conditions | Changes to the named attribute, optionally to or from a value (below) |
 
-## Attribute conditions
+## :material-filter-outline: Attribute conditions
 
 Select **Add Condition**, choose an **Attribute**, then a **Condition**:
 
@@ -51,7 +71,7 @@ With two or more conditions, choose how they combine:
 
 A search can combine up to ten conditions.
 
-## Reading the results
+## :material-table-search: Reading the results
 
 Each row is one change to one Metaverse Object, newest first:
 
@@ -65,21 +85,21 @@ Select a row to open the change in a panel beside the list: every attribute it c
 
 The filters are kept in the page's address, so a search can be bookmarked or shared.
 
-## What cannot be found
+## :material-alert-octagon-outline: What cannot be found
 
 - **Changes made while change tracking was off.** The **Track MVO changes** <!-- conformance: allow LANG-4 "the label the portal shows" --> Service Setting decides whether JIM records Metaverse Object changes at all; it is on by default. See [Service Settings](../administration/configuration.md#service-settings).
 - **Changes older than the retention period.** The **History retention period** Service Setting (`History.RetentionPeriod`, 90 days by default) applies, and the nightly **History Retention Cleanup** Schedule removes older changes.
 - **Changes to Connected System Objects.** The page searches the Metaverse. A Connected System Object's changes are on its own page in the [Connector Space](connected-systems.md#the-connector-space).
 
-## Who can use it
+## :material-account-lock-outline: Who can use it
 
 Anyone who can sign in to the portal can open the page, as they can a Metaverse Object's **Changes** tab. The REST API that serves the same search requires the Administrator role.
 
-## Search from a script
+## :material-console: Search from a script
 
 `Search-JIMMetaverseObjectChange` runs the same search; see [History](../powershell/history.md#search-jimmetaverseobjectchange). The REST API serves it from `POST /api/v1/history/metaverse-object-changes/search`.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Metaverse Objects](metaverse-objects.md): one object's own change history
 - [Deleted Objects](deleted-objects.md): the record JIM keeps of each deleted object

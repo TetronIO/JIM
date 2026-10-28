@@ -248,7 +248,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             {
                 Name = SqlConnectorConstants.SettingOracleEncryption,
                 DefaultStringValue = SqlConnectorConstants.DefaultOracleEncryption,
-                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate; where that certificate is not one the operating system already vouches for, add it in Admin > Certificates.",
+                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate the operating system already trusts: the Oracle driver accepts no additional trust anchors, so a certificate added in Admin > Certificates does not help here.",
                 Category = ConnectedSystemSettingCategory.Connectivity,
                 Type = ConnectedSystemSettingType.DropDown,
                 DropDownValues =
@@ -304,6 +304,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 Name = SqlConnectorConstants.SettingObjectTypes,
                 Required = true,
                 Description = ObjectTypesSettingDescription,
+                Example = SqlConnectorConstants.ObjectTypesExample,
                 Category = ConnectedSystemSettingCategory.Schema,
                 Type = ConnectedSystemSettingType.Text
             },
@@ -316,6 +317,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 // nobody has said exists.
                 Name = SqlConnectorConstants.SettingDeltaImportMode,
                 Description = DeltaImportModeSettingDescription,
+                Example = SqlConnectorConstants.DeltaConfigurationExample,
                 Category = ConnectedSystemSettingCategory.Schema,
                 Type = ConnectedSystemSettingType.DropDown,
                 DropDownValues = new List<string> { SqlConnectorConstants.DeltaImportModeChangeLogTable, SqlConnectorConstants.DeltaImportModeWatermarkColumn }
@@ -324,14 +326,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     }
 
     /// <summary>
-    /// The Object Types setting's description: what the document says, and a complete example to start
-    /// from. Long, deliberately. It is the only place an administrator writing the document by hand can
-    /// learn its shape from inside JIM, and an empty box with no example is the worst first experience
-    /// this Connector could offer.
+    /// The Object Types setting's description: what the document says. Long, deliberately. It is the only
+    /// place an administrator writing the document by hand can learn its shape from inside JIM, and an empty
+    /// box with no example is the worst first experience this Connector could offer.
     /// </summary>
     /// <remarks>
-    /// The example itself lives in <see cref="SqlConnectorConstants.ObjectTypesExample"/> and is parsed
-    /// by the Connector's own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// The example to start from is the setting's Example, from <see cref="SqlConnectorConstants.ObjectTypesExample"/>,
+    /// which the portal shows as a code block beneath the field. It is parsed by the Connector's own unit
+    /// tests, so it cannot drift out of step with what the parser accepts.
     /// </remarks>
     private static string ObjectTypesSettingDescription =>
         "Which Connected System Object Types this database holds, and where each one's objects come from, as a JSON document. " +
@@ -341,16 +343,16 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         "JIM never guesses that from a foreign key, but it does suggest one where the database declares it. " +
         "'relatedTables' turns a table of one row per value into a multi-valued attribute: name the attribute, its 'valueColumn', and the 'joinColumns' " +
         "that join a row back to its parent (one per anchor column, in the same order), plus 'referencesObjectType' where those values are references, as group membership is. " +
-        "Every other column is discovered and typed automatically. Example:" + Environment.NewLine + Environment.NewLine +
-        SqlConnectorConstants.ObjectTypesExample;
+        "Every other column is discovered and typed automatically. The example below is a complete document to start from.";
 
     /// <summary>
     /// The Delta Import Mode setting's description: what each mode reads, what each one can and cannot
     /// observe, and what each needs adding to the Object Types document.
     /// </summary>
     /// <remarks>
-    /// The example lives in <see cref="SqlConnectorConstants.DeltaConfigurationExample"/> and is parsed
-    /// by the Connector's own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// The example is the setting's Example, from <see cref="SqlConnectorConstants.DeltaConfigurationExample"/>,
+    /// shown as a code block beneath the field. It is parsed by the Connector's own unit tests, so it cannot
+    /// drift out of step with what the parser accepts.
     /// </remarks>
     private static string DeltaImportModeSettingDescription =>
         "How a Delta Import finds out what has changed. Leave this unanswered where this Connected System only runs Full Imports. " +
@@ -361,8 +363,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn', " +
         "and one on each of its related tables, named the same way, so that a phone number or a group membership changing is detected as a change to the object it belongs to. " +
         "It needs nothing extra in the database, but it detects creates and updates only: a row that has been deleted has no column left to move, " +
-        "so deletions are found only by a Full Import. Example:" + Environment.NewLine + Environment.NewLine +
-        SqlConnectorConstants.DeltaConfigurationExample;
+        "so deletions are found only by a Full Import. The example below shows both, added to an Object Types document.";
 
     /// <summary>
     /// Validates SqlConnector setting values using custom business logic. Whether the configured Delta Import
@@ -765,7 +766,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         var port = GetInt(settingValues, SqlConnectorConstants.SettingPort) ?? provider.GetDefaultPort(SqlConnectionEncryption.Tls);
         var timeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds;
 
-        return new SecureEndpoint(host, port, TimeSpan.FromSeconds(timeoutSeconds), "database server", provider.SecureTransportName, provider.SecureHandshakeFraming);
+        return new SecureEndpoint(host, port, TimeSpan.FromSeconds(timeoutSeconds), "database server", provider.SecureTransportName, provider.SecureHandshakeFraming,
+            AcceptsJimTrustedCertificates: provider.SupportsPinnedServerCertificate);
     }
     #endregion
 
@@ -791,6 +793,33 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
 
     #region Connections
     /// <summary>
+    /// Opens a connection to the database this Connected System is configured for. A failure is reported
+    /// in terms of its cause where the driver hides that beneath a generic error, which is what a
+    /// connection test, an Activity or a log line then shows.
+    /// </summary>
+    /// <remarks>
+    /// The description is applied here, at the outermost point, so the certificate handling below still
+    /// sees the driver's own exception, as it must to diagnose it.
+    /// </remarks>
+    /// <exception cref="ServerCertificateRejectedException">The server's certificate was refused, and this says which certificate and why.</exception>
+    /// <exception cref="SqlConnectionFailedException">The connection failed, and the driver's message hid the cause; the driver's exception is the inner one.</exception>
+    private DbConnection OpenConnection(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
+        try
+        {
+            return OpenTrustingJimCertificateStore(provider, connectionSettings, settingValues, logger);
+        }
+        catch (DbException ex) when (ex is not SqlConnectionFailedException)
+        {
+            var description = provider.DescribeConnectionFailure(ex);
+            if (description == ex.Message)
+                throw;
+
+            throw new SqlConnectionFailedException(description, ex);
+        }
+    }
+
+    /// <summary>
     /// Opens a connection to the database this Connected System is configured for, supplying JIM's own
     /// certificate store as an additional trust anchor where the driver has a way of taking one.
     /// </summary>
@@ -802,7 +831,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     /// of it (validity period, the name it was issued for), is then accepted for a second attempt.
     /// </remarks>
     /// <exception cref="ServerCertificateRejectedException">The server's certificate was refused, and this says which certificate and why.</exception>
-    private DbConnection OpenConnection(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    private DbConnection OpenTrustingJimCertificateStore(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         try
         {
@@ -880,7 +909,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     internal virtual ServerCertificateReading? ReadServerCertificate(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates, ILogger logger)
     {
         return ServerCertificateProbe.Read(endpoint.Host, endpoint.Port, trustedCertificates, endpoint.Timeout,
-            logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming);
+            logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming, endpoint.AcceptsJimTrustedCertificates);
     }
 
     /// <summary>

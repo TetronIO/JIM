@@ -230,6 +230,7 @@ public partial class ActivityRepository : IActivityRepository
 
     public async Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
+        // One group or none, so Single: FirstOrDefault over a constant-key group makes EF Core log warning 10103.
         var counts = await Repository.Database.ActivityRunProfileExecutionItems
             .Where(r => r.Activity.Id == activityId)
             .GroupBy(_ => 1)
@@ -240,7 +241,7 @@ public partial class ActivityRepository : IActivityRepository
                 TotalUnhandledErrors = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
                 TotalObjectTypeChangeRefusals = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged)
             })
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
 
         return counts != null
             ? new ActivityRpeiErrorCounts(counts.TotalWithErrors, counts.TotalRpeis, counts.TotalUnhandledErrors, counts.TotalObjectTypeChangeRefusals)
@@ -841,6 +842,39 @@ public partial class ActivityRepository : IActivityRepository
             .GroupBy(a => a.ParentActivityId!.Value)
             .Select(g => new { ParentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ParentId, x => x.Count);
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<int, List<TimeSpan>>> GetRecentSuccessfulRunProfileDurationsAsync(
+        IReadOnlyCollection<int> runProfileIds, int perRunProfile)
+    {
+        if (runProfileIds.Count == 0 || perRunProfile <= 0)
+            return new Dictionary<int, List<TimeSpan>>();
+
+        // One query for every requested Run Profile: the queue rarely holds more than a handful of distinct profiles,
+        // and the per-group Take translates to a ROW_NUMBER window over just their successful executions.
+        var ids = runProfileIds.Distinct().ToList();
+        var rows = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ConnectedSystemRunProfileId != null
+                        && ids.Contains(a.ConnectedSystemRunProfileId.Value)
+                        && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && a.TargetOperationType == ActivityTargetOperationType.Execute
+                        && (a.Status == ActivityStatus.Complete || a.Status == ActivityStatus.CompleteWithWarning)
+                        && a.ExecutionTime != null)
+            .GroupBy(a => a.ConnectedSystemRunProfileId!.Value)
+            .Select(g => new
+            {
+                RunProfileId = g.Key,
+                Durations = g.OrderByDescending(a => a.Executed)
+                    .ThenByDescending(a => a.Id)
+                    .Take(perRunProfile)
+                    .Select(a => a.ExecutionTime!.Value)
+                    .ToList()
+            })
+            .ToListAsync();
+
+        return rows.ToDictionary(r => r.RunProfileId, r => r.Durations);
     }
 
     public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()

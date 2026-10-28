@@ -9,6 +9,29 @@ audience: administrator
 
 Scoping criteria determine which objects the rule applies to. Only objects that match are processed.
 
+```jim-diagram
+archetype: decision
+title: How Scoping Criteria decide an object's scope
+desc: 'An object is in scope when any one of the rule''s top-level groups is met, or when the rule has no criteria; within a group, All needs every condition and Any at least one. An object a criterion cannot decide is left as it is, with an error recorded against it. An object out of scope leaves the rule: an import rule''s Out-of-Scope Action either disconnects it from the Metaverse or keeps the join and stops Attribute Flow, and an export rule''s Deprovisioning Action decides what happens to its object in the Connected System.'
+start: {label: Object against a rule's criteria}
+questions:
+- {id: groups, label: 'Any top-level group met?', sub: 'All: every condition; Any: one'}
+- {id: leaves, label: 'Which rule does it leave?'}
+outcomes:
+- {id: in, label: In scope, sub: processed by the rule, good: true}
+- {id: undecided, label: Left as it is, sub: an error recorded against it}
+- {id: disconnect, label: Disconnected, sub: from its Metaverse Object}
+- {id: joined, label: 'Left scope, join kept', sub: nothing flows from it}
+- {id: deprov, label: Deprovisioned, sub: per the Deprovisioning Action}
+answers:
+- {from: groups, to: in, label: 'yes, or no criteria'}
+- {from: groups, to: undecided, label: cannot be decided}
+- {from: groups, to: leaves, label: 'no'}
+- {from: leaves, to: disconnect, label: 'import: Disconnect'}
+- {from: leaves, to: joined, label: 'import: Remain joined'}
+- {from: leaves, to: deprov, label: an export rule}
+```
+
 For import rules, criteria evaluate Connected System Object attributes:
 
 ```text
@@ -29,7 +52,7 @@ Criteria are organised into groups with AND/OR logic and support nested groups f
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
-## Operators
+## :material-calculator-variant-outline: Operators
 
 The operators offered depend on the attribute's data type. They mean the same here as in a [Predefined Search](predefined-searches.md#operators-by-attribute-type), apart from the pattern operators, which a Predefined Search does not offer.
 
@@ -45,7 +68,7 @@ The operators offered depend on the attribute's data type. They mean the same he
 
 For example, to bring in only directory accounts that have an employee type and an email address in the organisation's domain, use an **All** group with `employeeType` *has a value* and `mail` *matches pattern* `^[a-z.]+@example\.org$`. An account with no employee type, or with an address that does not fit, is out of scope, and its Connections tab names the condition it fails.
 
-## How criteria are evaluated
+## :material-arrow-decision-outline: How criteria are evaluated
 
 Four rules decide outcomes that are easy to misread from the editor:
 
@@ -56,7 +79,7 @@ Four rules decide outcomes that are easy to misread from the editor:
 
 To see how one object evaluates against a rule, and which conditions it fails, open the object's Connections tab: see [Why it is connected, and why it is not](metaverse-objects.md#why-it-is-connected-and-why-it-is-not).
 
-## Multi-valued attributes in scope
+## :material-format-list-bulleted: Multi-valued attributes in scope
 
 A criterion on a multi-valued attribute (group names, a directory's `objectClass`, email aliases) is tested against **every** value the object holds, so the order its values were imported in never affects scope:
 
@@ -68,7 +91,7 @@ For example, an export rule scoped to `Groups` *contains* `Finance` includes a M
 
 Because each criterion looks for its own matching value, two criteria in an **All** group can be met by two different values. A date range built as *after* one date and *before* another includes an object with one date before the range and one after it, since each bound is satisfied by a different value. Scope ranges on a single-valued attribute when one value must fall inside them.
 
-## Comparing a computed value
+## :material-calculator-variant-outline: Comparing a computed value
 
 A criterion can compare the value an [expression](../concepts/expressions.md) computes from the object, rather than an attribute as it is stored. Use it when the value needs reshaping before it can be compared: an inconsistently cased or padded department, a date held as text, a code inside a longer string. In the Scope tab, choose **Add Criteria**, then **Expression** beside **Compare**, write the expression (**Insert attribute** and **Insert function** help), and choose **Compare as**. **Add Criteria** stays unavailable until the criterion is one the rule can be saved with, and says what is wrong while it is not. Automation creates one with [`New-JIMScopingCriterion`](../powershell/scoping-criteria.md#new-jimscopingcriterion) `-Expression` and `-CompareAs`, or through the REST API by giving `expression` and `compareAs` in place of an attribute id.
 
@@ -82,7 +105,7 @@ For example, to bring in people whose department starts with *Finance* however t
 
 JIM refuses an expression criterion when you save the rule if it could never work: one that does not parse, reads the other side (`mv["..."]` on an import rule), reads no attribute, names an attribute the object type does not have, or calls `Now()` or another function that returns a different value each time it runs. To scope by how long ago something happened, compare the date as a Date/Time against a [relative date](#relative-dates-in-scope-filters) instead. A criterion that stops being valid after it was saved, because an attribute it reads was renamed, removed or changed type, is not refused when the rule is next saved: the save goes ahead and warns about it, so the rule can always be disabled or corrected. Changing that criterion without fixing it is refused.
 
-## Relative dates in scope filters
+## :material-calendar-clock-outline: Relative dates in scope filters
 
 A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated on every run, so a scope that says "terminated within the last year" keeps moving with time, with no need to edit the rule.
 
@@ -98,7 +121,7 @@ For example, to scope an export rule to leavers terminated between 30 and 364 da
 
 Configure this in the Scope tab of the Synchronisation Rule editor (choose Relative when the attribute is a date), or with [`New-JIMScopingCriterion`](../powershell/scoping-criteria.md#new-jimscopingcriterion) and the REST API.
 
-## Testing a scope
+## :material-flask-outline: Testing a scope
 
 The **Test this scope** panel at the foot of the Scope tab answers whether one object would be in scope, before anything runs. It evaluates the criteria as they stand on the form, saved or not, with the same evaluation a synchronisation uses, so a test cannot pass where a synchronisation would not.
 
@@ -110,7 +133,7 @@ To keep a test and run it again after later changes, choose **Save as test case*
 
 Automation gets the same test through [`Test-JIMScope`](../powershell/scoping-criteria.md#test-jimscope) and the REST API's `POST sync-rules/{id}/scoping-criteria/test` endpoint, which test the saved criteria.
 
-## Previewing a scope change
+## :material-eye-outline: Previewing a scope change
 
 Changing a Scoping Criterion decides which objects the rule manages at all, and what that costs is decided by a different setting sitting beside it: narrowing an import rule takes objects out of scope, and the **Out-of-Scope Action** then decides whether their Metaverse Object joins survive; narrowing an export rule can delete the objects that leave from the target system, per the **Deprovisioning Action**. Widening pulls objects in, projecting and provisioning identities nobody has counted.
 

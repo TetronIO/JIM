@@ -21,8 +21,9 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Covers the Operations History tab now that it is a virtualised grid rather than a paged table. Three things
-/// are worth pinning, because each fails silently: the tab must forward the grid's skip-the-count request rather
+/// Covers the Operations Activity tab's Completed section (#2549), which replaced the History tab. Four things are
+/// worth pinning, because each fails silently: it must never show a run still in progress, which In progress shows
+/// instead (twice on one page, at two levels of detail, is what the tab was built to end); it must forward the grid's skip-the-count request rather
 /// than deciding for itself (a hardcoded false leaves the list with no total forever, and a hardcoded true
 /// re-counts the whole match set on every scroll window); a real-time notification must reach the grid, because
 /// the rows the virtualiser holds are cached and a repaint alone leaves a running execution frozen; and the two
@@ -30,7 +31,7 @@ namespace JIM.Web.Tests;
 /// different ways out.
 /// </summary>
 [TestFixture]
-public class OperationsHistoryTabTests : JimComponentTestContext
+public class OperationsCompletedSectionTests : JimComponentTestContext
 {
     private Mock<IActivityRepository> _activityRepository = null!;
     private Mock<IMetaverseRepository> _metaverseRepository = null!;
@@ -63,7 +64,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
         _activityRepository.Setup(r => r.GetWorkerTaskActivityFilterOptionsAsync())
             .ReturnsAsync(new ActivityFilterOptions());
         _navigation = Services.GetRequiredService<NavigationManager>();
-        _navigation.NavigateTo("/admin/operations?t=history");
+        _navigation.NavigateTo("/admin/operations?t=activity");
     }
 
     /// <summary>
@@ -94,14 +95,14 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     };
 
     [Test]
-    public void OperationsHistoryTab_FirstWindow_AsksTheRepositoryForTheTotalCount()
+    public void OperationsCompletedSection_FirstWindow_AsksTheRepositoryForTheTotalCount()
     {
         // The grid decides when a count is worth paying for and says so on the request; the tab must forward that
         // decision. Hardcoding it either way is invisible in the markup: false leaves the toolbar count and the
         // scroll area sized from nothing, true re-counts the whole match set once per scroll window.
         ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
 
         cut.WaitForAssertion(() => _activityRepository.Verify(r => r.GetActivitiesRangeAsync(
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
@@ -114,11 +115,41 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsHistoryTab_WindowLoaded_RendersTheExecutionsRows()
+    public void OperationsCompletedSection_WindowLoaded_NeverAsksForRunsStillInProgress()
     {
         ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
+
+        cut.WaitForAssertion(() => Assert.That(StatusFiltersRequested(), Is.Not.Empty));
+        Assert.That(StatusFiltersRequested(), Has.All.Not.Null.And.All.Not.Contains(ActivityStatus.InProgress),
+            "every read must exclude In Progress; In progress shows those runs with their full progress");
+    }
+
+    [Test]
+    public void OperationsCompletedSection_ResultChosen_AsksForJustThatResult()
+    {
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.FailedWithError)], 1);
+        var filters = JIM.Web.Models.OperationsActivityFilters.None with { Results = [ActivityStatus.FailedWithError] };
+
+        var cut = Render<OperationsCompletedSection>(p => p.Add(c => c.Filters, filters));
+
+        cut.WaitForAssertion(() => Assert.That(StatusFiltersRequested(), Is.Not.Empty));
+        Assert.That(StatusFiltersRequested()[0], Is.EqualTo(new[] { ActivityStatus.FailedWithError }));
+    }
+
+    /// <summary>The status filter each range read asked the repository for.</summary>
+    private List<IEnumerable<ActivityStatus>?> StatusFiltersRequested() => _activityRepository.Invocations
+        .Where(i => i.Method.Name == nameof(IActivityRepository.GetActivitiesRangeAsync))
+        .Select(i => (IEnumerable<ActivityStatus>?)i.Arguments[9])
+        .ToList();
+
+    [Test]
+    public void OperationsCompletedSection_WindowLoaded_RendersTheExecutionsRows()
+    {
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
 
         cut.WaitForAssertion(() =>
         {
@@ -153,7 +184,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task OperationsHistoryTab_ActivityProgressNotification_ReloadsTheGridWithoutTheReaderActingAsync()
+    public async Task OperationsCompletedSection_ActivityProgressNotification_ReloadsTheGridWithoutTheReaderActingAsync()
     {
         // The queue changing is the whole reason this tab exists. The virtualiser caches the rows it has fetched,
         // so a notification that only repaints the component leaves the reader looking at the previous run: the
@@ -161,7 +192,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
         var executions = new List<Activity> { RunProfileExecution("HR System", "Full Import", ActivityStatus.InProgress) };
         ArrangeWindow(executions, 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Full Import")));
         var countedReadsBeforeNotification = CountedWindowReads();
 
@@ -176,13 +207,13 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task OperationsHistoryTab_UnchangedData_DoesNotReloadTheGridAsync()
+    public async Task OperationsCompletedSection_UnchangedData_DoesNotReloadTheGridAsync()
     {
         // The sibling half of the contract: notifications and the polling fallback both arrive constantly, and a
         // reload on every one of them would re-count the whole match set for nothing.
         ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Full Import")));
         var readsBeforeNotification = WindowReads();
         var countedReadsBeforeNotification = CountedWindowReads();
@@ -201,18 +232,18 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsHistoryTab_NothingHasRun_SaysSoRatherThanOfferingToClearASearch()
+    public void OperationsCompletedSection_NothingHasRun_SaysSoRatherThanOfferingToClearASearch()
     {
         ArrangeWindow([], 0);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
 
         cut.WaitForAssertion(() =>
         {
             var emptyState = cut.FindComponent<TableEmptyState>();
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(emptyState.Instance.PrimaryText, Is.EqualTo("Nothing has run yet"));
+                Assert.That(emptyState.Instance.PrimaryText, Is.EqualTo("Nothing has finished yet"));
                 Assert.That(emptyState.Instance.ActionText, Is.Null,
                     "there is nothing to clear when the list has simply never been populated");
             }
@@ -220,14 +251,14 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsHistoryTab_SearchMatchedNothing_OffersToClearTheSearch()
+    public void OperationsCompletedSection_SearchMatchedNothing_OffersToClearTheSearch()
     {
         // The grid reads its own search from the URL under this tab's parameter prefix, so a deep link into a
         // search that matches nothing must produce the search-shaped empty state, not the never-run one.
-        _navigation.NavigateTo("/admin/operations?t=history&h-q=nothing-matches-this");
+        _navigation.NavigateTo("/admin/operations?t=activity&h-q=nothing-matches-this");
         ArrangeWindow([], 0);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
 
         cut.WaitForAssertion(() =>
         {
@@ -236,6 +267,105 @@ public class OperationsHistoryTabTests : JimComponentTestContext
             {
                 Assert.That(emptyState.Instance.PrimaryText, Does.Contain("nothing-matches-this"));
                 Assert.That(emptyState.Instance.ActionText, Is.EqualTo("Clear Search"));
+            }
+        });
+    }
+
+    [Test]
+    public void OperationsCompletedSection_ToolBar_IsTheSectionsHeadingWithItsChevronAndPauseButton()
+    {
+        // One row does the work of three: the section's heading (chevron, icon, name), the grid's count, search and
+        // density toggle, and the auto-refresh pause, all above the paper rather than a heading over a toolbar over
+        // a column header.
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var toolbar = cut.Find(".jim-virtualised-list-toolbar");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(toolbar.TextContent, Does.Contain("Completed"));
+                Assert.That(toolbar.QuerySelector("[aria-expanded]")?.GetAttribute("aria-expanded"), Is.EqualTo("true"));
+                Assert.That(toolbar.QuerySelector("[aria-label='Pause auto-refresh']"), Is.Not.Null);
+                Assert.That(toolbar.QuerySelector("input[placeholder]"), Is.Not.Null, "the search box is in the same row");
+                Assert.That(cut.FindAll(".jim-activity-section-header"), Is.Empty, "no second heading row");
+            }
+        });
+    }
+
+    [Test]
+    public async Task OperationsCompletedSection_ChevronClicked_AsksTheTabToToggleAsync()
+    {
+        ArrangeWindow([], 0);
+        var toggled = false;
+
+        var cut = Render<OperationsCompletedSection>(p => p.Add(c => c.ToggleRequested, () => toggled = true));
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll(".jim-virtualised-list-toolbar [aria-expanded]"), Has.Count.EqualTo(1)));
+
+        await cut.InvokeAsync(() => cut.Find(".jim-virtualised-list-toolbar [aria-expanded]").Click());
+
+        Assert.That(toggled, Is.True);
+    }
+
+    [Test]
+    public async Task OperationsCompletedSection_Collapsed_FoldsTheGridAndRefreshesOnlyOnceExpandedAgainAsync()
+    {
+        // Folded, the section is its heading; nothing under it can be seen, so nothing under it is re-read on every
+        // notification. Unfolding re-reads once, so what comes back into view is current.
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>(p => p.Add(c => c.Expanded, false));
+        cut.WaitForAssertion(() => Assert.That(cut.FindComponent<MudBlazor.MudCollapse>().Instance.Expanded, Is.False));
+        var readsWhileFolded = WindowReads();
+
+        _notifications.RaiseActivityProgressChanged(Guid.NewGuid());
+        await Task.Delay(200);
+        Assert.That(WindowReads(), Is.EqualTo(readsWhileFolded), "a folded section has nothing to keep current");
+
+        cut.Render(p => p.Add(c => c.Expanded, true));
+        await WaitUntilAsync(() => WindowReads() > readsWhileFolded);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindComponent<MudBlazor.MudCollapse>().Instance.Expanded, Is.True);
+            Assert.That(WindowReads(), Is.GreaterThan(readsWhileFolded), "unfolding checks for what changed meanwhile");
+        }
+    }
+
+    [Test]
+    public async Task OperationsCompletedSection_SearchTyped_SurvivesBeingFoldedAndUnfoldedAsync()
+    {
+        // The grid stays mounted under the fold. A grid rebuilt on unfolding would re-read the URL as it stood on
+        // arrival (its own writes go through history.replaceState, which NavigationManager never sees) and lose
+        // the search.
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Full Import")));
+        var search = cut.FindComponent<SearchField>();
+        await cut.InvokeAsync(() => search.Instance.ValueChanged.InvokeAsync("Full"));
+
+        cut.Render(p => p.Add(c => c.Expanded, false));
+        cut.Render(p => p.Add(c => c.Expanded, true));
+
+        Assert.That(cut.FindComponent<VirtualisedDataGrid<Activity>>().Instance.SearchText, Is.EqualTo("Full"));
+    }
+
+    [Test]
+    public void OperationsCompletedSection_RunThatChangedNothing_SaysSoInsteadOfACountOfZero()
+    {
+        ArrangeWindow([RunProfileExecution("HR System", "Full Import", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.FindAll("[data-testid='no-changes']"), Has.Count.EqualTo(1));
+                Assert.That(cut.FindAll(".jim-stat-chip"), Is.Empty, "a zero wears no chip");
             }
         });
     }
@@ -279,7 +409,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     };
 
     [Test]
-    public void OperationsHistoryTab_MetaverseObjectActivitySelected_LinksTheObjectUnderItsTypesPluralName()
+    public void OperationsCompletedSection_MetaverseObjectActivitySelected_LinksTheObjectUnderItsTypesPluralName()
     {
         // The panel used to link /admin/metaverse/{id}, a route that does not exist (#2151).
         var metaverseObjectId = Guid.NewGuid();
@@ -287,7 +417,7 @@ public class OperationsHistoryTabTests : JimComponentTestContext
             .ReturnsAsync(new MetaverseObjectHeader { Id = metaverseObjectId, TypeName = "Person", TypePluralName = "People" });
         ArrangeWindow([MetaverseObjectActivity(metaverseObjectId)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Priya Shah")));
         cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).Click();
 
@@ -297,14 +427,54 @@ public class OperationsHistoryTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsHistoryTab_MetaverseObjectActivityForADeletedObject_NamesItWithoutALink()
+    public void OperationsCompletedSection_ActivityWithAWarningSelected_ShowsEachWarningInThePanel()
+    {
+        // The panel's status chip said Complete With Warning but not why: the reason was only on the Activity page.
+        var activity = RunProfileExecution("Glitterband EMEA", "Export", ActivityStatus.CompleteWithWarning);
+        activity.WarningMessage = "Memory was low while this ran.\n\nJIM couldn't probe Panoply AD for values already in use.";
+        ArrangeWindow([activity], 1);
+
+        var cut = Render<OperationsCompletedSection>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Glitterband EMEA")));
+        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Glitterband EMEA")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var warnings = cut.FindComponents<MudBlazor.MudAlert>().Where(a => a.Instance.Severity == MudBlazor.Severity.Warning).ToList();
+            Assert.That(warnings, Has.Count.EqualTo(1), "the panel must carry the Activity's warning");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(warnings[0].Markup, Does.Contain("Memory was low while this ran."));
+                Assert.That(warnings[0].Markup, Does.Contain("JIM couldn&#x27;t probe Panoply AD").Or.Contain("JIM couldn't probe Panoply AD"));
+            }
+        });
+    }
+
+    [Test]
+    public void OperationsCompletedSection_ActivityWithoutAWarningSelected_ShowsNoWarning()
+    {
+        ArrangeWindow([RunProfileExecution("Glitterband EMEA", "Export", ActivityStatus.Complete)], 1);
+
+        var cut = Render<OperationsCompletedSection>();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Glitterband EMEA")));
+        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Glitterband EMEA")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("View Full Details"), "the panel did not open");
+            Assert.That(cut.FindComponents<MudBlazor.MudAlert>().Where(a => a.Instance.Severity == MudBlazor.Severity.Warning), Is.Empty);
+        });
+    }
+
+    [Test]
+    public void OperationsCompletedSection_MetaverseObjectActivityForADeletedObject_NamesItWithoutALink()
     {
         var metaverseObjectId = Guid.NewGuid();
         _metaverseRepository.Setup(r => r.GetMetaverseObjectHeaderAsync(metaverseObjectId))
             .ReturnsAsync((MetaverseObjectHeader?)null);
         ArrangeWindow([MetaverseObjectActivity(metaverseObjectId)], 1);
 
-        var cut = Render<OperationsHistoryTab>();
+        var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Priya Shah")));
         cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).Click();
 

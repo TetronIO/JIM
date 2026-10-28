@@ -13,11 +13,28 @@ While a Run Profile executes, its progress is available in real time on every su
 - **REST API**<br /> `GET /api/v1/activities/{id}/progress` returns a lightweight progress snapshot: status, phase message, object counts, percentage complete, throughput, estimated seconds remaining, and a live operation-type breakdown. It is designed for frequent polling and is much cheaper to serve than the full Activity detail endpoint; stop polling once the status reaches a terminal value.
 - **PowerShell**<br /> [`Get-JIMActivity -Follow`](../powershell/activities.md) follows an in-progress Activity's live progress until it completes, and [`Start-JIMRunProfile -Wait`](../powershell/run-profiles.md) displays the same live progress while blocking until completion.
 
+```jim-diagram
+archetype: lifecycle
+title: How each step of a run is shown
+desc: 'A Run Profile execution shows every one of its steps. A step still to come is greyed. When its turn comes it is highlighted as the step running now, and its progress bar counts its work. When it finishes it is a completed step, carrying how long it took. A step not needed on this run, such as deletion detection in a Delta Import, is marked with a green ring and a dash. A failed run marks the step it failed in.'
+container: {label: A step of a run, note: the progress bar always counts the running step}
+states:
+- {id: skipped, label: Not needed, sub: 'green ring, dash'}
+- {id: tocome, label: Still to come, sub: greyed}
+- {id: running, label: Running now, sub: highlighted}
+- {id: done, label: Completed, sub: with its duration}
+transitions:
+- {from: tocome, to: skipped, label: not needed}
+- {from: tocome, to: running, label: its turn}
+- {from: running, to: done, label: finishes}
+end: {from: container, label: the run fails in it, state: {label: Failed, sub: where to look first}}
+```
+
 **Every live figure describes the step running now, not the whole run.** The objects processed, the percentage, the throughput and the time remaining are all reset by each step that counts its own work, which is why the readout names its step. There is no whole-run estimate: steps differ too much in cost, and several cannot know their totals in advance, so any run-level figure would be invented rather than measured. How far through the run you are is answered by the steps themselves.
 
 Throughput and the estimated time remaining are derived from recent progress samples, so they reflect the current phase of the run rather than a whole-run average; they appear once enough samples exist and adapt as the run moves between phases. Where a step cannot know its total in advance, the progress bar runs indeterminate and the readout reports how many objects have been processed so far, without a percentage or a time remaining. Whether an import knows depends on the Connected System: a file's records are counted before they are read, so a file import shows a percentage throughout, while a directory cannot be asked how many objects a search will return without running it twice, so those imports show the count and the rate without a percentage rather than a figure JIM guessed. When the counter reaches its total but the step is still finishing its work, the time remaining reads "Finishing up" rather than counting down to a moment that has already passed.
 
-## The steps of a run
+## :material-format-list-numbered: The steps of a run
 
 A Run Profile execution is a journey through several steps, and the Activity shows all of them: what is done, what is running now, and what is still to come. An import, for example, connects to the Connected System, imports objects (fetching them, then matching them against the Connected System Objects already held), processes deletions, resolves references, saves changes, reconciles Pending Exports and records its results. An export prepares, writes the changes, makes a second pass over anything it had to defer, resolves change history references, selects any containers it created, and delivers initial passwords to the accounts it provisioned. A Synchronisation prepares, processes Connected System Objects, resolves cross-page references and reviews export scope.
 
@@ -31,7 +48,7 @@ The progress bar beneath the steps counts the work of the step currently running
 
 Several steps count their own work, so the bar restarts as the run moves between them: that is the step advancing, not progress being lost.
 
-## Connector steps and messages
+## :material-power-plug-outline: Connector steps and messages
 
 Some of a run's wall-clock time is spent inside the Connector, on work JIM cannot count objects for: reading an export file before merging changes into it, writing the merged file back out, querying a directory's root DSE, or fetching a page of objects from a container. Connectors declare these as their own steps, shown inside the step that called them, and narrate what they are doing as they go:
 
@@ -42,9 +59,9 @@ A Connector can report how many objects it has read while it is still working, a
 
 The steps are also available to automation: the Activity progress endpoint reports the current step and its position in the run, and `Start-JIMRunProfile -Wait` and `Get-JIMActivity -Follow` display it as "Step 3 of 7: Saving changes".
 
-## The run's steps in the queue
+## :material-tray-full: The run's steps on the Activity tab
 
-**Admin > Operations > Queue** shows the same run in miniature, so an administrator watching several at once does not have to open each in turn. Each row's Progress cell carries two things, one above the other:
+**Admin > Operations > Activity** shows the same run in miniature in its **In Progress** section, so an administrator watching several at once does not have to open each in turn. Each row's Progress cell carries two things, one above the other:
 
 - **The run's steps**, as a row of segments, one per step, coloured by what happened to each: done, running, skipped, failed, or not reached yet.
 - **The running step's own progress bar**, with a caption naming the step the figures belong to ("Step 3 of 7: Saving changes - 12,480 / 40,000").
@@ -53,4 +70,4 @@ The two measure different things on purpose: the segments say *where* in the run
 
 A task that is not a Run Profile execution records no steps (clearing Connected System Objects, generating example data, a factory reset), and shows the bar and its message alone, as it always has.
 
-The full picture, with step names, durations and the messages beneath them, is on the Activity itself; the row's name links straight to it.
+The full picture, with step names, durations and the messages beneath them, is on the Activity itself; the row's Connected System links straight to it.

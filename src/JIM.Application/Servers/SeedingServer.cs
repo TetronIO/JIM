@@ -1723,6 +1723,7 @@ internal class SeedingServer
                     DefaultStringValue = latestSetting.DefaultStringValue,
                     DefaultIntValue = latestSetting.DefaultIntValue,
                     Description = latestSetting.Description,
+                    Example = latestSetting.Example,
                     DropDownValues = latestSetting.DropDownValues,
                     Name = latestSetting.Name,
                     Type = latestSetting.Type,
@@ -1740,6 +1741,7 @@ internal class SeedingServer
                 // Update existing setting if changed
                 if (existingSetting.Category != latestSetting.Category ||
                     existingSetting.Description != latestSetting.Description ||
+                    existingSetting.Example != latestSetting.Example ||
                     existingSetting.Type != latestSetting.Type ||
                     existingSetting.Required != latestSetting.Required ||
                     existingSetting.RequiredGroup != latestSetting.RequiredGroup ||
@@ -1752,6 +1754,7 @@ internal class SeedingServer
                 {
                     existingSetting.Category = latestSetting.Category;
                     existingSetting.Description = latestSetting.Description;
+                    existingSetting.Example = latestSetting.Example;
                     existingSetting.Type = latestSetting.Type;
                     existingSetting.Required = latestSetting.Required;
                     existingSetting.RequiredGroup = latestSetting.RequiredGroup;

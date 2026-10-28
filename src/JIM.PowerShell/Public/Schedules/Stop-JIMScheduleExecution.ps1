@@ -24,7 +24,7 @@ function Stop-JIMScheduleExecution {
 
         JIM.ScheduleExecution
         StepDisplay (string): The step group the execution has reached, as one sentence naming it, for example Step
-            2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Queue.
+            2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Activity.
 
     .EXAMPLE
         Stop-JIMScheduleExecution -Id "12345678-1234-1234-1234-123456789012"

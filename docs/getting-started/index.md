@@ -9,9 +9,22 @@ audience: evaluator
 
 These pages take you from an empty server to JIM synchronising its first identities: what to have ready, installing JIM, and a first synchronisation you can follow step by step. If you get stuck, ask in the [Q&A category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/q-a), or open a [GitHub Issue](https://github.com/TetronIO/JIM/issues) for a bug.
 
+```jim-diagram
+archetype: map
+title: Three pages from an empty server to a first synchronisation
+desc: "Getting Started is three pages, read in order. Prerequisites lists what to have ready; then Quick Start installs JIM and signs you in; then Your First Synchronisation takes 25 people from an HR file to a staff directory file. Each node links to its page."
+nodes:
+- {id: pre, label: Prerequisites, link: prerequisites.md, row: 0, col: 0}
+- {id: quick, label: Quick Start, link: quickstart.md, row: 0, col: 1}
+- {id: first, label: Your First Synchronisation, link: first-synchronisation.md, row: 0, col: 2}
+edges:
+- {from: pre, to: quick, label: then install}
+- {from: quick, to: first, label: then synchronise}
+```
+
 <div class="grid cards" markdown>
 
--   :material-clipboard-check:{ .lg .middle } **Prerequisites**
+-   :material-clipboard-check-outline:{ .lg .middle } **Prerequisites**
 
     ---
 
@@ -19,7 +32,7 @@ These pages take you from an empty server to JIM synchronising its first identit
 
     [:octicons-arrow-right-24: Prerequisites](prerequisites.md)
 
--   :material-rocket-launch:{ .lg .middle } **Quick Start**
+-   :material-rocket-launch-outline:{ .lg .middle } **Quick Start**
 
     ---
 

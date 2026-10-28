@@ -55,7 +55,7 @@ public partial class SyncPreviewFidelityTests
     }
 
     [Test]
-    public async Task FullSynchronisationAdapter_OfAnObjectTheRunSkipsAsUnchanged_SaysItWouldNotChangeAsync()
+    public async Task FullSynchronisationAdapter_OfADriftedObjectUnchangedSinceTheLastSynchronisation_ProposesTheCorrectionAsync()
     {
         var ctx = await SetUpDriftAsync(enforceState: true);
         var targetObject = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
@@ -63,18 +63,14 @@ public partial class SyncPreviewFidelityTests
         targetObject.LastUpdated = DateTime.UtcNow.AddHours(-1);
         // ...and processed by the target's last synchronisation, which cleared the mark its provisioning set (#2092).
         targetObject.SynchronisationPending = false;
-        var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
-        target.LastSyncCompletedAt = DateTime.UtcNow;
-        target.ConfigurationLastFullyAppliedAt = DateTime.UtcNow;
+        SyncRepo.ConnectedSystems[ctx.Target.Id].LastSyncCompletedAt = DateTime.UtcNow;
 
         var deltas = await FullSynchronisationDeltasAsync(ctx.Target.Id);
 
-        using (Assert.EnterMultipleScope())
+        Assert.That(Rows(deltas), Is.EqualTo(new[]
         {
-            Assert.That(Rows(deltas), Is.EqualTo(new[] { Row(Transition.WouldNotChange, "Edited in AD", ctx.Target.Id) }),
-                "skipped as unchanged, its drift and all");
-            Assert.That(deltas.Single().ConnectedSystemObjectId, Is.EqualTo(targetObject.Id));
-        }
+            Row(Transition.DriftCorrection, "John Smith", ctx.Target.Id, "DisplayName", "Edited in AD", "John Smith")
+        }), "a Full Synchronisation evaluates every object, so an unchanged object's drift is corrected all the same (#891)");
     }
 
     [Test]

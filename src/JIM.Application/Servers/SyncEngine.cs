@@ -45,7 +45,8 @@ public partial class SyncEngine : ISyncEngine
         bool skipReferenceAttributes = false,
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false,
-        AttributePriorityContext? priorityContext = null)
+        AttributePriorityContext? priorityContext = null,
+        Func<ConnectedSystemObjectAttributeValue, bool>? cannotResolveThisRun = null)
     {
         var errors = new List<AttributeFlowError>();
 
@@ -72,7 +73,8 @@ public partial class SyncEngine : ISyncEngine
 
             ProcessMapping(cso, syncRuleMapping, objectTypes, expressionEvaluator,
                 skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass,
-                cso.ConnectedSystemId, errors, syncRule.MetaverseObjectTypeId, priorityContext);
+                cso.ConnectedSystemId, errors, syncRule.MetaverseObjectTypeId, priorityContext,
+                cannotResolveThisRun: cannotResolveThisRun);
         }
 
         return errors;

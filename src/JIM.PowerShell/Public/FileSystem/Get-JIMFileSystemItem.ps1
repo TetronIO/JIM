@@ -12,7 +12,7 @@ function Get-JIMFileSystemItem {
         Only paths within the configured allowed roots are accessible.
 
     .PARAMETER Path
-        The directory to list. Omit it to list the allowed root directories.
+        The directory to list. Omit it to list the first allowed root directory; use -Roots to list the roots themselves.
 
     .PARAMETER Roots
         Returns the allowed root directory paths instead of listing a directory.
@@ -23,10 +23,10 @@ function Get-JIMFileSystemItem {
     .EXAMPLE
         Get-JIMFileSystemItem
 
-        Lists the allowed root directories.
+        Lists the contents of the first allowed root directory, /connector-files.
 
     .EXAMPLE
-        Get-JIMFileSystemItem -Path "/data/imports"
+        Get-JIMFileSystemItem -Path "/connector-files/imports"
 
         Lists the contents of the given directory.
 

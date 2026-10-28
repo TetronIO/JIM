@@ -175,6 +175,131 @@ public class MetaverseObjectConnectionsTests
         }
     }
 
+    [Test]
+    public async Task GetMetaverseObjectConnectionsAsync_ObjectWithSecondaryExternalId_ReturnsBothIdentifiersAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var cso = BuildCso(5, 12, ConnectedSystemObjectStatus.Normal, ConnectedSystemObjectJoinType.Joined);
+        var objectGuid = Guid.NewGuid();
+        cso.ExternalIdAttributeId = ExternalIdAttributeId;
+        cso.SecondaryExternalIdAttributeId = SecondaryExternalIdAttributeId;
+        cso.AttributeValues =
+        [
+            new ConnectedSystemObjectAttributeValue { AttributeId = ExternalIdAttributeId, GuidValue = objectGuid },
+            new ConnectedSystemObjectAttributeValue { AttributeId = SecondaryExternalIdAttributeId, StringValue = "CN=Alice Smith,OU=Users,DC=glitterband,DC=local" }
+        ];
+        SetUpSingleConnection(mvoId, cso, pendingExport: null);
+
+        var result = await _application.Metaverse.GetMetaverseObjectConnectionsAsync(mvoId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].ExternalId, Is.EqualTo(objectGuid.ToString()));
+            Assert.That(result[0].SecondaryExternalId, Is.EqualTo("CN=Alice Smith,OU=Users,DC=glitterband,DC=local"));
+            Assert.That(result[0].PendingExternalId, Is.Null);
+            Assert.That(result[0].PendingSecondaryExternalId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectConnectionsAsync_ObjectWithoutSecondaryExternalId_ReturnsExternalIdOnlyAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var cso = BuildCso(5, 12, ConnectedSystemObjectStatus.Normal, ConnectedSystemObjectJoinType.Joined);
+        cso.ExternalIdAttributeId = ExternalIdAttributeId;
+        cso.AttributeValues = [new ConnectedSystemObjectAttributeValue { AttributeId = ExternalIdAttributeId, StringValue = "S8-1000" }];
+        SetUpSingleConnection(mvoId, cso, pendingExport: null);
+
+        var result = await _application.Metaverse.GetMetaverseObjectConnectionsAsync(mvoId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].ExternalId, Is.EqualTo("S8-1000"));
+            Assert.That(result[0].SecondaryExternalId, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// An object awaiting provisioning has no confirmed identifiers yet. Its Pending Export says what they will be,
+    /// so the row carries those rather than nothing (the row used to fall back to JIM's own object id).
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseObjectConnectionsAsync_PendingProvisioning_ReturnsPendingIdentifiersAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var cso = BuildCso(5, 12, ConnectedSystemObjectStatus.PendingProvisioning, ConnectedSystemObjectJoinType.Provisioned);
+        cso.ExternalIdAttributeId = ExternalIdAttributeId;
+        cso.SecondaryExternalIdAttributeId = SecondaryExternalIdAttributeId;
+        var pendingExport = new PendingExport
+        {
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange { AttributeId = ExternalIdAttributeId, StringValue = "asmith" },
+                new PendingExportAttributeValueChange { AttributeId = SecondaryExternalIdAttributeId, StringValue = "CN=Alice Smith,OU=Users,DC=bluewater,DC=local" },
+                new PendingExportAttributeValueChange { AttributeId = 99, StringValue = "Alice" }
+            ]
+        };
+        SetUpSingleConnection(mvoId, cso, pendingExport);
+
+        var result = await _application.Metaverse.GetMetaverseObjectConnectionsAsync(mvoId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].ExternalId, Is.Null);
+            Assert.That(result[0].SecondaryExternalId, Is.Null);
+            Assert.That(result[0].PendingExternalId, Is.EqualTo("asmith"));
+            Assert.That(result[0].PendingSecondaryExternalId, Is.EqualTo("CN=Alice Smith,OU=Users,DC=bluewater,DC=local"));
+        }
+    }
+
+    /// <summary>
+    /// A pending value is only shown where there is no confirmed one: a queued rename does not displace the
+    /// Secondary External ID the Connected System currently holds.
+    /// </summary>
+    [Test]
+    public async Task GetMetaverseObjectConnectionsAsync_ConfirmedSecondaryExternalIdWithPendingRename_ReturnsNoPendingValueAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var cso = BuildCso(5, 12, ConnectedSystemObjectStatus.Normal, ConnectedSystemObjectJoinType.Provisioned);
+        cso.SecondaryExternalIdAttributeId = SecondaryExternalIdAttributeId;
+        cso.AttributeValues = [new ConnectedSystemObjectAttributeValue { AttributeId = SecondaryExternalIdAttributeId, StringValue = "CN=Alice Smith,OU=Users,DC=glitterband,DC=local" }];
+        var pendingExport = new PendingExport
+        {
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending,
+            AttributeValueChanges = [new PendingExportAttributeValueChange { AttributeId = SecondaryExternalIdAttributeId, StringValue = "CN=Alice Jones,OU=Users,DC=glitterband,DC=local" }]
+        };
+        SetUpSingleConnection(mvoId, cso, pendingExport);
+
+        var result = await _application.Metaverse.GetMetaverseObjectConnectionsAsync(mvoId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].SecondaryExternalId, Is.EqualTo("CN=Alice Smith,OU=Users,DC=glitterband,DC=local"));
+            Assert.That(result[0].PendingSecondaryExternalId, Is.Null);
+        }
+    }
+
+    private const int ExternalIdAttributeId = 40;
+    private const int SecondaryExternalIdAttributeId = 41;
+
+    private void SetUpSingleConnection(Guid mvoId, ConnectedSystemObject cso, PendingExport? pendingExport)
+    {
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(mvoId))
+            .ReturnsAsync([cso]);
+        _mockMetaverseRepo
+            .Setup(r => r.GetMetaverseObjectHeaderAsync(mvoId))
+            .ReturnsAsync((MetaverseObjectHeader?)null);
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(pendingExport == null
+                ? new Dictionary<Guid, PendingExport>()
+                : new Dictionary<Guid, PendingExport> { [cso.Id] = pendingExport });
+    }
+
     private static ConnectedSystemObject BuildCso(
         int connectedSystemId,
         int objectTypeId,

@@ -51,6 +51,15 @@ public class SchedulerServer
     }
 
     /// <summary>
+    /// The enabled Schedule due to run soonest, or null when none is due. Lets the Operations page say when work will
+    /// next join the queue (#2549).
+    /// </summary>
+    public async Task<NextDueSchedule?> GetNextDueScheduleAsync()
+    {
+        return await Application.Repository.Scheduling.GetNextDueScheduleAsync();
+    }
+
+    /// <summary>
     /// Gets a page of Schedules as lightweight headers, each carrying its step count and the outcome of its most
     /// recent execution, so a list view can show whether the last run succeeded rather than only when it happened.
     /// </summary>

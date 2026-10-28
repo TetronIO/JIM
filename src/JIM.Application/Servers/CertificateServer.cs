@@ -524,6 +524,18 @@ public class CertificateServer : ICertificateProvider
         if (endpoint == null || connectedSystem == null)
             return new ServerCertificateTrustResult { Outcome = ToTrustOutcome(readOutcome), Message = message };
 
+        // A connection that takes no trust anchor from JIM (Oracle Database over TCPS) would be refused exactly as
+        // before, so storing the certificate would report success and change nothing.
+        if (!endpoint.AcceptsJimTrustedCertificates)
+        {
+            return new ServerCertificateTrustResult
+            {
+                Outcome = ServerCertificateTrustOutcome.NotUsedByThisConnection,
+                ExpectedThumbprint = expected,
+                Message = $"This connection to the {endpoint.ServerDescription} does not use the JIM certificate store, so trusting the certificate here would not make it work, and nothing was trusted. Its certificate must be issued by an authority the operating system already trusts."
+            };
+        }
+
         var reading = await ReadEndpointAsync(endpoint);
         if (reading?.Chain == null)
         {

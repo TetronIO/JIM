@@ -9,9 +9,30 @@ audience: automation-author
 
 These cmdlets read and change whether JIM sets an initial password on the Connected System Objects an export Synchronisation Rule provisions, how it generates one, and which Connected System Objects are waiting on a person because a target refused the password. No surface returns a password. What each setting does, and the rule's **Initial Password** tab, are covered in [Initial Password](../configuration/initial-password.md).
 
+```jim-diagram
+archetype: anatomy
+title: What Get-JIMSyncRuleInitialPassword returns, and never returns
+desc: 'Get-JIMSyncRuleInitialPassword returns a rule''s initial password settings: Enabled, whether JIM sets an initial password on the Connected System Objects the rule provisions; Source, Discovered, Custom or Static; CustomPolicy, the generator settings, which Set-JIMSyncRuleInitialPassword sends as a set; ExpiryBehaviour and EnableAccount, what happens once the password is set; and StaticPasswordSet with StaticPasswordSetAt, whether one password is stored for every object and when it last changed. It also returns the Connected System Objects waiting on a person: ParkedReasons and ParkedAccountCount for those a target refused the password for, and ExpiredAccountCount for those never given one in time. No password value is ever returned. A saved change that alters what would be delivered releases every parked object, while expired ones need a password set by other means.'
+subject:
+  kind: object
+  label: Initial password settings
+  parts:
+  - {label: '`Enabled`', detail: whether provisioned objects get one}
+  - {label: '`Source`', detail: '`Discovered`, `Custom` or `Static`'}
+  - {label: '`CustomPolicy`', detail: the generator settings}
+  - {label: Once it is set, detail: '`ExpiryBehaviour`, `EnableAccount`'}
+  - {label: Shared password, detail: '`StaticPasswordSet`, `StaticPasswordSetAt`'}
+  - {label: Refused by a target, detail: '`ParkedReasons`, `ParkedAccountCount`'}
+  - {label: Never given one in time, detail: '`ExpiredAccountCount`'}
+properties:
+- {name: Password, value: never returned}
+- {name: Parked, value: 'released when a save changes what is delivered'}
+- {name: Expired, value: 'set a password by other means'}
+```
+
 ---
 
-## Get-JIMSyncRuleInitialPassword
+## :material-form-textbox-password: Get-JIMSyncRuleInitialPassword
 
 Gets whether JIM sets an initial password on the Connected System Objects a Synchronisation Rule provisions, how it
 generates one, and which Connected System Objects are waiting on a person.
@@ -81,7 +102,7 @@ Get-JIMSyncRule | ForEach-Object {
 }
 ```
 
-## Set-JIMSyncRuleInitialPassword
+## :material-lock-reset: Set-JIMSyncRuleInitialPassword
 
 Changes the settings `Get-JIMSyncRuleInitialPassword` reports. Saving a change that alters what would be delivered releases every Connected System Object
 parked against the rule, and the Password Delivery Service attempts them again within seconds, with no export run
@@ -169,7 +190,7 @@ Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Ro
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Initial Password](../configuration/initial-password.md): what the settings do, and following a Connected System Object to its first sign-in
 - [Passwords](../concepts/passwords.md): how JIM handles passwords, and the rules that hold on every surface

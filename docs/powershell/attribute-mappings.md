@@ -9,9 +9,32 @@ audience: automation-author
 
 The Attribute Mapping cmdlets list, create, change and delete the Attribute Flows on a Synchronisation Rule: what each Connected System or Metaverse attribute, expression or generated value flows to. How Attribute Flows work, and how the value that wins is chosen, is covered in [Attribute Mappings](../configuration/attribute-mappings.md).
 
+```jim-diagram
+archetype: decision
+title: Which cmdlet changes an Attribute Flow
+desc: 'To change what an Attribute Flow targets, or whether its source is an attribute or an expression, remove it with Remove-JIMSyncRuleMapping and create it again with New-JIMSyncRuleMapping, because those changes revalidate it and reopen its place in the Attribute Priority order. To change its place in that order, use Set-JIMMetaverseAttributePriority or Move-JIMMetaverseAttributePriority. To change any other setting, use Set-JIMSyncRuleMapping, which changes only what you give; a setting that does not apply to the mapping, such as -NullIsValue on an export mapping, is refused rather than ignored, and so is a call that names no setting.'
+start: {label: Changing a mapping}
+questions:
+- {id: target, label: 'Change its target or kind of source?', sub: 'attribute or expression'}
+- {id: priority, label: 'Change its Attribute Priority place?'}
+- {id: applies, label: 'Does the setting apply to it?', sub: 'the mapping''s direction and kind'}
+outcomes:
+- {id: recreate, label: 'Remove it, then create it', sub: '`Remove-` then `New-JIMSyncRuleMapping`'}
+- {id: reorder, label: Reorder the priority, sub: with the Metaverse Attribute priority cmdlets}
+- {id: set, label: '`Set-JIMSyncRuleMapping`', sub: 'only what you give changes', good: true}
+- {id: refused, label: Refused, sub: 'such as `-NullIsValue` on an export mapping'}
+answers:
+- {from: target, to: recreate, label: 'yes'}
+- {from: target, to: priority, label: 'no'}
+- {from: priority, to: reorder, label: 'yes'}
+- {from: priority, to: applies, label: 'no'}
+- {from: applies, to: set, label: 'yes'}
+- {from: applies, to: refused, label: 'no'}
+```
+
 ---
 
-## Get-JIMSyncRuleMapping
+## :material-swap-vertical: Get-JIMSyncRuleMapping
 
 Retrieves Attribute Flow mappings for a Synchronisation Rule. Returns all mappings for the rule, or a specific mapping by ID.
 
@@ -88,7 +111,7 @@ Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
 
 ---
 
-## New-JIMSyncRuleMapping
+## :material-plus-circle-outline: New-JIMSyncRuleMapping
 
 Creates a new Attribute Flow mapping on a Synchronisation Rule. Mappings can be direct Attribute Flows (one or more source attributes to a target) or expression-based transformations.
 
@@ -213,7 +236,7 @@ New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 `
 
 ---
 
-## Set-JIMSyncRuleMapping
+## :material-pencil-outline: Set-JIMSyncRuleMapping
 
 Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
 
@@ -324,7 +347,7 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 14 -KeepUnique $false
 
 ---
 
-## Remove-JIMSyncRuleMapping
+## :material-delete-outline: Remove-JIMSyncRuleMapping
 
 Deletes an Attribute Flow mapping from a Synchronisation Rule.
 
@@ -379,7 +402,7 @@ This deletes every mapping on the rule. Run it with `-WhatIf` in place of `-Forc
 
 ---
 
-## Derived Attribute Flow warnings
+## :material-alert-octagon-outline: Derived Attribute Flow warnings
 
 Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/derived-attributes.md) reads. The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
 
@@ -393,7 +416,7 @@ Each `DependentDerivedFlows` entry has `MappingId`, `TargetMetaverseAttributeNam
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Attribute Mappings](../configuration/attribute-mappings.md): sources, expressions, value processing and Attribute Priority
 - [Deriving Metaverse Attributes](../configuration/derived-attributes.md): Attribute Flows that build a Metaverse attribute from others

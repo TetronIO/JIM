@@ -115,6 +115,17 @@ internal interface ISqlProvider
     void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings);
 
     /// <summary>
+    /// Describes a failure to open a connection in terms an administrator can act on: the driver's own
+    /// message, unless this dialect's driver hides the cause beneath it.
+    /// <para>
+    /// Oracle Database is the case this exists for. ODP.NET reports a refused negotiation (the server
+    /// will not encrypt the way the connection requires, say) as the catch-all <c>ORA-50201</c>, which
+    /// reads as a wrong host or service name, and keeps the actual cause in an inner exception.
+    /// </para>
+    /// </summary>
+    string DescribeConnectionFailure(DbException exception);
+
+    /// <summary>
     /// Creates a command on a connection, with any dialect-specific command configuration applied.
     /// </summary>
     DbCommand CreateCommand(DbConnection connection, string commandText);

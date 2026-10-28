@@ -23,18 +23,16 @@
    opening and animating shut. *@
 @if (_report != null)
 {
-    <ServiceHealthStrip Report="_report" Class="mt-2"
+    <ServiceHealthStrip Report="_report" NextSchedule="_nextSchedule" Class="mt-2"
                         @bind-Collapsed="_healthCollapsed" @bind-Collapsed:after="SaveHealthCollapsedAsync" />
 }
 
 @* TabPanelsClass is pa-0 rather than pt-5 because the Schedules tab opens straight onto a virtualised grid, which
    supplies its own top margin; stacking both double-counts the gap. Each tab's own first block carries it. *@
 <NavigableMudTabs TabPanelsClass="pa-0" Class="mt-6">
-    <MudTabPanel Text="Queue" Icon="@Icons.Material.Filled.Queue">
-        <OperationsQueueTab />
-    </MudTabPanel>
-    <MudTabPanel Text="History" Icon="@Icons.Material.Filled.History">
-        <OperationsHistoryTab />
+    @* Queued, running and finished work on one tab, in time order (#2549); it replaced the Queue and History tabs. *@
+    <MudTabPanel Text="Activity" Icon="@Icons.Material.Filled.DynamicFeed">
+        <OperationsActivityTab />
     </MudTabPanel>
     <MudTabPanel Text="Schedules" Icon="@Icons.Material.Filled.Schedule">
         <OperationsSchedulesTab />
@@ -94,9 +92,14 @@
     /// <summary>
     /// Whether the Service Health strip is collapsed. Read here rather than by the strip: the strip only renders once
     /// OnInitializedAsync has finished, so its first render already has the answer, whereas a strip reading it itself
-    /// could only do so after rendering and would paint open, then animate shut.
+    /// could only do so after rendering and would paint open, then animate shut. Collapsed until this browser says
+    /// otherwise: the strip's one line still carries the verdict, the live indicator and the next Schedule, three
+    /// cards saying Idle are the page's largest block with the least in it, and an outage has the portal-wide banner.
     /// </summary>
-    private bool _healthCollapsed;
+    private bool _healthCollapsed = true;
+
+    // The Schedule that will next add work to the queue, read with the health report so the two agree (#2549).
+    private JIM.Models.Scheduling.DTOs.NextDueSchedule? _nextSchedule;
 
     private Timer? _pollTimer;
     private bool _disposed;
@@ -106,7 +109,7 @@
         // Started before the health read so the browser round trip runs alongside it rather than after it.
         var healthCollapsed = PreferenceService.GetServiceHealthCollapsedAsync();
         await RefreshAsync();
-        _healthCollapsed = await healthCollapsed == true;
+        _healthCollapsed = await healthCollapsed ?? true;
 
         // A one-shot timer re-armed after each read (the pattern ExampleDataTemplateDetail uses), so a slow read
         // can never overlap the next one.
@@ -119,6 +122,7 @@
     {
         using var jim = JimFactory.Create();
         _report = await jim.SystemHealth.GetServiceHealthAsync(DateTime.UtcNow);
+        _nextSchedule = await jim.Scheduler.GetNextDueScheduleAsync();
         var summary = await jim.PasswordSynchronisation.GetQueueSummaryAsync();
         _passwordAttentionCount = summary.ParkedCount + summary.ExpiredCount;
         _generatedValueAttentionCount = (await jim.GeneratedValueDecisions.GetSummaryAsync()).NeedsDecisionCount;

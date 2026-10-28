@@ -44,6 +44,12 @@
         'LANG-7' = 'Ratchet'
         'LANG-8' = 'Block'
         'TERM-1' = 'Block'
+        # No emoji: icons come from Material Design Icons, which the theme ships (STY-1, STY-3).
+        'STY-1'  = 'Block'
+        # Heading icons on a section's index page, every H2, and nowhere else (STY-3).
+        'STY-3'  = 'Block'
+        # Every page has a diagram (VIS-1), from its first commit.
+        'VIS-1'  = 'Block'
     }
 
     RequiredFrontMatter     = @('title', 'description', 'type', 'audience')
@@ -112,6 +118,10 @@
     # A folder or page is added once every page in it declares its type and has no baseline
     # entries, and is never taken off again.
     ConformantFolders       = @('getting-started', 'api', 'reference', 'administration', 'configuration', 'concepts', 'connectors', 'powershell')
+    # Ratchet rules introduced after their pages were conformant: they keep a baseline on
+    # conformant pages too, so the pages that predate them are held at their debt and a new
+    # page has none. Remove a rule from here when its baseline is empty, and promote it to Block.
+    BaselineOnConformant    = @()
     ConformantPages         = @(
         'index.md'
         'concepts/index.md'

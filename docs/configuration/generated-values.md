@@ -9,6 +9,19 @@ audience: administrator
 
 Some values have no source to copy: an account name that must not clash with anyone else's, an employee number, a badge number, a correlation identifier. For these, choose **Generated Value** as the mapping's Source Type. JIM generates the value, checks that no one else holds it, and assigns it once; the value then persists and is never regenerated.
 
+```jim-diagram
+archetype: lifecycle
+title: A generated value, from waiting to retired
+desc: 'A generated value is not generated while a higher-priority source has a value or an input of its base expression has none. Once neither holds, JIM generates the value, checks that no one else holds it, and assigns it once; it is kept even if its inputs later change, and never regenerated. When JIM stops holding it, because the object is deleted, another Attribute Flow supplies the attribute, the flow is removed, or a target refused it and JIM corrected it, the value is retired and never issued again while Never reuse a value is on.'
+start: {label: Generated Value mapping}
+states:
+- {id: waiting, label: Not generated yet, sub: 'a higher-priority value, or an input missing'}
+- {id: assigned, label: Assigned once, sub: 'kept, even if its inputs change'}
+transitions:
+- {from: waiting, to: assigned, label: generated and checked unique}
+end: {from: assigned, label: no longer held, note: with Never reuse a value on, state: {label: Retired, sub: never issued again}}
+```
+
 A generated mapping is an ordinary Attribute Flow in every other respect: it is just another way to produce a value for the target attribute, like a direct or expression mapping, and it follows the same [Attribute Priority](attribute-mappings.md#attribute-priority) rules. The only difference is that it generates its value once.
 
 A generated value is a **base expression** plus a **uniqueness token**:
@@ -45,7 +58,7 @@ The base expression is an ordinary [expression](attribute-mappings.md#expression
 
 **Start again.** The Attribute Flow's **Start again…** action (typed confirmation) returns a sequence's counter to Start at, for example after rebuilding a solution. It also forgets the attribute's [retired values](#retired-values), so those numbers can be issued again; the confirmation says how many, and links to the list, before you commit. It changes no existing value and exports nothing; numbers still held when the counter reaches them are skipped, however many there are (see **Sequences** above). The action is recorded as an Activity, whose message includes how many retired values were forgotten.
 
-## Testing the base expression
+## :material-flask-outline: Testing the base expression
 
 The **Try it** pane beside the editor's settings runs the base expression as a Synchronisation would, as you type. Give each attribute it reads a value, or load them from an object, and see:
 
@@ -59,11 +72,11 @@ Over the REST API and PowerShell, test the Attribute Flow with [`Test-JIMExpress
 
 A [configuration test case](configuration-tests.md) for a Generated Value keeps that check: it expects the base the expression gives, never a candidate, so it passes or fails the same way however many values are already taken.
 
-## Checking and correcting values in target systems
+## :material-eye-check-outline: Checking and correcting values in target systems
 
 Before choosing a value, JIM can ask a target system whether the value is already in use there, and when a target still refuses a value as taken, JIM corrects it for you. See [Generated Values in Target Systems](generated-values-in-target-systems.md).
 
-## Values built from a generated value
+## :material-link-variant: Values built from a generated value
 
 A generated value rarely travels alone: an Email [derived](derived-attributes.md) from the generated Account Name, a User Principal Name from that Email, an export expression such as `mv["Account Name"] + "@corp.example"`. Each is a **value built from the generated value**, and changes whenever it does.
 
@@ -91,7 +104,7 @@ The switch belongs to Expression mappings, import and export; JIM refuses to swi
 - **REST API**<br /> A mapping carries `keepUnique`; one that builds a value from a generated value also carries `builtFromGeneratedValue`, describing it as the panel does (`via`, `kind`, `exportedTo`, `checkedBeforeIssuing`, `probedIn`, `moveToSyncRuleName` and the generated flow's `collisionRemediation`). A generated mapping's `generation.builtValues` lists every value built from it. Create and update requests take `keepUnique`.
 - **PowerShell**<br /> `-KeepUnique` on `New-JIMSyncRuleMapping` and `Set-JIMSyncRuleMapping` for Expression mappings (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)); `Get-JIMSyncRuleMapping` returns `KeepUnique`, `BuiltFromGeneratedValue` and `Generation.BuiltValues`.
 
-## Retired values
+## :material-delete-clock-outline: Retired values
 
 A generated value is often an identifier: an account name, an email address, an employee number. Issuing one to a second person is a security problem as much as a data one, because mail, group memberships and permissions keyed on that identifier quietly follow it to the new holder. So when JIM stops holding a generated value, it **retires** it: the value goes into the attribute's **retired values** list, and JIM never issues it again, whichever Attribute Flow generates the attribute.
 

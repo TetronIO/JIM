@@ -627,159 +627,138 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     background-color: var(--mud-palette-surface);
 }
 
-/* ─── Operations Queue: one block per Schedule Execution ───
-   The queue is a grid per group rather than one grouped table (MudBlazor cannot group and virtualise at once),
-   so each Schedule Execution's header is an ordinary block that has to join the grid beneath it into one box:
-   it carries the top corners and leaves its bottom edge to the grid's own top border. */
-.jim-queue-group-header {
+/* ─── Operations Activity tab (#2549) ───
+   Queued, In progress and Completed share one page, in time order, later at the top. A section holding rows opens
+   with a heading (a chevron that folds its rows, its icon, its name and its count); an empty section is a single
+   line saying why. Queued and In progress are plain tables whose columns take the same widths as Completed's grid
+   (ActivityTableColumns), so a column can be followed down the page. */
+.jim-activity-section-header {
     display: flex;
     align-items: center;
-    gap: 1.25rem;
-    padding: 0.5rem 1rem;
-    background-color: var(--mud-palette-surface);
-    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
-    border-bottom: none;
-    border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    min-height: 48px;
+    margin-bottom: 0.5rem;
 }
 
-/* The block leading the queue sits under the worker status bar, which already draws the box's top edge. */
-.jim-queue-group-header--joined {
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
+/* An empty section: one quiet line with a hairline under it, so two empty sections read as a short ledger rather
+   than as two headings over two boxes. The title keeps its heading size for the page's outline. */
+.jim-activity-ledger-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    min-height: 40px;
+    padding: 0 0.25rem;
+    border-bottom: 1px solid var(--mud-palette-table-lines, var(--mud-palette-lines-default));
 }
 
-/* Collapsed, the header is the whole box: it closes itself off rather than opening onto nothing. */
-.jim-queue-group-header--collapsed {
-    border-bottom: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
-    border-bottom-left-radius: var(--jim-container-radius);
-    border-bottom-right-radius: var(--jim-container-radius);
+.jim-activity-ledger-message {
+    color: var(--mud-palette-text-secondary);
 }
 
-/* The Schedule's name and position, which is also what collapses the group. */
-.jim-queue-group-toggle {
-    flex: 0 0 auto;
-    cursor: pointer;
+/* The chevron that folds a section: points down while the section is open, right while it is folded, as the
+   Service Health strip's does. */
+.jim-activity-collapse-toggle .mud-icon-root {
+    transition: transform 0.2s;
+    transform: rotate(-90deg);
 }
 
-/* Pushed right so the Schedule's actions land over the Actions column of the rows beneath. */
-.jim-queue-group-actions {
-    flex: 0 0 auto;
-    margin-left: auto;
+.jim-activity-collapse-toggle--open .mud-icon-root {
+    transform: rotate(0deg);
 }
 
-/* Cells sit in the middle of their row, so a running task's name, status, initiator and cancel button balance
-   against its taller progress block. The Progress cell alone hangs from the top, so its rail stays at the same
-   height in every row rather than floating when another cell happens to be taller. Scoped to the queue's grids. */
-.jim-queue-grid td {
+@media (prefers-reduced-motion: reduce) {
+    .jim-activity-collapse-toggle .mud-icon-root {
+        transition: none;
+    }
+}
+
+/* A finished run's result: a status dot (the .jim-status-dot vocabulary, further down) in the result's colour and
+   the result in words. A plain Complete carries no colour on its words, so the warnings and errors are what stand
+   out down a column of results. */
+.jim-activity-result {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.jim-activity-result--warn {
+    color: var(--jim-chip-text-warning, var(--mud-palette-warning));
+    font-weight: 600;
+}
+
+.jim-activity-result--err {
+    color: var(--jim-chip-text-error, var(--mud-palette-error));
+    font-weight: 600;
+}
+
+/* A run that changed nothing says so in words, low-lit, rather than wearing a chip with a zero on it. */
+.jim-activity-no-changes {
+    color: var(--mud-palette-text-secondary);
+    opacity: 0.7;
+}
+
+/* In progress's marker: a dot with a soft halo while the worker is busy, a plain muted dot while it is idle. */
+.jim-activity-now-dot {
+    width: 10px;
+    height: 10px;
+    margin: 0 7px;
+    border-radius: 9999px;
+    background-color: var(--mud-palette-info);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--mud-palette-info) 20%, transparent);
+}
+
+.jim-activity-now-dot--idle {
+    background-color: var(--mud-palette-text-secondary);
+    box-shadow: none;
+}
+
+/* The tables sit flush in their paper, which owns the border and the corners. */
+.jim-activity-table-paper {
+    overflow-x: auto;
+}
+
+.jim-activity-table {
+    table-layout: fixed;
+    min-width: 1100px;
+}
+
+html[lang] .jim-activity-table.mud-simple-table {
+    background-color: transparent;
+}
+
+/* Cells sit in the middle of their row, so a running task's name, status, initiator and cancel button balance against
+   its taller progress block; the Progress cell alone hangs from the top, so its rail stays at the same height in
+   every row. */
+.jim-activity-table td {
     vertical-align: middle;
 }
 
-.jim-queue-grid td.jim-queue-progress-cell {
+/* A task row. Queued's rows share one height, which jimQueueRows measures to decide how many fit the window. */
+.jim-activity-row td {
+    height: 52px;
+}
+
+.jim-activity-table td.jim-queue-progress-cell {
     vertical-align: top;
 }
 
-/* Joined to the block directly above it (its Schedule Execution's header, or the worker status bar), so the two
-   read as one box. !important because the portal's own container-radius rule above (.mud-table) carries it, and
-   a longhand without it loses to a shorthand that has it however specific the selector is. */
-html[lang] .jim-queue-grid--joined.mud-table-outlined {
-    border-top-left-radius: 0 !important;
-    border-top-right-radius: 0 !important;
+/* A Schedule Execution's header row: a quiet band across the table, above the tasks it covers. */
+.jim-activity-group-row td {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 4%, transparent);
 }
 
-/* Worker activity indicator bar — shown above queue table when tasks are processing */
-.jim-worker-activity-bar {
-    position: relative;
-    height: 40px;
-    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
-    border-bottom: none;
-    /* Joins the block beneath it into one box, so it carries the container radius on the two
-       corners that are actually on the outside of that box. */
-    border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0;
-    overflow: hidden;
-    background-color: var(--mud-palette-surface);
+/* "Show N more" sits at the top of Queued, where the rows it hides would be. */
+.jim-activity-more-row td {
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 
-.jim-worker-activity-shimmer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(90deg,
-            transparent 0%,
-            var(--mud-palette-primary) 40%,
-            var(--mud-palette-primary) 60%,
-            transparent 100%);
-    opacity: 0.08;
-    background-size: 200% 100%;
-    animation: jim-worker-shimmer 3s ease-in-out infinite;
-}
-
-@keyframes jim-worker-shimmer {
-    0% {
-        background-position: 200% 0;
-    }
-
-    100% {
-        background-position: -200% 0;
-    }
-}
-
-.jim-worker-activity-text {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    height: 100%;
-    font-size: 0.8125rem;
-    color: var(--mud-palette-text-secondary);
-    letter-spacing: 0.02em;
-}
-
-.jim-worker-activity-text .mud-icon-root {
-    font-size: 1rem;
-    color: var(--mud-palette-primary);
-    animation: jim-worker-icon-tick 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@keyframes jim-worker-icon-tick {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    8% {
-        transform: rotate(0deg);
-    }
-
-    13% {
-        transform: rotate(90deg);
-    }
-
-    50% {
-        transform: rotate(90deg);
-    }
-
-    55% {
-        transform: rotate(180deg);
-    }
-
-    100% {
-        transform: rotate(180deg);
-    }
-}
-
-/* Idle worker status bar: resting state (no shimmer rendered, icon static and muted) */
-.jim-worker-activity-bar--idle .jim-worker-activity-text .mud-icon-root {
-    animation: none;
-    color: var(--mud-palette-text-secondary);
-}
-
-/* Empty queue message connects flush beneath the always-present worker status bar */
-.jim-queue-empty-connected {
-    border-top-left-radius: 0 !important;
-    border-top-right-radius: 0 !important;
+.jim-activity-estimate {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 /* Nested containers: tables and tab panels inside papers use a deeper surface colour
@@ -1708,6 +1687,21 @@ a.jim-system-rule-chip-part:focus-visible {
     border-radius: var(--jim-container-radius);
     overflow-x: auto;
     white-space: pre;
+}
+
+/* A Connected System Text setting holds a document the administrator writes by hand (JSON, typically),
+   so its text area is monospaced like the code it contains. */
+.jim-setting-text textarea {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+/* A Connector setting's example, beneath its field. Long examples scroll within the block rather than
+   pushing the rest of the form a screen further down. */
+.jim-setting-example .jim-code-block {
+    max-height: 360px;
+    overflow-y: auto;
 }
 
 /* Shell syntax-highlighting tokens (bash / PowerShell), emitted by Helpers.HighlightShell.
@@ -5883,6 +5877,17 @@ html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-ch
     border-bottom: 1px solid var(--mud-palette-table-lines);
 }
 
+/* The toolbar drawn above the grid's paper rather than inside it (ToolBarAboveGrid): the same row, laid out the
+   same way, standing as the section's heading. The spacer inside needs a flex parent to push against. */
+.jim-virtualised-list-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    min-height: 48px;
+    margin-bottom: 0.5rem;
+}
+
 /* A slow search, sort or refresh: the rows on screen belong to the match set being replaced, so they fade and stop
    taking clicks until the new one arrives. A slow window fetched by scrolling never sets this (ShowsStaleRows in
    VirtualisedDataGrid.razor), because the rows already shown are still the right ones. */
@@ -6506,6 +6511,14 @@ html[lang] .jim-built-from-generated-value-inactive.mud-paper-outlined {
     width: 1%;
     padding-right: 0;
     white-space: nowrap;
+}
+
+/* The External ID beneath a Connections row's Secondary External ID: the same code face, a step smaller, so the readable
+   identifier above it leads. */
+.jim-connection-object-external-id {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8em;
+    margin-top: 1px;
 }
 
 /* The expansion spans the whole row on the table's recessed surface, so it reads as belonging to the row above. */

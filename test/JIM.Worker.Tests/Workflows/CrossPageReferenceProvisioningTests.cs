@@ -68,13 +68,11 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
         var reloadedSource = await ReloadEntityAsync(source);
         var profile = await CreateRunProfileAsync(reloadedSource.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var activity = await CreateActivityAsync(reloadedSource.Id, profile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloadedSource, profile, activity, new CancellationTokenSource())
-            .PerformFullSyncAsync();
+        var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloadedSource, profile, activity, new CancellationTokenSource());
+        await processor.PerformFullSyncAsync();
 
         // --- Assert: the group's provisioning survived the cross-page pass intact ---
-        // The cross-page step moves the Activity's counting window to its own work, counted in reference values: every
-        // one of Team Alpha's five, so the pass ran, for Alpha alone.
-        Assert.That(activity.ObjectsToProcess, Is.EqualTo(members.Count),
+        Assert.That(processor.CrossPageReferenceObjectCount, Is.EqualTo(1),
             "Team Alpha, and only Alpha, should have been deferred to the cross-page reference pass");
 
         var targetGroupCso = SyncRepo.ConnectedSystemObjects.Values

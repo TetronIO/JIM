@@ -40,7 +40,7 @@ function Get-JIMScheduleExecution {
 
         JIM.ScheduleExecution
         StepDisplay (string): The step group the execution has reached, as one sentence naming it, for example Step
-            2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Queue.
+            2 of 5: 2 in parallel, matching what the portal shows in Admin > Operations > Activity.
 
     .EXAMPLE
         Get-JIMScheduleExecution

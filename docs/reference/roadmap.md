@@ -9,11 +9,22 @@ audience: evaluator
 
 JIM has completed **pre-release stabilisation**. The core identity lifecycle (Import, Sync, Export and Schedule) is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and integration test coverage across its synchronisation scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
 
+```jim-diagram
+archetype: flow
+title: Where JIM is, and the milestones ahead
+desc: "Pre-release stabilisation is complete: the core identity lifecycle of Import, Sync, Export and Schedule works, and the platform is hardened for production. The milestones ahead, in order, are v1.0, Identity Lifecycle Complete, the first stable release; v1.x, Connector Ecosystem, which expands the systems JIM connects to out of the box; and v2.0, IGA Foundation, so identities can be managed directly in JIM. The roadmap gives no dates."
+steps:
+- {id: pre, label: Pre-release stabilisation, sub: complete}
+- {id: v1, label: v1.0, sub: Identity Lifecycle Complete, note: first stable release}
+- {id: v1x, label: v1.x, sub: Connector Ecosystem, note: more systems out of the box}
+- {id: v2, label: v2.0, sub: IGA Foundation, note: manage identities in JIM}
+```
+
 For the latest status and issue tracking, see the public [JIM Roadmap project board](https://github.com/orgs/TetronIO/projects/1).
 
 ---
 
-## 🎯 v1.0: Identity Lifecycle Complete
+## :material-flag-checkered: v1.0: Identity Lifecycle Complete
 
 The first stable release, delivering a production-ready identity lifecycle platform.
 
@@ -24,14 +35,14 @@ The first stable release, delivering a production-ready identity lifecycle platf
 
 ---
 
-## 🌳 v1.x: Connector Ecosystem
+## :material-puzzle-outline: v1.x: Connector Ecosystem
 
 Expanding the range of systems JIM can connect to out of the box. The JIM SCIM 2.0 Client Connector and the JIM SQL Connector (Microsoft SQL Server and Oracle Database) have already shipped, and the JIM SCIM 2.0 Service Provider Connector is in Preview; they are listed here for continuity.
 
 | Connector | Description | Status |
 |---|---|---|
-| [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | Any SCIM 2.0 service provider (RFC 7643/7644) | ✅ Available |
-| [JIM SQL Connector](../connectors/jim-sql-connector.md) | Microsoft SQL Server and Oracle Database | ✅ Available |
+| [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | Any SCIM 2.0 service provider (RFC 7643/7644) | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Available |
+| [JIM SQL Connector](../connectors/jim-sql-connector.md) | Microsoft SQL Server and Oracle Database | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Available |
 | [JIM SCIM 2.0 Service Provider Connector](../connectors/jim-scim-service-provider-connector.md) | Identity providers and other SCIM 2.0 clients push Users and Groups to JIM | Preview |
 | JIM SQL Connector: PostgreSQL and MySQL | The same connector, extended to two further engines | Planned |
 | JIM PowerShell Connector | PowerShell Core scripts | Planned |
@@ -41,7 +52,7 @@ Each connector follows JIM's established connector architecture, supporting sche
 
 ---
 
-## 🏛️ v2.0: IGA Foundation
+## :material-rocket-launch-outline: v2.0: IGA Foundation
 
 Evolves JIM's core IDAM capabilities so identities can be managed directly in JIM, without depending on Source-of-Record systems for everyday changes. The focus is depth in the existing identity surface (Users, Groups, custom types) rather than branching into adjacent domains.
 

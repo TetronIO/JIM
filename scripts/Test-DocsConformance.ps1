@@ -27,7 +27,10 @@
       A11Y-1  every Mermaid diagram carries accTitle and accDescr
       A11Y-2  every image has alt text; every included diagram has a <title>
               and a <desc>
-      TYP-1   a page that declares a type has the shape that type requires
+      VIS-1   the page has at least one diagram: a jim-diagram spec, an
+              included concept diagram, an inline diagram SVG or a Mermaid
+              diagram, outside any other code block
+      TYP-1  a page that declares a type has the shape that type requires
       TUT-2   every bold label in a tutorial's Portal tab exists in the portal
       PRI-1   a conformant priority page records the release it was last
               checked against (validated: vX.Y.Z), no later than VERSION, and
@@ -63,7 +66,10 @@
       Warn     findings are reported, never fail.
 
     A page in a conformant folder, or listed as a conformant page, carries no
-    baseline: its Ratchet findings fail outright. A conformant priority page
+    baseline: its Ratchet findings fail outright. The exception is a Ratchet
+    rule listed in BaselineOnConformant, introduced after its pages were
+    conformant (VIS-1): it keeps its baseline everywhere, so the pages that
+    predate it are held at their debt while a new page has none. A conformant priority page
     also fails on warnings, and has the smaller priority size budget.
 
     Exceptions live in the page, where the next author reads them, and must
@@ -162,7 +168,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
-    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'EXC-1')
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'STY-3', 'VIS-1', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
@@ -170,6 +176,16 @@ $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'ST
 $script:UnmarkableRules = @('EXC-1', 'MNT-3', 'PRI-1')
 $script:Tiers = @('Block', 'Ratchet', 'Warn')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
+# An icon or emoji shortcode such as :material-format-align-center: or :octicons-arrow-right-24:, which
+# the language rules and the word count skip: its name is markup, not prose.
+$script:IconShortcode = ':[a-z0-9]+(?:-[a-z0-9]+)+:'
+# STY-1. Three kinds of emoji: the pictograph blocks (Misc Symbols, Dingbats, and the
+# supplementary pictographs as UTF-16 pairs); the scattered characters that default to emoji
+# presentation (a play button, a return arrow, an information sign); and any character a
+# variation selector (U+FE0F) asks to draw as emoji. Typographic symbols such as an arrow,
+# a trademark or a copyright sign pass unless that selector follows them.
+# scripts/Test-DocsSite.ps1 scans the built site with the same pattern; keep the two in step.
+$script:EmojiRegex = [regex]::new('(?:(?:[\u2600-\u27BF\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA\u2139\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u21A9\u21AA\u2934\u2935\u3030\u303D\u3297\u3299\u203C\u2049]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDEFF])\uFE0F?|[^\s\uFE0F]\uFE0F)')
 
 # ---------------------------------------------------------------------------
 # Configuration, baseline and nav
@@ -195,6 +211,13 @@ function Read-Configuration {
     }
     # EXC-1 guards the exception mechanism itself, so it can be neither relaxed nor suppressed.
     $config.Rules['EXC-1'] = 'Block'
+    # Ratchet rules that keep their baseline on conformant pages (optional; see the help above).
+    if (-not $config.ContainsKey('BaselineOnConformant')) { $config.BaselineOnConformant = @() }
+    foreach ($r in $config.BaselineOnConformant) {
+        if ($config.Rules[$r] -ne 'Ratchet') {
+            throw "Configuration '$Path' lists '$r' in BaselineOnConformant, but only a Ratchet rule can keep a baseline."
+        }
+    }
     return $config
 }
 
@@ -419,7 +442,8 @@ function Get-WordCount {
             if ($marker[0] -eq $fenceMarker[0] -and $marker.Length -ge $fenceMarker.Length -and $line.Trim() -eq $marker) { $inFence = $false; continue }
         }
         if ($inFence -or $line.TrimStart().StartsWith('<!--')) { continue }
-        $words += ([regex]::Matches($line, '\S+')).Count
+        # An icon shortcode (:material-format-align-center:) is markup, not a word.
+        $words += ([regex]::Matches(($line -replace $script:IconShortcode, ' '), '\S+')).Count
     }
     return $words
 }
@@ -463,8 +487,15 @@ function Get-PageModel {
         }
 
         if ($line -match '^ {0,3}(?<hashes>#{1,6})\s+(?<text>.*?)\s*$') {
+            $headingLevel = $Matches['hashes'].Length
             $headingText = ($Matches['text'] -replace '\s*\{[^}]*\}\s*$', '' -replace '\s+#+\s*$', '').Trim()
-            $headings.Add([pscustomobject]@{ Level = $Matches['hashes'].Length; Text = $headingText; Line = $lineNumber })
+            # A leading icon shortcode (STY-3) is kept apart, so every other rule reads the heading's words.
+            $headingIcon = $null
+            if ($headingText -match '^:(?<icon>[a-z0-9]+(?:-[a-z0-9]+)*):\s*(?<rest>.*)$') {
+                $headingIcon = $Matches['icon']
+                $headingText = $Matches['rest']
+            }
+            $headings.Add([pscustomobject]@{ Level = $headingLevel; Text = $headingText; Icon = $headingIcon; Line = $lineNumber })
         }
 
         if ($line -match '<!--\s*conformance:') {
@@ -596,6 +627,26 @@ function Test-PageName {
     }
 }
 
+# STY-3: every H2 opens with a Material Design icon, which custom.css draws as a tile; no other
+# heading carries one. Get-PageModel separates a heading's leading icon shortcode from its words.
+function Test-HeadingIcons {
+    param($Page)
+
+    foreach ($h in $Page.Headings) {
+        if ($h.Level -eq 2) {
+            if (-not $h.Icon) {
+                New-Finding 'STY-3' $h.Line "the H2 '$($h.Text)' has no icon; every H2 opens with a Material Design icon, such as '## :material-layers-outline: $($h.Text)'."
+            }
+            elseif (-not $h.Icon.StartsWith('material-')) {
+                New-Finding 'STY-3' $h.Line "the H2 '$($h.Text)' opens with ':$($h.Icon):'; use a Material Design icon (:material-...:), preferring an -outline variant."
+            }
+        }
+        elseif ($h.Icon) {
+            New-Finding 'STY-3' $h.Line "the heading '$($h.Text)' carries an icon; only H2 headings carry one."
+        }
+    }
+}
+
 function Test-HeadingStructure {
     param($Page)
 
@@ -712,6 +763,25 @@ function Test-Accessibility {
             }
         }
     }
+}
+
+# VIS-1: the page has at least one diagram, in any of the forms the site draws. Only a fence
+# Get-PageModel recorded counts, so a diagram shown inside another code block (a ````markdown
+# example of how to write one) is text, not a diagram; the same goes for the snippet and SVG
+# lines, which are skipped inside code blocks.
+function Test-Visuals {
+    param($Page)
+
+    if (@($Page.Fences | Where-Object { $_.Info -match '^(?:jim-diagram|mermaid)\b' }).Count -gt 0) { return }
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
+        if ($Page.InFenceLine[$i]) { continue }
+        $line = $Page.Lines[$i]
+        if ($line -match '^\s*--8<--\s*"(?:docs/)?assets/diagrams/[^"]+\.svg"') { return }
+        if ($line -match '<svg\b[^>]*\bclass\s*=\s*"(?:[^"]*\s)?jim-diagram(?:\s[^"]*)?"') { return }
+    }
+    $h1 = $Page.Headings | Where-Object Level -eq 1 | Select-Object -First 1
+    $line = if ($h1) { $h1.Line } else { 1 }
+    New-Finding 'VIS-1' $line "the page has no diagram; add one that shows this page's own subject: a jim-diagram spec (docs/CLAUDE.md > Generated diagrams), an included concept diagram, or a Mermaid diagram."
 }
 
 function Test-Validation {
@@ -957,7 +1027,7 @@ function Get-ProseLine {
         if ([string]::IsNullOrWhiteSpace($line) -or $line.Contains('--8<--') -or $line -match '^\s*\[[^\]]+\]:\s*\S') { continue }
         if (@($StubPatterns | Where-Object { $_ -and $line.IndexOf($_, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count) { continue }
 
-        $withLinks = [regex]::Replace($line, '(`+).+?\1', ' ')
+        $withLinks = [regex]::Replace($line, '(`+).+?\1', ' ') -replace $script:IconShortcode, ' '
         $text = $withLinks -replace '\]\([^)]*\)', ']' -replace '\]\[[^\]]*\]', ']' -replace '<[^>]+>', ' ' -replace 'https?://\S+', ' ' -replace '\{[^}]*\}', ' ' -replace '&#?\w+;', ' '
         $tableHeader = $text.TrimStart().StartsWith('|') -and ($i + 1 -lt $lines.Count) -and $lines[$i + 1] -match '^\s*\|?\s*:?-{3,}'
 
@@ -1061,6 +1131,11 @@ function Test-Language {
         }
         foreach ($m in [regex]::Matches($p.WithLinks, 'github\.com/[^/\s)]+/[^/\s)]+/(?:issues|pull|discussions)/\d+')) {
             New-Finding 'LANG-8' $p.Line "a link to a GitHub issue or pull request; a public page leaves JIM's own workings out (VOI-4)."
+        }
+
+        # STY-1 (the pattern is described where $script:EmojiRegex is defined).
+        foreach ($m in $script:EmojiRegex.Matches($text)) {
+            New-Finding 'STY-1' $p.Line "an emoji ('$($m.Value)'); use a Material Design icon instead, such as :material-check-circle-outline:{ .jim-yes role=`"img`" aria-label=`"Yes`" } for a tick in a table (see STY-1 and STY-3)."
         }
     }
 }
@@ -1175,12 +1250,14 @@ foreach ($file in $files) {
         Test-FrontMatter -Page $page -Config $config
         Test-PageName -Page $page -NavLabels $navLabels
         Test-HeadingStructure -Page $page
+        Test-HeadingIcons -Page $page
         Test-CodeFences -Page $page
         Test-Stub -Page $page -Config $config
         Test-Opening -Page $page
         Test-SizeBudget -Page $page -Budget $budget
         Test-Growth -Page $page -Budget $budget -BaseRef $BaseRef -RepositoryRoot $repositoryFull -DocsRepoPath $docsRepoPath
         Test-Accessibility -Page $page -DocsFullPath $docsFull -RepositoryRoot $repositoryFull
+        Test-Visuals -Page $page
         Test-PageShape -Page $page -Config $config -RepositoryRoot $repositoryFull
         Test-Validation -Page $page -Priority $priority -Conformant $conformant -VersionPath (Join-Path $repositoryFull 'VERSION')
         Test-PortalLabel -Page $page -Config $config -RepositoryRoot $repositoryFull
@@ -1224,7 +1301,7 @@ foreach ($file in $files) {
     foreach ($finding in @($kept) + $markerFindings) {
         if (-not $finding) { continue }
         $mode = $config.Rules[$finding.Rule]
-        if ($conformant -and $mode -eq 'Ratchet') { $mode = 'Block' }
+        if ($conformant -and $mode -eq 'Ratchet' -and $finding.Rule -notin $config.BaselineOnConformant) { $mode = 'Block' }
         if ($conformant -and $priority -and $mode -eq 'Warn') { $mode = 'Block' }
         $findings.Add([pscustomobject]@{
                 Rule        = $finding.Rule
@@ -1272,7 +1349,8 @@ foreach ($f in $findings | Where-Object Mode -eq 'Ratchet') {
 function Test-BaselineEntryApplies {
     param([string]$Key)
     $ruleId, $pagePath = $Key.Split("`t")
-    return $pageSet.ContainsKey($pagePath) -and -not $conformantSet.ContainsKey($pagePath) -and $config.Rules[$ruleId] -eq 'Ratchet'
+    return $pageSet.ContainsKey($pagePath) -and $config.Rules[$ruleId] -eq 'Ratchet' -and
+        (-not $conformantSet.ContainsKey($pagePath) -or $ruleId -in $config.BaselineOnConformant)
 }
 
 if ($SeedBaseline) {
@@ -1343,7 +1421,7 @@ foreach ($key in $baseline.Keys) {
     $ruleId, $pagePath = $key.Split("`t")
     $display = "$docsDisplayPrefix/$pagePath"
     $reason = if (-not $pageSet.ContainsKey($pagePath)) { "$pagePath is not a page this check covers" }
-    elseif ($conformantSet.ContainsKey($pagePath)) { "$pagePath is conformant, so it carries no baseline" }
+    elseif ($conformantSet.ContainsKey($pagePath) -and $ruleId -notin $config.BaselineOnConformant) { "$pagePath is conformant, so it carries no baseline" }
     elseif ($config.Rules[$ruleId] -ne 'Ratchet') { "$ruleId is no longer a Ratchet rule" }
     else { "no $ruleId findings remain on $pagePath" }
     $errors.Add([pscustomobject]@{

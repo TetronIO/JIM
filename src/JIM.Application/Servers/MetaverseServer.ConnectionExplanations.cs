@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Servers.Scoping;
 using JIM.Application.Utilities;
 using JIM.Models.Core;
@@ -10,6 +11,7 @@ using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 
 namespace JIM.Application.Servers;
 
@@ -360,7 +362,12 @@ public partial class MetaverseServer
     {
         var state = ConnectedSystemObjectConnectionStateResolver.Resolve(cso.Status, pendingExport);
         row.ConnectedSystemObjectId = cso.Id;
-        row.DisplayName = cso.ExternalIdAttributeValue?.ToStringNoName() ?? cso.Id.ToString();
+        row.ExternalId = NullIfEmpty(cso.ExternalIdAttributeValue?.ToStringNoName());
+        row.SecondaryExternalId = NullIfEmpty(cso.SecondaryExternalIdAttributeValue?.ToStringNoName());
+        // A pending value is shown only where there is no confirmed one, as the Connector Space list does: a queued
+        // rename does not displace what the Connected System currently holds.
+        row.PendingExternalId = row.ExternalId == null ? PendingValueText(pendingExport, cso.ExternalIdAttributeId) : null;
+        row.PendingSecondaryExternalId = row.SecondaryExternalId == null ? PendingValueText(pendingExport, cso.SecondaryExternalIdAttributeId) : null;
         row.ConnectedSystemId = cso.ConnectedSystemId;
         row.ConnectedSystemName = cso.ConnectedSystem.Name;
         row.ObjectTypeName = cso.Type.Name;
@@ -372,5 +379,35 @@ public partial class MetaverseServer
             ? pendingExport?.AttributeValueChanges.Count
             : null;
         row.LastSynchronised = cso.LastUpdated;
+    }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
+
+    /// <summary>
+    /// The value a Pending Export will write to the given attribute, rendered as an External ID is; null when the
+    /// export carries no value for it.
+    /// </summary>
+    private static string? PendingValueText(PendingExport? pendingExport, int? attributeId)
+    {
+        if (pendingExport == null || attributeId == null)
+            return null;
+
+        var change = pendingExport.AttributeValueChanges.FirstOrDefault(avc => avc.AttributeId == attributeId);
+        if (change == null)
+            return null;
+
+        if (!string.IsNullOrEmpty(change.StringValue))
+            return change.StringValue;
+        if (change.DateTimeValue != null)
+            return AttributeDateDisplay.Format(change.DateTimeValue.Value);
+        if (change.IntValue != null)
+            return change.IntValue.Value.ToString(CultureInfo.InvariantCulture);
+        if (change.LongValue != null)
+            return change.LongValue.Value.ToString(CultureInfo.InvariantCulture);
+        if (change.DecimalValue != null)
+            return change.DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
+        if (change.GuidValue != null)
+            return change.GuidValue.Value.ToString();
+        return change.BoolValue?.ToString();
     }
 }

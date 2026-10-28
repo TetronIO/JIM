@@ -9,9 +9,36 @@ audience: automation-author
 
 These cmdlets work with the values a generated Attribute Flow issues: those a Metaverse Object holds now, those retired from an attribute and never issued again, the counter behind a Sequence, and the values a target rejected that wait on a decision. How values are generated and kept unique is covered in [Generated Values](../configuration/generated-values.md). A generated Attribute Flow itself is configured with [`New-JIMSyncRuleMapping`](attribute-mappings.md#new-jimsyncrulemapping).
 
+```jim-diagram
+archetype: comparison
+title: Trying again or allowing the rename of a held value
+desc: 'When a target rejects a generated value and JIM holds its export for a decision, Get-JIMGeneratedValueDecision lists it, and two cmdlets act on it. Reset-JIMGeneratedValueDecision tries again, for when the clash has been resolved in the target: it releases the held exports so the next export run tries the same values, and a value the target rejects again is held again. It takes IDs, or every held value of a Connected System, Synchronisation Rule or Metaverse Object, or -AllDecisions, and returns how many it released. Approve-JIMGeneratedValueRename allows the rename of one value, by ID or through the pipeline: at the next export that meets the rejection, JIM checks every system again, chooses the next free value and applies it everywhere the value is used, renaming the account in the Connected System that already holds the current value. It returns the value with Status RenameAllowed. Each action is recorded as an Activity naming who took it.'
+columns:
+- {label: Try again, sub: '`Reset-JIMGeneratedValueDecision`'}
+- {label: Allow the rename, sub: '`Approve-JIMGeneratedValueRename`'}
+rows:
+- label: When
+  cells:
+  - {text: the clash is resolved in the target}
+  - {text: the account holding the value may be renamed}
+- label: Next export
+  cells:
+  - {text: tries the same value, sub: 'rejected again, it is held again'}
+  - {text: 'chooses the next free value, applied everywhere', sub: 'after checking every system again'}
+- label: Acts on
+  cells:
+  - {text: 'IDs, or every value held for one system, rule or object', sub: '`-AllDecisions` to act on all'}
+  - {text: 'held values, one at a time', sub: by ID or through the pipeline}
+- label: Returns
+  cells:
+  - {text: how many it released, sub: '`AffectedCount`; zero is valid'}
+  - {text: the value, sub: 'Status `RenameAllowed`'}
+footer: 'Each action is recorded as an Activity naming who took it; `Get-JIMGeneratedValueDecision` lists what is held'
+```
+
 ---
 
-## Get-JIMGeneratedValue
+## :material-pound: Get-JIMGeneratedValue
 
 Lists the generated values a Metaverse Object holds, one per generated attribute, or nothing when it holds none. A generated Attribute Flow is configured with `New-JIMSyncRuleMapping -Generate`; see [Attribute Mappings](attribute-mappings.md#new-jimsyncrulemapping).
 
@@ -58,7 +85,7 @@ Get-JIMMetaverseObject -ObjectTypeName "User" -Search "j.smith" | Get-JIMGenerat
 
 ---
 
-## Get-JIMRetiredGeneratedValue
+## :material-delete-restore: Get-JIMRetiredGeneratedValue
 
 Lists an attribute's retired generated values, newest first: the values JIM issued for it and will never issue again, whichever Attribute Flow generates it. Every page is read, so the whole list is returned. Read-only; the only way to forget retired values is `Restart-JIMGeneratedValues` on a sequence. See [Retired values](../configuration/generated-values.md#retired-values) for when a value is retired.
 
@@ -124,7 +151,7 @@ Get-JIMMetaverseAttribute -Name "Employee Number" | Get-JIMRetiredGeneratedValue
 
 ---
 
-## Get-JIMGeneratedValueSequence
+## :material-order-numeric-ascending: Get-JIMGeneratedValueSequence
 
 Gets a generated Sequence mapping's counter state (Unique Value Generation): the next number it
 would issue, and how many it has issued so far. Read-only; nothing is allocated or reserved by calling
@@ -171,7 +198,7 @@ Get-JIMSyncRule -Id 1 | Get-JIMGeneratedValueSequence -MappingId 12
 
 ---
 
-## Restart-JIMGeneratedValues
+## :material-restart: Restart-JIMGeneratedValues
 
 "Start again" (Unique Value Generation). For a generated Sequence mapping, moves the target
 attribute's counter back to the mapping's configured Sequence Start (the move can go either direction;
@@ -222,7 +249,7 @@ Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false
 
 ---
 
-## Get-JIMGeneratedValueDecision
+## :material-arrow-decision-outline: Get-JIMGeneratedValueDecision
 
 Lists the generated values held for a decision, newest first, or reads one by ID, or counts them.
 
@@ -315,7 +342,7 @@ Get-JIMGeneratedValueDecision -Status NeedsDecision |
 Get-JIMGeneratedValueDecision -ConnectedSystemId 3 -All
 ```
 
-## Approve-JIMGeneratedValueRename
+## :material-check-decagram-outline: Approve-JIMGeneratedValueRename
 
 Allows the rename. At the next export that meets the rejection, JIM chooses the next free value and applies it everywhere the value is used, renaming the account in the Connected System that already holds the current value. The new value is decided then, after JIM checks every system again, not now. The held export is released so that export happens.
 
@@ -359,7 +386,7 @@ Get-JIMGeneratedValueDecision -SyncRuleId 2 -Status NeedsDecision -All | Approve
 
 Run the second example without `-WhatIf` only after reviewing what it lists: every value it names renames a live account.
 
-## Reset-JIMGeneratedValueDecision
+## :material-undo-variant: Reset-JIMGeneratedValueDecision
 
 Tries again: releases the held exports so the next export run tries the same values, for when the clash has been resolved in the target. A value the target rejects again is held for a decision again. Values whose rename has been allowed are left as they are. A pipeline is collected and sent as one request; each value released is recorded as its own Activity.
 
@@ -402,7 +429,7 @@ Get-JIMGeneratedValueDecision -Status NeedsDecision -ConnectedSystemId 3 | Reset
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Generated Values](../configuration/generated-values.md): how JIM generates unique values, and when one is retired
 - [Metaverse](metaverse.md): find the Metaverse Object whose generated values you want

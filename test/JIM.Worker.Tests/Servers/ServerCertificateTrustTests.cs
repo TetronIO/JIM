@@ -321,6 +321,23 @@ public class ServerCertificateTrustTests
     }
 
     [Test]
+    public async Task TrustServerCertificateAsync_WhenTheConnectionCannotUseTheJimStore_TrustsNothingAsync()
+    {
+        // Oracle Database over TCPS: storing the certificate would report "trusted" and the next connection would be
+        // refused exactly as before, so the trust is refused instead, saying what does work.
+        GivenTheConnectedSystemIs(StubConnector.StoreIgnoringConnectorName);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _issuer.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.NotUsedByThisConnection));
+            Assert.That(result.Message, Does.Contain("operating system"));
+            _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
+        }
+    }
+
+    [Test]
     public async Task TrustServerCertificateAsync_WithASpacedThumbprint_StillMatchesTheCertificateAsync()
     {
         var spaced = string.Join(' ', Enumerable.Range(0, _leaf.Thumbprint.Length / 2).Select(i => _leaf.Thumbprint.Substring(i * 2, 2)));
@@ -616,19 +633,23 @@ public class ServerCertificateTrustTests
     {
         public IConnector Create(string connectorName, ICredentialProtection? credentialProtection = null, ICertificateProvider? certificateProvider = null)
         {
-            return connectorName == StubConnector.PlainConnectorName
-                ? new StubPlainConnector()
-                : new StubConnector();
+            return connectorName switch
+            {
+                StubConnector.PlainConnectorName => new StubPlainConnector(),
+                StubConnector.StoreIgnoringConnectorName => new StubConnector(acceptsJimTrustedCertificates: false),
+                _ => new StubConnector()
+            };
         }
     }
 
-    private class StubConnector : IConnector, IConnectorSecureEndpoint
+    private class StubConnector(bool acceptsJimTrustedCertificates = true) : IConnector, IConnectorSecureEndpoint
     {
         public const string SecureConnectorName = "Stub Secure Connector";
         public const string PlainConnectorName = "Stub Plain Connector";
+        public const string StoreIgnoringConnectorName = "Stub Store-Ignoring Connector";
         public const string SettingBaseUrl = "Base URL";
 
-        public string Name => SecureConnectorName;
+        public string Name => acceptsJimTrustedCertificates ? SecureConnectorName : StoreIgnoringConnectorName;
 
         public string? Description => null;
 
@@ -640,7 +661,8 @@ public class ServerCertificateTrustTests
             if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
                 return null;
 
-            return new SecureEndpoint(uri.Host, uri.IsDefaultPort ? 443 : uri.Port, TimeSpan.FromSeconds(10), "test server", "HTTPS");
+            return new SecureEndpoint(uri.Host, uri.IsDefaultPort ? 443 : uri.Port, TimeSpan.FromSeconds(10), "test server", "HTTPS",
+                AcceptsJimTrustedCertificates: acceptsJimTrustedCertificates);
         }
     }
 

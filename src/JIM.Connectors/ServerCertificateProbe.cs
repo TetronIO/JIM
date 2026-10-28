@@ -39,6 +39,7 @@ public static class ServerCertificateProbe
     /// <param name="serverDescription">What to call the far end in the remediation text, for example "directory server" or "SCIM service provider".</param>
     /// <param name="secureTransportName">The secure transport being attempted, for example "LDAPS" or "HTTPS", named in the remediation text.</param>
     /// <param name="handshakeFraming">How the TLS handshake has to reach the server; see <see cref="SecureEndpoint.HandshakeFraming"/>.</param>
+    /// <param name="acceptsJimTrustedCertificates">Whether the connection uses the JIM certificate store; see <see cref="SecureEndpoint.AcceptsJimTrustedCertificates"/>. When it does not, the chain is judged against the operating system alone, since that is all the connection will be.</param>
     /// <returns>What the server presented and why it fails, or null when the server could not be reached at all, which is a different problem.</returns>
     public static ServerCertificateDiagnostic? Probe(
         string host,
@@ -48,9 +49,10 @@ public static class ServerCertificateProbe
         ILogger logger,
         string serverDescription = "directory server",
         string secureTransportName = "LDAPS",
-        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls)
+        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls,
+        bool acceptsJimTrustedCertificates = true)
     {
-        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName, handshakeFraming)?.Diagnostic;
+        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName, handshakeFraming, acceptsJimTrustedCertificates)?.Diagnostic;
     }
 
     /// <summary>
@@ -68,7 +70,8 @@ public static class ServerCertificateProbe
         ILogger logger,
         string serverDescription = "directory server",
         string secureTransportName = "LDAPS",
-        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls)
+        SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls,
+        bool acceptsJimTrustedCertificates = true)
     {
         X509Certificate2? presented = null;
         var sentByServer = new List<X509Certificate2>();
@@ -89,7 +92,7 @@ public static class ServerCertificateProbe
 
             var transport = OpenHandshakeTransport(client.GetStream(), handshakeFraming, host, port, logger);
             if (transport == null)
-                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName);
+                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName, acceptsJimTrustedCertificates);
 
             using var sslStream = new SslStream(transport, false, (_, certificate, chain, _) =>
             {
@@ -126,12 +129,15 @@ public static class ServerCertificateProbe
         try
         {
             if (presented == null)
-                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName);
+                return DescribeWithoutCertificate(host, port, serverDescription, secureTransportName, acceptsJimTrustedCertificates);
 
             // Downloading an issuer is bounded separately from the handshake, and more tightly: a dead address in a
             // certificate should not hold up the explanation of a failure for as long as the server itself may.
-            using var assembled = CertificateChainAssembler.Assemble(presented, sentByServer, trustedCertificates, Min(timeout, MaximumIssuerDownloadTime));
-            var diagnostic = Describe(presented, host, port, assembled, serverDescription);
+            // A connection that cannot use the JIM certificate store is judged as it will be made: against the operating
+            // system alone. Counting the store would call a certificate trusted that the connection then refuses.
+            var judgedAgainst = acceptsJimTrustedCertificates ? trustedCertificates : [];
+            using var assembled = CertificateChainAssembler.Assemble(presented, sentByServer, judgedAgainst, Min(timeout, MaximumIssuerDownloadTime));
+            var diagnostic = Describe(presented, host, port, assembled, serverDescription, acceptsJimTrustedCertificates);
             var elements = assembled.Elements.Select(Describe).ToList();
 
             // Everything between the server's certificate and the root; a self-signed certificate is both, with
@@ -186,7 +192,7 @@ public static class ServerCertificateProbe
         return new TdsPreLoginTlsStream(network);
     }
 
-    private static ServerCertificateReading DescribeWithoutCertificate(string host, int port, string serverDescription, string secureTransportName)
+    private static ServerCertificateReading DescribeWithoutCertificate(string host, int port, string serverDescription, string secureTransportName, bool acceptsJimTrustedCertificates)
     {
         return new ServerCertificateReading
         {
@@ -194,6 +200,7 @@ public static class ServerCertificateProbe
             {
                 Host = host,
                 Port = port,
+                AcceptsJimTrustedCertificates = acceptsJimTrustedCertificates,
                 FailureReason = ServerCertificateFailureReason.NoCertificatePresented,
                 Remediation = $"The {serverDescription} offered no certificate. Check that it is configured for {secureTransportName} on this port."
             }
@@ -251,12 +258,14 @@ public static class ServerCertificateProbe
         string host,
         int port,
         AssembledCertificateChain chain,
-        string serverDescription)
+        string serverDescription,
+        bool acceptsJimTrustedCertificates)
     {
         var diagnostic = new ServerCertificateDiagnostic
         {
             Host = host,
             Port = port,
+            AcceptsJimTrustedCertificates = acceptsJimTrustedCertificates,
             Subject = certificate.Subject,
             Issuer = certificate.Issuer,
             SubjectAlternativeNames = GetSubjectAlternativeNames(certificate),
@@ -305,7 +314,9 @@ public static class ServerCertificateProbe
             }
 
             diagnostic.FailureReason = ServerCertificateFailureReason.UntrustedIssuer;
-            diagnostic.Remediation = DescribeWhatToTrust(diagnostic, chain, serverDescription);
+            diagnostic.Remediation = acceptsJimTrustedCertificates
+                ? DescribeWhatToTrust(diagnostic, chain, serverDescription)
+                : $"Nothing in the certificate chain is trusted by the operating system, and this connection's driver takes no certificate from the JIM certificate store, so adding one there will not help. The {serverDescription}'s certificate must be issued by an authority the operating system already trusts.";
             return diagnostic;
         }
 

@@ -9,6 +9,7 @@ using JIM.Models.Staging;
 using NUnit.Framework;
 using Serilog;
 using System.Data;
+using System.Data.Common;
 using ILogger = Serilog.ILogger;
 
 namespace JIM.Worker.Tests.Connectors;
@@ -369,8 +370,21 @@ public class SqlConnectorTests
             Assert.That(setting.Required, Is.True, "A Connected System with no object types can do nothing at all.");
             Assert.That(setting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Schema));
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.Text), "The document is multi-line, so it needs a Text setting rather than a String one.");
-            Assert.That(setting.Description, Does.Contain("objectTypes"), "The Description is where an administrator finds the shape and an example to copy.");
-            Assert.That(setting.Description, Does.Contain("anchorColumns"));
+            Assert.That(setting.Description, Does.Contain("anchorColumns"), "The Description is where an administrator finds the document's shape.");
+            Assert.That(setting.Example, Is.EqualTo(SqlConnectorConstants.ObjectTypesExample), "The example to copy is carried separately so the portal can show it as a code block.");
+            Assert.That(setting.Description, Does.Not.Contain(SqlConnectorConstants.ObjectTypesExample), "An example left inside the Description is rendered as one run-on paragraph.");
+        }
+    }
+
+    [Test]
+    public void GetSettings_DeltaImportMode_CarriesItsExampleSeparatelyFromItsDescription()
+    {
+        var setting = GetSetting(SqlConnectorConstants.SettingDeltaImportMode);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(setting.Example, Is.EqualTo(SqlConnectorConstants.DeltaConfigurationExample));
+            Assert.That(setting.Description, Does.Not.Contain(SqlConnectorConstants.DeltaConfigurationExample));
         }
     }
 
@@ -483,6 +497,28 @@ public class SqlConnectorTests
     }
 
     [Test]
+    public void ResolveSecureEndpoint_OracleTcps_SaysTheJimCertificateStoreDoesNotApply()
+    {
+        // The Oracle driver takes no trust anchor from JIM, so a certificate trusted in JIM changes nothing about
+        // a TCPS connection; the endpoint says so, and every place that offers trust honours it.
+        var settingValues = CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps);
+
+        var endpoint = _connector.ResolveSecureEndpoint(settingValues);
+
+        Assert.That(endpoint!.AcceptsJimTrustedCertificates, Is.False);
+    }
+
+    [Test]
+    public void ResolveSecureEndpoint_SqlServerEncrypted_SaysTheJimCertificateStoreApplies()
+    {
+        var settingValues = CreateSqlServerSettingValues(encrypt: true);
+
+        var endpoint = _connector.ResolveSecureEndpoint(settingValues);
+
+        Assert.That(endpoint!.AcceptsJimTrustedCertificates, Is.True);
+    }
+
+    [Test]
     public void ResolveSecureEndpoint_NoHostSupplied_ReturnsNull()
     {
         var settingValues = CreateSqlServerSettingValues(encrypt: true);
@@ -543,6 +579,60 @@ public class SqlConnectorTests
             Assert.That(results[0].ErrorMessage, Does.Contain("network-related"));
             Assert.That(results[0].Exception, Is.SameAs(failure), "The administrator needs the driver's own account, not a summary of it.");
         }
+    }
+
+    [Test]
+    public void ValidateSettingValues_DriverHidesTheCauseBeneathAGenericError_ReportsTheCause()
+    {
+        var failure = new FakeDbException("ORA-50201: Failed to connect to server", new Exception("ORA-12660: parameters incompatible"));
+        var connector = CreateConnectorWith(new FakeSqlProvider
+        {
+            OpenFailure = failure,
+            ConnectionFailureDescription = _ => "ORA-12660: parameters incompatible (reported by the driver as ORA-50201)"
+        });
+
+        var results = connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].ErrorMessage, Is.EqualTo("Unable to connect. Message: ORA-12660: parameters incompatible (reported by the driver as ORA-50201)"));
+            Assert.That(results[0].Exception?.InnerException, Is.SameAs(failure), "The driver's own exception stays reachable for diagnosis.");
+        }
+    }
+
+    [Test]
+    public void OpenImportConnection_DriverHidesTheCauseBeneathAGenericError_ThrowsADatabaseFailureNamingTheCause()
+    {
+        var failure = new FakeDbException("ORA-50201: Failed to connect to server", new Exception("ORA-12660: parameters incompatible"));
+        var connector = CreateConnectorWith(new FakeSqlProvider
+        {
+            OpenFailure = failure,
+            ConnectionFailureDescription = _ => "ORA-12660: parameters incompatible (reported by the driver as ORA-50201)"
+        });
+
+        // A run's Activity records the exception's message, so the cause has to be in the message itself.
+        // And it stays a DbException, which is what every caller of an open already handles.
+        var thrown = Assert.Throws(Is.InstanceOf<DbException>(),
+            () => connector.OpenImportConnection(CreateSqlServerSettingValues(encrypt: false), null, _logger));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown!.Message, Is.EqualTo("ORA-12660: parameters incompatible (reported by the driver as ORA-50201)"));
+            Assert.That(thrown!.InnerException, Is.SameAs(failure));
+        }
+    }
+
+    [Test]
+    public void OpenImportConnection_DriverMessageAlreadyNamesTheCause_ThrowsTheDriversOwnException()
+    {
+        var failure = new FakeDbException("Login failed for user 'jim_sync'.");
+        var connector = CreateConnectorWith(new FakeSqlProvider { OpenFailure = failure });
+
+        var thrown = Assert.Throws(Is.InstanceOf<DbException>(),
+            () => connector.OpenImportConnection(CreateSqlServerSettingValues(encrypt: false), null, _logger));
+
+        Assert.That(thrown, Is.SameAs(failure), "Nothing is wrapped when there is nothing to add.");
     }
 
     [Test]

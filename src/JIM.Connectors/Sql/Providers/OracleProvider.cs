@@ -227,6 +227,52 @@ internal class OracleProvider : SqlProviderBase
     }
 
     /// <summary>
+    /// Leads with the most specific Oracle error in the exception chain, where ODP.NET has hidden it
+    /// beneath a more generic one.
+    /// </summary>
+    /// <remarks>
+    /// ODP.NET reports a failure during Oracle Net negotiation as <c>ORA-50201</c> ("Failed to connect to
+    /// server or failed to parse connect string"), which sends an administrator to check a host and
+    /// service name that are right, and keeps the cause (<c>ORA-12660</c> or <c>ORA-12650</c> for an
+    /// encryption mismatch) in an inner exception. Only the first line of each message is used: the
+    /// inner ones carry Oracle's help link on a second line, which a one-line report has no room for.
+    /// Where every level repeats the outer error's code, the driver's message is already the whole story.
+    /// </remarks>
+    public override string DescribeConnectionFailure(DbException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var reported = FirstLine(exception.Message);
+        var reportedCode = OracleErrorCode(reported);
+
+        string? cause = null;
+        for (var inner = exception.InnerException; inner != null; inner = inner.InnerException)
+        {
+            var line = FirstLine(inner.Message);
+            var code = OracleErrorCode(line);
+            if (code != null && code != reportedCode)
+                cause = line;
+        }
+
+        return cause == null ? exception.Message : $"{cause} (reported by the driver as {reported})";
+    }
+
+    private static string FirstLine(string message)
+    {
+        var end = message.IndexOfAny(['\r', '\n']);
+        return (end < 0 ? message : message[..end]).Trim();
+    }
+
+    /// <summary>
+    /// The <c>ORA-nnnnn</c> a message opens with, or null where it is not an Oracle error.
+    /// </summary>
+    private static string? OracleErrorCode(string message)
+    {
+        var colon = message.IndexOf(':');
+        return colon > 4 && message.StartsWith("ORA-", StringComparison.Ordinal) ? message[..colon] : null;
+    }
+
+    /// <summary>
     /// Pins the session's time zone to the Connected System's Database Time Zone, which is what makes a
     /// <c>TIMESTAMP WITH LOCAL TIME ZONE</c> column mean the same thing on every Worker.
     /// </summary>
@@ -357,7 +403,12 @@ internal class OracleProvider : SqlProviderBase
             throw new ArgumentException("An Oracle connection needs either a service name or a SID to identify the database.", nameof(settings));
         }
 
-        return $"(DESCRIPTION=(ADDRESS=(PROTOCOL={protocol})(HOST={settings.Host})(PORT={port}))(CONNECT_DATA={connectData}))";
+        // Over TCPS, the server's certificate must name the host JIM connects to. ODP.NET only checks that
+        // when told to: without SSL_SERVER_DN_MATCH it accepts a certificate issued for any host that
+        // chains to a trusted authority, which leaves the session open to interception (#2589).
+        var security = settings.Encryption == SqlConnectionEncryption.Tls ? "(SECURITY=(SSL_SERVER_DN_MATCH=TRUE))" : string.Empty;
+
+        return $"(DESCRIPTION=(ADDRESS=(PROTOCOL={protocol})(HOST={settings.Host})(PORT={port}))(CONNECT_DATA={connectData}){security})";
     }
 
     #endregion

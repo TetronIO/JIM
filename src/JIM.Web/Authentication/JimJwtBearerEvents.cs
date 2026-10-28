@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Security.Claims;
+using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -40,8 +41,31 @@ public static class JimJwtBearerEvents
                 // interactive sign-ins are. That includes a mistyped API key prefix, since every bearer token without
                 // the key prefix is validated here.
                 await AccessTokenAuthenticationAudit.OnAuthenticationFailedAsync(context);
+
+                // A token the identity provider issued, refused for its audience or issuer, names a setting to fix
+                // (#2443). The token is refused either way.
+                await RecordSignInProblemsAsync(context);
             }
         };
+    }
+
+    /// <summary>
+    /// Records what is wrong with a token refused for its audience or issuer, once its signature and lifetime show the
+    /// identity provider issued it; see <see cref="SignInProblemDiagnosis.DiagnoseRefusedAccessTokenAsync"/>.
+    /// </summary>
+    private static async Task RecordSignInProblemsAsync(AuthenticationFailedContext context)
+    {
+        if (!IsAudienceOrIssuerFailure(context.Exception) || !BearerToken.TryRead(context.Request, out var token))
+            return;
+
+        var reports = await SignInProblemDiagnosis.DiagnoseRefusedAccessTokenAsync(token, context.Options, context.HttpContext.RequestAborted);
+        if (reports.Count == 0)
+            return;
+
+        // Required, not optional, as the audit's recorder is: a missing registration must fail at once.
+        var problems = context.HttpContext.RequestServices.GetRequiredService<SignInProblemLog>();
+        foreach (var report in reports)
+            problems.Record(report);
     }
 
     /// <summary>
@@ -93,6 +117,13 @@ public static class JimJwtBearerEvents
     {
         SecurityTokenSignatureKeyNotFoundException => true,
         AggregateException aggregate => aggregate.InnerExceptions.Any(IsSigningKeyNotFound),
+        _ => false
+    };
+
+    private static bool IsAudienceOrIssuerFailure(Exception? exception) => exception switch
+    {
+        SecurityTokenInvalidAudienceException or SecurityTokenInvalidIssuerException => true,
+        AggregateException aggregate => aggregate.InnerExceptions.Any(IsAudienceOrIssuerFailure),
         _ => false
     };
 

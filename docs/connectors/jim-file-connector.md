@@ -11,7 +11,39 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 
 **Capabilities:** Full Import, Export
 
-## Supported Features
+```jim-diagram
+archetype: comparison
+title: The File Connector's three modes compared
+desc: "Import Only, the default, reads the file on each Full Import and never writes it; the file must exist first, and a change made to it outside JIM is read at the next import. Export Only writes the file on each export, confirmed as soon as it is written, and never reads it back; the file need not exist, because an export creates it, but the Object Type must then be set as a fixed value. A change made to the file outside JIM goes unseen, because JIM compares with the values it last wrote. Bidirectional writes the file on each export and then reads it in a confirming import; the file must exist first, and a change made outside JIM is read by the confirming import. Every mode reads or writes one file, at a path under /connector-files."
+columns:
+  - { label: Import Only, sub: the default }
+  - { label: Export Only, sub: "writes, never reads back" }
+  - { label: Bidirectional, sub: "export, then a confirming import" }
+rows:
+  - label: Reads the file
+    cells:
+      - { text: on each Full Import }
+      - { text: never }
+      - { text: after each export, sub: in a confirming import }
+  - label: Writes the file
+    cells:
+      - { text: never }
+      - { text: on each export, sub: confirmed as soon as it is written }
+      - { text: on each export, sub: confirmed as soon as it is written }
+  - label: "Must the file exist?"
+    cells:
+      - { text: "yes, before you configure it" }
+      - { text: "no: an export creates it", sub: then set a fixed Object Type }
+      - { text: "yes, before you configure it" }
+  - label: Edits made outside JIM
+    cells:
+      - { text: read at the next import }
+      - { text: go unseen, sub: JIM compares with what it last wrote }
+      - { text: read by the confirming import }
+footer: "Every mode reads or writes one file, at a path under `/connector-files`"
+```
+
+## :material-format-list-checks: Supported Features
 
 - **Configurable delimiters**<br /> Comma (default), tab, pipe, semicolon, or any custom character
 - **Multi-valued attributes**<br /> Held in one column, the values separated by a configurable Multi-Value Delimiter (default: pipe `|`); you mark the attribute multi-valued on the Schema tab (see [Multi-valued attributes](#multi-valued-attributes))
@@ -23,7 +55,7 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 - **Auto-confirm export**<br /> An export counts as confirmed as soon as the file is written, and JIM records the values it wrote, so it knows what the file holds without reading it back (see [Export Only mode](#export-only-mode))
 - **Stop on first error**<br /> Optionally halt processing on the first error encountered, useful for debugging data quality issues
 
-## File access
+## :material-folder-outline: File access
 
 JIM ships with a named volume (`jim-connector-files-volume`) mounted inside both the JIM Web and JIM Worker containers at `/connector-files`, on Docker and on Podman. The File Connector reads from and writes to paths under this directory. **You will configure all File Connector File Path settings as `/connector-files/<some-path>`.**
 
@@ -152,7 +184,7 @@ JIM's File Connector configurations would then point at:
 - `/connector-files/hr-input/employees.csv`<br /> Read from the HR share
 - `/connector-files/payroll-output/payroll.csv`<br /> Written to the payroll share
 
-## Schema Discovery
+## :material-file-search-outline: Schema Discovery
 
 When you configure a File Connector Connected System and trigger schema discovery, JIM performs the following steps:
 
@@ -163,7 +195,7 @@ When you configure a File Connector Connected System and trigger schema discover
 
 In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by Synchronisation Rules.
 
-## Multi-valued attributes
+## :material-format-list-bulleted: Multi-valued attributes
 
 A multi-valued attribute is one column whose cells hold several values, separated by the **Multi-Value Delimiter** setting (pipe `|` by default):
 
@@ -181,7 +213,7 @@ On import, each value in the cell is read separately. On export, JIM writes the 
 - **Large sets stay in one cell.** A group with thousands of members is a long cell. The file is still valid, but spreadsheet applications may not show all of it (Excel shows at most 32,767 characters in a cell), so edit such files with a text editor or a script.
 - **A Boolean holds one value**, so it cannot be made multi-valued.
 
-## Export Cell Formats
+## :material-file-delimited-outline: Export Cell Formats
 
 When JIM writes the export file, each attribute value is rendered as text in its cell:
 
@@ -195,7 +227,7 @@ When JIM writes the export file, each attribute value is rendered as text in its
 !!! note "Binary is export-only"
     The File Connector cannot import Binary attribute values: schema discovery never infers a Binary type, and a schema-declared Binary attribute fails to parse on import. Binary cells written by an export are therefore one-way; do not use Bidirectional mode for a schema that includes Binary attributes.
 
-## Export Only mode
+## :material-export: Export Only mode
 
 In Export Only mode JIM writes the file and never reads it back. It knows what each row holds because every export records the values it wrote against the row's Connected System Object. That is what lets JIM clear a value in the file when it is cleared in the Metaverse: it compares the new value with what it last wrote.
 
@@ -215,7 +247,7 @@ JIM records values only when it writes them. Point a new Export Only Connected S
 
 The import reads every row into the Connector Space, and moves the objects it finds to Normal. Rows JIM did not write, and objects JIM expected but the file does not have, are reported by that import like any other.
 
-## Settings
+## :material-tune-variant: Settings
 
 | Setting | Description | Default | Example |
 |---------|-------------|---------|---------|
@@ -231,7 +263,7 @@ The import reads every row into the Connector Space, and moves the objects it fi
 !!! note "Object type configuration"
     You must specify exactly one of **Object Type Column** or **Object Type**; JIM rejects the settings if you supply neither or both. If the file contains multiple object types in different rows, use Object Type Column to point to the column that identifies each row's type. If every row represents the same type, use Object Type to set a fixed value.
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 ### File not found
 
@@ -309,7 +341,7 @@ If a cell such as `CN=Alice|CN=Bob` imports as a single value:
 - **The attribute is single-valued.**<br /> Every column is discovered single-valued; mark it **Multi-Valued** on the Schema tab, as described under [Multi-valued attributes](#multi-valued-attributes).
 - **The delimiter does not match.**<br /> Check that the Multi-Value Delimiter setting matches the character separating the values in the file.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Connectors](index.md)
 - [Connected Systems](../configuration/connected-systems.md)

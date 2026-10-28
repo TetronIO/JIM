@@ -25,9 +25,12 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class VirtualisedDataGridTests : JimComponentTestContext
 {
+    private FakeUserPreferenceService _preferences = null!;
+
     protected override void ConfigureAdditionalServices()
     {
-        Services.AddSingleton<IUserPreferenceService>(new FakeUserPreferenceService());
+        _preferences = new FakeUserPreferenceService();
+        Services.AddSingleton<IUserPreferenceService>(_preferences);
     }
 
     private IRenderedComponent<VirtualisedDataGrid<string>> RenderGrid(
@@ -278,7 +281,7 @@ public class VirtualisedDataGridTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimInterop.replaceQueryString"), Is.False,
+            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimInterop.updateQueryString"), Is.False,
                 "an embedded grid must not write its state to the shared address bar");
             Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.observe"), Is.False,
                 "with no URL state to keep current, an embedded grid has no reason to watch its own scrolling");
@@ -363,11 +366,43 @@ public class VirtualisedDataGridTests : JimComponentTestContext
             "disposal must release the resize listener the fit registered");
     }
 
-    // The grid rewrites the URL with history.replaceState, which NavigationManager never sees, so its Uri still
+    [Test]
+    public async Task VirtualisedDataGrid_WhenDisposedWhileTheBrowserIsUnresponsive_StillReleasesEverythingAsync()
+    {
+        // A circuit torn down while its browser is unresponsive (a frozen background tab, a dropped connection not
+        // yet detected) cancels the interop call rather than reporting a disconnect. That is the same "no browser to
+        // talk to" as JSDisconnectedException, and must not escape disposal: an escaped one is logged at Error as an
+        // unhandled circuit exception, and it skips the rest of the clean-up.
+        JSInterop.Setup<object>("jimVirtualList.stop", _ => true).SetCanceled();
+        var cut = RenderGrid();
+        cut.WaitForAssertion(() =>
+            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.fit"), Is.True));
+
+        await DisposeRenderedComponentsAsync();
+
+        Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.unfit"), Is.True,
+            "a cancelled call must not stop disposal releasing the resize listener");
+    }
+
+    // The grid updates the URL with history.replaceState, which NavigationManager never sees, so its Uri still
     // holds the query from the last real navigation. A page filter changed in place must survive the grid's next
-    // write of its own state, here the scroll reset every filter change is followed by.
-    private string LastWrittenQuery() => (string)JSInterop.Invocations
-        .Last(i => i.Identifier == "jimInterop.replaceQueryString").Arguments[0]!;
+    // write of its own state, here the scroll reset every filter change is followed by. The browser merges each
+    // update into the live URL; this replays every update the grid sent, in order, the way jimInterop does.
+    private string AddressBarQuery(string initialQuery)
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(initialQuery);
+        foreach (var update in JSInterop.Invocations.Where(i => i.Identifier == "jimInterop.updateQueryString"))
+        {
+            foreach (var (name, values) in (IReadOnlyDictionary<string, string[]?>)update.Arguments[0]!)
+            {
+                query.Remove(name);
+                foreach (var value in values ?? [])
+                    query.Add(name, value);
+            }
+        }
+
+        return System.Web.HttpUtility.UrlDecode(query.ToString()) ?? string.Empty;
+    }
 
     [Test]
     public async Task SetQueryParameterAsync_FollowedByScrollReset_KeepsTheNewValueAsync()
@@ -380,8 +415,8 @@ public class VirtualisedDataGridTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(LastWrittenQuery(), Does.Contain("type=groups"));
-            Assert.That(LastWrittenQuery(), Does.Not.Contain("type=users"));
+            Assert.That(AddressBarQuery("type=users"), Does.Contain("type=groups"));
+            Assert.That(AddressBarQuery("type=users"), Does.Not.Contain("type=users"));
         }
     }
 
@@ -394,6 +429,119 @@ public class VirtualisedDataGridTests : JimComponentTestContext
         await cut.InvokeAsync(() => cut.Instance.ClearQueryParameterAsync("search"));
         await cut.InvokeAsync(() => cut.Instance.ResetScrollAsync());
 
-        Assert.That(LastWrittenQuery(), Does.Not.Contain("hasAttribute"));
+        Assert.That(AddressBarQuery("search=hasAttribute:department"), Does.Not.Contain("hasAttribute"));
+    }
+
+    [Test]
+    public async Task WriteUrlState_PageParameterWrittenSinceByAnotherWriter_IsLeftAloneAsync()
+    {
+        // The Operations Activity tab writes its section toggles and filters to the same URL as its Completed grid.
+        // Each writer names only its own parameters, so the grid's next write cannot drop the page's.
+        var cut = RenderGrid();
+
+        await cut.InvokeAsync(() => cut.Instance.ResetScrollAsync());
+
+        var written = JSInterop.Invocations.Where(i => i.Identifier == "jimInterop.updateQueryString")
+            .SelectMany(i => ((IReadOnlyDictionary<string, string[]?>)i.Arguments[0]!).Keys)
+            .ToHashSet();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(written, Is.Not.Empty);
+            Assert.That(written, Is.SubsetOf(new[] { "q", "sort", "desc", "row" }));
+        }
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_ToolBarAboveGrid_DrawsOneRowAboveTheGridInTheUsualOrder()
+    {
+        // A section whose heading is the grid's toolbar (the Operations Activity tab's Completed) has the grid draw
+        // that one row above its paper rather than inside it, so the page does not stack a heading over a toolbar
+        // over a column header. The row keeps the in-paper order (actions left, count beside the search on the
+        // right) with the heading first, so there is one toolbar convention, not two.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 4)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Widgets")
+            .Add(c => c.ToolBarAboveGrid, true)
+            .Add(c => c.ToolBarLeading, (RenderFragment)(builder => builder.AddMarkupContent(0, "<h2>Completed</h2>")))
+            .Add(c => c.ToolBarExtras, (RenderFragment)(builder => builder.AddMarkupContent(0, "<span>Pause</span>"))));
+
+        cut.WaitForAssertion(() =>
+        {
+            var markup = cut.Markup;
+            var heading = markup.IndexOf("<h2>Completed</h2>", StringComparison.Ordinal);
+            var action = markup.IndexOf("Pause", StringComparison.Ordinal);
+            var count = markup.IndexOf("4 Widgets", StringComparison.Ordinal);
+            var search = markup.IndexOf("placeholder=\"Search", StringComparison.Ordinal);
+            var grid = markup.IndexOf("id=\"test-grid\"", StringComparison.Ordinal);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.FindComponents<MudBlazor.MudToolBar>(), Is.Empty, "the paper must not draw a second toolbar");
+                Assert.That(heading, Is.GreaterThan(-1), "the heading did not render");
+                Assert.That(heading, Is.LessThan(action), "the heading leads the row");
+                Assert.That(action, Is.LessThan(count), "actions sit left of the count, as inside the paper");
+                Assert.That(count, Is.LessThan(search), "the count sits beside the search box, as inside the paper");
+                Assert.That(search, Is.LessThan(grid), "the whole row sits above the grid");
+            }
+        });
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_ToolBarAboveGrid_ShowsItsHeadingBeforeTheDensityPreferenceArrives()
+    {
+        // The grid waits for the density preference before drawing its rows, so they paint at the right height. A
+        // heading that is the section's only title cannot wait with them: it would be missing from the prerendered
+        // page and from the first interactive paint. The density toggle, whose icon depends on the preference,
+        // is the one thing that waits.
+        var densePreference = new TaskCompletionSource<bool?>();
+        _preferences.TableDenseRead = densePreference.Task;
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string>(), 0)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.ToolBarAboveGrid, true)
+            .Add(c => c.ToolBarLeading, (RenderFragment)(builder => builder.AddMarkupContent(0, "<h2>Completed</h2>"))));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("<h2>Completed</h2>"), "the heading waits for nothing");
+            Assert.That(cut.FindComponents<TableDensityToggle>(), Is.Empty, "the toggle cannot show an icon it does not know yet");
+        }
+
+        densePreference.SetResult(false);
+
+        cut.WaitForAssertion(() => Assert.That(cut.FindComponents<TableDensityToggle>(), Has.Count.EqualTo(1)));
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_Collapsed_FoldsTheGridAndLeavesItsToolBarStanding()
+    {
+        // Collapsing a section folds its rows away and keeps its heading, and the grid stays mounted underneath: a
+        // grid that is unmounted and re-created re-reads the URL as it stood on arrival (its own writes go through
+        // history.replaceState, which NavigationManager never sees), losing the search, sort and scroll since.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.ToolBarAboveGrid, true)
+            .Add(c => c.Collapsed, true)
+            .Add(c => c.ToolBarLeading, (RenderFragment)(builder => builder.AddMarkupContent(0, "<h2>Completed</h2>"))));
+
+        cut.WaitForAssertion(() =>
+        {
+            var collapse = cut.FindComponent<MudBlazor.MudCollapse>();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(collapse.Instance.Expanded, Is.False);
+                Assert.That(collapse.FindAll("#test-grid"), Has.Count.EqualTo(1), "the grid folds");
+                Assert.That(collapse.FindAll("h2"), Is.Empty, "the heading stays outside the fold");
+                Assert.That(cut.Markup, Does.Contain("<h2>Completed</h2>"));
+            }
+        });
     }
 }

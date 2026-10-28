@@ -9,9 +9,28 @@ audience: automation-author
 
 Log cmdlets provide read-only access to JIM's structured service logs (Web, Worker, Scheduler and Database), with filtering by service, date, level, and search text. Useful for remote troubleshooting without needing container/host access. The portal's [Logs](../administration/logs.md) page shows the same entries.
 
+```jim-diagram
+archetype: decision
+title: Which log cmdlet to use
+desc: "To follow entries as they arrive, use Watch-JIMLog: it polls until you press Ctrl+C or -MaxPolls runs out, and writes coloured lines to the console rather than objects. To see which log files exist, use Get-JIMLogFile, which returns each file's service, date and size. Otherwise use Get-JIMLogEntry, which returns entries as objects for the pipeline: today's (UTC), up to 500, unless you filter them with -Date, -Limit and the other parameters."
+start: { label: Reading the logs }
+questions:
+  - { id: live, label: "Following entries as they arrive?" }
+  - { id: files, label: "Asking which log files exist?" }
+outcomes:
+  - { id: watch, label: "`Watch-JIMLog`", sub: "console lines, not objects, until Ctrl+C or `-MaxPolls`" }
+  - { id: file, label: "`Get-JIMLogFile`", sub: "each file's service, date and size" }
+  - { id: entry, label: "`Get-JIMLogEntry`", sub: "objects for the pipeline; by default today's, up to 500", good: true }
+answers:
+  - { from: live, to: watch, label: "yes" }
+  - { from: live, to: files, label: "no" }
+  - { from: files, to: file, label: "yes" }
+  - { from: files, to: entry, label: "no: entries" }
+```
+
 ---
 
-## Get-JIMLogEntry
+## :material-text-box-search-outline: Get-JIMLogEntry
 
 Gets log entries, with optional filtering. Also exposes the available log level and service names, so you can discover valid `-Level`/`-Service` values.
 
@@ -77,7 +96,7 @@ Get-JIMLogEntry -ListLevels
 
 ---
 
-## Get-JIMLogFile
+## :material-file-document-multiple-outline: Get-JIMLogFile
 
 Lists the log files JIM currently has on disk, across all services.
 
@@ -117,7 +136,7 @@ Get-JIMLogFile | Where-Object Service -eq 'worker'
 
 ---
 
-## Watch-JIMLog
+## :material-monitor-eye: Watch-JIMLog
 
 Streams log entries to the console as they arrive, colour-coded by level (red for `Error`/`Fatal`, yellow for `Warning`, dark grey for `Debug`/`Verbose`). Polls the Logs API on an interval, displaying only entries newer than the last one seen, and runs until interrupted with ++ctrl+c++. Transient API failures are reported as warnings and polling continues.
 
@@ -161,6 +180,6 @@ Watch-JIMLog -IntervalSeconds 5
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](activities.md): the audit trail for synchronisation operations, complementary to raw service logs

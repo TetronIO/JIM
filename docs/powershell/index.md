@@ -9,11 +9,40 @@ audience: automation-author
 
 The JIM PowerShell module provides a cross-platform command-line interface for managing and automating JIM operations. It wraps the JIM REST API in idiomatic PowerShell cmdlets with full pipeline support, so identity management workflows can be scripted.
 
-## Requirements
+```jim-diagram
+archetype: map
+title: How the main cmdlet groups connect
+desc: "Connect first, with the Connection cmdlets; then the groups build on one another. A Connected System is created from a Connector, and its schema is imported and chosen with the Connected System Schema cmdlets; Synchronisation Rules are bound to its Object Types. Run Profiles run against the Connected System; each run is queued as a Worker Task and recorded as an Activity, whose Execution Items say what happened to each object. Schedules run Run Profiles in steps, and each run of a Schedule is a Schedule Execution. Each group links to its page; the table below lists every group."
+nodes:
+  - { id: connectors, label: Connectors, link: connectors.md, row: 0, col: 1 }
+  - { id: schedules, label: Schedules, link: schedules.md, row: 0, col: 2 }
+  - { id: executions, label: Schedule Executions, link: schedule-executions.md, row: 0, col: 3 }
+  - { id: connection, label: Connection, link: connection.md, row: 1, col: 0 }
+  - { id: cs, label: Connected Systems, link: connected-systems.md, row: 1, col: 1 }
+  - { id: rp, label: Run Profiles, link: run-profiles.md, row: 1, col: 2 }
+  - { id: activities, label: Activities, link: activities.md, row: 1, col: 3 }
+  - { id: schema, label: Connected System Schema, link: connected-system-schema.md, row: 2, col: 1 }
+  - { id: tasks, label: Worker Tasks, link: worker-tasks.md, row: 2, col: 2 }
+  - { id: items, label: Execution Items, link: execution-items.md, row: 2, col: 3 }
+  - { id: rules, label: Synchronisation Rules, link: synchronisation-rules.md, row: 3, col: 1 }
+edges:
+  - { from: connection, to: cs, label: before }
+  - { from: cs, to: connectors, label: created from }
+  - { from: cs, to: schema, label: has a }
+  - { from: rules, to: schema, label: bound to }
+  - { from: rp, to: cs, label: run against }
+  - { from: schedules, to: rp, label: run in steps }
+  - { from: schedules, to: executions, label: run as }
+  - { from: rp, to: tasks, label: queued as }
+  - { from: rp, to: activities, label: recorded as }
+  - { from: activities, to: items, label: hold }
+```
+
+## :material-clipboard-list-outline: Requirements
 
 - **[PowerShell 7.0 or later](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell)** (cross-platform: Windows, macOS, and Linux)
 
-## Installation
+## :material-download-outline: Installation
 
 ### From PowerShell Gallery
 
@@ -33,7 +62,7 @@ $env:PSModulePath -split [IO.Path]::PathSeparator
 Import-Module JIM
 ```
 
-## Authentication
+## :material-shield-key-outline: Authentication
 
 The module supports two authentication methods: interactive browser-based SSO and API keys.
 
@@ -67,7 +96,7 @@ if (Test-JIMConnection -Quiet) {
 
 See [Connection](connection.md) for full details on all connection cmdlets.
 
-## Cmdlet Categories
+## :material-view-grid-outline: Cmdlet Categories
 
 | Category | Cmdlets | Description |
 |----------|---------|-------------|
@@ -113,7 +142,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Logs](logs.md) | 3 | Query, retrieve, and tail JIM service log files for remote troubleshooting |
 | [Data Flow](data-flow.md) | 1 | List every configured attribute data flow across all Connected Systems (`Get-JIMDataFlow`) |
 
-## Quick Start
+## :material-rocket-launch-outline: Quick Start
 
 ```powershell
 # Install and connect
@@ -133,7 +162,7 @@ Get-JIMMetaverseObject -ObjectTypeName "person" -All
 Get-JIMActivity -PageSize 5
 ```
 
-## Pipeline Support
+## :material-pipe: Pipeline Support
 
 Most cmdlets accept pipeline input and produce pipeline-friendly output, enabling powerful one-liners:
 
@@ -154,7 +183,7 @@ Get-JIMApiKey | Where-Object { $_.ExpiresAt -and $_.ExpiresAt -lt (Get-Date) } |
 Get-JIMCertificate | ForEach-Object { Test-JIMCertificate -Id $_.Id }
 ```
 
-## Output Object Conventions
+## :material-code-braces: Output Object Conventions
 
 Cmdlet output objects use **PascalCase** property names, following PowerShell convention, even though JIM's REST API serialises its JSON in camelCase:
 
@@ -179,7 +208,7 @@ $person.Attributes.employeeID    # ...not 'Mail' / 'EmployeeID'
 
 The same applies to any other data-keyed map, such as a log entry's `Properties`.
 
-## Confirmation Prompts
+## :material-help-circle-outline: Confirmation Prompts
 
 Destructive operations (deletions, clears) use PowerShell's `ShouldProcess` mechanism and prompt for confirmation by default. Use `-Force` to suppress prompts in scripts:
 
@@ -191,7 +220,7 @@ Remove-JIMConnectedSystem -Id 1
 Remove-JIMConnectedSystem -Id 1 -Force
 ```
 
-## Further Reading
+## :material-book-open-variant-outline: Further Reading
 
 - [API Authentication](../api/authentication.md): authentication methods and security recommendations
 - [API Reference](../api/index.md): REST API documentation that maps to these cmdlets

@@ -83,10 +83,7 @@ public class SyncRuleMappingUpdateTests : WorkflowTestBase
     {
         // An attribute priority reorder or "Null is a value" change stamps AuditHelper.SetUpdated on the
         // detached mapping before persistence. The audit stamp must reach the database: it is the mapping's
-        // configuration change trail, and Full Synchronisation compares the newest rule/mapping change
-        // against ConfigurationLastFullyAppliedAt to decide whether the unchanged-object optimisation must
-        // be disabled so the new configuration reaches every object. Dropping the stamp silently hides a
-        // reorder from that comparison.
+        // configuration change trail, and dropping it silently loses who changed the mapping and when.
         var system = await CreateConnectedSystemAsync("HR");
         var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
         var displayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };

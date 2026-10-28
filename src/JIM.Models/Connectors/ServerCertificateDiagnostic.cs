@@ -101,6 +101,13 @@ public class ServerCertificateDiagnostic
     /// </summary>
     public string? Remediation { get; set; }
 
+    /// <summary>
+    /// Whether the connection uses a certificate added to the JIM certificate store. False where the driver takes no
+    /// trust anchor from JIM (Oracle Database over TCPS), so the certificate has to be one the operating system already
+    /// trusts, and trusting it in JIM is not offered: it would report success and change nothing.
+    /// </summary>
+    public bool AcceptsJimTrustedCertificates { get; set; } = true;
+
     public bool IsExpired => ValidTo.HasValue && ValidTo.Value < DateTime.UtcNow;
 
     public bool IsNotYetValid => ValidFrom.HasValue && ValidFrom.Value > DateTime.UtcNow;

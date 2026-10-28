@@ -81,7 +81,7 @@ public interface ISyncRepository
     /// <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>.</param>
     /// <param name="createdOnOrAfter">When provided, restricts the page to objects created at or after this instant:
     /// the closing sweep of a type-ordered run, for objects created while it was in flight.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
@@ -357,8 +357,8 @@ public interface ISyncRepository
         IReadOnlyDictionary<Guid, uint>? synchronisationPendingSeenRowVersions = null);
 
     /// <summary>
-    /// Clears the <c>ScopeReviewPending</c> flag on CSOs the sync engine has re-evaluated past the unchanged-skip
-    /// (issue #892). Called at page flush. No-op when <paramref name="ids"/> is empty.
+    /// Clears the <c>ScopeReviewPending</c> flag on CSOs the sync engine has re-evaluated (issue #892). Called at page
+    /// flush. No-op when <paramref name="ids"/> is empty.
     /// </summary>
     Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
 
@@ -407,9 +407,9 @@ public interface ISyncRepository
     /// <summary>
     /// Persists an optimistic export apply delta (issue #1079): bulk-inserts newly exported
     /// attribute value rows and bulk-deletes superseded ones. Touches NO parent CSO row (Status,
-    /// LastUpdated and every other CSO field are left exactly as they were): re-arming the Full
-    /// Synchronisation unchanged-object watermark for a no-op confirming import depends on
-    /// LastUpdated staying untouched here. Callers are responsible for keeping the in-memory
+    /// LastUpdated and every other CSO field are left exactly as they were): keeping a no-op
+    /// confirming import out of the next Delta Synchronisation depends on LastUpdated staying
+    /// untouched here. Callers are responsible for keeping the in-memory
     /// Connected System Object graph in sync with the persisted delta afterwards.
     /// <para>
     /// SPEC-1082 D9: also nulls <see cref="ConnectedSystemObject.ImportStateHash"/> and
@@ -1033,6 +1033,15 @@ public interface ISyncRepository
     Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Writes what reference resolution changed, and nothing else: each Pending Export's
+    /// HasUnresolvedReferences, and each resolved change's StringValue, UnresolvedReferenceValue and
+    /// ResolvedReferenceCsoId. Lets the deferred export pass save a chunk's resolutions without
+    /// rewriting every column of every change it carries.
+    /// </summary>
+    Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges);
+
+    /// <summary>
     /// Deletes Pending Exports by their associated CSO IDs.
     /// Returns the count of deleted Pending Exports.
     /// Used during obsolete CSO processing to clean up orphaned exports, and by the MVO deletion
@@ -1264,26 +1273,6 @@ public interface ISyncRepository
     /// </summary>
     /// <param name="syncRuleIds">The Synchronisation Rule ids to resolve. Deduplicated internally.</param>
     Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds);
-
-    /// <summary>
-    /// Gets the most recent configuration change instant across all Synchronisation Rules and their mappings
-    /// (each entity's LastUpdated, falling back to Created), or null when no rules exist. Rule enable/disable,
-    /// scoping and matching changes stamp the rule; mapping creation, attribute priority reordering and
-    /// "Null is a value" changes stamp the mapping, and a mapping's deletion stamps its parent rule (#1533). A deleted
-    /// rule leaves no row behind, so its deletion, alone or with its Connected System, is read from the Service
-    /// Settings singleton (#2309). Together these cover every configuration surface that affects inbound resolution.
-    /// A Full Synchronisation compares it against the last completed sync to decide whether
-    /// the unchanged-object optimisation must be disabled for the run so new configuration reaches every object.
-    /// </summary>
-    Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync();
-
-    /// <summary>
-    /// A Connected System's two synchronisation watermarks (<see cref="ConnectedSystem.LastSyncCompletedAt"/> and
-    /// <see cref="ConnectedSystem.ConfigurationLastFullyAppliedAt"/>), read on their own, or null when the system does
-    /// not exist. The Full Synchronisation preview (#1530) decides from them, as the run does, whether the
-    /// unchanged-object optimisation applies (<see cref="ConnectedSystem.GetUnchangedObjectWatermark(DateTime?, DateTime?, DateTime?)"/>).
-    /// </summary>
-    Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId);
 
     /// <summary>
     /// A Connected System's <see cref="ConnectedSystem.ObjectMatchingRuleMode"/>, read on its own, or null when the system
@@ -1660,6 +1649,14 @@ public interface ISyncRepository
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
+    /// What references to the given Metaverse Objects are written as in a Connected System: per
+    /// Metaverse Object joined to an object there, that object's id and anchor. Summary-tier; used by
+    /// export execution to resolve deferred references without materialising the referenced objects.
+    /// </summary>
+    Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId);
+
+    /// <summary>
     /// Gets a single Connected System Object Type attribute by ID.
     /// Used during export to determine attribute data types.
     /// </summary>
@@ -1710,14 +1707,22 @@ public interface ISyncRepository
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null);
 
     /// <summary>
-    /// Collects all remaining executable exports with unresolved references (deferred) strictly
-    /// after the given keyset cursor, in a single call. Used by the export batch-collection loop
-    /// to fast-path once a batch is discovered to be made up entirely of deferred exports, instead
-    /// of continuing to page through the remainder 100 rows at a time purely to build the deferred
-    /// list (issue #985). Same ordering and filtering semantics as
+    /// Collects the ids of all remaining executable exports with unresolved references (deferred)
+    /// strictly after the given keyset cursor, in a single call. Used by the export batch-collection
+    /// loop to fast-path once a batch is discovered to be made up entirely of deferred exports,
+    /// instead of continuing to page through the remainder 100 rows at a time purely to build the
+    /// deferred list (issue #985). Ids only: the deferred pass loads them a chunk at a time with
+    /// <see cref="GetDeferredExportsByIdsAsync"/>. Same ordering and filtering semantics as
     /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports.
     /// </summary>
-    Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+    Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Loads one chunk of the deferred export pass: the given Pending Exports, untracked, in
+    /// (CreatedAt, Id) order, with the graph reference resolution and the Connector read. An id with
+    /// no row is left out.
+    /// </summary>
+    Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
 
     /// <summary>
     /// Returns whether any executable exports WITHOUT unresolved references exist strictly after

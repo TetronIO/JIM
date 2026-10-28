@@ -626,6 +626,29 @@ public partial class ActivityServer
     }
 
     /// <summary>
+    /// The typical duration of each requested Run Profile: the median of its most recent successful runs (at most
+    /// <paramref name="sampleSize"/>), so one unusually slow or fast run does not skew it. A Run Profile that has
+    /// never completed successfully is absent. Used to estimate when queued work will start (#2549).
+    /// </summary>
+    public async Task<Dictionary<int, TimeSpan>> GetMedianRecentRunDurationsAsync(
+        IReadOnlyCollection<int> runProfileIds, int sampleSize = 5)
+    {
+        var recent = await Application.Repository.Activity.GetRecentSuccessfulRunProfileDurationsAsync(runProfileIds, sampleSize);
+        return recent
+            .Where(r => r.Value.Count > 0)
+            .ToDictionary(r => r.Key, r => Median(r.Value));
+    }
+
+    private static TimeSpan Median(List<TimeSpan> durations)
+    {
+        var sorted = durations.OrderBy(d => d).ToList();
+        var middle = sorted.Count / 2;
+        return sorted.Count % 2 == 1
+            ? sorted[middle]
+            : TimeSpan.FromTicks((sorted[middle - 1].Ticks + sorted[middle].Ticks) / 2);
+    }
+
+    /// <summary>
     /// Whether any Run Profile has ever been executed, in any state. Backs the home page's "Run your first
     /// synchronisation" setup step: an administrator who ran a Run Profile by hand has run their first
     /// synchronisation, whether or not a Schedule has ever fired.

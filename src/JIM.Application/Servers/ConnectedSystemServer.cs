@@ -1870,6 +1870,7 @@ public partial class ConnectedSystemServer
                 DefaultStringValue = connectorSetting.DefaultStringValue,
                 DefaultIntValue = connectorSetting.DefaultIntValue,
                 Description = connectorSetting.Description,
+                Example = connectorSetting.Example,
                 DropDownValues = connectorSetting.DropDownValues,
                 Name = connectorSetting.Name,
                 Type = connectorSetting.Type,

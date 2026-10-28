@@ -9,9 +9,22 @@ audience: administrator
 
 A **Configuration Change Preview** ([Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it)) answers "what would this proposed *edit* do?" **Sync Preview** answers a narrower, more immediate question about the configuration you already have: **"what would synchronising this object do, right now?"**
 
+```jim-diagram
+archetype: flow
+title: The destructive cascade Sync Preview walks
+desc: 'When an object falls out of scope of every import Synchronisation Rule, Sync Preview walks the same chain a synchronisation would, staging, persisting and exporting nothing. 1: out of scope and joined, the object would disconnect from its Metaverse Object. 2: the Metaverse Object''s type is put to its Deletion Rule, which would delete it immediately, schedule it for deletion after a grace period, or keep it; a scheduled deletion evaluates nothing further. 3: if it would be deleted, every other Connected System Object joined to it is evaluated in turn, and is deprovisioned from its target system or disconnected, per its export rule''s Deprovisioning Action.'
+in: {label: Connected System Object, note: out of import scope}
+out: {label: Target systems, note: deleted or disconnected}
+container: {label: Sync Preview, tag: nothing staged or exported}
+steps:
+- {id: disconnect, label: 'Out of scope, joined', badge: 1, sub: would disconnect}
+- {id: rule, label: Deletion Rule, badge: 2, sub: 'delete, schedule or keep', next: if deleted}
+- {id: down, label: Downstream deprovisioning, badge: 3, sub: each joined object}
+```
+
 Nothing you configure changes to ask it. JIM evaluates the object against the stored Synchronisation Rules exactly as a real synchronisation would, and reports what it finds. Nothing is staged, persisted, or exported.
 
-## Where to find it
+## :material-map-marker-outline: Where to find it
 
 - **Connected System Object page**: a **Preview Sync** button beside **Set Password**, opening the preview inline below the object's header.
 - **Metaverse Object detail page, Connections tab**: every Connected System Object joined to the Metaverse Object is listed with a per-row **Preview Sync** action, previewing that one object's synchronisation. Each row also expands to explain why the connection exists, and a **Not connected** section below says why the object has no object in other Connected Systems; see [Why it is connected, and why it is not](metaverse-objects.md#why-it-is-connected-and-why-it-is-not).
@@ -19,7 +32,7 @@ Nothing you configure changes to ask it. JIM evaluates the object against the st
 
 Each panel names the Connected System whose Full Synchronisation is being previewed, so a preview reached from a Connected System Object's Connections row is never mistaken for a preview of a different system.
 
-## How to read it
+## :material-eye-outline: How to read it
 
 Every statement in the preview is conditional: "would project", "would join", "would be deprovisioned from Target". Nothing has happened. If the preview surfaces a blocking error, for example an Attribute Flow that could not be evaluated, the panel says so plainly: the synchronisation it describes would fail, not succeed as shown.
 
@@ -27,7 +40,7 @@ A predicted join through an [Object Matching Rule](object-matching-rules.md) als
 
 The panel offers the same **Timeline** and **Table** views documented for a recorded [Run Profile Execution Item](activity-execution-items.md) (the Lineage view is not offered, since a preview has no recorded object graph to draw). On the Table view, the current-state and would-be columns read **Current** and **Would be** rather than **Before** and **After**.
 
-## Which exports it shows
+## :material-export: Which exports it shows
 
 The preview shows the exports synchronising this object would stage, which is narrower than every difference between its Metaverse Object and each target:
 
@@ -40,9 +53,9 @@ The preview shows the exports synchronising this object would stage, which is na
 - **Queued changes the target no longer needs**<br /> Where an update is already queued for a target, but the target holds the value the Metaverse Object would now have (a value changed and changed back before an export ran, for example), synchronising withdraws the queued change instead of exporting it. The preview shows this as **Changes queued for its target Connected System would be withdrawn**, with the queued values, where the synchronisation records **Pending Export changes withdrawn**. The account keeps the value it already holds.
 - **A value already waiting for an Initial Password**<br /> An Active Directory account created disabled waits, with the enabled value your Attribute Flow asked for queued, until its [Initial Password](initial-password.md) is set. A change to the person that leaves your Attribute Flow asking for that same value sends nothing new, so the preview proposes no export for it, as the synchronisation stages none. See [Enabling new Active Directory accounts](../connectors/jim-ldap-connector-passwords.md#enabling-new-active-directory-accounts).
 
-The preview evaluates the object as a synchronisation that processes it would. A Full Synchronisation skips a joined object that has not changed since the system's last synchronisation, unless a Synchronisation Rule has changed since the last Full Synchronisation, so for such an object nothing shown here happens until it changes or the configuration does.
+The preview evaluates the object as a synchronisation that processes it would. A Full Synchronisation processes every object, so what is shown here happens on the next one; a Delta Synchronisation processes the object only once it has changed.
 
-## The destructive cascade
+## :material-delete-outline: The destructive cascade
 
 When an object falls out of scope of every import Synchronisation Rule with Scoping Criteria, a real synchronisation does not stop at disconnecting it. Sync Preview walks the same chain:
 
@@ -64,19 +77,19 @@ The same goes for a downstream object whose provisioning was **never exported**:
 
     Under the **When Last Connector Disconnected** Deletion Rule, an account JIM has provisioned to a target system counts as a connector like any other. A Metaverse Object with target accounts is therefore **not** deleted just because its source system leaves scope; the target accounts keep it alive, holding their last known values. If you want a departing source to remove those target accounts, the Metaverse Object's type needs **When Authoritative Source Disconnected** with that source listed, which is the rule that actually deprovisions targets when an authoritative source disconnects. See [Deletion behaviour](metaverse.md#deletion-behaviour) for the full explanation, including the grace period and how a reconnection can cancel a scheduled deletion.
 
-## Export-only preview from a Metaverse Object
+## :material-hub-outline: Export-only preview from a Metaverse Object
 
 A Metaverse Object is never synchronised itself; its Connected System Objects are. **Preview Exports** below the Connections table therefore asks a narrower question than the Connections tab's per-object preview: given the Metaverse Object **as it stands right now**, what would export to each target Connected System? It carries no inbound chain at all (no scope, no join, no Attribute Flow), so it cannot tell you whether an inbound change is about to arrive first. Use it to check what an edit you have already made to the Metaverse Object would push outward; use the per-object preview on the Connections tab for the full inbound-then-outbound answer for one Connected System Object.
 
 There is no single preview covering every source at once: a Full Synchronisation always belongs to one Connected System, so a preview spanning several would not correspond to any run you could actually start.
 
-## What the preview cannot know
+## :material-help-circle-outline: What the preview cannot know
 
 Sync Preview evaluates the object against data already in the Metaverse; it does not run an import first, so a source-system change that has not been imported yet is invisible to it. Nothing here carries a **Pending Export** id, either: because nothing is staged, there is nothing yet to look up on the [Pending Exports](connected-systems.md#pending-exports) list. Both are true of every preview: the panel describes what synchronising **now** would do, not what synchronising **after everything currently pending elsewhere finishes** would do.
 
 A [generated value](generated-values.md) is checked, with the [values built from it](generated-values.md#values-built-from-a-generated-value), against JIM's own records only: the preview never contacts a Connected System. It shows the candidates the run would pass over and any value it would hold back for an input, and names the Connected Systems the run would also probe for the generated value and each value built from it. A target account JIM has not imported can still make the run choose a different value.
 
-## REST and PowerShell
+## :material-console: REST and PowerShell
 
 Sync Preview is available over every surface:
 
@@ -87,7 +100,7 @@ Sync Preview is available over every surface:
 
 Both require the Administrator role. Full endpoint detail is in the [interactive API reference](../../api/reference/).
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it): previewing a proposed configuration *edit*, rather than what today's stored configuration would do
 - [Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): what import, sync and export actually do when they run for real

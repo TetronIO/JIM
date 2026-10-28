@@ -16,7 +16,7 @@ The **Joiner/Mover/Leaver** (JML) lifecycle is the foundational automation model
 
 JIM handles each transition through its [Synchronisation Rules](../configuration/synchronisation-rules.md) and the [synchronisation pipeline](synchronisation-pipeline.md), acting on your configuration without anyone stepping in.
 
-## 👤 Joiner
+## :material-account-plus-outline: Joiner
 
 A **joiner** event occurs when a new identity appears in a source system for the first time, as when HR creates a record for a new employee.
 
@@ -47,7 +47,7 @@ A new employee, Jane Smith, is added to the HR system:
 7. Export creates Jane's Active Directory account. Active Directory will not create an enabled account that has no password, so the Synchronisation Rule that provisions it has an [Initial Password](passwords.md#giving-new-connected-system-objects-their-first-password): JIM creates the account disabled and queues her password.
 8. The password is set within seconds, which enables the account, and the next import confirms it holds `512`.
 
-## 🔄 Mover
+## :material-account-switch-outline: Mover
 
 A **mover** event occurs when an existing identity's attributes change: a department transfer, a new title, a name change, an office move, and so on.
 
@@ -82,7 +82,7 @@ A mover event can also change whether an identity is **in scope** for a Synchron
 
 When an identity falls out of scope for an export Synchronisation Rule, its account in that rule's target system is **deprovisioned**, as the leaver section describes.
 
-## 🚪 Leaver
+## :material-account-minus-outline: Leaver
 
 A **leaver** event occurs when an identity is removed, or marked inactive, in the source system, as when HR processes an employee's termination.
 
@@ -138,7 +138,7 @@ Grace periods are valuable for:
 
 During the grace period, the Metaverse Object stays in the Metaverse, marked for deletion. If the identity reappears before the period expires, the deletion is cancelled and the identity is restored, but only when the reappearance undoes what triggered the deletion. Under **When Last Connector Disconnected**, any system reconnecting cancels it. Under **When Authoritative Source Disconnected**, a reconnection from any selected source cancels it in All sources mode, while in Specific mode only the system whose disconnection scheduled the deletion can; an unrelated system reconnecting does not rescue the object.
 
-## End-to-End Example
+## :material-file-document-outline: End-to-End Example
 
 Here is a complete JML lifecycle for one employee.
 

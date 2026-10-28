@@ -14,101 +14,17 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* mt-5 rather than a tab-panel padding: the Operations page hands its tabs no top padding of their own, because
-   the Schedules tab opens straight onto a grid that already supplies this same gap. *@
-<MudText Typo="Typo.h6" Class="mt-5 mb-3">Execution History</MudText>
+@* The Activity tab's Completed section (#2549): what the worker has finished, newest first. The filters above the tab
+   arrive as a parameter, shared with Queued and In progress; Result, and Has child activities, apply here alone. *@
+<section aria-labelledby="activity-completed-heading" data-testid="activity-completed" data-collapsed="@(Expanded ? "false" : "true")">
 
-@* Filter Controls *@
-<MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="flex-wrap mb-4">
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true"
-                   SelectedValues="_filterConnectedSystems"
-                   SelectedValuesChanged="OnConnectedSystemFilterChanged"
-                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            @if (_filterOptions != null)
-            {
-                @foreach (var cs in _filterOptions.ConnectedSystems)
-                {
-                    <MudSelectItem T="string" Value="@cs">@cs</MudSelectItem>
-                }
-            }
-        </MudSelect>
-    </MudItem>
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true"
-                   SelectedValues="_filterRunProfiles"
-                   SelectedValuesChanged="OnRunProfileFilterChanged"
-                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            @if (_filterOptions != null)
-            {
-                @foreach (var rp in _filterOptions.RunProfiles)
-                {
-                    <MudSelectItem T="string" Value="@rp">@rp</MudSelectItem>
-                }
-            }
-        </MudSelect>
-    </MudItem>
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true"
-                   SelectedValues="_filterSchedules"
-                   SelectedValuesChanged="OnScheduleFilterChanged"
-                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetScheduleMultiSelectText))">
-            @if (_filterOptions != null)
-            {
-                @foreach (var schedule in _filterOptions.Schedules)
-                {
-                    <MudSelectItem T="Guid" Value="@schedule.Id">@schedule.Name</MudSelectItem>
-                }
-            }
-        </MudSelect>
-    </MudItem>
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true"
-                   SelectedValues="_filterStatuses"
-                   SelectedValuesChanged="OnStatusFilterChanged"
-                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
-        </MudSelect>
-    </MudItem>
-    <MudItem Class="flex-grow-1">
-        <SearchField Value="@_filterInitiatedBy"
-                     ValueChanged="OnInitiatedByFilterChanged"
-                     Label="Initiated By"
-                     Placeholder="Search by name..."
-                     DebounceInterval="500"
-                     Margin="Margin.None" />
-    </MudItem>
-    <MudItem Class="d-flex align-end">
-        <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
-                     Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
-    </MudItem>
-    <MudItem Class="d-flex align-end">
-        <MudCheckBox T="bool" Value="_filterScheduledOnly" ValueChanged="OnScheduledOnlyFilterChanged"
-                     Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
-    </MudItem>
-    <MudItem Class="d-flex align-end mb-2">
-        <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Placement="Placement.Top">
-            <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
-                           Size="Size.Small"
-                           OnClick="@(() => _pollingPaused = !_pollingPaused)"
-                           Color="@(_pollingPaused ? Color.Warning : Color.Default)" />
-        </MudTooltip>
-    </MudItem>
-</MudStack>
-
-@* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
-   and the toolbar count) lives in the shared grid; this tab supplies the columns, the window loader, the
-   page-owned filters above and the empty states. The URL parameters are prefixed so this grid's state cannot
-   collide with the Schedules tab's on the shared Operations page URL. *@
+@* The section's heading is the grid's toolbar, drawn above the paper: one row carrying the chevron that folds the
+   rows, the icon and the name, then the grid's own count, search box and density toggle, with the auto-refresh
+   pause beside the toggle (both say how the table behaves). The grid stays mounted under the fold, so a search or
+   scroll made before folding is still there after. The infinite-scroll machinery (URL state, scroll restore, window
+   loading) lives in the shared grid; this section supplies the columns, the window loader and the empty states. The
+   columns take the widths Queued and In progress use, so the three sections line up. The URL parameters are
+   prefixed so this grid's state cannot collide with the Schedules tab's on the shared page URL. *@
 <VirtualisedDataGrid @ref="_grid" T="Activity"
                      ContainerId="operations-history"
                      UrlParameterPrefix="h-"
@@ -116,11 +32,48 @@
                      DefaultSortDescending="true"
                      LoadWindow="LoadWindowAsync"
                      RowClicked="HandleRowClicked"
-                     SingularName="Execution"
-                     PluralName="Executions"
-                     SearchPlaceholder="Search target or initiator">
+                     SearchPlaceholder="Search target or initiator"
+                     ToolBarAboveGrid="true"
+                     Collapsed="@(!Expanded)"
+                     GridClass="mt-0">
+    <ToolBarLeading>
+        <MudTooltip Text="@(Expanded ? "Collapse Completed" : "Expand Completed")" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
+                           Class="@($"jim-activity-collapse-toggle{(Expanded ? " jim-activity-collapse-toggle--open" : string.Empty)}")"
+                           aria-label="@(Expanded ? "Collapse Completed" : "Expand Completed")"
+                           aria-expanded="@(Expanded ? "true" : "false")" aria-controls="operations-history"
+                           OnClick="@(() => ToggleRequested.InvokeAsync())" />
+        </MudTooltip>
+        <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Success" />
+        <MudText Typo="Typo.h6" id="activity-completed-heading">Completed</MudText>
+    </ToolBarLeading>
+    <ToolBarExtras>
+        <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
+                           Size="Size.Small" aria-label="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")"
+                           OnClick="@(() => _pollingPaused = !_pollingPaused)"
+                           Color="@(_pollingPaused ? Color.Warning : Color.Default)" />
+        </MudTooltip>
+    </ToolBarExtras>
     <Columns>
-        <TemplateColumn T="Activity" Title="Connected System" Sortable="false">
+        <TemplateColumn T="Activity" Title="Result" Sortable="false" HeaderStyle="@ActivityTableColumns.State">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Result" Name="status" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{
+                    var activity = context.Item;
+                    var verdict = ResultModifier(activity.Status);
+                }
+                @* A dot in the result's colour and the result in words. Only a warning or an error colours the words,
+                   so down a column of results the ones that need reading stand out. *@
+                <span class="@($"jim-activity-result jim-activity-result--{verdict}")">
+                    <span class="@($"jim-status-dot jim-status-dot--{verdict}")" aria-hidden="true"></span>
+                    @activity.Status.ToString().SplitOnCapitalLetters()
+                </span>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Connected System" Sortable="false" HeaderStyle="@ActivityTableColumns.ConnectedSystem">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
             </HeaderTemplate>
@@ -136,7 +89,7 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Run Profile" Sortable="false">
+        <TemplateColumn T="Activity" Title="Run Profile" Sortable="false" HeaderStyle="@ActivityTableColumns.RunProfile">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Run Profile" Name="target" />
             </HeaderTemplate>
@@ -152,38 +105,13 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Schedule" Sortable="false">
-            <HeaderTemplate>
-                <MudText Typo="Typo.button">Schedule</MudText>
-            </HeaderTemplate>
-            <CellTemplate>
-                @{ var activity = context.Item; }
-                @if (!string.IsNullOrEmpty(activity.ScheduledByScheduleName))
-                {
-                    <MudStack Spacing="0">
-                        <span>@activity.ScheduledByScheduleName</span>
-                        @if (activity.ScheduleStepIndex.HasValue)
-                        {
-                            var stepNumber = activity.ScheduleStepIndex.Value + 1;
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Step @stepNumber</MudText>
-                        }
-                    </MudStack>
-                }
-                else
-                {
-                    <EmptyValue />
-                }
-            </CellTemplate>
-        </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Outcomes" Sortable="false">
+        <TemplateColumn T="Activity" Title="Outcomes" Sortable="false" HeaderStyle="@ActivityTableColumns.Detail">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Outcomes</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @{ var activity = context.Item; }
-                @if (activity.Status != ActivityStatus.InProgress)
-                {
-                    @if (HasAnyStats(activity))
+                @if (HasAnyStats(activity))
                     {
                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                             @{ var runType = GetEffectiveRunType(activity.ConnectedSystemRunType, activity.TargetName); }
@@ -344,36 +272,11 @@
                     }
                     else
                     {
-                        <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
-                                     Icon="@Icons.Material.Outlined.CheckCircle" Class="jim-stat-chip">
-                                0
-                            </MudChip>
-                        </MudTooltip>
+                        <span class="jim-activity-no-changes" data-testid="no-changes">No changes</span>
                     }
-                }
-                else
-                {
-                    @if (activity.ObjectsToProcess > 0)
-                    {
-                        var percentage = (double)activity.ObjectsProcessed / activity.ObjectsToProcess * 100;
-                        <MudStack Spacing="0" Style="width: 120px;">
-                            <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" Size="Size.Small" />
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3" Style="white-space: nowrap;">@activity.ObjectsProcessed.ToString("N0") / @activity.ObjectsToProcess.ToString("N0")</MudText>
-                        </MudStack>
-                    }
-                    else
-                    {
-                        <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" Style="width: 80px;" Size="Size.Small" />
-                        @if (!string.IsNullOrEmpty(activity.Message))
-                        {
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@activity.Message</MudText>
-                        }
-                    }
-                }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Initiated By" Sortable="false">
+        <TemplateColumn T="Activity" Title="Initiated By" Sortable="false" HeaderStyle="@ActivityTableColumns.InitiatedBy">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Initiated By" Name="initiatedby" />
             </HeaderTemplate>
@@ -385,19 +288,7 @@
                                    ScheduleExecutionId="@context.Item.ScheduleExecutionId" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Status" Sortable="false">
-            <HeaderTemplate>
-                <VirtualisedSortHeader Title="Status" Name="status" />
-            </HeaderTemplate>
-            <CellTemplate>
-                @{ var activity = context.Item; }
-                <MudChip T="string" Variant="Variant.Text"
-                         Color="Helpers.GetActivityMudBlazorColorForStatus(activity.Status)">
-                    @activity.Status.ToString().SplitOnCapitalLetters()
-                </MudChip>
-            </CellTemplate>
-        </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Executed" Sortable="false">
+        <TemplateColumn T="Activity" Title="Executed" Sortable="false" HeaderStyle="@ActivityTableColumns.FirstTime" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Executed" Name="created" />
             </HeaderTemplate>
@@ -408,7 +299,7 @@
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Duration" Sortable="false">
+        <TemplateColumn T="Activity" Title="Duration" Sortable="false" HeaderStyle="@ActivityTableColumns.SecondTime" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Duration" Name="executiontime" />
             </HeaderTemplate>
@@ -419,14 +310,17 @@
                     var executionTime = activity.ExecutionTime.Value;
                     @executionTime.ToCasualString()
                 }
-                else if (activity.Status == ActivityStatus.InProgress)
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-disabled">Running...</MudText>
-                }
                 else
                 {
                     <EmptyValue />
                 }
+            </CellTemplate>
+        </TemplateColumn>
+        @* Lines the grid up with Queued and In progress, whose last column holds their actions; here it says the row
+           opens. *@
+        <TemplateColumn T="Activity" Title="" Sortable="false" HeaderStyle="@ActivityTableColumns.Actions" CellStyle="text-align: right;">
+            <CellTemplate>
+                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Class="mud-text-secondary" aria-hidden="true" />
             </CellTemplate>
         </TemplateColumn>
     </Columns>
@@ -441,22 +335,23 @@
                              ActionText="Clear Search"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
-        else if (HasActiveFilters)
+        else if (Filters.IsActive)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                             PrimaryText="No executions match the current filters"
+                             PrimaryText="No completed executions match the current filters"
                              SecondaryText="Adjust or clear the filters above to see more executions."
                              ActionText="Clear Filters"
-                             OnAction="ClearFiltersAsync" />
+                             OnAction="@(() => OnClearFilters.InvokeAsync())" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.History"
-                             PrimaryText="Nothing has run yet"
-                             SecondaryText="Run Profile executions appear here once one has run, whether started from the Queue tab, by a Schedule, or through the API." />
+                             PrimaryText="Nothing has finished yet"
+                             SecondaryText="Run Profile executions appear here once one has finished, whether queued from this tab, by a Schedule, or through the API." />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
+</section>
 
 @* Activity Detail Panel with Overlay *@
 <MudOverlay @bind-Visible="_panelOpen" DarkBackground="true" AutoClose="true" ZIndex="1250" />
@@ -477,6 +372,17 @@
                     @_selectedActivity.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
             </div>
+
+            @* Why the run warned, beneath the status it explains; one line per warning, as on the Activity page. *@
+            @if (!string.IsNullOrWhiteSpace(_selectedActivity.WarningMessage))
+            {
+                <MudAlert Severity="Severity.Warning">
+                    @foreach (var warningLine in _selectedActivity.WarningMessage.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        <MudText Typo="Typo.body1">@warningLine</MudText>
+                    }
+                </MudAlert>
+            }
 
             @* Schedule context; renders nothing unless a Schedule produced this Activity. *@
             <ActivityScheduleContext ScheduleExecutionId="_selectedActivity.ScheduleExecutionId"
@@ -779,8 +685,20 @@
 </div>
 
 @code {
+    /// <summary>The Activity tab's filters; this section applies them all, Result and Has child activities included.</summary>
+    [Parameter] public OperationsActivityFilters Filters { get; set; } = OperationsActivityFilters.None;
+
+    /// <summary>Raised when the empty state's Clear Filters is chosen; the filters are the tab's to clear.</summary>
+    [Parameter] public EventCallback OnClearFilters { get; set; }
+
+    /// <summary>Whether the grid is unfolded under the section's heading. Folded, it is left alone until it is unfolded.</summary>
+    [Parameter] public bool Expanded { get; set; } = true;
+
+    /// <summary>Raised when the heading's chevron is clicked; the tab flips the section and writes the choice to the URL.</summary>
+    [Parameter] public EventCallback ToggleRequested { get; set; }
+
     @* ─── Worker Task preset ─── *@
-    @* This tab shows Worker Task Activities: the operations the worker service executes. There is one
+    @* This section shows Worker Task Activities: the operations the worker service executes. There is one
        Activity query; which Activities a caller wants is the caller's to say, so these two filters are
        what make it the Operations history rather than the general Activities list. Run Profile executions
        and Connected System operations, restricted to the operations the worker performs (Execute a Run
@@ -818,27 +736,40 @@
     // detector itself, so an unchanged list never reloads.
     private string? _lastDataFingerprint;
 
-    // Filter state
-    private ActivityFilterOptions? _filterOptions;
-    private IReadOnlyCollection<string> _filterConnectedSystems = [];
-    private IReadOnlyCollection<string> _filterRunProfiles = [];
-    private IReadOnlyCollection<ActivityStatus> _filterStatuses = [];
-    private IReadOnlyCollection<Guid> _filterSchedules = [];
-    private string? _filterInitiatedBy;
-    private bool _filterHasChildren;
-    private bool _filterScheduledOnly;
+    // The filters the grid last loaded under, so a change can be told from a re-render.
+    private OperationsActivityFilters? _appliedFilters;
 
-    // Whether any page-owned filter has been narrowed from its default. The grid's search box is judged
-    // separately, so the empty state can offer the more specific "Clear Search" way out.
-    private bool HasActiveFilters => _filterConnectedSystems.Any() || _filterRunProfiles.Any()
-        || _filterStatuses.Any() || _filterSchedules.Any() || !string.IsNullOrWhiteSpace(_filterInitiatedBy)
-        || _filterHasChildren || _filterScheduledOnly;
+    // Whether the section was unfolded at the last render, so unfolding can be told from a re-render.
+    private bool _wasExpanded = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_appliedFilters != null && _appliedFilters != Filters)
+        {
+            _appliedFilters = Filters;
+            await ApplyFilterChangeAsync();
+        }
+
+        // Unfolding re-reads once: nothing was kept current while the rows were out of sight.
+        var unfolded = Expanded && !_wasExpanded;
+        _wasExpanded = Expanded;
+        if (unfolded)
+            await RefreshIfChangedAsync();
+    }
+
+    /// <summary>The status vocabulary's verdict for a result: what colours its dot, and its words when it needs reading.</summary>
+    private static string ResultModifier(ActivityStatus status) => Helpers.GetActivityMudBlazorColorForStatus(status) switch
+    {
+        Color.Success => "ok",
+        Color.Warning => "warn",
+        Color.Error => "err",
+        _ => "neutral"
+    };
 
     protected override async Task OnInitializedAsync()
     {
-        // Load the filter options; the grid loads its own first window as soon as it is in the DOM.
-        using var jim = JimFactory.Create();
-        _filterOptions = await jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
+        // The grid loads its own first window as soon as it is in the DOM.
+        _appliedFilters = Filters;
 
         // Event-driven refresh (issue #307): a Worker Task deletion means a run finished (so history
         // changes) and Activity progress updates drive the in-progress rows; both trigger an immediate
@@ -883,7 +814,7 @@
     /// </summary>
     private async Task RefreshIfChangedAsync()
     {
-        if (_grid == null || _panelOpen || _pollingPaused)
+        if (_grid == null || _panelOpen || _pollingPaused || !Expanded)
             return;
 
         if (!await _refreshLock.WaitAsync(0))
@@ -902,13 +833,13 @@
                 true,
                 operationFilter: WorkerTaskOperations,
                 typeFilter: WorkerTaskTargetTypes,
-                statusFilter: _filterStatuses.Any() ? _filterStatuses : null,
-                hasChildActivities: _filterHasChildren ? true : null,
-                connectedSystemFilter: _filterConnectedSystems.Any() ? _filterConnectedSystems : null,
-                runProfileFilter: _filterRunProfiles.Any() ? _filterRunProfiles : null,
-                initiatedByFilter: string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy,
-                initiatedBySchedule: _filterScheduledOnly ? true : null,
-                scheduleFilter: _filterSchedules.Any() ? _filterSchedules : null,
+                statusFilter: Filters.CompletedStatuses(),
+                hasChildActivities: Filters.HasChildActivities ? true : null,
+                connectedSystemFilter: Filters.ConnectedSystems.Count > 0 ? Filters.ConnectedSystems : null,
+                runProfileFilter: Filters.RunProfiles.Count > 0 ? Filters.RunProfiles : null,
+                initiatedByFilter: null,
+                initiatedBySchedule: Filters.ScheduledOnly ? true : null,
+                scheduleFilter: Filters.Schedules.Count > 0 ? Filters.Schedules : null,
                 includeTotalCount: false);
 
             var fingerprint = BuildFingerprint(result.Results);
@@ -944,13 +875,13 @@
             request.SortDescending,
             operationFilter: WorkerTaskOperations,
             typeFilter: WorkerTaskTargetTypes,
-            statusFilter: _filterStatuses.Any() ? _filterStatuses : null,
-            hasChildActivities: _filterHasChildren ? true : null,
-            connectedSystemFilter: _filterConnectedSystems.Any() ? _filterConnectedSystems : null,
-            runProfileFilter: _filterRunProfiles.Any() ? _filterRunProfiles : null,
-            initiatedByFilter: string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy,
-            initiatedBySchedule: _filterScheduledOnly ? true : null,
-            scheduleFilter: _filterSchedules.Any() ? _filterSchedules : null,
+            statusFilter: Filters.CompletedStatuses(),
+            hasChildActivities: Filters.HasChildActivities ? true : null,
+            connectedSystemFilter: Filters.ConnectedSystems.Count > 0 ? Filters.ConnectedSystems : null,
+            runProfileFilter: Filters.RunProfiles.Count > 0 ? Filters.RunProfiles : null,
+            initiatedByFilter: null,
+            initiatedBySchedule: Filters.ScheduledOnly ? true : null,
+            scheduleFilter: Filters.Schedules.Count > 0 ? Filters.Schedules : null,
             includeTotalCount: request.IncludeTotalCount);
 
         // A newest-first read of the top of the list is exactly what the change detector fingerprints, so refresh
@@ -1009,22 +940,6 @@
     }
 
     /// <summary>
-    /// Returns every page-owned filter to its default; offered as the way out by the empty state when the current
-    /// filters matched nothing.
-    /// </summary>
-    private async Task ClearFiltersAsync()
-    {
-        _filterConnectedSystems = [];
-        _filterRunProfiles = [];
-        _filterStatuses = [];
-        _filterSchedules = [];
-        _filterInitiatedBy = null;
-        _filterHasChildren = false;
-        _filterScheduledOnly = false;
-        await ApplyFilterChangeAsync();
-    }
-
-    /// <summary>
     /// Builds a lightweight fingerprint of the current result set for change detection.
     /// Captures identity, status, and a representative subset of granular stats so polling
     /// only triggers a reload when data actually changed.
@@ -1033,75 +948,6 @@
     {
         return string.Join("|", activities.Select(a =>
             $"{a.Id}:{a.Status}:{a.ObjectsProcessed},{a.ObjectsToProcess},{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDisconnectedOutOfScope},{a.TotalOutOfScopeRetainJoin},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalPendingExports},{a.TotalErrors}"));
-    }
-
-    private async Task OnConnectedSystemFilterChanged(IReadOnlyCollection<string> values)
-    {
-        _filterConnectedSystems = values;
-        await ApplyFilterChangeAsync();
-    }
-
-    private async Task OnRunProfileFilterChanged(IReadOnlyCollection<string> values)
-    {
-        _filterRunProfiles = values;
-        await ApplyFilterChangeAsync();
-    }
-
-    private async Task OnScheduleFilterChanged(IReadOnlyCollection<Guid> values)
-    {
-        _filterSchedules = values;
-        await ApplyFilterChangeAsync();
-    }
-
-    private async Task OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
-    {
-        _filterStatuses = values;
-        await ApplyFilterChangeAsync();
-    }
-
-    private async Task OnInitiatedByFilterChanged(string text)
-    {
-        _filterInitiatedBy = text;
-        await ApplyFilterChangeAsync();
-    }
-
-    private async Task OnHasChildrenFilterChanged(bool value)
-    {
-        _filterHasChildren = value;
-        await ApplyFilterChangeAsync();
-    }
-
-    private async Task OnScheduledOnlyFilterChanged(bool value)
-    {
-        _filterScheduledOnly = value;
-        await ApplyFilterChangeAsync();
-    }
-
-    private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
-    {
-        return selectedValues.Count switch
-        {
-            0 => string.Empty,
-            1 => selectedValues[0],
-            _ => $"{selectedValues.Count} selected"
-        };
-    }
-
-    /// <summary>
-    /// MultiSelectionTextFunc is typed against the string form of the selected values regardless of the select's T,
-    /// so the Schedule select would otherwise render a raw GUID for a single selection. Map the id back to the
-    /// Schedule's name via the loaded filter options.
-    /// </summary>
-    private string GetScheduleMultiSelectText(IReadOnlyList<string> selectedValues)
-    {
-        if (selectedValues.Count == 0)
-            return string.Empty;
-
-        if (selectedValues.Count > 1)
-            return $"{selectedValues.Count} selected";
-
-        var schedule = _filterOptions?.Schedules.FirstOrDefault(s => s.Id.ToString() == selectedValues[0]);
-        return schedule?.Name ?? selectedValues[0];
     }
 
     private async Task HandleRowClicked(Activity activity)
