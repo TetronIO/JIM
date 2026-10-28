@@ -766,7 +766,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         var port = GetInt(settingValues, SqlConnectorConstants.SettingPort) ?? provider.GetDefaultPort(SqlConnectionEncryption.Tls);
         var timeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds;
 
-        return new SecureEndpoint(host, port, TimeSpan.FromSeconds(timeoutSeconds), "database server", provider.SecureTransportName, provider.SecureHandshakeFraming);
+        return new SecureEndpoint(host, port, TimeSpan.FromSeconds(timeoutSeconds), "database server", provider.SecureTransportName, provider.SecureHandshakeFraming,
+            AcceptsJimTrustedCertificates: provider.SupportsPinnedServerCertificate);
     }
     #endregion
 
@@ -881,7 +882,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     internal virtual ServerCertificateReading? ReadServerCertificate(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates, ILogger logger)
     {
         return ServerCertificateProbe.Read(endpoint.Host, endpoint.Port, trustedCertificates, endpoint.Timeout,
-            logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming);
+            logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming, endpoint.AcceptsJimTrustedCertificates);
     }
 
     /// <summary>

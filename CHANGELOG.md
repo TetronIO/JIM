@@ -174,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 JIM no longer offers to trust an Oracle Database TCPS server's certificate, which reported **Certificate trusted** while the next connection test failed just the same: the Oracle driver takes no certificate from JIM, so the certificate must be one the operating system trusts. The certificate card says so instead, a read judges the certificate against the operating system alone (`acceptsJimTrustedCertificates` over REST and `Get-JIMConnectedSystemServerCertificate`), and trusting it through REST or `Approve-JIMConnectedSystemServerCertificate` is refused with `NotUsedByThisConnection`.
 - 🐛 The SQL Connector's **Oracle Encryption** setting no longer tells you to add a TCPS server certificate in Admin > Certificates: the Oracle driver accepts no additional trust anchors, so a TCPS certificate must be one the operating system already trusts.
 - 🐛 `Get-JIMFileSystemItem` and the REST file system listing now say what they do with no path: they list the first allowed root directory, `/connector-files`, not the allowed roots; `-Roots` lists those.
 - 🐛 The SQL Connector can now be configured in the portal: its required **Object Types** setting showed "Unknown setting type" instead of a field, so the JSON document describing your tables could only be set through REST or PowerShell. It is now a multi-line field with a complete example beneath it to copy, and saving with it empty is refused.

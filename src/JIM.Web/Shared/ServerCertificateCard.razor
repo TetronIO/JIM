@@ -209,11 +209,13 @@
 
     /// <summary>
     /// Offered only where trusting the certificate is what fixes the failure, and only where the caller supplied the
-    /// context needed to act on it.
+    /// context needed to act on it. A connection that takes nothing from the JIM certificate store is never fixed by
+    /// trusting, so it is never offered there.
     /// </summary>
     private bool ShowTrustAction =>
         ConnectedSystemId.HasValue &&
         Diagnostic?.FailureReason == ServerCertificateFailureReason.UntrustedIssuer &&
+        Diagnostic.AcceptsJimTrustedCertificates &&
         !string.IsNullOrEmpty(Diagnostic.Thumbprint);
 
     /// <summary>
