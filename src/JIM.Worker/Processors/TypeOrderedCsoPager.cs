@@ -33,6 +33,7 @@ public sealed class TypeOrderedCsoPager
 
     private readonly PageLoader _loadPage;
     private readonly IReadOnlyList<int> _typeIds;
+    private readonly Dictionary<int, int> _walkPositionByTypeId;
     private readonly DateTime _createdFloor;
     private readonly HashSet<Guid> _handedOutSinceFloor = [];
     private int _typeIndex;
@@ -48,6 +49,7 @@ public sealed class TypeOrderedCsoPager
     {
         _loadPage = loadPage;
         _typeIds = typeIds;
+        _walkPositionByTypeId = typeIds.Select((typeId, position) => (typeId, position)).ToDictionary(t => t.typeId, t => t.position);
         _createdFloor = createdFloor;
         _sweeping = typeIds.Count == 0;
     }
@@ -61,6 +63,20 @@ public sealed class TypeOrderedCsoPager
     /// Whether the last page came from the closing sweep.
     /// </summary>
     public bool IsSweeping => _sweeping;
+
+    /// <summary>
+    /// Objects created at or after this instant are swept once the type walks finish, so a type's walk is only certain to
+    /// have handed out the objects created before it.
+    /// </summary>
+    public DateTime CreatedFloor => _createdFloor;
+
+    /// <summary>
+    /// Whether the walk of <paramref name="typeId"/> has finished: every object of that type created before
+    /// <see cref="CreatedFloor"/> has been handed out, so none of them is processed again later in the run. False for the
+    /// type being walked now, and for a type this run does not walk.
+    /// </summary>
+    public bool HasFinishedWalking(int typeId) =>
+        _walkPositionByTypeId.TryGetValue(typeId, out var position) && (_sweeping || position < _typeIndex);
 
     /// <summary>
     /// Loads the next non-empty page, or returns null when every type and the sweep are exhausted.

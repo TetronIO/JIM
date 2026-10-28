@@ -141,6 +141,15 @@ internal abstract class SqlProviderBase : ISqlProvider
     {
     }
 
+    /// <summary>
+    /// The driver's own message by default: a driver whose message already names the cause needs nothing added.
+    /// </summary>
+    public virtual string DescribeConnectionFailure(DbException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        return exception.Message;
+    }
+
     public virtual DbCommand CreateCommand(DbConnection connection, string commandText)
     {
         ArgumentNullException.ThrowIfNull(connection);

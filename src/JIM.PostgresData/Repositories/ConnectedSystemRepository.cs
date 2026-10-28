@@ -1883,7 +1883,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <summary>
     /// DTO for the reference value lookup SQL query.
     /// </summary>
-    private record ReferencedCsoRow(Guid CsoId, Guid? MetaverseObjectId);
+    private record ReferencedCsoRow(Guid CsoId, Guid? MetaverseObjectId, int TypeId, DateTime Created);
 
     /// <summary>
     /// Populates ReferenceValue navigations on CSO attribute values using direct SQL.
@@ -1910,28 +1910,33 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         if (referencedCsoIds.Count == 0)
             return;
 
-        // Direct SQL: get Id and MetaverseObjectId for every referenced CSO.
+        // Direct SQL: get Id, MetaverseObjectId, TypeId and Created for every referenced CSO.
         // This bypasses the deep EF Include chain entirely — no navigation properties, no
         // change tracker conflicts, no cartesian explosions.
         var rows = await Repository.Database.Database
             .SqlQueryRaw<ReferencedCsoRow>(
                 """
-                SELECT "Id" AS "CsoId", "MetaverseObjectId"
+                SELECT "Id" AS "CsoId", "MetaverseObjectId", "TypeId", "Created"
                 FROM "ConnectedSystemObjects"
                 WHERE "Id" = ANY({0})
                 """,
                 referencedCsoIds.ToArray())
             .ToListAsync();
 
-        var mvoIdLookup = rows.ToDictionary(r => r.CsoId, r => r.MetaverseObjectId);
+        var rowLookup = rows.ToDictionary(r => r.CsoId);
 
         // Populate ResolvedReferenceMetaverseObjectId on each attribute value.
         // This [NotMapped] property provides the same data that consumers previously got
-        // from av.ReferenceValue.MetaverseObjectId, without touching EF navigations.
-        foreach (var av in allAttributeValues)
+        // from av.ReferenceValue.MetaverseObjectId, without touching EF navigations. The referenced object's type and
+        // creation time tell a synchronisation whether an unjoined reference could still be joined later in the run.
+        var resolvedValues = allAttributeValues
+            .Select(av => (Value: av, Row: av.ReferenceValueId is { } id && rowLookup.TryGetValue(id, out var r) ? r : null))
+            .Where(x => x.Row != null);
+        foreach (var (av, row) in resolvedValues)
         {
-            if (av.ReferenceValueId.HasValue && mvoIdLookup.TryGetValue(av.ReferenceValueId.Value, out var mvoId))
-                av.ResolvedReferenceMetaverseObjectId = mvoId;
+            av.ResolvedReferenceMetaverseObjectId = row!.MetaverseObjectId;
+            av.ResolvedReferenceTypeId = row!.TypeId;
+            av.ResolvedReferenceCreated = row!.Created;
         }
     }
 

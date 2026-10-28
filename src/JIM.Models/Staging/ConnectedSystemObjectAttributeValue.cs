@@ -17,6 +17,20 @@ public class ConnectedSystemObjectAttributeValue
     [NotMapped]
     public Guid? ResolvedReferenceMetaverseObjectId { get; set; }
 
+    /// <summary>
+    /// The Object Type of the referenced CSO, populated alongside <see cref="ResolvedReferenceMetaverseObjectId"/>. With
+    /// <see cref="ResolvedReferenceCreated"/>, it tells a synchronisation whether an unjoined referenced object could still
+    /// be joined later in the same run.
+    /// </summary>
+    [NotMapped]
+    public int? ResolvedReferenceTypeId { get; set; }
+
+    /// <summary>
+    /// When the referenced CSO was created, populated alongside <see cref="ResolvedReferenceMetaverseObjectId"/>.
+    /// </summary>
+    [NotMapped]
+    public DateTime? ResolvedReferenceCreated { get; set; }
+
     [Key]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public Guid Id { get; set; }

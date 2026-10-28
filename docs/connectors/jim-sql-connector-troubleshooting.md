@@ -41,6 +41,8 @@ answers:
 
 The database driver's own message follows. A wrong host or blocked port times out after the Connection Timeout; a wrong database name, service name or SID is rejected immediately in the database's own words; a wrong password is an authentication failure. On Oracle, check you have chosen the right form (service name or SID) as well as the right value.
 
+On Oracle with Native Network Encryption, `ORA-12660` (encryption or crypto-checksumming parameters incompatible) or `ORA-12650` (no common encryption or data integrity algorithm) means the server will not encrypt the way JIM requires. Check its `sqlnet.ora` against [What an Oracle server needs for Native Network Encryption](jim-sql-connector-security.md#what-an-oracle-server-needs-for-native-network-encryption). The driver reports both as `ORA-50201` ("failed to parse connect string"), which JIM shows after the cause; it does not mean the host or service name is wrong.
+
 ## :material-certificate-outline: The connection test fails on the certificate (SQL Server)
 
 See [When the connection test fails on the certificate](jim-sql-connector-security.md#when-the-connection-test-fails-on-the-certificate).

@@ -283,6 +283,15 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     }
 
     /// <summary>
+    /// When set, how this dialect describes a failed connection, standing in for a driver (Oracle's) that
+    /// hides the cause beneath a generic error.
+    /// </summary>
+    internal Func<DbException, string>? ConnectionFailureDescription { get; init; }
+
+    public override string DescribeConnectionFailure(DbException exception) =>
+        ConnectionFailureDescription?.Invoke(exception) ?? base.DescribeConnectionFailure(exception);
+
+    /// <summary>
     /// The Microsoft SQL Server page shape, because this stand-in quotes and prefixes the way that
     /// dialect does. The real dialects' generation is asserted in their own tests; what matters here is
     /// that the Connector asks the provider for a page rather than writing SQL of its own.
@@ -1712,6 +1721,13 @@ internal sealed class FakeDbException : DbException
     internal FakeDbException(string message, string? sqlState = null) : base(message)
     {
         _sqlState = sqlState;
+    }
+
+    /// <summary>
+    /// A failure whose cause the driver keeps in an inner exception, as ODP.NET does.
+    /// </summary>
+    internal FakeDbException(string message, Exception innerException) : base(message, innerException)
+    {
     }
 
     public override string? SqlState => _sqlState;
