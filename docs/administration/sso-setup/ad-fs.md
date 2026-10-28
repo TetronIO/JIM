@@ -122,7 +122,7 @@ To check sign-out too, see [Testing Your Configuration](../sso-setup.md#testing-
 
 ## :material-api: Let the API reference sign in (optional)
 
-The API reference at `https://jim.example.com/api/reference` can call JIM's API with an API key as it stands. Its **Try It** can also sign you in through AD FS, with the PowerShell module's application, whose redirect URIs `Register-JIMIdentityProvider` gives the page's address. The browser then asks AD FS for the token itself, and AD FS answers a browser on another site only when Cross-Origin Resource Sharing (CORS) is on for JIM's address. CORS is a setting for the whole AD FS farm, not the Application Group, so the command leaves it to you. It needs AD FS 2019 or later.
+The API reference at `https://jim.example.com/api/reference` can call JIM's API with an API key as it stands. Its **Try It** can also sign you in through AD FS, using the PowerShell module's application. `Register-JIMIdentityProvider` adds `https://jim.example.com/api/reference` to that application's redirect URIs, so AD FS returns you to the page after you sign in. The browser then asks AD FS for the token itself, and AD FS answers a browser on another site only when Cross-Origin Resource Sharing (CORS) is on for JIM's address. CORS is a setting for the whole AD FS farm, not the Application Group, so the command leaves it to you. It needs AD FS 2019 or later.
 
 On the AD FS server, in PowerShell as an AD FS administrator, turn CORS on and add JIM's address to the trusted origins. `-CORSTrustedOrigins` replaces the list, so this keeps any origins already trusted:
 
