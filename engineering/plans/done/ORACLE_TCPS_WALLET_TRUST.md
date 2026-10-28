@@ -1,6 +1,6 @@
 # Oracle TCPS: Trust a Certificate from the JIM Certificate Store
 
-- **Status:** Doing (Phase 0 in review as #2590; Phases 1 and 2 under way together)
+- **Status:** Done
 - **Issue:** [#2581](https://github.com/TetronIO/JIM/issues/2581)
 - **Prerequisite:** [#2589](https://github.com/TetronIO/JIM/issues/2589) (TCPS host name verification)
 
@@ -90,7 +90,7 @@ A new `SqlTrustedOracleWallet` is the sibling of `SqlTrustedServerCertificateFil
 
 ## Implementation phases
 
-### Phase 0: Host name verification (#2589)
+### Phase 0: Host name verification (#2589) ✅
 
 A separate, small pull request that ships first: `(SECURITY=(SSL_SERVER_DN_MATCH=TRUE))` for TCPS, with a descriptor unit test and a Security changelog entry. Its runtime proof arrives with the lane in Phase 1.
 
@@ -98,7 +98,7 @@ A separate, small pull request that ships first: `(SECURITY=(SSL_SERVER_DN_MATCH
 
 Like the SQL Server lane, the Oracle lane's CA is trusted by nobody but the JIM store, so its "connects once trusted" case only exists once wallet trust does. A lane on its own could test refusals and nothing else, so Phases 1 and 2 are one pull request, and the lane is what proves the trust.
 
-### Phase 1: An Oracle TCPS test lane
+### Phase 1: An Oracle TCPS test lane ✅
 
 The `RequiresOracleTls` NUnit tier and an `oracle-tls-tests` CI job, the same shape as `sql-tls-tests`:
 - **`test/scripts/Start-OracleTlsTestServer.ps1`:**
@@ -113,14 +113,14 @@ The `RequiresOracleTls` NUnit tier and an `oracle-tls-tests` CI job, the same sh
 - **The four open verifications above** become tests here.
 - **Runs on:** pull requests that change the SQL Connector (path filter), and on `main`.
 
-### Phase 2: Wallet trust
+### Phase 2: Wallet trust ✅
 
 The provider capability, anchor selection, `SqlTrustedOracleWallet` and the `ConfigureConnection` change, each red first. Unit tests sit alongside `SqlConnectorCertificateTrustTests` and the file's own tests, covering:
 - materialisation, permissions, clean-up on dispose, and the sweep;
 - anchor selection against chains with and without a vouched-for root;
 - the refusal when the store holds only an intermediate.
 
-### Phase 3: Surfaces and docs
+### Phase 3: Surfaces and docs ✅
 
 The card's choices, `RootRequired` through REST and PowerShell with Pester coverage, the read's new field, the regenerated PowerShell reference, the docs pages and setting description, and a changelog entry (a 🔄 for the trust behaviour, plus a note on the breaking field rename).
 
