@@ -33,8 +33,8 @@ out: {label: Browser, note: applies them}
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Limits how much of JIM's URL is leaked in the `Referer` header of outbound links |
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | Disables browser APIs JIM never uses |
 
-If something earlier in the pipeline (a controller action, for example) has already set one of these headers,
-JIM does not overwrite it; the more specific value wins.
+JIM sets these defaults as a request enters its pipeline. A handler that runs after them (a controller action, for
+example) and sets one of these headers replaces JIM's default, so the more specific value wins.
 
 ## :material-lock-check-outline: Content Security Policy
 
