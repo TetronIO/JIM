@@ -107,12 +107,22 @@
                                 <span class="jim-certificate-chain-role">Not found</span>
                             </div>
                         }
-                        @foreach (var link in ChainFromTheTop)
+                        @* On a connection that accepts only a root, the whole chain is still shown, so the card does not read
+                           as though the server sent one certificate; the root is marked as the one on offer and the rest
+                           are there to read. Elsewhere every row is a working choice, so none is singled out. *@
+                        @foreach (var link in ChainForDisplay)
                         {
-                            <div class="jim-certificate-chain-row" data-testid="jim-certificate-chain-element">
+                            <div class="jim-certificate-chain-row @RowClass(link)" data-testid="jim-certificate-chain-element"
+                                 data-trust="@RowTrust(link)">
                                 <span class="jim-certificate-chain-name">@link.CommonName</span>
                                 <span class="jim-certificate-chain-source">@CertificateDisplay.FormatSource(link.Element.Source)</span>
                                 <span class="jim-certificate-chain-role">@CertificateDisplay.FormatRole(link.Role)</span>
+                            </div>
+                        }
+                        @if (Diagnostic.TrustAnchorMustBeRoot && ChainForDisplay.Any(link => !link.CanBeTrusted))
+                        {
+                            <div class="jim-certificate-chain-caption" data-testid="jim-certificate-chain-reference-note">
+                                This connection accepts only the root, so the rest of the chain is shown for reference.
                             </div>
                         }
                     </div>
@@ -136,9 +146,8 @@
                             else if (Diagnostic.TrustAnchorMustBeRoot)
                             {
                                 <text>
-                                    This connection accepts only the root of the chain, so that is what JIM offers.
-                                    Trusting it keeps working through renewals of everything beneath it. JIM reads the
-                                    chain from the server again first, adds the root to
+                                    Trusting the root keeps working through renewals of everything beneath it. JIM reads
+                                    the chain from the server again first, adds the root to
                                     <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>, and records who
                                     trusted it and why.
                                 </text>
@@ -165,7 +174,8 @@
                         <MudButton Variant="Variant.Filled" DropShadow="false"
                                    StartIcon="@Icons.Material.Filled.VerifiedUser" Disabled="_trusting"
                                    OnClick="TrustAsync" data-testid="jim-certificate-trust">
-                            @(HasAChoice ? "Choose what to trust" : "Trust this certificate")
+                            @(Diagnostic.TrustAnchorMustBeRoot && !Diagnostic.IsSelfSigned ? "Trust the root"
+                              : HasAChoice ? "Choose what to trust" : "Trust this certificate")
                         </MudButton>
                     </div>
                 }
@@ -234,7 +244,26 @@
     private List<ServerCertificateTrustOption> ChainFromTheTop =>
         Diagnostic == null ? [] : ServerCertificateTrustOption.For(Diagnostic);
 
+    /// <summary>
+    /// Every certificate in the chain, the root first, including those this connection cannot be told to trust.
+    /// </summary>
+    private List<ServerCertificateTrustOption> ChainForDisplay =>
+        Diagnostic == null ? [] : ServerCertificateTrustOption.Chain(Diagnostic);
+
     private bool HasAChoice => ChainFromTheTop.Count > 1;
+
+    /// <summary>
+    /// Only a connection that accepts only a root distinguishes its rows; elsewhere the attribute is left off.
+    /// </summary>
+    private string? RowTrust(ServerCertificateTrustOption link) =>
+        Diagnostic?.TrustAnchorMustBeRoot != true ? null : link.CanBeTrusted ? "offered" : "reference";
+
+    private string RowClass(ServerCertificateTrustOption link) => RowTrust(link) switch
+    {
+        "offered" => "jim-certificate-chain-row-offered",
+        "reference" => "jim-certificate-chain-row-reference",
+        _ => string.Empty
+    };
 
     private bool IsSound => Diagnostic?.FailureReason == ServerCertificateFailureReason.None;
 

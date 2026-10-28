@@ -4170,6 +4170,30 @@ html[lang] .jim-kv-table td:first-child {
     margin-top: 4px;
 }
 
+/* On a connection that accepts only a root (Oracle Database over TCPS), the root is the one row on offer and the rest of
+   the chain is there to read: the offered row takes the primary colour, and the others are drawn dashed and quiet, like
+   the gap above, so neither reads as a choice. */
+.jim-certificate-chain-row-offered {
+    border-color: var(--mud-palette-primary);
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+    background-color: rgba(var(--mud-palette-primary-rgb), 0.08);
+}
+
+.jim-certificate-chain-row-reference {
+    border-style: dashed;
+}
+
+.jim-certificate-chain-row-reference .jim-certificate-chain-name {
+    font-weight: 400;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-certificate-chain-caption {
+    margin-top: 6px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+}
+
 /* A certificate JIM could not find is drawn as a gap in the chain rather than as one of its links. */
 .jim-certificate-chain-row-missing {
     border-style: dashed;

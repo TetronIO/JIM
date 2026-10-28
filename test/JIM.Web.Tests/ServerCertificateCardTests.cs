@@ -209,6 +209,58 @@ public class ServerCertificateCardTests : JimComponentTestContext
     /// The same connection where JIM could not find the root: nothing it could offer would work, so nothing is offered,
     /// and the remediation says where the root has to come from.
     /// </summary>
+    /// <summary>
+    /// The whole chain is shown, so the card does not read as though the server sent one certificate, and the root is
+    /// marked as the one on offer; the others are there to read, with a line saying so.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereOnlyARootCanBeTrusted_ListsTheWholeChainAndMarksTheRootAsOffered()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, RootOnlyDiagnostic(withRoot: true))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        var rows = cut.FindAll("[data-testid='jim-certificate-chain-element']");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows.Select(row => row.GetAttribute("data-trust")), Is.EqualTo(new[] { "offered", "reference", "reference" }));
+            Assert.That(rows[0].TextContent, Does.Contain("Corp Root CA"));
+            Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-reference-note']"), Has.Count.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// Without the root, nothing in the chain can be trusted here, so every row is for reference and none is offered.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereOnlyARootCanBeTrustedAndNoneWasFound_OffersNoRow()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, RootOnlyDiagnostic(withRoot: false))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-element']").Select(row => row.GetAttribute("data-trust")),
+            Is.EqualTo(new[] { "reference", "reference" }));
+    }
+
+    /// <summary>
+    /// Where any certificate in the chain can be trusted, no row is singled out and there is nothing to explain.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereAnyCertificateCanBeTrusted_MarksNoRow()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, WithChain(complete: true))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-element']").Select(row => row.GetAttribute("data-trust")), Is.All.Null);
+            Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-reference-note']"), Is.Empty);
+        }
+    }
+
     [Test]
     public void ServerCertificateCard_WhereOnlyARootCanBeTrustedAndNoneWasFound_DoesNotOfferTheTrustAction()
     {
