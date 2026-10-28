@@ -9,6 +9,33 @@ audience: administrator
 
 When an import stages a reference attribute value (for example a group member's Distinguished Name) that does not correspond to any object in the Connector Space, JIM cannot resolve the reference. The most common cause is the referenced object sitting outside the configured [Container Scope](partitions-and-containers.md), which can be entirely deliberate: excluding foreign or out-of-remit objects from import is a normal scoping decision.
 
+```jim-diagram
+archetype: comparison
+title: The three Unresolved Reference Handling modes
+desc: "Error, the default, marks each affected object's Run Profile execution item with an Unresolved Reference error and completes the Activity with a warning showing the errored items; choose it when every reference is expected to resolve. Warn raises no per-object errors and completes the Activity with a warning carrying a summary count and View Affected Objects; choose it when unresolved references are worth a glance but should not read as failures. Ignore raises neither, and the import completes successfully; choose it when unresolved references are expected and benign. In every mode each execution item records how many references were left unresolved, and the same setting governs export."
+columns:
+  - { label: Error, sub: the default }
+  - { label: Warn }
+  - { label: Ignore }
+rows:
+  - label: Execution item
+    cells:
+      - { text: Unresolved Reference error }
+      - { text: no error, sub: references listed in amber }
+      - { text: no error, sub: references listed in amber }
+  - label: Activity
+    cells:
+      - { text: warning, sub: showing the errored items }
+      - { text: warning, sub: "a summary count, View Affected Objects" }
+      - { text: completes successfully }
+  - label: Choose it when
+    cells:
+      - { text: every reference should resolve }
+      - { text: "worth a glance, not a failure" }
+      - { text: expected and benign }
+footer: "In every mode each execution item counts its unresolved references; the setting governs export too"
+```
+
 Each Connected System has an **Unresolved Reference Handling** setting that controls what happens when this occurs during import:
 
 | Mode | Behaviour |

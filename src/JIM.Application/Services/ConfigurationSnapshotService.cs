@@ -1309,6 +1309,7 @@ public class ConfigurationSnapshotService
             AddEnum(children, "category", setting.Category, "Category");
             AddEnum(children, "type", setting.Type, "Type");
             Add(children, "description", setting.Description, "Description");
+            Add(children, "example", setting.Example, "Example");
             Add(children, "required", Render(setting.Required), "Required");
             if (setting.Type == ConnectedSystemSettingType.StringEncrypted && !string.IsNullOrEmpty(setting.DefaultStringValue))
                 children.Add(ConfigurationSnapshotNode.Secret("defaultStringValue", ComputePlaintextHash(setting.DefaultStringValue, hashKey), "Default value"));

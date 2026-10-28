@@ -22,6 +22,28 @@ The LDAP service account used by JIM should follow the principle of least privil
 - **For reading the password policy (OpenLDAP)**<br /> Two optional reads, each buying something different. Read on the policy entry named by `olcPPolicyDefault` (and its siblings) gives JIM the rules themselves. Read on the overlay's configuration under `cn=config` (the `olcOverlay=ppolicy` entries) tells JIM which policy is the default where more than one exists, and whether a check module is configured; without it, a directory with a single policy entry is still read in full, while one with several is reported as not readable.
 - **For a definite answer on policy overrides (OpenLDAP and 389 Directory Server)**<br /> Read access over the objects JIM manages that includes the operational `pwdPolicySubentry` attribute (OpenLDAP) or the policy containers (389) lets JIM report that overrides exist. Neither directory offers a way to prove that none do, so the best answer there is could not tell, and the figures shown remain a floor.
 
+```jim-diagram
+archetype: anatomy
+title: The rights JIM's service account needs
+desc: "JIM binds as a dedicated service account, never a directory administrator (a Domain Admin, the rootDN or the Directory Manager), and the access is granted to a group the account is a member of. For import, it needs read on the containers and attributes JIM imports. For export, create, modify and delete in the target containers; with Create containers as needed? on, it may also create organisational units. For Delta Import, read on where the directory records its changes. On Active Directory, importing deletions needs List Contents, Read Property and Read Permissions on the Deleted Objects container. Probing generated values needs read on the probed attributes across the whole partition. Setting passwords needs Reset Password on the containers JIM manages. Reading the password policy is optional, and buys a definite answer."
+subject:
+  kind: object
+  label: The service account's rights
+  parts:
+    - { label: Import, detail: read what JIM imports }
+    - { label: Export, detail: "create, modify, delete in the targets" }
+    - { label: "Create containers as needed?", detail: create organisational units }
+    - { label: Delta Import, detail: read where changes are recorded }
+    - { label: Deleted Objects, detail: "Active Directory: list and read it" }
+    - { label: Probing, detail: read probed attributes partition-wide }
+    - { label: Passwords, detail: Reset Password where JIM manages }
+properties:
+  - { name: Bind as, value: a dedicated account }
+  - { name: Grant to, value: a group it is in }
+  - { name: Never, value: a directory administrator }
+  - { name: Optional, value: password policy reads }
+```
+
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.
 

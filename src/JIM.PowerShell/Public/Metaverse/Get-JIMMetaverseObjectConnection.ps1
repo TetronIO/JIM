@@ -43,10 +43,18 @@ function Get-JIMMetaverseObjectConnection {
         ConnectedSystemId (int): The unique identifier of the Connected System.
         Connected (bool): $true for a joined Connected System Object, $false for an export Synchronisation Rule that
             has not connected.
-        Object (string): The joined Connected System Object's name, or its external id where it has none; empty when
-            not connected.
+        Object (string): The joined Connected System Object's identifier as the portal's Connections tab shows it: its
+            Secondary External ID (for an LDAP Connected System, its distinguished name) where it has one, otherwise its
+            External ID, falling back to the value a queued Pending Export will assign; empty when not connected.
         ConnectedSystemObjectId (guid): The unique identifier of the joined Connected System Object; empty when not
             connected.
+        ExternalId (string): The joined object's External ID; empty when it has none yet or when not connected.
+        SecondaryExternalId (string): The joined object's Secondary External ID; empty when its Connected System has
+            none, it has no value yet, or when not connected.
+        PendingExternalId (string): The External ID a queued Pending Export will give the joined object, where it has
+            none yet; empty otherwise.
+        PendingSecondaryExternalId (string): The Secondary External ID a queued Pending Export will give the joined
+            object, where it has none yet; empty otherwise.
         ObjectType (string): The Connected System Object Type's name.
         Role (string): Source, Target, Source and Target or None, from the enabled Synchronisation Rules for that
             Connected System and Object Type; always Target when not connected.
@@ -149,8 +157,14 @@ function Get-JIMMetaverseObjectConnection {
                 ConnectedSystem         = $connection.ConnectedSystemName
                 ConnectedSystemId       = $connection.ConnectedSystemId
                 Connected               = $true
-                Object                  = $connection.DisplayName
+                Object                  = @($connection.SecondaryExternalId, $connection.PendingSecondaryExternalId,
+                                              $connection.ExternalId, $connection.PendingExternalId) |
+                                              Where-Object { $_ } | Select-Object -First 1
                 ConnectedSystemObjectId = $connection.ConnectedSystemObjectId
+                ExternalId              = $connection.ExternalId
+                SecondaryExternalId     = $connection.SecondaryExternalId
+                PendingExternalId       = $connection.PendingExternalId
+                PendingSecondaryExternalId = $connection.PendingSecondaryExternalId
                 ObjectType              = $connection.ObjectTypeName
                 Role                    = $role
                 State                   = $connection.State
@@ -175,6 +189,10 @@ function Get-JIMMetaverseObjectConnection {
                 Connected               = $false
                 Object                  = $null
                 ConnectedSystemObjectId = $null
+                ExternalId              = $null
+                SecondaryExternalId     = $null
+                PendingExternalId       = $null
+                PendingSecondaryExternalId = $null
                 ObjectType              = $entry.ObjectTypeName
                 Role                    = 'Target'
                 State                   = $entry.Reason

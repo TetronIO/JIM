@@ -9,6 +9,38 @@ audience: administrator
 
 These pages take JIM into production and keep it there: installing it on Docker or Podman, signing in through your identity provider, securing it, configuring it, and upgrading, backing up and troubleshooting it.
 
+```jim-diagram
+archetype: map
+title: How the Administration pages connect
+desc: "Deployment installs JIM, on Docker or on Podman (Running on Podman), and leads to TLS and Reverse Proxy for JIM's certificate and to Single Sign-On Setup for sign-in, whose settings are in the Configuration Reference; the Configuration Reference leads to Preview Features for the Preview flags. Security Headers and Security Audit Events come from the same security assessment. Upgrading and a Factory Reset both start with a backup from Backup & Disaster Recovery, the only way to undo a reset. Troubleshooting leads to Troubleshooting Synchronisation for runs, and uses Logs. Each box links to its page."
+nodes:
+- {id: sso, label: Single Sign-On Setup, link: sso-setup.md, row: 0, col: 0}
+- {id: deploy, label: Deployment, link: deployment.md, row: 0, col: 1}
+- {id: tls, label: TLS and Reverse Proxy, link: tls-and-reverse-proxy.md, row: 0, col: 2}
+- {id: headers, label: Security Headers, link: security-headers.md, row: 1, col: 3}
+- {id: config, label: Configuration Reference, link: configuration.md, row: 1, col: 0}
+- {id: podman, label: Running on Podman, link: podman.md, row: 1, col: 1}
+- {id: audit, label: Security Audit Events, link: security-audit-events.md, row: 1, col: 2}
+- {id: preview, label: Preview Features, link: preview-features.md, row: 2, col: 0}
+- {id: upgrade, label: Upgrading, link: upgrading.md, row: 2, col: 1}
+- {id: backup, label: Backup & Recovery, link: backup-recovery.md, row: 2, col: 2}
+- {id: reset, label: Factory Reset, link: factory-reset.md, row: 2, col: 3}
+- {id: logs, label: Logs, link: logs.md, row: 3, col: 0}
+- {id: trouble, label: Troubleshooting, link: troubleshooting.md, row: 3, col: 1}
+- {id: syncfix, label: Troubleshooting Synchronisation, link: troubleshooting-synchronisation.md, row: 3, col: 2}
+edges:
+- {from: deploy, to: sso, label: sign-in}
+- {from: deploy, to: tls, label: certificate}
+- {from: deploy, to: podman, label: on Podman}
+- {from: audit, to: headers, label: see also}
+- {from: sso, to: config, label: settings in}
+- {from: config, to: preview, label: flags in}
+- {from: upgrade, to: backup, label: back up first}
+- {from: reset, to: backup, label: back up first}
+- {from: trouble, to: syncfix, label: for runs}
+- {from: trouble, to: logs, label: uses}
+```
+
 <div class="grid cards" markdown>
 
 -   **[Working with Lists](portal-lists.md)**

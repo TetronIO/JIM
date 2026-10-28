@@ -9,6 +9,33 @@ audience: administrator
 
 JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The installer sets them for you; to change one later, edit the file. The settings and their names are the same on both runtimes.
 
+```jim-diagram
+archetype: comparison
+title: Environment variables and Service Settings compared
+desc: "Environment variables are kept in a file on the server, .env, or jim-config.yaml on Podman; you change one by editing the file, and it takes effect when JIM restarts. They suit infrastructure: the database connection, the OIDC authority, log paths. Service Settings are kept in the database; an Administrator changes them in the portal at Admin > Service Settings, which records who changed each and when, and most take effect at once, without a restart. They suit day-to-day operation, such as history retention, API rate limits and the synchronisation page size. A read-only Service Setting that mirrors a variable shows the value JIM started with."
+columns:
+- {label: Environment variables, sub: '`.env`, or `jim-config.yaml` on Podman'}
+- {label: Service Settings, sub: Admin > Service Settings}
+rows:
+- label: Kept in
+  cells:
+  - {text: a file on the server}
+  - {text: the database}
+- label: Changed by
+  cells:
+  - {text: editing the file}
+  - {text: an Administrator, sub: 'audited: who and when'}
+- label: Takes effect
+  cells:
+  - {text: when JIM restarts}
+  - {text: 'most at once', sub: no restart}
+- label: Suits
+  cells:
+  - {text: infrastructure, sub: 'database, OIDC authority, log paths'}
+  - {text: day-to-day operation, sub: 'retention, rate limits, page size'}
+footer: 'A read-only Service Setting that mirrors a variable shows the value JIM started with'
+```
+
 !!! tip
     A fully commented `.env.example` template is included with every release and is available in the [GitHub repository](https://github.com/TetronIO/JIM/releases).
 

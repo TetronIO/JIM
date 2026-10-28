@@ -100,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 The Connections tab names each object by its Secondary External ID where it has one, such as an LDAP distinguished name, with its External ID beneath. REST and `Get-JIMMetaverseObjectConnection` return both, plus pending values, in place of `displayName`.
 - 🔄 A Full Synchronisation now evaluates every Connected System Object on every run, whether or not it has changed, so it corrects anything a Delta Synchronisation missed and applies JIM upgrades to existing data. It takes longer on a large system; schedule Delta Synchronisation for routine runs. (#891)
 - 🔄 The Operations page's Queue and History tabs are now one **Activity** tab: queued, running and finished work in time order, full progress for every run including parallel Schedule steps, estimated start and finish times, and the next Schedule due. Each section's heading folds its rows, an empty section is one line, and the filters sit behind a **Filters** button with the active ones shown as chips. (#2549)
 - 🔄 **Service Health** on Administration > Operations now opens collapsed to its one line: the verdict, whether the page is updated live, and the next Schedule due. The chevron opens the cards, and the portal remembers the choice. (#1635)
@@ -176,6 +177,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 The side panel for a finished run on the Operations page's **Activity** tab now shows why it completed with a warning, beneath its status, where it showed the status alone and the reason was only on the Activity page.
 - 🐛 A portal tab that stops responding, such as one frozen in the background, no longer leaves errors in JIM.Web's log when its page is closed. Lists now finish closing cleanly, and the remaining "Unhandled exception in circuit" entry is logged as a warning, as it already was for a browser that had disconnected.
+- 🐛 The SQL Connector can now be configured in the portal: its required **Object Types** setting showed "Unknown setting type" instead of a field, so the JSON document describing your tables could only be set through REST or PowerShell. It is now a multi-line field with a complete example beneath it to copy, and saving with it empty is refused.
 - 🐛 A run queued behind a parallel Schedule step now waits for the step to finish. It used to start alongside it, so a hand-queued Full Import could run at the same time as the Schedule's Full Import of the same Connected System.
 - 🐛 A leaver whose end date passes, or a joiner whose start date arrives, is now processed by the next Delta Synchronisation once Temporal Scope Reconciliation has flagged them; until now only a Full Synchronisation applied the change, so a schedule of Delta Synchronisations never did.
 - 🐛 Sorting or searching an Activity's execution items by name no longer times out on large runs; a 40,000-item Display Name sort took 48 seconds and showed an error page.

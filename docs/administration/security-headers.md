@@ -12,6 +12,17 @@ set of defence-in-depth security headers. This is an application-layer control (
 Misconfiguration) that reduces the impact of cross-site scripting, clickjacking, and MIME-sniffing attacks, and
 requires no configuration.
 
+```jim-diagram
+archetype: flow
+title: How JIM's security headers reach the browser
+desc: "Every response from JIM.Web, whether the portal, a static asset or the REST API, gets five security headers: the Content Security Policy and four more. Where something more specific sets one of them, its value wins. A reverse proxy in front of JIM, if there is one, passes the headers on unchanged unless it is configured to strip or rewrite them. The browser then applies them."
+in: {label: JIM.Web response, note: 'portal, asset or API'}
+steps:
+- {id: headers, label: Security headers, sub: 'CSP and four more', note: 'a more specific value wins'}
+- {id: proxy, label: Reverse proxy, sub: if there is one, note: 'passes them on unless set to strip'}
+out: {label: Browser, note: applies them}
+```
+
 ## :material-shield-lock-outline: Headers sent
 
 | Header | Value | Purpose |

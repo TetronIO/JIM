@@ -4512,6 +4512,9 @@ namespace JIM.PostgresData.Migrations
                     b.PrimitiveCollection<List<string>>("DropDownValues")
                         .HasColumnType("text[]");
 
+                    b.Property<string>("Example")
+                        .HasColumnType("text");
+
                     b.Property<string>("Name")
                         .HasColumnType("text");
 

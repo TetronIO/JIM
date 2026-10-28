@@ -13,6 +13,25 @@ The JIM SQL Connector connects JIM to identity data held in a relational databas
 
 One Connected System covers one database, and can synchronise several of its tables at once. You describe which tables (or views) hold which kind of object in a short JSON document; JIM discovers the columns and their types from the database itself.
 
+```jim-diagram
+archetype: anatomy
+title: What one entry in the Object Types document says
+desc: "Each entry in the Object Types document describes one Object Type, and says only what the database cannot. name is what JIM calls the Object Type. table, or a select statement, is where its rows come from; an Object Type read through select can be imported but not exported to. anchorColumns are the columns that identify a row, and become its External ID. columns lists the columns holding another object's key, which become references. relatedTables names child tables, each of which becomes a multi-valued attribute. watermarkColumn or changeLog is needed only for a Delta Import. JIM discovers the ordinary columns and their types itself, and checks the document when you save it."
+subject:
+  kind: object
+  label: One Object Type entry
+  parts:
+    - { label: "`name`", detail: what JIM calls the Object Type }
+    - { label: "`table` or `select`", detail: "where its rows come from; `select` is import only" }
+    - { label: "`anchorColumns`", detail: "identify a row: the External ID" }
+    - { label: "`columns`", detail: "another object's key: a reference" }
+    - { label: "`relatedTables`", detail: "a child table: a multi-valued attribute" }
+    - { label: "`watermarkColumn` or `changeLog`", detail: for Delta Import only }
+properties:
+  - { name: Ordinary columns, value: discovered by JIM }
+  - { name: Checked, value: when you save }
+```
+
 !!! note "This page is about databases JIM synchronises with"
     JIM's own data store is PostgreSQL and is configured when JIM is deployed; see [Deployment](../administration/deployment.md). Nothing on this page affects it.
 
@@ -104,7 +123,7 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 | Setting | Required | What to enter |
 |---------|----------|---------------|
-| Object Types | Yes | The JSON document describing your tables. Step 2 explains it. |
+| Object Types | Yes | A JSON document describing your tables, typed or pasted into this multi-line field. Step 2 explains it. |
 
 #### Delta Import
 
@@ -114,7 +133,9 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 ### Step 2: Describe your tables
 
-The **Object Types** setting tells JIM which tables hold which objects. Each entry names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
+SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM in a short JSON document. Enter it in the **Object Types** field under **Object Type Configuration** on the Connected System's **Settings** tab. The field shows a complete example beneath it; select **Copy** to start from that.
+
+Each entry in the document names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
 
 ```json title="A Person with a manager reference and a related table of phone numbers"
 {

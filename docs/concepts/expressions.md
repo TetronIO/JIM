@@ -9,6 +9,19 @@ audience: administrator
 
 When a Synchronisation Rule flows an attribute from one system to another, it often needs to do more than copy a value across unchanged. You might want to build an email address from a first and last name, force a username to lower case, decide whether an account should be enabled based on someone's employment status, or skip an object entirely unless it meets a condition. JIM's **expression language** is how you describe these transformations.
 
+```jim-diagram
+archetype: flow
+title: How one expression builds an email address for one object
+desc: "During synchronisation, JIM evaluates an expression for each object to produce the value of a target attribute. Taking the expression Lower(mv[\"First Name\"]) + \".\" + Lower(mv[\"Last Name\"]) + \"@company.com\" for Jane Smith's Metaverse Object: the expression reads the First Name and Last Name attributes, giving Jane and Smith; the Lower function turns them into jane and smith; and the + operator joins them with a full stop and @company.com. The target attribute receives jane.smith@company.com."
+in: {label: Metaverse Object, note: Jane Smith}
+container: {label: Expression, tag: evaluated for each object}
+steps:
+- {id: read, label: Reads attributes, sub: "First Name: Jane, Last Name: Smith"}
+- {id: fn, label: "Applies `Lower()`", sub: "jane, smith"}
+- {id: op, label: "Joins with `+`", sub: 'adds "." and "@company.com"'}
+out: {label: Target attribute, note: '`jane.smith@company.com`'}
+```
+
 An expression is a short, readable formula that JIM evaluates during synchronisation to produce the value for a target attribute. If you have ever written a formula in a spreadsheet cell, this will feel familiar: you reference attributes much as a spreadsheet references cells, combine them with operators and functions, and JIM works out the result for each object as it is synchronised. No programming experience is required.
 
 ## :material-swap-vertical: Where Expressions Fit

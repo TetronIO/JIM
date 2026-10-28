@@ -9,6 +9,33 @@ audience: administrator
 
 Read this before you write an [expression](expressions.md) that references an attribute which might be absent. How JIM treats a missing input decides whether a target value is **cleared**, **kept**, or **silently filled with malformed data**. Get this wrong and an expression can quietly clear good data, or write a broken value that passes straight through to the target system.
 
+```jim-diagram
+archetype: comparison
+title: Where a missing input ends up, by how the expression uses it
+desc: "An attribute the object does not have reads as null. Passed to a string function such as Trim, the null travels through unchanged, the expression returns null, and the target is cleared. Joined with + in a concatenation, the null reads as an empty string, so the expression returns a real but malformed value, such as jane.@company.com, which is stored as it is. Guarded with Coalesce, the expression returns the fallback, and the fallback is stored. The effect on the target is for an attribute with one contributing Synchronisation Rule. Missing Input Behaviour can have JIM refuse instead: contribute no value, fail the mapping or fail the object."
+columns:
+- {label: A string function, sub: '`Trim(cs["middleName"])`'}
+- {label: Concatenation, sub: '`a + "." + b`'}
+- {label: A guard, sub: '`Coalesce(a, b)`'}
+rows:
+- label: The missing input reads as
+  cells:
+  - {text: "null"}
+  - {text: an empty string}
+  - {text: "null, then the fallback"}
+- label: The expression returns
+  cells:
+  - {text: "null", sub: travels through unchanged}
+  - {text: a real value, sub: '`jane.@company.com`'}
+  - {text: the fallback's value}
+- label: The target attribute
+  cells:
+  - {text: cleared, sub: with one contributor}
+  - {text: a malformed value stored, sub: passes straight through}
+  - {text: the fallback stored}
+footer: "Missing Input Behaviour can refuse instead: contribute no value, fail the mapping, or fail the object"
+```
+
 When you reference an attribute the object does not have (for example `cs["middleName"]` on a person with no middle name), the expression sees **null**. There are four behaviours to understand, and a per-mapping setting (point 5) that lets you have JIM refuse the outcome rather than guess at it.
 
 ## :material-null: 1. A null result means "no value", never "leave it alone"

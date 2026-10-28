@@ -10,6 +10,22 @@ validated: v0.16.0
 
 An **activity** is a tracked operation in JIM. Every significant action creates an activity record with status, timing, and summary statistics: Run Profile executions, schema imports, data generation, certificate management, and configuration changes all produce activities. Example data generation is now its own distinct **Data Generation** activity type, separate from configuration changes to an Example Data Template.
 
+```jim-diagram
+archetype: anatomy
+title: What an Activity records
+desc: 'An Activity records its status, from In progress to Complete, Complete with warning, Complete with error, Failed with error or Cancelled; who initiated it (a user, an API key, the system, a Schedule or Anonymous); its timing and summary statistics, such as `totalErrors`; for a Run Profile execution, an execution item for each object it touched; for a configuration change, a versioned snapshot of the object after the change; and, where a Schedule produced it, the Schedule and which of its steps it was.'
+subject:
+  kind: object
+  label: Activity
+  parts:
+  - {label: Status, detail: 'In progress, then how it ended'}
+  - {label: Initiated by, detail: 'user, API key, System, Schedule or Anonymous'}
+  - {label: Summary statistics, detail: 'timing and counters, such as `totalErrors`'}
+  - {label: Execution items, detail: 'Run Profile executions: one per object'}
+  - {label: Configuration Change History, detail: 'configuration changes: a versioned snapshot'}
+  - {label: Schedule context, detail: the Schedule and which step}
+```
+
 Activities are the primary mechanism for monitoring synchronisation progress and troubleshooting issues. Run Profile activities additionally include detailed per-object execution items, so you can drill from a high-level "5 errors" counter down to the specific objects that failed.
 
 ## :material-progress-clock: Lifecycle

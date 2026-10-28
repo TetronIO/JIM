@@ -9,6 +9,27 @@ audience: automation-author
 
 JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the Metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
 
+```jim-diagram
+archetype: map
+title: How the API and its documentation fit together
+desc: "The PowerShell Module wraps JIM's REST API, which serves every endpoint under /api/v1/. Every request needs Authentication, except a few system endpoints such as the health probes, and requests are throttled by Rate Limiting. Every endpoint is documented in the interactive API reference, which is also served as an OpenAPI document for generating client code, and the Configuration section explains the objects the endpoints manage. Each node except the REST API and the OpenAPI document links to its page."
+nodes:
+- {id: auth, label: Authentication, link: authentication.md, row: 0, col: 1}
+- {id: ps, label: PowerShell Module, link: ../powershell/index.md, row: 1, col: 0}
+- {id: api, label: "REST API, `/api/v1/`", row: 1, col: 1}
+- {id: ref, label: API reference, link: reference/, row: 1, col: 2}
+- {id: openapi, label: OpenAPI document, row: 0, col: 2}
+- {id: rate, label: Rate Limiting, link: rate-limiting.md, row: 2, col: 1}
+- {id: config, label: Configuration, link: ../configuration/index.md, row: 2, col: 2}
+edges:
+- {from: ps, to: api, label: wraps}
+- {from: api, to: auth, label: most requests need}
+- {from: api, to: rate, label: throttled by}
+- {from: api, to: ref, label: documented in}
+- {from: ref, to: openapi, label: also as}
+- {from: ref, to: config, label: objects explained in}
+```
+
 ## :material-map-search-outline: Where to find what
 
 | Looking for | Go to |

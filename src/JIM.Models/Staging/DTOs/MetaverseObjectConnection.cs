@@ -17,10 +17,27 @@ public class MetaverseObjectConnection
     public Guid ConnectedSystemObjectId { get; set; }
 
     /// <summary>
-    /// The object's external id, or its display name where the external id could not be rendered.
-    /// Never both; see <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/>.
+    /// The object's External ID as the Connected System holds it; null when it has none yet (an object awaiting
+    /// provisioning).
     /// </summary>
-    public string? DisplayName { get; set; }
+    public string? ExternalId { get; set; }
+
+    /// <summary>
+    /// The object's Secondary External ID (for an LDAP Connected System, its distinguished name); null when the
+    /// Connected System has no Secondary External ID or the object has no value for it yet.
+    /// </summary>
+    public string? SecondaryExternalId { get; set; }
+
+    /// <summary>
+    /// The External ID a queued Pending Export will give the object, where it has no External ID yet; null otherwise.
+    /// </summary>
+    public string? PendingExternalId { get; set; }
+
+    /// <summary>
+    /// The Secondary External ID a queued Pending Export will give the object, where it has no Secondary External ID
+    /// yet; null otherwise.
+    /// </summary>
+    public string? PendingSecondaryExternalId { get; set; }
 
     /// <summary>
     /// The Connected System's id.

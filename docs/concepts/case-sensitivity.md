@@ -9,6 +9,33 @@ audience: administrator
 
 Whenever JIM compares two pieces of text, it is answering one of four questions. Each question has one rule, so once you know which question a comparison asks, you know how it treats case.
 
+```jim-diagram
+archetype: decision
+title: How a comparison treats case, by the question it asks
+desc: "Find the question a comparison of two pieces of text asks. Finding something (search boxes, list filters and log search) ignores case. Testing whether a value meets a condition (scoping criteria, Predefined Search criteria and comparisons in expressions) is exact, unless you say otherwise. Asking whether two values are the same thing (identifiers, references, Object Matching Rules, generated-value uniqueness and names) ignores case, so JBloggs is jbloggs, unless the value is an identifier declared case-exact, which compares exactly because its Connected System treats the two as different. Asking whether a value has changed is exact, so a change of case is a change."
+start: {label: Two pieces of text}
+questions:
+- {id: find, label: "Is it finding something?", sub: "search boxes, filters, log search"}
+- {id: cond, label: "Is it testing a condition?", sub: "scoping, search criteria, expressions"}
+- {id: same, label: "Are two values the same thing?", sub: "identifiers, matching, uniqueness, names"}
+- {id: exact, label: "An identifier declared case-exact?"}
+outcomes:
+- {id: find-ignore, label: Ignore case, sub: a capital letter never hides it}
+- {id: cond-exact, label: Exact, sub: unless you say otherwise}
+- {id: changed, label: Exact, sub: a change of case is a change}
+- {id: id-exact, label: Exact, sub: its system treats them as two}
+- {id: id-ignore, label: Ignore case, sub: "`JBloggs` is `jbloggs`"}
+answers:
+- {from: find, to: find-ignore, label: "yes"}
+- {from: find, to: cond, label: "no"}
+- {from: cond, to: cond-exact, label: "yes"}
+- {from: cond, to: same, label: "no"}
+- {from: same, to: changed, label: "no: has a value changed?"}
+- {from: same, to: exact, label: "yes"}
+- {from: exact, to: id-exact, label: "yes"}
+- {from: exact, to: id-ignore, label: "no"}
+```
+
 Understanding this model helps you predict when a change will flow, when two objects will join, and why an [expression](expressions.md) behaves the way it does.
 
 ## :material-format-letter-case: The policy

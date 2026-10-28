@@ -9,6 +9,29 @@ audience: automation-author
 
 Cmdlets for generating sample identity data for testing and evaluation purposes. Example data sets and templates allow you to populate the Metaverse with realistic test identities without requiring a live Connected System.
 
+```jim-diagram
+archetype: comparison
+title: Two ways to change a template's attributes
+desc: "Set-JIMExampleDataTemplate with -ObjectType replaces the template's whole Object Type graph: every Object Type and attribute configuration you do not supply is removed, so use it to restructure a template. Add-JIMExampleDataTemplateAttribute adds one attribute's configuration to an Object Type the template already has, and keeps every other setting as it was, so use it to add one attribute without restating the rest. A built-in template refuses both; Copy-JIMExampleDataTemplate makes a copy, which is never built in and can be changed."
+columns:
+  - { label: "`Set-JIMExampleDataTemplate`", sub: "with `-ObjectType`" }
+  - { label: "`Add-JIMExampleDataTemplateAttribute`", sub: "one attribute at a time" }
+rows:
+  - label: Changes
+    cells:
+      - { text: "the whole Object Type graph", sub: "every Object Type and attribute" }
+      - { text: one attribute's configuration, sub: "on an Object Type the template already has" }
+  - label: The rest
+    cells:
+      - { text: "removed, unless you supply it again" }
+      - { text: "kept, every setting as it was" }
+  - label: Use it to
+    cells:
+      - { text: restructure a template }
+      - { text: "add one attribute without restating the rest" }
+footer: "Built-in templates refuse both; change a `Copy-JIMExampleDataTemplate` copy"
+```
+
 ---
 
 ## :material-database-outline: Get-JIMExampleDataSet

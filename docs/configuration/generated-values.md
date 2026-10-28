@@ -9,6 +9,19 @@ audience: administrator
 
 Some values have no source to copy: an account name that must not clash with anyone else's, an employee number, a badge number, a correlation identifier. For these, choose **Generated Value** as the mapping's Source Type. JIM generates the value, checks that no one else holds it, and assigns it once; the value then persists and is never regenerated.
 
+```jim-diagram
+archetype: lifecycle
+title: A generated value, from waiting to retired
+desc: 'A generated value is not generated while a higher-priority source has a value or an input of its base expression has none. Once neither holds, JIM generates the value, checks that no one else holds it, and assigns it once; it is kept even if its inputs later change, and never regenerated. When JIM stops holding it, because the object is deleted, another Attribute Flow supplies the attribute, the flow is removed, or a target refused it and JIM corrected it, the value is retired and never issued again while Never reuse a value is on.'
+start: {label: Generated Value mapping}
+states:
+- {id: waiting, label: Not generated yet, sub: 'a higher-priority value, or an input missing'}
+- {id: assigned, label: Assigned once, sub: 'kept, even if its inputs change'}
+transitions:
+- {from: waiting, to: assigned, label: generated and checked unique}
+end: {from: assigned, label: no longer held, note: with Never reuse a value on, state: {label: Retired, sub: never issued again}}
+```
+
 A generated mapping is an ordinary Attribute Flow in every other respect: it is just another way to produce a value for the target attribute, like a direct or expression mapping, and it follows the same [Attribute Priority](attribute-mappings.md#attribute-priority) rules. The only difference is that it generates its value once.
 
 A generated value is a **base expression** plus a **uniqueness token**:

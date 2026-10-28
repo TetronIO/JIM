@@ -11,6 +11,29 @@ These cmdlets read the [Password Synchronisation](../concepts/password-synchroni
 changes on their way to your Connected Systems) and do the two things you can do about the ones that are stuck:
 release them for another attempt, or cancel them.
 
+```jim-diagram
+archetype: comparison
+title: Releasing and cancelling queued password changes
+desc: "Resume-JIMPendingPasswordChange applies to Pending, Parked and Cancelled changes. It makes them due now, clearing the recorded failure and resetting the attempt count, and the Password Delivery Service attempts them within about a second. It leaves Expired changes alone, because the password they carried is gone. Stop-JIMPendingPasswordChange applies to Pending and Parked changes. It marks them Cancelled, keeping them with who cancelled them and when, rather than deleting them. It leaves Expired and already Cancelled changes alone, so their recorded outcome is kept. Both return AffectedCount and record one Activity per request, and neither returns a password."
+columns:
+  - { label: "`Resume-JIMPendingPasswordChange`", sub: release for another attempt }
+  - { label: "`Stop-JIMPendingPasswordChange`", sub: cancel delivery }
+rows:
+  - label: Applies to
+    cells:
+      - { text: "`Pending`, `Parked` and `Cancelled`" }
+      - { text: "`Pending` and `Parked`" }
+  - label: Does
+    cells:
+      - { text: makes them due now, sub: "attempted within about a second; failure and attempt count cleared" }
+      - { text: "marks them `Cancelled`", sub: "kept, not deleted, with who cancelled them and when" }
+  - label: Leaves alone
+    cells:
+      - { text: "`Expired`", sub: the password it carried is gone }
+      - { text: "`Expired` and `Cancelled`", sub: their recorded outcome is kept }
+footer: "Both return `AffectedCount` and record one Activity per request; neither returns a password"
+```
+
 They exist because a recovery is not a job for a browser. When a directory has been refusing passwords and
 somebody has finally fixed the cause, what you want is one command that releases everything parked behind it,
 not a page of rows to click through.

@@ -9,6 +9,33 @@ audience: administrator
 
 A Connected System's schema is the Object Types and attributes JIM discovered in it, and your selection among them decides what JIM reads. This page covers what a selection change does, previewing it, refreshing the schema, and an object that changes Object Type.
 
+```jim-diagram
+archetype: comparison
+title: The three choices on a destructive schema refresh
+desc: "When a schema refresh removes or redefines something, its preview offers three choices. Cancel applies nothing and leaves dependent configuration as it is, but the next Full Import still obsoletes the objects of a removed Object Type. Apply & Disable Dependents records the refresh and disables each dependent Synchronisation Rule and mapping, touching no objects or values; re-enabling is a choice per rule or mapping. Apply & Remove records the refresh and deletes the dependent Synchronisation Rules and mappings; a removed Object Type's objects are marked Obsolete and a removed attribute's stored values are deleted. A refresh that only adds offers Apply Schema Changes instead."
+columns:
+  - { label: Cancel, sub: applies nothing }
+  - { label: Apply & Disable Dependents, sub: then rework what depends }
+  - { label: Apply & Remove, sub: for what is decommissioned }
+rows:
+  - label: The refresh
+    cells:
+      - { text: not recorded }
+      - { text: recorded }
+      - { text: recorded }
+  - label: Dependent rules and mappings
+    cells:
+      - { text: left as they are }
+      - { text: disabled, sub: re-enabled by hand }
+      - { text: deleted }
+  - label: Objects and values
+    cells:
+      - { text: "a removed type's objects obsoleted anyway", sub: by the next Full Import }
+      - { text: none touched }
+      - { text: "a removed type's objects obsoleted", sub: "a removed attribute's values deleted" }
+footer: "A refresh that only adds offers Apply Schema Changes, since additions cannot affect anything"
+```
+
 ## :material-filter-outline: What deselecting means
 
 The Schema tab's ticks decide what JIM **reads**, and the two kinds of tick behave very differently when you clear them.

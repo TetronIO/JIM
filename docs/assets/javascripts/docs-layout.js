@@ -11,10 +11,12 @@
  *
  *   Resizable table columns
  *     A handle on the boundary between two header cells (so on every one but the last). Drag
- *     it, or focus it and use the arrow keys (Shift for bigger steps), to move width between
- *     the two columns it divides; the table keeps its width, so it never starts to scroll.
- *     Neither column goes below its minimum. Double-click to restore the natural layout.
- *     Widths are not remembered.
+ *     it, or focus it and use the arrow keys (Shift for bigger steps), to move the boundary;
+ *     the table keeps its width, so it never starts to scroll. The column left of the handle
+ *     grows or shrinks, and every column to its right gives or takes the difference in
+ *     proportion, none going below its minimum; columns to the left stay put. Dragging back
+ *     within the same drag restores the widths it started from. Double-click to restore the
+ *     natural layout. Widths are not remembered.
  *
  * No external dependencies. scripts/Test-DocsLayout.ps1 drives both in a browser.
  */
@@ -106,19 +108,43 @@
     return total;
   }
 
-  // Moves the boundary after `cell` so the cell becomes `width` wide, taking the difference
-  // from (or giving it to) the column to its right. Their combined width is unchanged, so the
-  // table's is too; neither goes below MIN_COLUMN.
-  function resizeColumn(table, cell, width) {
-    freeze(table);
-    var neighbour = cell.nextElementSibling;
-    if (!neighbour) return;
-    // The widths freeze() set, not the rendered ones, so repeated moves never drift.
-    var pair = parseFloat(cell.style.width) + parseFloat(neighbour.style.width);
-    var next = Math.min(Math.max(Math.round(width), MIN_COLUMN), pair - MIN_COLUMN);
-    if (next < MIN_COLUMN) return;  // the pair is already as narrow as the two minimums allow
-    cell.style.width = next + "px";
-    neighbour.style.width = (pair - next) + "px";
+  function widthsOf(table) {
+    var cells = table.querySelectorAll("thead th");
+    var widths = [];
+    for (var i = 0; i < cells.length; i++) widths.push(parseFloat(cells[i].style.width));
+    return widths;
+  }
+
+  // Moves the boundary after column `index` by `delta` pixels from the widths in `start` (the
+  // widths freeze() set, not the rendered ones, so repeated moves never drift). The column left of
+  // the boundary takes the change and every column to its right absorbs it in proportion: when
+  // they give width, each gives in proportion to what it has above MIN_COLUMN, so none goes below
+  // it; when they take width, each takes in proportion to its width. Columns to the left never
+  // move, so the boundary stays under the pointer, and the total, so the table's width, is fixed.
+  function moveBoundary(table, index, start, delta) {
+    var widths = start.slice();
+    var right = widths.slice(index + 1);
+    var change;
+    if (delta > 0) {
+      var spare = 0;
+      for (var i = 0; i < right.length; i++) spare += Math.max(right[i] - MIN_COLUMN, 0);
+      change = Math.min(delta, spare);
+      for (var j = 0; j < right.length; j++) {
+        if (spare > 0) right[j] -= change * Math.max(right[j] - MIN_COLUMN, 0) / spare;
+      }
+    } else {
+      change = -Math.min(-delta, Math.max(widths[index] - MIN_COLUMN, 0));
+      var total = sum(right);
+      for (var k = 0; k < right.length; k++) right[k] -= change * right[k] / total;
+    }
+    widths[index] += change;
+    for (var m = 0; m < right.length; m++) widths[index + 1 + m] = right[m];
+    var cells = table.querySelectorAll("thead th");
+    for (var n = 0; n < cells.length; n++) cells[n].style.width = widths[n] + "px";
+  }
+
+  function indexOf(cell) {
+    return Array.prototype.indexOf.call(cell.parentNode.children, cell);
   }
 
   function reset(table) {
@@ -143,13 +169,14 @@
       event.preventDefault();
       freeze(table);
       var startX = event.clientX;
-      var startWidth = parseFloat(cell.style.width);
+      var start = widthsOf(table);
+      var index = indexOf(cell);
       handle.setPointerCapture(event.pointerId);
       // A data attribute, not a class: Material styles tables as table:not([class]), and an
       // emptied class attribute would still opt this one out of every rule.
       table.setAttribute("data-jim-col-resizing", "true");
 
-      function move(e) { resizeColumn(table, cell, startWidth + (e.clientX - startX)); }
+      function move(e) { moveBoundary(table, index, start, e.clientX - startX); }
       function up() {
         handle.removeEventListener("pointermove", move);
         handle.removeEventListener("pointerup", up);
@@ -166,8 +193,7 @@
       event.preventDefault();
       var step = event.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
       freeze(table);
-      var width = parseFloat(cell.style.width);
-      resizeColumn(table, cell, width + (event.key === "ArrowRight" ? step : -step));
+      moveBoundary(table, indexOf(cell), widthsOf(table), event.key === "ArrowRight" ? step : -step);
     });
 
     handle.addEventListener("dblclick", function (event) {

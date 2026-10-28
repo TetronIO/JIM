@@ -9,6 +9,33 @@ audience: automation-author
 
 These cmdlets work with the values a generated Attribute Flow issues: those a Metaverse Object holds now, those retired from an attribute and never issued again, the counter behind a Sequence, and the values a target rejected that wait on a decision. How values are generated and kept unique is covered in [Generated Values](../configuration/generated-values.md). A generated Attribute Flow itself is configured with [`New-JIMSyncRuleMapping`](attribute-mappings.md#new-jimsyncrulemapping).
 
+```jim-diagram
+archetype: comparison
+title: Trying again or allowing the rename of a held value
+desc: 'When a target rejects a generated value and JIM holds its export for a decision, Get-JIMGeneratedValueDecision lists it, and two cmdlets act on it. Reset-JIMGeneratedValueDecision tries again, for when the clash has been resolved in the target: it releases the held exports so the next export run tries the same values, and a value the target rejects again is held again. It takes IDs, or every held value of a Connected System, Synchronisation Rule or Metaverse Object, or -AllDecisions, and returns how many it released. Approve-JIMGeneratedValueRename allows the rename of one value, by ID or through the pipeline: at the next export that meets the rejection, JIM checks every system again, chooses the next free value and applies it everywhere the value is used, renaming the account in the Connected System that already holds the current value. It returns the value with Status RenameAllowed. Each action is recorded as an Activity naming who took it.'
+columns:
+- {label: Try again, sub: '`Reset-JIMGeneratedValueDecision`'}
+- {label: Allow the rename, sub: '`Approve-JIMGeneratedValueRename`'}
+rows:
+- label: When
+  cells:
+  - {text: the clash is resolved in the target}
+  - {text: the account holding the value may be renamed}
+- label: Next export
+  cells:
+  - {text: tries the same value, sub: 'rejected again, it is held again'}
+  - {text: 'chooses the next free value, applied everywhere', sub: 'after checking every system again'}
+- label: Acts on
+  cells:
+  - {text: 'IDs, or every value held for one system, rule or object', sub: '`-AllDecisions` to act on all'}
+  - {text: 'held values, one at a time', sub: by ID or through the pipeline}
+- label: Returns
+  cells:
+  - {text: how many it released, sub: '`AffectedCount`; zero is valid'}
+  - {text: the value, sub: 'Status `RenameAllowed`'}
+footer: 'Each action is recorded as an Activity naming who took it; `Get-JIMGeneratedValueDecision` lists what is held'
+```
+
 ---
 
 ## :material-pound: Get-JIMGeneratedValue

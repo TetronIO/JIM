@@ -9,6 +9,21 @@ audience: automation-author
 
 The API key cmdlets manage the full lifecycle of API keys used for non-interactive authentication with JIM. You can create, retrieve, update, and delete API keys, as well as control their enabled state and role assignments.
 
+```jim-diagram
+archetype: lifecycle
+title: An API key's life, one cmdlet per step
+desc: "New-JIMApiKey creates an API key, which starts enabled and works until its expiry date, if it has one. The full key is returned once, by New-JIMApiKey with -PassThru; Get-JIMApiKey shows only its KeyPrefix. Set-JIMApiKey -Disable disables the key, which is kept but no longer valid, and Set-JIMApiKey -Enable enables it again. Remove-JIMApiKey deletes it, enabled or disabled; deletion is permanent, and requests using the key fail at once."
+start: { label: "`New-JIMApiKey`" }
+container: { label: API key, note: "`New-JIMApiKey -PassThru` returns the key once; `Get-JIMApiKey` shows only `KeyPrefix`" }
+states:
+  - { id: enabled, label: Enabled, sub: "works until `ExpiresAt`, if set" }
+  - { id: disabled, label: Disabled, sub: "kept, but no longer valid" }
+transitions:
+  - { from: enabled, to: disabled, label: "`Set-JIMApiKey -Disable`" }
+  - { from: disabled, to: enabled, label: "`Set-JIMApiKey -Enable`" }
+end: { from: container, label: "`Remove-JIMApiKey`", note: permanent, state: { label: Deleted, sub: requests using it fail at once } }
+```
+
 !!! warning
     The full API key value is only visible at creation time. After creation, only the key prefix is returned for identification purposes. Store the key securely immediately; it cannot be retrieved again.
 

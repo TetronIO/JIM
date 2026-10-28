@@ -330,6 +330,36 @@ public class ConnectorSettingValidatorTests
     }
 
     [Test]
+    public void Validate_RequiredTextSettingMissing_ReturnsInvalidResult()
+    {
+        // A Text setting is a multi-line value the administrator types, not a block of display text, so a
+        // required one left empty must stop the save just as a required String setting does.
+        var settingValues = new List<ConnectedSystemSettingValue>
+        {
+            CreateSettingValue("Object Types", requiredGroup: null, type: ConnectedSystemSettingType.Text, required: true)
+        };
+
+        var results = ConnectorSettingValidator.Validate(settingValues);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].IsValid, Is.False);
+        Assert.That(results[0].ErrorMessage, Does.Contain("Object Types"));
+    }
+
+    [Test]
+    public void Validate_RequiredTextSettingSupplied_ReturnsNoResults()
+    {
+        var settingValues = new List<ConnectedSystemSettingValue>
+        {
+            CreateSettingValue("Object Types", requiredGroup: null, type: ConnectedSystemSettingType.Text, stringValue: "{ \"objectTypes\": [] }", required: true)
+        };
+
+        var results = ConnectorSettingValidator.Validate(settingValues);
+
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
     public void Validate_RequiredIntegerSettingMissing_ReturnsInvalidResult()
     {
         // Arrange

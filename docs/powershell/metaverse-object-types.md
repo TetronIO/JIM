@@ -9,6 +9,33 @@ audience: automation-author
 
 The Metaverse Object Type cmdlets manage the kinds of identity JIM stores, such as User and Group: list them, create custom ones, rename them, set how their Metaverse Objects are deleted, and delete them. The attributes an Object Type carries are managed with the [Metaverse Attribute](metaverse-attributes.md) cmdlets. What Object Types are, and how each deletion rule behaves, are covered in [Metaverse](../configuration/metaverse.md).
 
+```jim-diagram
+archetype: decision
+title: What Remove-JIMMetaverseObjectType checks before it deletes
+desc: 'Remove-JIMMetaverseObjectType refuses to delete a built-in Object Type, such as User or Group. It refuses a custom one that any Metaverse Object belongs to, until those objects are deleted, and one that any Synchronisation Rule targets, until those rules are removed; each refusal says which, and changes nothing. With -WhatIf it stops there, having checked that the deletion is allowed and said how many references it would remove. Otherwise it deletes the Object Type, once you confirm or with -Force, removing its Predefined Searches, Example Data Template entries and attribute bindings with it and keeping the attributes themselves; each removal is recorded as an Activity.'
+start: {label: Deleting an Object Type}
+questions:
+- {id: builtin, label: 'Built-in?', sub: such as User or Group}
+- {id: objects, label: 'Any Metaverse Objects of the type?'}
+- {id: rules, label: 'Any Synchronisation Rule targeting it?'}
+- {id: whatif, label: '`-WhatIf`?'}
+outcomes:
+- {id: never, label: Refused, sub: a built-in type is never deleted}
+- {id: objs, label: Refused, sub: delete the objects first}
+- {id: rls, label: Refused, sub: remove those rules first}
+- {id: check, label: Checked only, sub: says what it would remove}
+- {id: deleted, label: Deleted, sub: 'with its Predefined Searches, templates and bindings', good: true}
+answers:
+- {from: builtin, to: never, label: 'yes'}
+- {from: builtin, to: objects, label: 'no'}
+- {from: objects, to: objs, label: 'yes'}
+- {from: objects, to: rules, label: 'no'}
+- {from: rules, to: rls, label: 'yes'}
+- {from: rules, to: whatif, label: 'no'}
+- {from: whatif, to: check, label: 'yes'}
+- {from: whatif, to: deleted, label: 'no: once confirmed'}
+```
+
 ---
 
 ## :material-shape-outline: Get-JIMMetaverseObjectType

@@ -9,6 +9,19 @@ audience: administrator
 
 **Service settings** control runtime behaviour for JIM: instance identity, single sign-on, synchronisation options, recovering work from a crashed Worker, and history retention. Each setting has a key (in dot notation), a typed value, and a default.
 
+```jim-diagram
+archetype: lifecycle
+title: A Service Setting's default, override and revert
+desc: 'Every Service Setting starts on its built-in default, which is then its effective value and Is overridden is false. Setting a value through the admin UI or API overrides it: the value set is the effective value and Is overridden is true. Reverting clears the override, and the effective value returns to the default. Read-only settings, mirrored from environment variables, reject both; change the environment variable and restart JIM instead.'
+container: {label: Service Setting, note: 'read-only settings reject both: change the environment variable and restart JIM'}
+states:
+- {id: default, label: On its default, sub: 'Is overridden: no'}
+- {id: overridden, label: Overridden, sub: 'Is overridden: yes'}
+transitions:
+- {from: default, to: overridden, label: set a value}
+- {from: overridden, to: default, label: revert, note: the override clears}
+```
+
 ## :material-compare-horizontal: Default vs override
 
 Every setting has a built-in default. If you set a value through the admin UI or API, that value takes effect; otherwise the default applies. Two flags help you reason about state at a glance:

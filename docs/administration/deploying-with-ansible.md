@@ -9,6 +9,19 @@ audience: implementer
 
 To deploy JIM across RHEL servers with Ansible, use Red Hat's podman system role: `redhat.rhel_system_roles.podman`, from the RHEL System Roles, or its upstream `fedora.linux_system_roles.podman`. The role installs Podman's Quadlet units, stores Podman secrets, opens firewalld ports and, for a rootless account, enables lingering, which is everything [the installer](deployment.md#what-the-installer-does) does on Podman. JIM ships no role or collection of its own: the playbook below deploys the same files as the installer, rootful, as the installer does by default. [Rootless](#rootless) shows what changes to run JIM rootless, as an account named `jim`.
 
+```jim-diagram
+archetype: flow
+title: What the play does on each server
+desc: "The play takes JIM's files from the playbook's files folder and its secrets from Ansible Vault, and runs on each server in the inventory group jim_servers, in Ansible's order. Its pre_tasks first keep NetworkManager off Podman's interfaces; for a rootless JIM they also create the jim account and let rootless containers publish port 443. The podman system role then stores the Podman secrets, installs the Quadlet units in dependency order and opens the firewall port. Last, the post_tasks enable netavark-firewalld-reload.service, which keeps JIM's network through a firewalld reload. JIM then starts, and is ready when its health check passes."
+in: { label: Playbook and Vault, note: "files and secrets" }
+container: { label: Each server in the group, tag: "`jim_servers`" }
+steps:
+  - { id: pre, label: "`pre_tasks`", sub: NetworkManager setting, note: "rootless: account, port 443" }
+  - { id: role, label: podman system role, sub: "secrets, units, firewall" }
+  - { id: post, label: "`post_tasks`", sub: firewalld reload service }
+out: { label: JIM, note: ready when healthy }
+```
+
 Read [Running JIM on Podman](podman.md) first: it explains the files, and the choice between rootful and rootless.
 
 ## :material-clipboard-list-outline: Before you begin

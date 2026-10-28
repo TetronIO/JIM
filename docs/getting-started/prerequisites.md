@@ -10,6 +10,22 @@ validated: v0.16.0
 
 JIM needs a container runtime, an OpenID Connect identity provider, a TLS certificate, a PostgreSQL database and a host to run them on. Have each in place before you deploy.
 
+```jim-diagram
+archetype: anatomy
+title: What a JIM installation needs in place
+desc: "Before you deploy JIM, have six things in place. A container runtime: Docker Engine 24.0 or later with Docker Compose v2.24 or later, or Podman 4.4 or later with systemd. An OpenID Connect identity provider, with a client registration for JIM. A TLS certificate for JIM's host name, from your certificate authority or created by the setup script. A PostgreSQL database, either the bundled container or your own server. A host with at least 2 CPU cores, 4 GB of RAM and 20 GB of storage, and more memory as the largest Connected System grows. And the network: only inbound HTTPS, on port 443 or a port you choose, needs to be exposed."
+subject:
+  kind: object
+  label: A JIM installation
+  parts:
+  - {label: Container runtime, detail: "Docker Engine 24.0+, or Podman 4.4+"}
+  - {label: Identity provider, detail: "OpenID Connect, with JIM registered"}
+  - {label: TLS certificate, detail: "from your CA, or made by the setup script"}
+  - {label: PostgreSQL, detail: "bundled, or your own server"}
+  - {label: Host, detail: "at least 2 cores, 4 GB RAM, 20 GB disk"}
+  - {label: Network, detail: "only inbound HTTPS exposed"}
+```
+
 ## :material-docker: Container Runtime
 
 JIM runs in containers, on either of two runtimes. You will need one of:

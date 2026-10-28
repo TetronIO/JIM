@@ -9,6 +9,27 @@ audience: administrator
 
 A **schedule** defines an automated sequence of operations that JIM executes on a trigger (cron-based or manual). Each schedule contains ordered steps that can run sequentially or in parallel, and each step runs a [Run Profile](run-profiles.md).
 
+```jim-diagram
+archetype: decision
+title: What a Schedule does when a step fails
+desc: 'When a step fails, its own When this step fails setting decides first. Stop the Schedule or Continue the Schedule there is set on this step. Follow the Schedule, the default for new steps, defers to the Schedule''s When a step fails setting: Stop the Schedule, its default, or Continue the Schedule. A Schedule that stops runs none of the later steps and its execution ends Failed; one that continues runs the remaining steps and ends Complete With Error.'
+start: {label: A step fails}
+questions:
+- {id: step, label: When this step fails, sub: the step's own setting}
+- {id: schedule, label: When a step fails, sub: the Schedule's setting}
+outcomes:
+- {id: stopstep, label: Stops on failure, sub: set on this step; ends Failed}
+- {id: contstep, label: Continues on failure, sub: set on this step; ends Complete With Error}
+- {id: stopsched, label: Stops on failure, sub: from the Schedule; ends Failed}
+- {id: contsched, label: Continues on failure, sub: from the Schedule; ends Complete With Error}
+answers:
+- {from: step, to: stopstep, label: Stop the Schedule}
+- {from: step, to: contstep, label: Continue the Schedule}
+- {from: step, to: schedule, label: Follow the Schedule}
+- {from: schedule, to: stopsched, label: 'Stop the Schedule (default)'}
+- {from: schedule, to: contsched, label: Continue the Schedule}
+```
+
 Schedules are the primary mechanism for automating identity synchronisation workflows. A typical example is a nightly schedule that imports from each Connected System, runs synchronisation, and exports the results.
 
 ## :material-flash-outline: Triggers

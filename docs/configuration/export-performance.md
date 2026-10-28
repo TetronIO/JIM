@@ -9,6 +9,18 @@ audience: administrator
 
 An export sends its changes to the target system in batches of 100. Where the Connector supports it, JIM sends several batches at once, which shortens a large export (provisioning thousands of new starters, say) without changing what is sent. **Max Export Parallelism** decides how many.
 
+```jim-diagram
+archetype: flow
+title: How an export's changes reach the target system at once
+desc: 'An export splits its Pending Exports into batches of 100. Max Export Parallelism decides how many batches JIM sends at once, each over a connection of its own, kept for the whole run. Within each batch, the LDAP Connector''s Export Concurrency sends several changes at once. The two multiply: two batches at once, each with an Export Concurrency of 16, is up to 32 operations in flight against the target system.'
+in: {label: Pending Exports, note: the export's changes}
+out: {label: Target system, note: 'the two multiply: 2 × 16 = up to 32'}
+steps:
+- {id: batch, label: Split into batches, sub: 100 changes each}
+- {id: parallel, label: Batches sent at once, sub: up to Max Export Parallelism}
+- {id: concurrency, label: Changes sent at once, sub: 'per batch: Export Concurrency'}
+```
+
 ## :material-tune-variant: Setting it
 
 Max Export Parallelism is under **Export Performance** on a Connected System's Settings tab, shown for Connectors that can export in parallel: the [LDAP Connector](../connectors/jim-ldap-connector.md) and the [SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md). Script it with `Set-JIMConnectedSystem -MaxExportParallelism`, or `maxExportParallelism` over the REST API.

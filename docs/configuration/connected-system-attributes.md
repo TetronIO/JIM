@@ -9,6 +9,25 @@ audience: administrator
 
 Each attribute JIM discovers in a Connected System's schema carries what JIM learned about it: whether the system lets JIM write it, what type of value it holds, how finely it holds a date, and whether it is a credential. This page covers each.
 
+```jim-diagram
+archetype: anatomy
+title: What JIM records about each attribute
+desc: "Each attribute JIM discovers in a Connected System's schema records its writability (Writable, Read-Only or Set on creation only), its data type, which decides the Metaverse Attributes it can be mapped to, its plurality (single-valued or multi-valued), for a Text attribute whether its values are case-exact, for a DateTime attribute its Date Resolution, the finest step of time kept, and whether it is a credential attribute, which is never managed. Each is discovered from the Connected System's schema; writability is never set by an administrator, and a data type, plurality, case-exact declaration or Date Resolution you set survives a schema refresh."
+subject:
+  kind: object
+  label: Connected System attribute
+  parts:
+    - { label: Writability, detail: "Writable, Read-Only or Set on creation only" }
+    - { label: Data type, detail: which Metaverse Attributes it maps to }
+    - { label: Plurality, detail: single-valued or multi-valued }
+    - { label: Case-exact, detail: "Text: are `JBloggs` and `jbloggs` two values?" }
+    - { label: Date Resolution, detail: "DateTime: the finest step of time kept" }
+    - { label: Credential, detail: "on the blocked list: never managed" }
+properties:
+  - { name: Discovered, value: from the Connected System's schema }
+  - { name: Set by you, value: survives a schema refresh }
+```
+
 ## :material-pencil-lock-outline: Attribute writability
 
 When JIM retrieves a Connected System's schema, each discovered attribute is recorded with how the system will let JIM write to it. You can see this in the Schema tab's **Writability** column, filter the attribute list by it, and read it from the REST API and PowerShell as the attribute's `writability` value. It is discovered, never set by an administrator: it reflects what the Connected System told JIM.

@@ -1,0 +1,49 @@
+[
+  {
+    "archetype": "comparison",
+    "title": "Full and Delta runs compared",
+    "desc": "Full runs read or evaluate every object; Delta runs only what changed. Export has no Full or Delta form.",
+    "columns": [
+      {
+        "label": "Full",
+        "sub": "every object, every time"
+      },
+      {
+        "label": "Delta",
+        "sub": "only what changed, faster"
+      }
+    ],
+    "rows": [
+      {
+        "label": "Import",
+        "cells": [
+          {
+            "text": "reads every object",
+            "sub": "one no longer returned is deleted",
+            "meter": 12
+          },
+          {
+            "text": "reads changes since the last import",
+            "sub": "needs a connector that tracks changes",
+            "meter": 3
+          }
+        ]
+      },
+      {
+        "label": "Synchronisation",
+        "cells": [
+          {
+            "text": "evaluates every Connected System Object",
+            "sub": "previewable before it runs",
+            "meter": 12
+          },
+          {
+            "text": "evaluates objects with pending changes",
+            "meter": 3
+          }
+        ]
+      }
+    ],
+    "footer": "Export flushes the Pending Exports either way: it has no Full or Delta form"
+  }
+]

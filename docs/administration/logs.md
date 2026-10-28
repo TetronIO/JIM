@@ -9,6 +9,18 @@ audience: operator
 
 The **Logs** page (Administration, then **Logs**) shows the log entries JIM's services write, so you can follow up an error or watch a run without a shell on the host. Each entry shows its time, level, service and message, and opens to its full detail: properties, any exception, and the raw entry.
 
+```jim-diagram
+archetype: flow
+title: From a service's log file to one entry's detail
+desc: "JIM's services, Web, Worker, Scheduler and Database, write log files to the shared log directory, JIM_LOG_PATH. On the Logs page you choose a Service, a Date and the Levels, then select Refresh; the filters apply only then. Search messages narrows the list as you type, matching the message or its exception. Selecting an entry opens Log Entry Details, with its properties, any exception and the raw entry."
+in: {label: JIM's services, note: 'Web, Worker, Scheduler, Database'}
+steps:
+- {id: files, label: Log files, sub: '`JIM_LOG_PATH`'}
+- {id: filter, label: Filter, sub: 'Service, Date, Level', note: 'applied on Refresh'}
+- {id: search, label: Search messages, sub: message or exception}
+- {id: detail, label: Log Entry Details, sub: 'properties, exception, raw'}
+```
+
 ## :material-filter-outline: Which logs it shows
 
 | Service | What it logs |

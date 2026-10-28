@@ -9,6 +9,25 @@ audience: automation-author
 
 The Schedule cmdlets manage when JIM runs Run Profiles on its own: create a Schedule with a trigger and a pattern, give it steps, and turn it on or off. To run a Schedule now, or to watch and stop its runs, see [Schedule Executions](schedule-executions.md). What Schedules are, and their trigger types, patterns and step types, are covered in [Schedules](../configuration/schedules.md).
 
+```jim-diagram
+archetype: anatomy
+title: Which cmdlet sets each part of a Schedule
+desc: "A Schedule is created with New-JIMSchedule and changed with Set-JIMSchedule, which set its name and description; its trigger and pattern, with -TriggerType, -PatternType and the times or interval the pattern needs; and what it does when a step fails, with -OnStepFailure Stop or Continue. Enable-JIMSchedule and Disable-JIMSchedule turn it on and off; a Schedule is created disabled unless New-JIMSchedule is given -Enabled. Add-JIMScheduleStep adds a step that runs a Run Profile, with -Parallel to run it alongside the step before; Remove-JIMScheduleStep removes one by its position. Set-JIMScheduleStep -OnFailure sets what one step does when it fails: follow the Schedule, stop or continue. Get-JIMSchedule reads it all back, and Remove-JIMSchedule deletes the Schedule."
+subject:
+  kind: object
+  label: Schedule
+  parts:
+    - { label: "Name, trigger and pattern", detail: "`New-JIMSchedule`, `Set-JIMSchedule`" }
+    - { label: When any step fails, detail: "`-OnStepFailure`: `Stop` or `Continue`" }
+    - { label: Enabled or disabled, detail: "`Enable-JIMSchedule`, `Disable-JIMSchedule`" }
+    - { label: "Steps, each a Run Profile", detail: "`Add-JIMScheduleStep`" }
+    - { label: When one step fails, detail: "`Set-JIMScheduleStep -OnFailure`" }
+    - { label: A step removed, detail: "`Remove-JIMScheduleStep`" }
+    - { label: The whole Schedule removed, detail: "`Remove-JIMSchedule`" }
+properties:
+  - { name: Created, value: "disabled, unless enabled at creation" }
+```
+
 ---
 
 ## :material-calendar-clock-outline: Get-JIMSchedule

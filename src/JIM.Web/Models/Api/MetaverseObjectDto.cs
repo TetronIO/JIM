@@ -300,8 +300,23 @@ public class MetaverseObjectConnectionDto
     /// <summary>The name of the Connected System that holds the object.</summary>
     public string ConnectedSystemName { get; set; } = null!;
 
-    /// <summary>The object's best-ranked name, falling back to its external id.</summary>
+    /// <summary>The object's best-ranked name, falling back to its External ID.</summary>
     public string? DisplayName { get; set; }
+
+    /// <summary>The object's External ID; null when it has none yet (an object awaiting provisioning).</summary>
+    public string? ExternalId { get; set; }
+
+    /// <summary>
+    /// The object's Secondary External ID (for an LDAP Connected System, its distinguished name); null when the Connected
+    /// System has none or the object has no value for it yet.
+    /// </summary>
+    public string? SecondaryExternalId { get; set; }
+
+    /// <summary>The External ID a queued Pending Export will give the object, where it has none yet; null otherwise.</summary>
+    public string? PendingExternalId { get; set; }
+
+    /// <summary>The Secondary External ID a queued Pending Export will give the object, where it has none yet; null otherwise.</summary>
+    public string? PendingSecondaryExternalId { get; set; }
 
     /// <summary>The Connected System Object Type's name (for example "user").</summary>
     public string ObjectTypeName { get; set; } = null!;
@@ -345,8 +360,9 @@ public class MetaverseObjectConnectionDto
 
     /// <summary>
     /// Maps one derived connection, preferring the name the Metaverse Object's own graph carries: the
-    /// connections derivation loads only identifying values (a group can hold thousands), so it names a row by
-    /// its external id, where the detail response has always used the object's best-ranked name.
+    /// connections derivation loads only identifying values (a group can hold thousands), so it carries no name
+    /// and the row falls back to its External ID, where the detail response has always used the object's best-ranked
+    /// name.
     /// </summary>
     public static MetaverseObjectConnectionDto FromConnection(
         MetaverseObjectConnection connection,
@@ -358,7 +374,11 @@ public class MetaverseObjectConnectionDto
             Id = connection.ConnectedSystemObjectId,
             ConnectedSystemId = connection.ConnectedSystemId,
             ConnectedSystemName = connection.ConnectedSystemName,
-            DisplayName = bestRankedName ?? connection.DisplayName,
+            DisplayName = bestRankedName ?? connection.ExternalId ?? connection.PendingExternalId,
+            ExternalId = connection.ExternalId,
+            SecondaryExternalId = connection.SecondaryExternalId,
+            PendingExternalId = connection.PendingExternalId,
+            PendingSecondaryExternalId = connection.PendingSecondaryExternalId,
             ObjectTypeName = connection.ObjectTypeName,
             JoinType = connection.JoinType,
             DateJoined = connectedSystemObject.DateJoined,

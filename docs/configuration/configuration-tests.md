@@ -9,6 +9,27 @@ audience: administrator
 
 A configuration test case holds inputs, and what part of your configuration should give for them: an Attribute Flow's result, a Generated Value's base, whether an object is in a Synchronisation Rule's Scope, or an Object Matching Rule's match values. Saving a change runs the cases it could affect and stops the save if one of them stops passing, so a change cannot break something that used to work without you deciding it should. A case runs through the same code synchronisation runs, so it gives the result a synchronisation would give for the same inputs. It cannot test what depends on other objects, such as which Generated Value is free or which Metaverse Object a match finds.
 
+```jim-diagram
+archetype: decision
+title: What a save does when it stops a test case passing
+desc: 'Saving a change runs every test case covering it twice: against the configuration as saved, and against the change. If no case that passed before fails with the change, the change is saved; a case that was already failing never stops a save. If one does, nothing is saved yet and you choose. Keep editing, the default, saves nothing and leaves the change on the page to correct. Accept the new result saves the change, and each case that stopped passing now expects what the configuration gives. Save anyway saves the change and leaves those cases failing.'
+start: {label: Saving a change}
+questions:
+- {id: broke, label: 'A passing case now fails?', sub: 'each case runs as saved, and with the change'}
+- {id: choose, label: Save stopped, sub: you choose}
+outcomes:
+- {id: saved, label: Saved, sub: an already failing case never stops it, good: true}
+- {id: editing, label: Nothing saved, sub: the change stays on the page}
+- {id: accept, label: Saved; cases updated, sub: each expects the new result}
+- {id: anyway, label: Saved; cases fail, sub: the cases are left as they are}
+answers:
+- {from: broke, to: saved, label: 'no'}
+- {from: broke, to: choose, label: 'yes'}
+- {from: choose, to: editing, label: Keep editing (default)}
+- {from: choose, to: accept, label: Accept the new result}
+- {from: choose, to: anyway, label: Save anyway}
+```
+
 Each case covers exactly one thing: one Attribute Flow, one Synchronisation Rule's Scope, or one Object Matching Rule. It is deleted with what it covers.
 
 ## :material-content-save-outline: Save a test case from a tester

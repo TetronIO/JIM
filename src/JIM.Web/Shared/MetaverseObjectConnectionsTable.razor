@@ -32,7 +32,7 @@ else if (IsLoaded)
         <HeaderContent>
             <MudTh Class="jim-expand-column"></MudTh>
             <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.ConnectedSystemName)" InitialDirection="SortDirection.Ascending">Connected System</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.DisplayName)">Object</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => GetObjectSortKey(c))">Object</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => GetRoleSortKey(c))">Role</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.JoinType)">Join</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="MetaverseObjectConnectionExplanation" SortBy="@(c => c.State)">State</MudTableSortLabel></MudTh>
@@ -51,10 +51,49 @@ else if (IsLoaded)
             <MudTd DataLabel="Connected System">
                 <MudLink Href="@Utilities.GetConnectedSystemHref(context.ConnectedSystemId)">@context.ConnectedSystemName</MudLink>
             </MudTd>
+            @* The Secondary External ID (an LDAP DN) leads where the Connected System has one, being the identifier a
+               person can read; the External ID (often a GUID) sits beneath it for troubleshooting. A value only a
+               Pending Export carries so far is shown as pending. With neither, the object's type names the link. *@
             <MudTd DataLabel="Object">
-                <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ConnectedSystemId, context.ConnectedSystemObjectId)">
-                    @context.DisplayName
-                </MudLink>
+                @{
+                    var objectHref = Utilities.GetConnectedSystemObjectHref(context.ConnectedSystemId, context.ConnectedSystemObjectId);
+                    var leadsWithSecondary = context.SecondaryExternalId != null || context.PendingSecondaryExternalId != null;
+                    var leadValue = leadsWithSecondary ? context.SecondaryExternalId : context.ExternalId;
+                    var leadPendingValue = leadsWithSecondary ? context.PendingSecondaryExternalId : context.PendingExternalId;
+                }
+                @* One line each, capped and clipped with the full value on hover, as the Connector Space keeps its DNs:
+                   a DN wrapped at its first space splits the name it starts with. *@
+                <div class="jim-column-cap" style="--jim-column-cap: 36rem;">
+                    <MudLink Href="@objectHref" Class="jim-text-code jim-one-line" title="@(leadValue ?? leadPendingValue)"
+                             data-testid="jim-mvo-connection-object">
+                        @if (leadValue != null)
+                        {
+                            @leadValue
+                        }
+                        else if (leadPendingValue != null)
+                        {
+                            <PendingValue Value="@leadPendingValue" />
+                        }
+                        else
+                        {
+                            @context.ObjectTypeName
+                        }
+                    </MudLink>
+                    @if (leadsWithSecondary && (context.ExternalId != null || context.PendingExternalId != null))
+                    {
+                        <div class="mud-text-secondary jim-one-line jim-connection-object-external-id" title="@(context.ExternalId ?? context.PendingExternalId)"
+                             data-testid="jim-mvo-connection-object-external-id">
+                            @if (context.ExternalId != null)
+                            {
+                                @context.ExternalId
+                            }
+                            else
+                            {
+                                <PendingValue Value="@context.PendingExternalId" />
+                            }
+                        </div>
+                    }
+                </div>
             </MudTd>
             <MudTd DataLabel="Role">
                 <MudStack Row="true" Spacing="1">
@@ -100,7 +139,7 @@ else if (IsLoaded)
                     <EmptyValue />
                 }
             </MudTd>
-            <MudTd>
+            <MudTd Class="jim-nowrap">
                 <MudButton Variant="Variant.Text" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Visibility"
                            Disabled="@PreviewLoading"
@@ -185,6 +224,13 @@ else if (IsLoaded)
         if (!ExpandedIds.Remove(connection.ConnectedSystemObjectId))
             ExpandedIds.Add(connection.ConnectedSystemObjectId);
     }
+
+    /// <summary>
+    /// Sort key for the Object column: the identifier the row leads with.
+    /// </summary>
+    private static string GetObjectSortKey(MetaverseObjectConnectionExplanation connection) =>
+        connection.SecondaryExternalId ?? connection.PendingSecondaryExternalId
+        ?? connection.ExternalId ?? connection.PendingExternalId ?? string.Empty;
 
     /// <summary>
     /// Sort key for the Role column: sources before targets, and a connection that is both sorts with

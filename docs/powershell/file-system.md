@@ -9,6 +9,18 @@ audience: automation-author
 
 File System cmdlets let you browse the JIM Container's file system, used when configuring file-based connectors (e.g. CSV) to select import/export paths. Only paths within the configured allowed mount points are accessible.
 
+```jim-diagram
+archetype: anatomy
+title: A connector file path, and the cmdlets that check each part
+desc: "A path JIM can use, such as /connector-files/hr/users.csv, starts with an allowed root, one of the mount points Get-JIMFileSystemItem -Roots lists; what follows is found by listing directories with Get-JIMFileSystemItem -Path. Test-JIMFileSystemPath returns $true for a path under an allowed root, and $false for a path anywhere else, which JIM cannot read."
+subject:
+  kind: value
+  parts:
+    - { id: root, text: /connector-files, strong: true, callout: "An allowed root, as `Get-JIMFileSystemItem -Roots` lists it" }
+    - { text: /hr/users.csv }
+derived: { from: root, label: "is the path under it?", box: "`Test-JIMFileSystemPath` returns `$true`", note: "`$false` anywhere else; list inside a root with `Get-JIMFileSystemItem -Path`" }
+```
+
 ---
 
 ## :material-folder-search-outline: Get-JIMFileSystemItem

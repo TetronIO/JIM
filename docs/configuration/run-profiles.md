@@ -10,6 +10,25 @@ validated: v0.16.0
 
 A **Run Profile** defines a synchronisation operation that can be executed against a [Connected System](connected-systems.md). Each Run Profile specifies the type of operation (import, sync, or export), a batch size, and (where applicable) a target partition or file path.
 
+```jim-diagram
+archetype: comparison
+title: Full and Delta runs compared
+desc: "A Full Import reads every object from the Connected System, and an object it no longer returns is deleted; a Delta Import reads only the changes since the last import, and needs a connector that tracks changes. A Full Synchronisation evaluates every Connected System Object, and can be previewed before it runs; a Delta Synchronisation evaluates only objects with pending changes. Export flushes the Pending Exports either way: it has no Full or Delta form."
+columns:
+- {label: Full, sub: 'every object, every time'}
+- {label: Delta, sub: 'only what changed, faster'}
+rows:
+- label: Import
+  cells:
+  - {text: reads every object, sub: one no longer returned is deleted, meter: 12}
+  - {text: reads changes since the last import, sub: needs a connector that tracks changes, meter: 3}
+- label: Synchronisation
+  cells:
+  - {text: evaluates every Connected System Object, sub: previewable before it runs, meter: 12}
+  - {text: evaluates objects with pending changes, meter: 3}
+footer: 'Export flushes the Pending Exports either way: it has no Full or Delta form'
+```
+
 Run Profiles are the building blocks of [Schedules](schedules.md): each step of a Schedule runs a Run Profile. A Run Profile can also be run directly, for a one-off operation.
 
 ## :material-play-circle-outline: Run types
