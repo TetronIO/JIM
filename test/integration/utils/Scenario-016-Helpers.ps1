@@ -213,6 +213,7 @@ function Invoke-Scenario16Row {
         'DriverShape.Raw16Anchor'          { return Test-S16Raw16Anchor -Context $Context -Config $Config }
         'DriverShape.NumberShapes'         { return Test-S16NumberShapes -Context $Context -Config $Config }
         'ConfigurationValidation'          { return Test-S16ConfigurationValidation -Context $Context -Config $Config }
+        'Connection.OracleEncryption'      { return Test-S16OracleEncryption -Context $Context -Config $Config }
         'Scale.FullImport500k'             { return Test-S16ScaleImport -Context $Context -Config $Config }
 
         'Export.Create'                    { return Test-S16ExportCreate -Context $Context -Config $Config }
@@ -1668,6 +1669,57 @@ function Test-S16ConfigurationValidation {
     }
 
     return @{ Status = 'pass'; Detail = "Save-time connectivity test accepted valid settings and refused both a wrong password and an unreachable host." }
+}
+
+# ─── Connection encryption ─────────────────────────────────────────────────────
+
+function Test-S16OracleEncryption {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    # Encryption changes nothing JIM reads back, so every other row would pass just the same over plain
+    # text. The evidence is what each JIMTEST session negotiated, written at logon by the trigger the
+    # seed installs (Get-OracleSessionEncryptionRecordScript). Setup's connectivity tests alone log
+    # sessions from all three systems: two left on the default, Native Network Encryption, and the
+    # App Users system on None.
+    #
+    # The connector asks for encryption and checksumming as REQUIRED, so a session that connected with
+    # it cannot have negotiated neither. What this proves on top is that JIM really asks (a
+    # regression that stopped applying the settings would connect in plain text against this listener,
+    # which accepts either), and which algorithms the two ends settled on.
+    $counts = Invoke-Scenario16Query -Config $Config -Query @"
+SELECT COUNT(CASE WHEN ENCRYPTION LIKE 'AES%' AND CHECKSUM LIKE 'SHA%' AND CHECKSUM <> 'SHA1' THEN 1 END) || ',' ||
+       COUNT(CASE WHEN ENCRYPTION IS NULL AND CHECKSUM IS NULL THEN 1 END) || ',' ||
+       COUNT(CASE WHEN (ENCRYPTION IS NOT NULL OR CHECKSUM IS NOT NULL)
+                   AND NOT (ENCRYPTION LIKE 'AES%' AND CHECKSUM LIKE 'SHA%' AND CHECKSUM <> 'SHA1') THEN 1 END) || ',' ||
+       NVL(MAX(CASE WHEN ENCRYPTION IS NOT NULL THEN ENCRYPTION || ' with ' || CHECKSUM END), 'none')
+  FROM JIM_S16_AUDIT.SESSION_ENCRYPTION;
+"@
+
+    $parts = $counts -split ','
+    if ($parts.Count -ne 4) {
+        return @{ Status = 'fail'; Detail = "Could not read the session encryption record: '$counts'." }
+    }
+    $encrypted = [int]$parts[0]
+    $plain = [int]$parts[1]
+    $other = [int]$parts[2]
+    $negotiated = $parts[3]
+
+    $failures = @()
+    if ($encrypted -eq 0) {
+        $failures += "No JIMTEST session negotiated AES with SHA-2 checksumming, so the systems left on the default, Native Network Encryption, connected without it."
+    }
+    if ($plain -eq 0) {
+        $failures += "No JIMTEST session was unencrypted, so the App Users system set to None did not connect in plain text."
+    }
+    if ($other -gt 0) {
+        $failures += "$other JIMTEST session(s) negotiated something other than AES with SHA-2 checksumming (for example $negotiated)."
+    }
+
+    if ($failures.Count -gt 0) {
+        return @{ Status = 'fail'; Detail = ($failures -join ' ') }
+    }
+
+    return @{ Status = 'pass'; Detail = "$encrypted session(s) on the default, Native Network Encryption, negotiated $negotiated; $plain session(s) on None were plain text." }
 }
 
 # ─── Scale ─────────────────────────────────────────────────────────────────────
