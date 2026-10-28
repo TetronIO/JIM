@@ -315,9 +315,14 @@
         "http://localhost:8406/callback/",
         "http://localhost:8407/callback/",
         "http://localhost:8408/callback/",
-        "http://localhost:8409/callback/"
+        "http://localhost:8409/callback/",
+        "http://localhost:5200/api/reference",
+        "https://localhost:7000/api/reference"
       ],
-      "webOrigins": [],
+      "webOrigins": [
+        "http://localhost:5200",
+        "https://localhost:7000"
+      ],
       "notBefore": 0,
       "bearerOnly": false,
       "consentRequired": false,

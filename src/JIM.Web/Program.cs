@@ -478,6 +478,12 @@ try
     var placeholderAuthorizationEndpoint = $"{authorityBase}/protocol/openid-connect/auth";
     var placeholderTokenEndpoint = $"{authorityBase}/protocol/openid-connect/token";
 
+    // Try It signs in from the browser with PKCE and no secret, so it is a public client: it signs in as the PowerShell
+    // module does, with the same client and the API scope in the same form (#2594). The portal's client is confidential,
+    // and its token endpoint expects a secret the browser does not have.
+    var tryItClientId = PublicClientSignIn.ClientId(clientId, Environment.GetEnvironmentVariable(Constants.Config.SsoPublicClientId));
+    var tryItApiScope = PublicClientSignIn.ApiScope(authority, apiScope, clientId);
+
     // Setup OpenAPI with OAuth2 + API Key security schemes for API documentation
     builder.Services.AddOpenApi("v1", options =>
     {
@@ -500,7 +506,7 @@ try
                 }
             };
 
-            OpenApiSecurityConfiguration.Apply(document, new Uri(authorizationEndpoint), new Uri(tokenEndpoint), apiScope!);
+            OpenApiSecurityConfiguration.Apply(document, new Uri(authorizationEndpoint), new Uri(tokenEndpoint), tryItApiScope!);
         });
 
         // Anonymous endpoints (health probes, version, auth configuration) opt out of the document-wide requirement,
@@ -625,17 +631,19 @@ try
             .AddPreferredSecuritySchemes(OpenApiSecurityConfiguration.ApiKeySchemeName)
             .AddAuthorizationCodeFlow(OpenApiSecurityConfiguration.OAuth2SchemeName, flow =>
             {
-                flow.ClientId = clientId!;
+                flow.ClientId = tryItClientId!;
                 flow.Pkce = Pkce.Sha256;
+                flow.SelectedScopes = ["openid", tryItApiScope!];
             });
     }
 
     if (hasStaticOpenApiDoc)
     {
         // Served here, ahead of UseStaticFiles(), so the document carries the identity provider's real OAuth endpoints
-        // in place of the placeholders written when the image was built, and Try It can sign in (#2544).
+        // and API scope in place of those written when the image was built, and Try It can sign in (#2544, #2594).
         var staticOpenApiDocument = new StaticOpenApiDocument(staticOpenApiPath,
-            cancellationToken => IdentityProviderOAuthEndpoints.ReadAsync(OidcConfigurationManager(app.Services), cancellationToken));
+            cancellationToken => IdentityProviderOAuthEndpoints.ReadAsync(OidcConfigurationManager(app.Services), cancellationToken),
+            tryItApiScope);
         app.Use(async (context, next) =>
         {
             if (HttpMethods.IsGet(context.Request.Method)

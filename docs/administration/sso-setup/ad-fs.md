@@ -120,6 +120,20 @@ JIM_SSO_INITIAL_ADMIN=3f2504e0-4f89-11d3-9a0c-0305e82c3301
 
 To check sign-out too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
 
+## :material-api: Let the API reference sign in (optional)
+
+The API reference at `https://jim.example.com/api/reference` can call JIM's API with an API key as it stands. Its **Try It** can also sign you in through AD FS, using the PowerShell module's application. `Register-JIMIdentityProvider` adds `https://jim.example.com/api/reference` to that application's redirect URIs, so AD FS returns you to the page after you sign in. The browser then asks AD FS for the token itself, and AD FS answers a browser on another site only when Cross-Origin Resource Sharing (CORS) is on for JIM's address. CORS is a setting for the whole AD FS farm, not the Application Group, so the command leaves it to you. It needs AD FS 2019 or later.
+
+On the AD FS server, in PowerShell as an AD FS administrator, turn CORS on and add JIM's address to the trusted origins. `-CORSTrustedOrigins` replaces the list, so this keeps any origins already trusted:
+
+```powershell
+Set-AdfsResponseHeaders -EnableCORS $true
+$origins = @((Get-AdfsResponseHeaders).CORSTrustedOrigins) + 'https://jim.example.com' | Where-Object { $_ } | Select-Object -Unique
+Set-AdfsResponseHeaders -CORSTrustedOrigins $origins
+```
+
+The origin is JIM's address without a path: `https://jim.example.com`, or `https://jim.example.com:8443` on another port. See Microsoft's [guide to AD FS response headers](https://learn.microsoft.com/windows-server/identity/ad-fs/operations/customize-http-security-headers-ad-fs#cors-customization).
+
 ## :material-check-all: Keep the registration right
 
 Run `Register-JIMIdentityProvider` again, with the same `-Url`, to check and repair the registration. It changes nothing when the registration is right, and puts back whatever has drifted, such as a removed redirect URI, a changed scope, or another client given access to JIM's API. The values it returns stay the same, so JIM's settings need no change. Add `-WhatIf` to list what has drifted without changing it.
