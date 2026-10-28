@@ -14,7 +14,7 @@
                 Test-JIMConnection, Get-JIMUserInfo, and Get-JIMRole (Administrator only), all with the bearer token
                 Connect-JIM obtained.
     TryIt       Signs in as the API reference's Try It does (Invoke-TryItSignIn, #2594): the client, endpoints and scope
-                the page and its OpenAPI document give, PKCE back to /api/reference, and the code exchanged with JIM's
+                the page and its OpenAPI document give, PKCE back to /api/reference/, and the code exchanged with JIM's
                 origin, reporting the Access-Control-Allow-Origin AD FS answered. Then /api/v1/userinfo and the
                 Administrator-only API with that bearer token.
 
@@ -74,7 +74,7 @@ try {
         # The settings, never the token.
         $result.tryIt = [ordered]@{
             clientId = $tryIt.Settings.ClientId; authorizationUrl = $tryIt.Settings.AuthorizationUrl; tokenUrl = $tryIt.Settings.TokenUrl
-            apiScope = $tryIt.Settings.ApiScope; origin = $tryIt.Origin; allowedOrigin = $tryIt.AllowedOrigin
+            apiScope = $tryIt.Settings.ApiScope; redirectUri = $tryIt.Settings.RedirectUri; origin = $tryIt.Origin; allowedOrigin = $tryIt.AllowedOrigin
         }
         $api = Get-BearerApiResult -JimUrl $JimUrl -AccessToken $tryIt.AccessToken
         $result.userInfo = $api.UserInfo

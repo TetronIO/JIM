@@ -219,7 +219,7 @@ Describe 'Register-JIMIdentityProvider -Provider Keycloak against Keycloak' -Ski
     }
 
     It 'Signs the same person in to the API reference''s Try It, from JIM''s page, with JIM''s audience (#2594)' {
-        $tokens = Invoke-SignIn -ClientId 'jim-powershell' -RedirectUri "$($script:JimUrl)/api/reference" -Scope 'openid jim-api' `
+        $tokens = Invoke-SignIn -ClientId 'jim-powershell' -RedirectUri "$($script:JimUrl)/api/reference/" -Scope 'openid jim-api' `
             -Origin $script:JimUrl
 
         $access = ConvertFrom-Jwt $tokens.access_token

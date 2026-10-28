@@ -107,9 +107,10 @@ function Get-JIMAdfsRegistrationPlan {
     $apiName = "$Name - API"
     $serverRedirects = @($Url | ForEach-Object { $baseUrl = $_.TrimEnd('/'); "$baseUrl/signin-oidc"; "$baseUrl/signout-callback-oidc" })
     # The API reference's Try It signs in from the browser through the same public client, redirected back to the page
-    # itself (#2594). AD FS answers its token request only once CORS is on for JIM's origin, a farm-wide setting the SSO
+    # itself (#2594): /api/reference/, with the slash, because Scalar redirects the bare path there and sends the page's
+    # own URL as redirect_uri. AD FS answers its token request only once CORS is on for JIM's origin, a farm-wide setting the SSO
     # guide gives; it is not part of the Application Group, so it is left to the administrator.
-    $nativeRedirects = @(Get-JIMLoopbackRedirectUri) + @($Url | ForEach-Object { "$($_.TrimEnd('/'))/api/reference" })
+    $nativeRedirects = @(Get-JIMLoopbackRedirectUri) + @($Url | ForEach-Object { "$($_.TrimEnd('/'))/api/reference/" })
     $rules = Get-JIMAdfsIssuanceTransformRule
     $changes = [System.Collections.Generic.List[object]]::new()
 

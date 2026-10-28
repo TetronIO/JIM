@@ -30,7 +30,7 @@
                        they are, and is refused every Administrator API.
       8  Try It        The API reference's Try It signs the administrator in as a browser on JIM's page does (#2594):
                        with the public client and AD FS's own endpoints and API scope from the page, PKCE back to
-                       /api/reference, and the code exchanged with JIM's origin, which AD FS allows (CORS, turned on by
+                       /api/reference/, and the code exchanged with JIM's origin, which AD FS allows (CORS, turned on by
                        the runner as the AD FS guide says). Its bearer token is accepted on /api as the same person.
 
     It is reported as its own commit status, jim-ad-lab-adfs, by ad-lab.yml, which runs it apart from the LDAP
