@@ -2,7 +2,7 @@
 
 - **Status:** Doing
 - **Issue:** [#2492](https://github.com/TetronIO/JIM/issues/2492)
-- **Last Updated:** 2026-10-25
+- **Last Updated:** 2026-10-28
 
 ## Overview
 
@@ -114,6 +114,8 @@ Cross-page step: only intra-type references (nested groups, managers), value-bud
 - Re-run Scale750k40kGroups: the cross-page step should report 0 objects (no nested groups in the scenario), and total Full Synchronisation time should drop by roughly the step's 29 minutes, offset by any change in main-loop group-page cost.
 - Add or extend a scenario with manager references and nested groups at medium scale to measure the Phase 2 step, since today's scale scenarios exercise no intra-type references.
 - Full integration suite green; peak worker memory no worse than baseline.
+
+**As found (first scale run, 2026-10-25):** the run saved only about 3 minutes, not 25, and peak Worker memory rose from 26.2 GB to 31.1 GB. Group pages climbed from about 4 s to 85 s as the run went on. Span breakdowns (added for this: a slow span now logs its descendants' totals by path) traced the climb to the join lookup: with statistics gathered while the type held few objects, the planner drove the match from the `MetaverseObjects` type index and read every object of the type for each value. The lookup now checks each candidate's type through a correlated subquery on its own row, which keeps the plan on the attribute value index whatever the statistics say. Preparing the lookup once per connection was tried and reverted: the generic plan cached on near-empty tables was reused as they grew and made joins slower (12 s to 31.6 s on Scenario 008 Large). The remaining group-page cost is proportional to membership and sits in EF Core's change tracker (page load, join match load, tracker attach after the bulk write); that is [#2598](https://github.com/TetronIO/JIM/issues/2598), planned in [`SYNC_HOT_PATH_OFF_EF_TRACKER.md`](../SYNC_HOT_PATH_OFF_EF_TRACKER.md). Awaiting a second scale run to confirm group pages no longer climb.
 
 ## Success Criteria
 
