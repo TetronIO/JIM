@@ -15,10 +15,16 @@
     Each run makes a realm of its own and deletes it afterwards. Skipped unless JIM_TEST_KEYCLOAK_URL names a Keycloak
     (such as http://localhost:18080) whose master realm administrator is JIM_TEST_KEYCLOAK_ADMIN, with the password in
     JIM_TEST_KEYCLOAK_ADMIN_PASSWORD. The keycloak-registration-tests job in ci.yml starts one.
+
+    It also proves that the development realm, .devcontainer/keycloak/jim-realm.json, registers JIM exactly as the
+    command does, so development and CI sign in with the configuration a customer gets: the command, run against it
+    with development's values from .env.example, finds nothing to change. Skipped unless JIM_TEST_KEYCLOAK_DEV_REALM
+    names the realm that file was imported as.
 #>
 
 BeforeDiscovery {
     $script:KeycloakAvailable = [bool]$env:JIM_TEST_KEYCLOAK_URL
+    $script:DevRealmAvailable = [bool]$env:JIM_TEST_KEYCLOAK_URL -and [bool]$env:JIM_TEST_KEYCLOAK_DEV_REALM
 }
 
 BeforeAll {
@@ -74,7 +80,10 @@ BeforeAll {
     # Signs the test person in through a client, as a browser would: the authorisation code flow with PKCE, the
     # login form filled in, and the code exchanged at the token endpoint. Returns the token response.
     function script:Invoke-SignIn {
-        param([string]$ClientId, [string]$RedirectUri, [string]$Scope, [securestring]$ClientSecret)
+        param(
+            [string]$ClientId, [string]$RedirectUri, [string]$Scope, [securestring]$ClientSecret,
+            [string]$Authority = $script:Authority, [string]$UserName = $script:PersonName, [string]$Password = $script:PersonPassword
+        )
 
         $verifier = -join ((1..64) | ForEach-Object { [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~' | Get-Random })
         $hash = [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::ASCII.GetBytes($verifier))
@@ -85,7 +94,7 @@ BeforeAll {
         }
         $queryString = ($query.GetEnumerator() | ForEach-Object { "$($_.Key)=$([uri]::EscapeDataString($_.Value))" }) -join '&'
 
-        $login = Invoke-WebRequest -Uri "$($script:Authority)/protocol/openid-connect/auth?$queryString" -MaximumRedirection 0 -SkipHttpErrorCheck
+        $login = Invoke-WebRequest -Uri "$Authority/protocol/openid-connect/auth?$queryString" -MaximumRedirection 0 -SkipHttpErrorCheck
         $login.StatusCode | Should -Be 200 -Because "Keycloak shows its login form, not $($login.Headers.Location) $($login.Content)"
         $action = [System.Net.WebUtility]::HtmlDecode([regex]::Match($login.Content, 'id="kc-form-login"[^>]*action="([^"]+)"').Groups[1].Value)
         if (-not $action) { $action = [System.Net.WebUtility]::HtmlDecode([regex]::Match($login.Content, '<form[^>]*action="([^"]+)"').Groups[1].Value) }
@@ -101,8 +110,8 @@ BeforeAll {
         $client = [System.Net.Http.HttpClient]::new($handler)
         try {
             $form = [System.Collections.Generic.Dictionary[string, string]]::new()
-            $form['username'] = $script:PersonName
-            $form['password'] = $script:PersonPassword
+            $form['username'] = $UserName
+            $form['password'] = $Password
             $form['credentialId'] = ''
             $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $action)
             $request.Content = [System.Net.Http.FormUrlEncodedContent]::new($form)
@@ -124,7 +133,7 @@ BeforeAll {
             client_id = $ClientId; code_verifier = $verifier
         }
         if ($ClientSecret) { $body.client_secret = [System.Net.NetworkCredential]::new('', $ClientSecret).Password }
-        Invoke-RestMethod -Method Post -Uri "$($script:Authority)/protocol/openid-connect/token" -Body $body
+        Invoke-RestMethod -Method Post -Uri "$Authority/protocol/openid-connect/token" -Body $body
     }
 
     if (-not $env:JIM_TEST_KEYCLOAK_URL) { return }
@@ -255,5 +264,40 @@ Describe 'Register-JIMIdentityProvider -Provider Keycloak against Keycloak' -Ski
             -ClientCredential $serviceCredential -AdminRealm $script:Realm -Confirm:$false
 
         $result.Changes | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'The development realm' -Skip:(-not $script:DevRealmAvailable) {
+
+    BeforeAll {
+        # Development's sign-in settings, as .env.example gives them.
+        $script:DevSettings = @{}
+        foreach ($line in Get-Content (Join-Path $PSScriptRoot '..' '..' '..' '.env.example')) {
+            if ($line -match '^(JIM_SSO_[A-Z_]+)=(.*)$') { $script:DevSettings[$Matches[1]] = $Matches[2].Trim('"') }
+        }
+        $script:DevAuthority = "$($env:JIM_TEST_KEYCLOAK_URL)/realms/$($env:JIM_TEST_KEYCLOAK_DEV_REALM)"
+        # The addresses development serves JIM on: docker-compose.override.yml's port, and .vscode/launch.json's two.
+        $script:DevUrls = @('http://localhost:5200', 'https://localhost:7000')
+    }
+
+    It 'Registers JIM exactly as the command does, with the values .env.example gives JIM' {
+        $result = Register-JIMIdentityProvider -Provider Keycloak -Url $script:DevUrls -Authority $script:DevAuthority `
+            -Credential $script:AdminCredential -ClientId $script:DevSettings.JIM_SSO_CLIENT_ID `
+            -ClientSecret (ConvertTo-SecureString $script:DevSettings.JIM_SSO_SECRET -AsPlainText -Force) -Confirm:$false
+
+        $result.Changes | Should -BeNullOrEmpty -Because 'jim-realm.json should hold what Register-JIMIdentityProvider creates; update it to match'
+        $result.ApiScope | Should -Be $script:DevSettings.JIM_SSO_API_SCOPE
+        $result.ClaimType | Should -Be $script:DevSettings.JIM_SSO_CLAIM_TYPE
+        $result.MvAttribute | Should -Be $script:DevSettings.JIM_SSO_MV_ATTRIBUTE
+    }
+
+    It 'Signs development''s administrator in to the portal as JIM''s initial administrator' {
+        $tokens = Invoke-SignIn -Authority $script:DevAuthority -UserName 'admin' -Password 'admin' `
+            -ClientId $script:DevSettings.JIM_SSO_CLIENT_ID -RedirectUri 'http://localhost:5200/signin-oidc' -Scope 'openid profile email jim-api' `
+            -ClientSecret (ConvertTo-SecureString $script:DevSettings.JIM_SSO_SECRET -AsPlainText -Force)
+
+        $access = ConvertFrom-Jwt $tokens.access_token
+        @($access.aud) | Should -Contain $script:DevSettings.JIM_SSO_CLIENT_ID
+        $access.sub | Should -Be $script:DevSettings.JIM_SSO_INITIAL_ADMIN
     }
 }

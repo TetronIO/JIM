@@ -496,6 +496,28 @@ public class SqlConnectorTests
     }
 
     [Test]
+    public void ResolveSecureEndpoint_OracleTcps_SaysTheJimCertificateStoreDoesNotApply()
+    {
+        // The Oracle driver takes no trust anchor from JIM, so a certificate trusted in JIM changes nothing about
+        // a TCPS connection; the endpoint says so, and every place that offers trust honours it.
+        var settingValues = CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps);
+
+        var endpoint = _connector.ResolveSecureEndpoint(settingValues);
+
+        Assert.That(endpoint!.AcceptsJimTrustedCertificates, Is.False);
+    }
+
+    [Test]
+    public void ResolveSecureEndpoint_SqlServerEncrypted_SaysTheJimCertificateStoreApplies()
+    {
+        var settingValues = CreateSqlServerSettingValues(encrypt: true);
+
+        var endpoint = _connector.ResolveSecureEndpoint(settingValues);
+
+        Assert.That(endpoint!.AcceptsJimTrustedCertificates, Is.True);
+    }
+
+    [Test]
     public void ResolveSecureEndpoint_NoHostSupplied_ReturnsNull()
     {
         var settingValues = CreateSqlServerSettingValues(encrypt: true);

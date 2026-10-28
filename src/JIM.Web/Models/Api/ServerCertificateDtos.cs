@@ -13,8 +13,9 @@ namespace JIM.Web.Models.Api;
 public class ServerCertificateResponse
 {
     /// <summary>
-    /// The certificate the server presented and which check it fails, judged with the JIM certificate store taken
-    /// into account.
+    /// The certificate the server presented and which check it fails, judged as the connection will be: with the JIM
+    /// certificate store taken into account where the connection uses it (<c>AcceptsJimTrustedCertificates</c>), and
+    /// against the operating system alone where it does not.
     /// </summary>
     public ServerCertificateDiagnostic Certificate { get; set; } = null!;
 

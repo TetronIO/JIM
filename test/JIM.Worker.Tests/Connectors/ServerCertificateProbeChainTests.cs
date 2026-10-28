@@ -89,6 +89,34 @@ public class ServerCertificateProbeChainTests
     }
 
     [Test]
+    public void Read_ByDefault_SaysTheJimStoreAppliesToTheConnection()
+    {
+        using var server = new TlsServer(_leaf, _intermediate);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_root)]);
+
+        Assert.That(reading.Diagnostic.AcceptsJimTrustedCertificates, Is.True);
+    }
+
+    [Test]
+    public void Read_RootInTheJimStoreButTheConnectionCannotUseIt_ReportsAnUntrustedIssuerTheStoreCannotFix()
+    {
+        // Oracle Database over TCPS: its driver takes no trust anchor from JIM, so a root in the JIM store changes
+        // nothing about the connection. Reporting it trusted would tell the administrator a refused connection is fine.
+        using var server = new TlsServer(_leaf, _intermediate);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_root)], acceptsJimTrustedCertificates: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.UntrustedIssuer));
+            Assert.That(reading.Diagnostic.AcceptsJimTrustedCertificates, Is.False);
+            Assert.That(reading.Diagnostic.Remediation, Does.Not.Contain("Admin > Certificates"));
+            Assert.That(reading.Diagnostic.Remediation, Does.Contain("operating system"));
+        }
+    }
+
+    [Test]
     public void Read_IntermediateInTheJimStore_FindsNothingWrong()
     {
         // #1914: the probe demanded a root in the store, so an intermediate an administrator had added was still
@@ -189,10 +217,10 @@ public class ServerCertificateProbeChainTests
         }
     }
 
-    private ServerCertificateReading Read(TlsServer server, X509Certificate2[] trusted)
+    private ServerCertificateReading Read(TlsServer server, X509Certificate2[] trusted, bool acceptsJimTrustedCertificates = true)
     {
         var reading = ServerCertificateProbe.Read(HostName, server.Port, trusted, TimeSpan.FromSeconds(10), _logger,
-            "database server", "TLS", SecureHandshakeFraming.DirectTls);
+            "database server", "TLS", SecureHandshakeFraming.DirectTls, acceptsJimTrustedCertificates);
 
         Assert.That(reading, Is.Not.Null, "The server answered, so the probe must have seen its certificate.");
         return reading!;

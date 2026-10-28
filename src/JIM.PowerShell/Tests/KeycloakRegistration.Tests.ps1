@@ -69,10 +69,11 @@ Describe 'Get-JIMKeycloakRegistrationPlan' {
         }
 
         $script:Plan = {
-            param($Current, [switch]$ResetClientSecret, [string]$Url = 'https://jim.example.com')
-            InModuleScope JIM -Parameters @{ Current = $Current; Reset = [bool]$ResetClientSecret; Url = $Url } {
-                param($Current, $Reset, $Url)
-                Get-JIMKeycloakRegistrationPlan -Url $Url -ClientId 'jim' -PublicClientId 'jim-powershell' -Current $Current -ResetClientSecret:$Reset
+            param($Current, [switch]$ResetClientSecret, [string[]]$Url = 'https://jim.example.com', [string]$ClientSecret)
+            InModuleScope JIM -Parameters @{ Current = $Current; Reset = [bool]$ResetClientSecret; Url = $Url; Secret = $ClientSecret } {
+                param($Current, $Reset, $Url, $Secret)
+                $given = if ($Secret) { @{ ClientSecret = (ConvertTo-SecureString $Secret -AsPlainText -Force) } } else { @{} }
+                Get-JIMKeycloakRegistrationPlan -Url $Url -ClientId 'jim' -PublicClientId 'jim-powershell' -Current $Current -ResetClientSecret:$Reset @given
             }
         }
     }
@@ -254,6 +255,34 @@ Describe 'Get-JIMKeycloakRegistrationPlan' {
         $portal = ($plan.Changes | Where-Object { $_.Action -eq 'NewClient' -and $_.Target -eq 'jim' }).Arguments.Properties
         $portal.redirectUris | Should -Be @('https://jim.example.com:8443/signin-oidc')
         $portal.PostLogoutRedirectUris | Should -Be @('https://jim.example.com:8443/signout-callback-oidc')
+    }
+
+    It 'Redirects the portal to each of JIM''s addresses' {
+        $plan = & $script:Plan (& $script:NewEmptyRealm) -Url 'http://localhost:5200', 'https://localhost:7000/'
+
+        $portal = ($plan.Changes | Where-Object { $_.Action -eq 'NewClient' -and $_.Target -eq 'jim' }).Arguments.Properties
+        $portal.redirectUris | Should -Be @('http://localhost:5200/signin-oidc', 'https://localhost:7000/signin-oidc')
+        $portal.PostLogoutRedirectUris | Should -Be @('http://localhost:5200/signout-callback-oidc', 'https://localhost:7000/signout-callback-oidc')
+    }
+
+    It 'Creates the portal with the client secret it is given' {
+        $plan = & $script:Plan (& $script:NewEmptyRealm) -ClientSecret 'given-secret'
+
+        $portal = ($plan.Changes | Where-Object { $_.Action -eq 'NewClient' -and $_.Target -eq 'jim' }).Arguments
+        [System.Net.NetworkCredential]::new('', $portal.Secret).Password | Should -Be 'given-secret'
+        ($plan.Changes | Where-Object { $_.Action -eq 'NewClient' -and $_.Target -eq 'jim-powershell' }).Arguments.Secret | Should -BeNullOrEmpty
+    }
+
+    It 'Sets the client secret it is given only when the portal has another' {
+        $realm = & $script:NewCompleteRealm
+        $realm.Clients | Where-Object ClientId -eq 'jim' | Add-Member -NotePropertyName Secret -NotePropertyValue 'given-secret'
+        (& $script:Plan $realm -ClientSecret 'given-secret').Changes | Should -BeNullOrEmpty
+
+        $plan = & $script:Plan $realm -ClientSecret 'another-secret'
+        @($plan.Changes.Action) | Should -Be @('SetClientSecret')
+        $plan.Changes[0].Target | Should -Be 'jim'
+        $plan.Changes[0].Description | Should -Be 'Set the client secret to the one given'
+        [System.Net.NetworkCredential]::new('', $plan.Changes[0].Arguments.Secret).Password | Should -Be 'another-secret'
     }
 }
 
@@ -438,6 +467,78 @@ Describe 'Register-JIMIdentityProvider -Provider Keycloak' {
                 Should -Throw '*Keycloak said no*'
 
             Should -Invoke Write-Warning -Times 1 -Exactly -ParameterFilter { $Message -match '-ResetClientSecret' }
+        }
+    }
+
+    It 'Registers each of JIM''s addresses' {
+        InModuleScope JIM {
+            $null = Register-JIMIdentityProvider -Provider Keycloak -Url 'http://localhost:5200', 'https://localhost:7000' -Authority 'https://sso.example.com/realms/jim' -Credential $script:Credential -Confirm:$false
+
+            Should -Invoke Invoke-JIMKeycloakRegistrationChange -ParameterFilter {
+                $Change.Action -eq 'NewClient' -and $Change.Target -eq 'jim' -and
+                ($Change.Arguments.Properties.redirectUris -join ' ') -eq 'http://localhost:5200/signin-oidc https://localhost:7000/signin-oidc'
+            }
+        }
+    }
+
+    It 'Refuses any of JIM''s addresses that is not https, or http on this computer' {
+        InModuleScope JIM {
+            { Register-JIMIdentityProvider -Provider Keycloak -Url 'https://jim.example.com', 'http://jim.example.com' -Authority 'https://sso.example.com/realms/jim' -Credential $script:Credential -ErrorAction Stop } |
+                Should -Throw "*'http://jim.example.com'*"
+        }
+    }
+
+    It 'Uses the client secret it is given, reads the portal''s to compare, and returns it once set' {
+        InModuleScope JIM {
+            $secret = ConvertTo-SecureString 'given-secret' -AsPlainText -Force
+            Mock Invoke-JIMKeycloakRegistrationChange { if ($Change.Action -eq 'NewClient' -and $Change.Arguments.Secret) { 'given-secret' } }
+
+            $result = Register-JIMIdentityProvider -Provider Keycloak -Url 'https://jim.example.com' -Authority 'https://sso.example.com/realms/jim' -Credential $script:Credential -ClientSecret $secret -Confirm:$false
+
+            [System.Net.NetworkCredential]::new('', $result.ClientSecret).Password | Should -Be 'given-secret'
+            Should -Invoke Get-JIMKeycloakRegistrationState -Times 1 -ParameterFilter { $SecretOf -eq 'jim' }
+        }
+    }
+
+    It 'Does not read the portal''s secret when it is not given one' {
+        InModuleScope JIM {
+            $null = Register-JIMIdentityProvider -Provider Keycloak -Url 'https://jim.example.com' -Authority 'https://sso.example.com/realms/jim' -Credential $script:Credential -Confirm:$false
+
+            Should -Invoke Get-JIMKeycloakRegistrationState -Times 1 -ParameterFilter { -not $SecretOf }
+        }
+    }
+
+    It 'Refuses a given client secret with -ResetClientSecret, and for AD FS' {
+        InModuleScope JIM {
+            $secret = ConvertTo-SecureString 'given-secret' -AsPlainText -Force
+            { Register-JIMIdentityProvider -Provider Keycloak -Url 'https://jim.example.com' -Authority 'https://sso.example.com/realms/jim' -Credential $script:Credential -ClientSecret $secret -ResetClientSecret -ErrorAction Stop } |
+                Should -Throw '*-ResetClientSecret*'
+            { Register-JIMIdentityProvider -Provider ADFS -Url 'https://jim.example.com' -Authority 'https://sso.example.com/realms/jim' -Credential $script:Credential -ClientSecret $secret -ErrorAction Stop } |
+                Should -Throw '*-ClientSecret are for Keycloak*'
+        }
+    }
+}
+
+Describe 'Get-JIMKeycloakRegistrationState' {
+
+    It 'Reads the client secret of the client it is asked about, and of no other' {
+        InModuleScope JIM {
+            Mock Invoke-JIMKeycloakAdminApi {
+                switch -Wildcard ($Path) {
+                    '/clients' {
+                        [PSCustomObject]@{ id = 'u1'; clientId = 'jim'; defaultClientScopes = @(); optionalClientScopes = @(); attributes = [PSCustomObject]@{} }
+                        [PSCustomObject]@{ id = 'u2'; clientId = 'other'; defaultClientScopes = @(); optionalClientScopes = @(); attributes = [PSCustomObject]@{} }
+                    }
+                    '/clients/u1/client-secret' { [PSCustomObject]@{ type = 'secret'; value = 'stored-secret' } }
+                    default { }
+                }
+            }
+
+            $state = Get-JIMKeycloakRegistrationState -Connection @{ Realm = 'jim' } -SecretOf 'jim'
+
+            ($state.Clients | Where-Object ClientId -eq 'jim').Secret | Should -Be 'stored-secret'
+            ($state.Clients | Where-Object ClientId -eq 'other').Secret | Should -BeNullOrEmpty
+            Should -Invoke Invoke-JIMKeycloakAdminApi -Times 0 -ParameterFilter { $Path -eq '/clients/u2/client-secret' }
         }
     }
 }

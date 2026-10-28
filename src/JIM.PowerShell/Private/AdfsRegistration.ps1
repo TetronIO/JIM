@@ -79,7 +79,7 @@ function Get-JIMAdfsRegistrationPlan {
         Works out what has to change on AD FS for JIM's registration to be as it should be.
 
     .PARAMETER Url
-        JIM's address, as people reach it.
+        JIM's addresses, as people reach it.
 
     .PARAMETER Name
         The Application Group's name, which is also its identifier.
@@ -96,17 +96,16 @@ function Get-JIMAdfsRegistrationPlan {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string[]]$Url,
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][object]$Current,
         [switch]$ResetClientSecret
     )
 
-    $baseUrl = $Url.TrimEnd('/')
     $serverName = "$Name - Portal"
     $nativeName = "$Name - PowerShell"
     $apiName = "$Name - API"
-    $serverRedirects = @("$baseUrl/signin-oidc", "$baseUrl/signout-callback-oidc")
+    $serverRedirects = @($Url | ForEach-Object { $baseUrl = $_.TrimEnd('/'); "$baseUrl/signin-oidc"; "$baseUrl/signout-callback-oidc" })
     $nativeRedirects = Get-JIMLoopbackRedirectUri
     $rules = Get-JIMAdfsIssuanceTransformRule
     $changes = [System.Collections.Generic.List[object]]::new()
