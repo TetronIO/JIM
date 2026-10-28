@@ -148,7 +148,7 @@ To check sign-out too, see [Testing Your Configuration](../sso-setup.md#testing-
 
 Run `Register-JIMIdentityProvider` again, with the same `-Url` and `-Authority`, to check and repair the registration. It changes nothing when the registration is right, and puts back whatever has drifted, such as a removed redirect URI, PKCE turned off, or `jim-api` added to another client. The values it returns stay the same, so JIM's settings need no change. Add `-WhatIf` to list what has drifted without changing it.
 
-If JIM's address changes, run it with the new address. It replaces the portal's redirect URIs; the client IDs and the secret stay as they are.
+If JIM's address changes, run it with the new address. It replaces the portal's redirect URIs; the client IDs and the secret stay as they are. If people reach JIM at more than one address, give each to `-Url`.
 
 To check the registration on a schedule, run it as a Keycloak client's service account with `-ClientCredential`, giving the account the `realm-admin` role of JIM's realm's `realm-management` client. See [Register-JIMIdentityProvider](../../powershell/identity-providers.md#register-jimidentityprovider).
 
