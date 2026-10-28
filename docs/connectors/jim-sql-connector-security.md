@@ -71,6 +71,17 @@ On Oracle, grant per object rather than `SELECT ANY TABLE`. The account then see
 - **Oracle** connections use Native Network Encryption by default (AES, with SHA-2 integrity checking), or TLS over a TCPS listener if you choose it. Choose **None** only in a lab.
 - Nothing needs installing on the JIM host for either database, and JIM connects only to the host you name, so the connector works unchanged in an air-gapped deployment.
 
+### What an Oracle server needs for Native Network Encryption
+
+Nothing, if its network settings are at Oracle's defaults: the server accepts encryption without requiring it, and JIM requires it, so the session is encrypted. JIM asks for AES256, AES192 or AES128 encryption with SHA512, SHA384 or SHA256 integrity checking, and refuses to connect rather than fall back to plain text.
+
+The connection test fails if the server's `sqlnet.ora`:
+
+- sets `SQLNET.ENCRYPTION_SERVER` or `SQLNET.CRYPTO_CHECKSUM_SERVER` to `REJECTED`;
+- or limits `SQLNET.ENCRYPTION_TYPES_SERVER` or `SQLNET.CRYPTO_CHECKSUM_TYPES_SERVER` to algorithms outside those lists, such as `SHA1`.
+
+To make the server refuse any client that does not encrypt, set `SQLNET.ENCRYPTION_SERVER` and `SQLNET.CRYPTO_CHECKSUM_SERVER` to `REQUIRED`. JIM connects either way.
+
 ### When the connection test fails on the certificate
 
 For SQL Server, if the server presents a certificate JIM does not yet trust (one issued by an internal authority, or self-signed), the connection test fails and shows you the certificate: who issued it, what name it was issued for, its validity dates and its thumbprint, which check it failed, and the certificate chain JIM could find above it. Choose what to trust from the card: the root (recommended, since it survives the renewal of every certificate beneath it), an intermediate authority, or the server's own certificate, which needs trusting again when it is renewed. Any of them makes the connection work.
