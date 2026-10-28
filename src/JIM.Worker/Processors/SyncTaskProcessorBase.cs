@@ -7728,33 +7728,28 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
-            var heldConnectedSystemObjectIds = await GetConnectedSystemObjectIdsHeldForInitialPasswordAsync();
+            var heldPendingExports = await GetPendingExportsHeldForInitialPasswordAsync();
 
-            foreach (var (cso, mvo) in _pendingDriftEvaluations.Where(pending => !heldConnectedSystemObjectIds.Contains(pending.Cso.Id)))
-                EvaluateDriftAndEnforceState(cso, mvo);
-
-            if (heldConnectedSystemObjectIds.Count > 0)
-            {
-                Log.Information("EvaluateQueuedDriftAsync: Skipped Drift Detection for {Count} Connected System Object(s) holding a change until its " +
-                    "Initial Password is delivered", heldConnectedSystemObjectIds.Count);
-            }
+            foreach (var (cso, mvo) in _pendingDriftEvaluations)
+                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id));
         }
 
         _pendingDriftEvaluations.Clear();
     }
 
     /// <summary>
-    /// The page's queued Connected System Objects whose Pending Export holds a change written with an interim value
-    /// until an Initial Password is delivered (#2039). Drift Detection skips them entirely, not just the held attribute:
-    /// a correction staged for any attribute makes the page flush delete every existing Pending Export for the object
-    /// (<see cref="FlushPendingExportOperationsAsync"/>), the held change with it, and the enabled value would then be
-    /// re-sent to an account the target will not enable until it has a password. One query per page, answered from a
-    /// partial index on the flag, and none at all when this run detects no drift.
+    /// The Pending Exports of the page's queued Connected System Objects that hold a change written with an interim
+    /// value until an Initial Password is delivered (#2039), keyed by object. Drift Detection still corrects such an
+    /// object's other attributes at once (#2501), but its correction must neither restate the held change nor drop it:
+    /// the page flush replaces the object's Pending Export with the correction (<see cref="FlushPendingExportOperationsAsync"/>),
+    /// so the held change has to travel with it. The first query reads the partial index on the flag, so a page with
+    /// nothing held costs one cheap query, and none at all when this run detects no drift; the Pending Exports are read
+    /// only for the objects it names.
     /// </summary>
-    private async Task<IReadOnlySet<Guid>> GetConnectedSystemObjectIdsHeldForInitialPasswordAsync()
+    private async Task<IReadOnlyDictionary<Guid, PendingExport>> GetPendingExportsHeldForInitialPasswordAsync()
     {
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
-            return new HashSet<Guid>();
+            return new Dictionary<Guid, PendingExport>();
 
         var connectedSystemObjectIds = _pendingDriftEvaluations
             .Select(pending => pending.Cso.Id)
@@ -7762,9 +7757,13 @@ public abstract class SyncTaskProcessorBase
             .Distinct()
             .ToList();
         if (connectedSystemObjectIds.Count == 0)
-            return new HashSet<Guid>();
+            return new Dictionary<Guid, PendingExport>();
 
-        return await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
+        var heldConnectedSystemObjectIds = await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
+        if (heldConnectedSystemObjectIds.Count == 0)
+            return new Dictionary<Guid, PendingExport>();
+
+        return await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(heldConnectedSystemObjectIds);
     }
 
     /// <summary>
@@ -7813,7 +7812,14 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     private const string DriftNotCheckedPrefix = "Drift Detection could not check this object, so no correction was staged. ";
 
-    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
+    /// <summary>
+    /// Evaluates one object's drift and stages its corrections for the page flush.
+    /// </summary>
+    /// <param name="cso">The Connected System Object that was just processed.</param>
+    /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
+    /// <param name="heldPendingExport">The object's Pending Export when it holds a change until an Initial Password is
+    /// delivered (#2039), whose held change the correction must neither restate nor drop (#2501); otherwise null.</param>
+    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo, PendingExport? heldPendingExport = null)
     {
         // Skip if no drift detection export rules exist
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
@@ -7891,6 +7897,12 @@ public abstract class SyncTaskProcessorBase
             errorRpei.ErrorType = errorType;
             errorRpei.ErrorMessage = errorMessage;
             _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+
+        if (heldPendingExport != null)
+        {
+            DriftDetectionService.DropCorrectionsRestatingHeldChanges(result, heldPendingExport);
+            DriftDetectionService.CarryOverReplacedPendingExport(result, heldPendingExport);
         }
 
         // A Drift Correction item is raised only where a correction was staged (#2180), never for a difference that

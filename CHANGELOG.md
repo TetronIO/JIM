@@ -176,6 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Enforce State corrects an Active Directory account's attributes while its Initial Password is still being delivered. Before, the whole account was skipped until the delivery, so a value changed in the directory in that window was put back a synchronisation late, or not until the account next changed. The enabled value JIM holds back until the password arrives is still never re-sent. Synchronisation previews propose the same corrections. (#2501)
 - 🐛 The Worker no longer logs an Entity Framework warning that a query "may lead to unpredictable results" when it completes an Activity or reads change history date ranges. The queries were always correct; they now say so.
 - 🐛 An export's **Exporting deferred changes** step now shows its progress throughout, saying what it is loading, resolving and saving, and ends at its total. It sat at 0% while it prepared, then stopped one batch short.
 - 🐛 The side panel for a finished run on the Operations page's **Activity** tab now shows why it completed with a warning, beneath its status, where it showed the status alone and the reason was only on the Activity page.
