@@ -74,7 +74,8 @@ try {
         # The settings, never the token.
         $result.tryIt = [ordered]@{
             clientId = $tryIt.Settings.ClientId; authorizationUrl = $tryIt.Settings.AuthorizationUrl; tokenUrl = $tryIt.Settings.TokenUrl
-            apiScope = $tryIt.Settings.ApiScope; redirectUri = $tryIt.Settings.RedirectUri; origin = $tryIt.Origin; allowedOrigin = $tryIt.AllowedOrigin
+            apiScope = $tryIt.Settings.ApiScope; redirectUri = $tryIt.Settings.RedirectUri
+            connectSources = @($tryIt.Settings.ConnectSources); origin = $tryIt.Origin; allowedOrigin = $tryIt.AllowedOrigin
         }
         $api = Get-BearerApiResult -JimUrl $JimUrl -AccessToken $tryIt.AccessToken
         $result.userInfo = $api.UserInfo

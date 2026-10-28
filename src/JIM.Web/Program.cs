@@ -587,6 +587,19 @@ try
     // serves a match, so anything registered after it would never run for a static asset request.
     app.UseSecurityHeaders();
 
+    // The API reference's Try It exchanges its sign-in code at the identity provider's token endpoint from the
+    // browser (#2594), so its page, and only its page, may connect to that endpoint's origin. The endpoint is the one
+    // its OpenAPI document gives, read through the same cached configuration manager.
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api/reference", StringComparison.OrdinalIgnoreCase))
+        {
+            var endpoints = await IdentityProviderOAuthEndpoints.ReadAsync(OidcConfigurationManager(app.Services), context.RequestAborted);
+            context.Response.Headers.ContentSecurityPolicy = SecurityHeadersMiddleware.ApiReferenceContentSecurityPolicy(endpoints?.TokenEndpoint);
+        }
+        await next(context);
+    });
+
     // API documentation: serve Scalar API reference with the OpenAPI document.
     // Static mode: if a pre-generated file exists at wwwroot/api/openapi/v1.json (baked into
     // Docker images during build), serve it via UseStaticFiles. Works in any environment.

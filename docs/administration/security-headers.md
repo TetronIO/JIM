@@ -62,12 +62,19 @@ component styling rely on inline `<script>` and `style="..."` usage.
 `connect-src 'self'` covers the WebSocket connection that keeps the portal live, over plain HTTP (`ws:`) and HTTPS
 (`wss:`) alike, and allows no WebSocket connection to any other host.
 
+The API reference at `/api/reference` is the one exception. Its **Try It** signs you in from the browser and asks your
+identity provider's token endpoint for the token itself, so on that page alone `connect-src` also allows the token
+endpoint's origin, for example `connect-src 'self' https://adfs.example.com`. JIM takes the endpoint from your identity
+provider's own configuration, as the API reference does, and adds only its origin. When JIM cannot read that
+configuration, the page has the policy above, and **Try It** works only with an API key.
+
 ## :material-lan: Reverse proxies and corporate networks
 
 If you put a reverse proxy in front of JIM (see [TLS and Reverse Proxy](tls-and-reverse-proxy.md)),
 JIM's headers pass through unchanged unless your proxy is explicitly configured to strip or rewrite them. A
 corporate web proxy or browser security extension that inspects or blocks unrecognised `Content-Security-Policy`
-directives may need an allowance for JIM's origin; the policy above is the complete list of directives JIM sends,
+directives may need an allowance for JIM's origin; the policy above, with the API reference's one addition, is the
+complete list of directives JIM sends,
 useful if you need to document it for a network security review.
 
 ## :material-book-open-variant-outline: See also

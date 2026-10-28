@@ -31,7 +31,9 @@
       8  Try It        The API reference's Try It signs the administrator in as a browser on JIM's page does (#2594):
                        with the public client and AD FS's own endpoints and API scope from the page, PKCE back to
                        /api/reference/, and the code exchanged with JIM's origin, which AD FS allows (CORS, turned on by
-                       the runner as the AD FS guide says). Its bearer token is accepted on /api as the same person.
+                       the runner as the AD FS guide says). The page's Content Security Policy lets it connect to the
+                       token endpoint's origin, and to nothing else outside JIM. Its bearer token is accepted on /api
+                       as the same person.
 
     It is reported as its own commit status, jim-ad-lab-adfs, by ad-lab.yml, which runs it apart from the LDAP
     scenarios (Test-ScenarioRunsOnItsOwn). Active Directory lab only.
@@ -307,6 +309,13 @@ try {
     Add-TestResult -Name "The API reference offers Try It AD FS's own endpoints, the public client and the Web API's openid scope" `
         -Passed ($null -ne $tryItSettings -and "$($tryItSettings.authorizationUrl)" -like "$adfsBase/*" -and "$($tryItSettings.tokenUrl)" -like "$adfsBase/*" -and
             "$($tryItSettings.clientId)" -eq "$env:JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID" -and "$($tryItSettings.apiScope)" -like 'api://*/openid') `
+        -Detail (Format-SignInResult $tryIt)
+    # A browser refuses the token request unless the page's Content Security Policy lets it connect there; this client
+    # does not enforce that, so the policy is checked instead.
+    $tokenOrigin = if ($null -ne $tryItSettings -and $tryItSettings.tokenUrl) { ([uri]$tryItSettings.tokenUrl).GetLeftPart([UriPartial]::Authority) } else { $null }
+    Add-TestResult -Name "The API reference's Content Security Policy lets it connect to AD FS's token endpoint, and nowhere else outside JIM" `
+        -Passed ($null -ne $tokenOrigin -and @($tryItSettings.connectSources) -contains $tokenOrigin -and
+            @($tryItSettings.connectSources | Where-Object { $_ -ne "'self'" -and $_ -ne $tokenOrigin }).Count -eq 0) `
         -Detail (Format-SignInResult $tryIt)
     Add-TestResult -Name "AD FS lets JIM's page read Try It's token (CORS), and /api accepts it as the same administrator" `
         -Passed ($null -ne $tryItSettings -and "$($tryItSettings.allowedOrigin)" -eq "$($tryItSettings.origin)" -and
