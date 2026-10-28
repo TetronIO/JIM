@@ -155,7 +155,13 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 
 In production, the recommended way to test API access with SSO is via the JIM PowerShell module (see step 6 below), which supports interactive browser-based authentication.
 
-Every JIM instance also serves the interactive API reference at `/api/reference`, and its **Try It** signs in through your identity provider. For that sign-in to work, your identity provider must have `https://your-jim-url/api/reference` registered as a single-page-application redirect URI for JIM's client (see [Microsoft Entra ID Step 5a](sso-setup/microsoft-entra-id.md#step-5a-configure-scalar-api-reference-authentication-optional) for an example). Without it, use an API key in **Try It** instead. To test it:
+Every JIM instance also serves the interactive API reference at `/api/reference`, and its **Try It** signs in through your identity provider. It signs in from the browser with no secret, so it uses the public client, as the PowerShell module does: `JIM_SSO_PUBLIC_CLIENT_ID`, or `JIM_SSO_CLIENT_ID` when that is unset. The public client needs `https://your-jim-url/api/reference` as a redirect URI, and the identity provider must answer the browser's token request from JIM's address:
+
+- **Keycloak**: `Register-JIMIdentityProvider` registers both.
+- **AD FS**: `Register-JIMIdentityProvider` registers the redirect URI. Turning on CORS for JIM's address is a farm-wide setting you make yourself; see [Let the API reference sign in](sso-setup/ad-fs.md#let-the-api-reference-sign-in-optional).
+- **Microsoft Entra ID**: register the address as a single-page-application redirect URI; see [Step 5a](sso-setup/microsoft-entra-id.md#step-5a-configure-scalar-api-reference-authentication-optional).
+
+Without these, use an API key in **Try It** instead. To test it:
 
 1. Navigate to `https://your-jim-url/api/reference`
 2. Select an endpoint and choose the **OAuth2** security scheme

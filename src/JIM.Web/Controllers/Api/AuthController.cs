@@ -65,15 +65,8 @@ public class AuthController : ControllerBase
         // cross-session token caching (issue #305) and uses it for silent in-session refresh.
         // Without offline_access, providers such as Entra ID issue no refresh token at all.
         var scopes = new List<string> { "openid", "profile", "offline_access" };
-        if (!string.IsNullOrEmpty(apiScope))
-        {
-            // AD FS takes a resource in the scope parameter only as [resource]/[scope], and a bare identifier such as
-            // api://{id} would be split at its own last slash and refused (MSIS9602), so the module asks for the Web
-            // API's openid scope. The portal passes AD FS the resource directly (PortalSignInRequest).
-            scopes.Add(PortalSignInRequest.IsAdfsAuthority(authority)
-                ? $"{ApiAudienceResolver.Resolve(apiScope, clientId)}/openid"
-                : apiScope);
-        }
+        if (PublicClientSignIn.ApiScope(authority, apiScope, clientId) is { } publicClientApiScope)
+            scopes.Add(publicClientApiScope);
 
         // Prefer the public/client-facing authority when the deployment exposes Keycloak on a
         // different URL to clients than to the JIM backend (e.g. dev devcontainer: backend reaches
@@ -83,12 +76,8 @@ public class AuthController : ControllerBase
         var clientAuthority = !string.IsNullOrEmpty(publicAuthority) ? publicAuthority : authority;
 
         // Interactive clients (PowerShell module, etc.) perform public-client PKCE flows with
-        // loopback redirects. Some IDPs (notably Keycloak) require this to be a separate client
-        // registration from the confidential web client used by the Blazor UI. When
-        // JIM_SSO_PUBLIC_CLIENT_ID is set, advertise it to clients; otherwise fall back to
-        // JIM_SSO_CLIENT_ID (valid for IDPs like Entra ID or AD FS where the same registration
-        // can support both a web platform and a native/desktop platform).
-        var interactiveClientId = !string.IsNullOrEmpty(publicClientId) ? publicClientId : clientId;
+        // loopback redirects.
+        var interactiveClientId = PublicClientSignIn.ClientId(clientId, publicClientId);
 
         return Ok(new AuthConfigResponse
         {

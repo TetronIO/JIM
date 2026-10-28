@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -163,6 +164,57 @@ public class StaticOpenApiDocumentTests
         Assert.That(served, Is.EqualTo(withoutOAuth));
     }
 
+    /// <summary>
+    /// The image build writes the API scope it was built with, not the one this deployment's identity provider issues
+    /// tokens for (#2594). Try It asks for whatever the document offers, so the scope is replaced too, in the flow and
+    /// in the requirement, whether or not the endpoints can be read.
+    /// </summary>
+    [Test]
+    public async Task ReadAsync_TryItApiScope_ReplacesTheBuiltScopeInTheFlowAndTheRequirementAsync()
+    {
+        const string adfsScope = "api://11111111-1111-1111-1111-111111111111/openid";
+        var document = new StaticOpenApiDocument(_documentPath, _ => Task.FromResult<(string, string)?>(null), adfsScope);
+
+        var served = await document.ReadAsync(CancellationToken.None);
+
+        using var json = JsonDocument.Parse(served);
+        var requirements = json.RootElement.GetProperty("security").EnumerateArray().ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AuthorizationCodeFlow(served).GetProperty("scopes").EnumerateObject().Select(p => p.Name),
+                Is.EqualTo(new[] { "openid", adfsScope }));
+            Assert.That(AuthorizationCodeFlow(served).GetProperty("scopes").GetProperty(adfsScope).GetString(), Is.EqualTo("Access JIM API"));
+            Assert.That(requirements[0].GetProperty("OAuth2").EnumerateArray().Select(s => s.GetString()), Is.EqualTo(new[] { "openid", adfsScope }));
+            Assert.That(requirements[1].GetProperty("ApiKey").GetArrayLength(), Is.Zero, "the API key requirement is left alone");
+            Assert.That(AuthorizationCodeFlow(served).GetProperty("authorizationUrl").GetString(), Is.EqualTo(PlaceholderAuthorizationUrl));
+        }
+    }
+
+    [Test]
+    public async Task ReadAsync_TryItApiScopeAsBuilt_ServesTheDocumentAsWrittenAsync()
+    {
+        var document = new StaticOpenApiDocument(_documentPath, _ => Task.FromResult<(string, string)?>(null), "api://jim/access");
+
+        var served = await document.ReadAsync(CancellationToken.None);
+
+        Assert.That(served, Is.EqualTo(BuiltDocument));
+    }
+
+    [Test]
+    public async Task ReadAsync_RealEndpointsAndTryItApiScope_ServesBothAsync()
+    {
+        var document = new StaticOpenApiDocument(_documentPath,
+            _ => Task.FromResult<(string, string)?>((RealAuthorizationUrl, RealTokenUrl)), "jim-api");
+
+        var flow = AuthorizationCodeFlow(await document.ReadAsync(CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(flow.GetProperty("authorizationUrl").GetString(), Is.EqualTo(RealAuthorizationUrl));
+            Assert.That(flow.GetProperty("scopes").EnumerateObject().Select(p => p.Name), Is.EqualTo(new[] { "openid", "jim-api" }));
+        }
+    }
+
     [Test]
     public async Task ReadAsync_NoConfigurationManager_ReadsNoEndpointsAsync()
     {
@@ -223,7 +275,18 @@ public class StaticOpenApiDocumentTests
                 "scheme": "bearer"
               }
             }
-          }
+          },
+          "security": [
+            {
+              "OAuth2": [
+                "openid",
+                "api://jim/access"
+              ]
+            },
+            {
+              "ApiKey": []
+            }
+          ]
         }
         """;
 }

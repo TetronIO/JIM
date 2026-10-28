@@ -60,7 +60,8 @@ Describe 'Get-JIMKeycloakRegistrationPlan' {
             $realm.Clients += [PSCustomObject]@{
                 ClientId = 'jim-powershell'; PublicClient = $true; Enabled = $true; StandardFlowEnabled = $true
                 ImplicitFlowEnabled = $false; DirectAccessGrantsEnabled = $false; ServiceAccountsEnabled = $false
-                RedirectUris = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" })
+                RedirectUris = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference'
+                WebOrigins = @('https://jim.example.com')
                 PostLogoutRedirectUris = @(); Pkce = 'S256'
                 DefaultClientScopes = @('basic', 'profile', 'email', 'roles', 'web-origins', 'acr')
                 OptionalClientScopes = @('offline_access', 'address', 'phone', 'microprofile-jwt', 'jim-api')
@@ -105,14 +106,37 @@ Describe 'Get-JIMKeycloakRegistrationPlan' {
         $portal.Pkce | Should -Be 'S256'
     }
 
-    It 'Makes the PowerShell module a public client on the loopback ports 8400 to 8409' {
+    It 'Makes the PowerShell module a public client on the loopback ports 8400 to 8409, and the API reference''s sign-in' {
         $plan = & $script:Plan (& $script:NewEmptyRealm)
 
         $module = ($plan.Changes | Where-Object { $_.Action -eq 'NewClient' -and $_.Target -eq 'jim-powershell' }).Arguments.Properties
         $module.publicClient | Should -BeTrue
         $module.directAccessGrantsEnabled | Should -BeFalse
-        $module.redirectUris | Should -Be @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" })
+        $module.redirectUris | Should -Be (@(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference')
+        $module.webOrigins | Should -Be @('https://jim.example.com')
         $module.Pkce | Should -Be 'S256'
+    }
+
+    It 'Lets Try It sign in from each of JIM''s addresses, with each address''s origin as a web origin (#2594)' {
+        $plan = & $script:Plan (& $script:NewEmptyRealm) -Url 'https://jim.example.com:8443/jim/', 'http://localhost:5200'
+
+        $module = ($plan.Changes | Where-Object { $_.Action -eq 'NewClient' -and $_.Target -eq 'jim-powershell' }).Arguments.Properties
+        $module.redirectUris | Should -Contain 'https://jim.example.com:8443/jim/api/reference'
+        $module.redirectUris | Should -Contain 'http://localhost:5200/api/reference'
+        $module.webOrigins | Should -Be @('https://jim.example.com:8443', 'http://localhost:5200')
+    }
+
+    It 'Adds Try It''s redirect and origin to a public client registered before it needed them' {
+        $realm = & $script:NewCompleteRealm
+        $module = $realm.Clients | Where-Object ClientId -eq 'jim-powershell'
+        $module.RedirectUris = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" })
+        $module.WebOrigins = @()
+
+        $change = (& $script:Plan $realm).Changes | Where-Object { $_.Action -eq 'SetClient' -and $_.Target -eq 'jim-powershell' }
+
+        $change.Arguments.Properties.Keys | Sort-Object | Should -Be @('redirectUris', 'webOrigins')
+        $change.Description | Should -Match 'https://jim.example.com/api/reference'
+        $change.Description | Should -Match 'web origins'
     }
 
     It 'Gives each client the scopes JIM signs in with, and jim-api only as optional' {

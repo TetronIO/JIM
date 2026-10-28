@@ -94,7 +94,7 @@ This step creates the API scope that JIM uses for JWT Bearer token validation (f
 
 Every JIM instance serves the interactive [Scalar](https://scalar.com/) API reference at `/api/reference`. This step lets its **Try It** sign in with OAuth. Skip it if you will use an API key in **Try It**, or the PowerShell module instead.
 
-To enable OAuth authentication in the Scalar API reference:
+**Try It** signs in with the same client as the PowerShell module (Step 5b): this app registration if you share the client ID, or the PowerShell module's own app registration if you set `JIM_SSO_PUBLIC_CLIENT_ID`. On that app registration:
 
 1. Go to **Authentication**
 2. Click **Add Redirect URI**
