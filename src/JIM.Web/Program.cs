@@ -472,7 +472,8 @@ try
     // identity provider's own configuration when the document is generated at runtime, through the same back-channel
     // as sign-in; never at start-up, where an identity provider that is down or not yet trusted would stop JIM starting
     // at all (#2363). Placeholders built from the authority stand in when it cannot be read, and always in OpenAPI
-    // generation mode, which has no identity provider.
+    // generation mode, which has no identity provider. A document built that way is given the real endpoints as it is
+    // served (StaticOpenApiDocument, #2544).
     var authorityBase = (authority ?? "https://idp.example.com/realms/jim").TrimEnd('/');
     var placeholderAuthorizationEndpoint = $"{authorityBase}/protocol/openid-connect/auth";
     var placeholderTokenEndpoint = $"{authorityBase}/protocol/openid-connect/token";
@@ -484,7 +485,8 @@ try
         {
             var (authorizationEndpoint, tokenEndpoint) = isOpenApiGenerateMode
                 ? (placeholderAuthorizationEndpoint, placeholderTokenEndpoint)
-                : await ReadOAuthEndpointsAsync(context.ApplicationServices, placeholderAuthorizationEndpoint, placeholderTokenEndpoint, cancellationToken);
+                : await IdentityProviderOAuthEndpoints.ReadAsync(OidcConfigurationManager(context.ApplicationServices), cancellationToken)
+                  ?? (placeholderAuthorizationEndpoint, placeholderTokenEndpoint);
 
             document.Info = new OpenApiInfo
             {
@@ -630,7 +632,21 @@ try
 
     if (hasStaticOpenApiDoc)
     {
-        // Static file is served automatically by UseStaticFiles() at /api/openapi/v1.json
+        // Served here, ahead of UseStaticFiles(), so the document carries the identity provider's real OAuth endpoints
+        // in place of the placeholders written when the image was built, and Try It can sign in (#2544).
+        var staticOpenApiDocument = new StaticOpenApiDocument(staticOpenApiPath,
+            cancellationToken => IdentityProviderOAuthEndpoints.ReadAsync(OidcConfigurationManager(app.Services), cancellationToken));
+        app.Use(async (context, next) =>
+        {
+            if (HttpMethods.IsGet(context.Request.Method)
+                && context.Request.Path.Equals("/api/openapi/v1.json", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync(await staticOpenApiDocument.ReadAsync(context.RequestAborted));
+                return;
+            }
+            await next(context);
+        });
         app.MapScalarApiReference("/api/reference", o => ConfigureScalar(o, "/api/openapi/v1.json"));
         app.Logger.LogInformation("Serving static OpenAPI document from {Path}", staticOpenApiPath);
     }
@@ -1140,33 +1156,12 @@ static string CategoriseOidcFailure(Exception? exception)
 }
 
 /// <summary>
-/// Reads the authorisation and token endpoints for the runtime OpenAPI document from the identity provider's
-/// configuration, as the OpenID Connect handler holds it (so through the sign-in back-channel and its trust), falling
-/// back to placeholders when the identity provider cannot be reached or is not trusted yet. Only Scalar's "Try It"
-/// sign-in uses them, so a fallback never blocks the document.
+/// The OpenID Connect handler's configuration manager, which reads the identity provider's configuration through the
+/// sign-in back-channel and its trust. Null when there is none.
 /// </summary>
-static async Task<(string AuthorizationEndpoint, string TokenEndpoint)> ReadOAuthEndpointsAsync(
-    IServiceProvider services, string placeholderAuthorizationEndpoint, string placeholderTokenEndpoint, CancellationToken cancellationToken)
-{
-    var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<OpenIdConnectOptions>>()
-        .Get(OpenIdConnectDefaults.AuthenticationScheme);
-
-    try
-    {
-        var configuration = options.ConfigurationManager == null
-            ? null
-            : await options.ConfigurationManager.GetConfigurationAsync(cancellationToken);
-
-        if (!string.IsNullOrEmpty(configuration?.AuthorizationEndpoint) && !string.IsNullOrEmpty(configuration.TokenEndpoint))
-            return (configuration.AuthorizationEndpoint, configuration.TokenEndpoint);
-    }
-    catch (InvalidOperationException ex)
-    {
-        Log.Warning(ex, "Could not read the identity provider's configuration for the API reference; its sign-in uses placeholder endpoints");
-    }
-
-    return (placeholderAuthorizationEndpoint, placeholderTokenEndpoint);
-}
+static Microsoft.IdentityModel.Protocols.IConfigurationManager<Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfiguration>? OidcConfigurationManager(IServiceProvider services) =>
+    services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<OpenIdConnectOptions>>()
+        .Get(OpenIdConnectDefaults.AuthenticationScheme).ConfigurationManager;
 
 /// <summary>
 /// Gets the valid token issuers for JWT validation.
