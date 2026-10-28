@@ -275,11 +275,11 @@
       ],
       "steps": [
         {
-          "goto": "/admin/operations?t=history"
+          "goto": "/admin/operations?t=activity"
         },
         {
           "waitFor": {
-            "text": "Execution History"
+            "selector": "[data-testid=\"activity-completed\"] .jim-activity-result"
           }
         }
       ]
@@ -434,11 +434,11 @@
       ],
       "steps": [
         {
-          "goto": "/admin/operations?t=history&h-desc=0"
+          "goto": "/admin/operations?t=activity"
         },
         {
           "waitFor": {
-            "text": "Execution History"
+            "selector": "[data-testid=\"activity-completed\"] .jim-activity-result"
           }
         }
       ]
