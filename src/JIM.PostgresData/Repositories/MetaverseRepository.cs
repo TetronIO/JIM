@@ -1600,55 +1600,44 @@ public partial class MetaverseRepository : IMetaverseRepository
                 .CountAsync(cso => cso.MetaverseObjectId == id);
         }
 
-        // Step 2: Get per-attribute value counts for this MVO
+        // Step 2: Get per-attribute value counts and pluralities for this MVO, in one pass over its values
         Dictionary<string, int> totalCounts;
+        List<int> singleValuedAttributeIds;
+        List<int> multiValuedAttributeIds;
         using (ActivitySource.StartActivity("Mvo.LoadAttributeCounts"))
         {
             var attributeValueCounts = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-                .Where(av => av.MetaverseObject.Id == id)
-                .GroupBy(av => av.Attribute.Name)
-                .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+                .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == id)
+                .GroupBy(av => new { av.AttributeId, av.Attribute.Name, av.Attribute.AttributePlurality })
+                .Select(g => new { g.Key.AttributeId, g.Key.Name, g.Key.AttributePlurality, Count = g.Count() })
                 .ToListAsync();
 
-            totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
-        }
-
-        // Step 3: Load SVA values (all of them) and MVA values (capped)
-        HashSet<int> multiValuedAttributeIds;
-        using (ActivitySource.StartActivity("Mvo.LoadAttributePluralities"))
-        {
-            var mvaAttributeIds = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-                .Where(av => av.MetaverseObject.Id == id)
-                .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
-                .Distinct()
-                .ToListAsync();
-
-            multiValuedAttributeIds = mvaAttributeIds
+            totalCounts = attributeValueCounts
+                .GroupBy(x => x.Name)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Count));
+            singleValuedAttributeIds = attributeValueCounts
+                .Where(a => a.AttributePlurality != AttributePlurality.MultiValued)
+                .Select(a => a.AttributeId)
+                .ToList();
+            multiValuedAttributeIds = attributeValueCounts
                 .Where(a => a.AttributePlurality == AttributePlurality.MultiValued)
                 .Select(a => a.AttributeId)
-                .ToHashSet();
+                .ToList();
         }
 
-        // Load all SVA values
+        // Step 3: Load SVA values (all of them) and MVA values (capped). Named by attribute id rather than by excluding
+        // the multi-valued ones, so the (object, attribute) index serves the read without visiting a large group's members.
         List<MetaverseObjectAttributeValue> svaValues;
         using (var svaSpan = ActivitySource.StartActivity("Mvo.LoadSvaValues"))
         {
-            // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
             svaValues = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-                .AsTracking()
-                .AsSplitQuery()
-                .Where(av => av.MetaverseObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
+                .AsNoTracking()
+                .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == id && singleValuedAttributeIds.Contains(av.AttributeId))
                 .Include(av => av.Attribute)
-                .Include(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.Type)
-                .Include(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-                .ThenInclude(rvav => rvav.Attribute)
                 .ToListAsync();
             svaSpan?.SetTag("count", svaValues.Count);
         }
 
-        // Load capped MVA values per attribute
         var cappedMvaValues = new List<MetaverseObjectAttributeValue>();
         using (var mvaSpan = ActivitySource.StartActivity("Mvo.LoadCappedMvaValues"))
         {
@@ -1658,19 +1647,12 @@ public partial class MetaverseRepository : IMetaverseRepository
             {
                 using var iterSpan = ActivitySource.StartActivity("Mvo.LoadCappedMvaValues.Attribute");
                 iterSpan?.SetTag("attributeId", attrId);
-                // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
                 var values = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-                    .AsTracking()
-                    .AsSplitQuery()
-                    .Where(av => av.MetaverseObject.Id == id && av.AttributeId == attrId)
+                    .AsNoTracking()
+                    .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == id && av.AttributeId == attrId)
                     .OrderBy(av => av.Id)
                     .Take(CappedMvaLimit)
                     .Include(av => av.Attribute)
-                    .Include(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.Type)
-                    .Include(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-                    .ThenInclude(rvav => rvav.Attribute)
                     .ToListAsync();
                 iterSpan?.SetTag("returned", values.Count);
 
@@ -1680,6 +1662,8 @@ public partial class MetaverseRepository : IMetaverseRepository
 
         // Combine and attach to entity
         entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+        using (ActivitySource.StartActivity("Mvo.LoadReferencedObjects"))
+            await AttachReferencedMetaverseObjectsAsync(entity.AttributeValues);
 
         return new MvoDetailResult
         {
@@ -4472,24 +4456,45 @@ public partial class MetaverseRepository : IMetaverseRepository
         if (includeTotalCount)
             totalCount = await query.CountAsync();
 
-        // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
         var values = await query
-            .AsTracking()
-            .AsSplitQuery()
+            .AsNoTracking()
             // The id is the whole sort key, so it is already the total order Skip/Take windows need; there is no
             // second key that could tie.
             .OrderBy(av => av.Id)
             .Skip(offset)
             .Take(count)
             .Include(av => av.Attribute)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(rvav => rvav.Attribute)
             .ToListAsync();
+        await AttachReferencedMetaverseObjectsAsync(values);
 
         return (values, totalCount);
+    }
+
+    /// <summary>
+    /// Sets the referenced object on every value that references one, read by id with its Object Type and no values:
+    /// a referenced object is named from <see cref="MetaverseObject.CachedDisplayName"/>, which
+    /// <see cref="MetaverseObject.Name"/> falls back to. Never an Include from the values themselves: the planner
+    /// cannot tell that a large group's few non-member values reference few objects, so it drove that read from every
+    /// Display Name value in the metaverse and a group of 594,000 members took 18 seconds to open.
+    /// </summary>
+    private async Task AttachReferencedMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObjectAttributeValue> values)
+    {
+        var referencedIds = values
+            .Where(v => v.ReferenceValueId.HasValue)
+            .Select(v => v.ReferenceValueId!.Value)
+            .Distinct()
+            .ToList();
+        if (referencedIds.Count == 0)
+            return;
+
+        var referencedObjects = await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Include(mo => mo.Type)
+            .Where(mo => referencedIds.Contains(mo.Id))
+            .ToDictionaryAsync(mo => mo.Id);
+
+        foreach (var value in values.Where(v => v.ReferenceValueId.HasValue))
+            value.ReferenceValue = referencedObjects.GetValueOrDefault(value.ReferenceValueId!.Value);
     }
 
     public async Task<List<Guid>> GetMetaverseObjectIdsByDateAttributeRangeAsync(int metaverseObjectTypeId, int attributeId, DateTime? afterUtc, DateTime throughUtc)
