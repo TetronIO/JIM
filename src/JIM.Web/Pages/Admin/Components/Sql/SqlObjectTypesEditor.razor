@@ -64,10 +64,19 @@
         }
         else if (_catalogueFailure != null)
         {
-            <MudAlert Severity="Severity.Warning" Class="mt-4" data-testid="jim-sql-catalogue-unavailable">
-                JIM could not read the database's tables and views, so names are typed rather than chosen: @_catalogueFailure
-                <AlertButton Severity="Severity.Warning" Class="ml-2" OnClick="RetryCatalogueAsync"
-                             data-testid="jim-sql-catalogue-retry">Retry</AlertButton>
+            @* The reason is the driver's own message and often runs to several lines, so it gets a column of its
+               own and Retry stays on the right rather than wrapping into the text. *@
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="jim-sql-inline-alert mt-4" data-testid="jim-sql-catalogue-unavailable">
+                <div class="jim-sql-inline-alert-body">
+                    <div class="jim-sql-inline-alert-text">
+                        <strong>JIM could not read the database's tables and views, so names are typed rather than chosen.</strong>
+                        <div class="mt-1">@_catalogueFailure</div>
+                    </div>
+                    <span class="jim-sql-inline-alert-actions">
+                        <AlertButton Severity="Severity.Warning" Size="Size.Small" OnClick="RetryCatalogueAsync"
+                                     data-testid="jim-sql-catalogue-retry">Retry</AlertButton>
+                    </span>
+                </div>
             </MudAlert>
         }
 

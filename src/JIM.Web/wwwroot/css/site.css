@@ -1759,38 +1759,40 @@ a.jim-system-rule-chip-part:focus-visible {
     max-width: 420px;
 }
 
-/* A suggestion strip (a foreign key, a primary key): the sentence on the left, its actions together on the
-   right, all on one centre line. The site-wide alert rule anchors the icon to the first text line, which
-   suits a paragraph; this is a single row whose button is taller than the text, so icon, text and buttons
-   centre on the row instead. html[lang] because MudBlazor's own alert layout loads after this sheet. */
-html[lang] .jim-sql-suggestion .mud-alert-position {
+/* An alert strip in the SQL Object Types editor (a foreign-key or primary-key suggestion, the catalogue
+   unavailable banner): the text on the left, its actions together on the right, all centred on the row. The
+   site-wide alert rule anchors the icon to the first text line, which suits a paragraph; these are rows whose
+   button is what the text answers to, so icon, text and buttons centre on the row instead, and a long text
+   wraps within its own column rather than around the button. html[lang] because MudBlazor's own alert layout
+   loads after this sheet. */
+html[lang] .jim-sql-inline-alert .mud-alert-position {
     align-items: center;
 }
 
-html[lang] .jim-sql-suggestion .mud-alert-icon {
+html[lang] .jim-sql-inline-alert .mud-alert-icon {
     padding-top: 0;
     padding-bottom: 0;
 }
 
-html[lang] .jim-sql-suggestion .mud-alert-message {
+html[lang] .jim-sql-inline-alert .mud-alert-message {
     flex: 1 1 auto;
     min-width: 0;
     padding-block: 6px;
 }
 
-.jim-sql-suggestion-body {
+.jim-sql-inline-alert-body {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px 16px;
 }
 
-.jim-sql-suggestion-text {
+.jim-sql-inline-alert-text {
     flex: 1 1 320px;
     min-width: 0;
 }
 
-.jim-sql-suggestion-actions {
+.jim-sql-inline-alert-actions {
     display: flex;
     align-items: center;
     gap: 4px;

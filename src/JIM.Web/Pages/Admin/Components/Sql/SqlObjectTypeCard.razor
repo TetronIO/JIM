@@ -120,12 +120,12 @@
             </div>
             @if (PrimaryKeyAnchor.Count > 0)
             {
-                <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-suggestion mt-3" data-testid="jim-sql-anchor-suggestion">
-                    <div class="jim-sql-suggestion-body">
-                        <span class="jim-sql-suggestion-text">
+                <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-inline-alert mt-3" data-testid="jim-sql-anchor-suggestion">
+                    <div class="jim-sql-inline-alert-body">
+                        <span class="jim-sql-inline-alert-text">
                             The table's primary key is @ColumnList(PrimaryKeyAnchor), which identifies each row.
                         </span>
-                        <span class="jim-sql-suggestion-actions">
+                        <span class="jim-sql-inline-alert-actions">
                             <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="UsePrimaryKeyAsync">Use the primary key</AlertButton>
                         </span>
                     </div>
@@ -161,15 +161,15 @@
             }
             @foreach (var suggestion in Suggestions)
             {
-                <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-suggestion mb-2" data-testid="jim-sql-reference-suggestion">
-                    <div class="jim-sql-suggestion-body">
+                <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-inline-alert mb-2" data-testid="jim-sql-reference-suggestion">
+                    <div class="jim-sql-inline-alert-body">
                         @if (suggestion.Kind == SqlObjectTypeSuggestionKind.Reference)
                         {
-                            <span class="jim-sql-suggestion-text">
+                            <span class="jim-sql-inline-alert-text">
                                 <code class="jim-code-inline">@suggestion.ColumnName</code> has a foreign key to
                                 @suggestion.ReferencedObjectTypeName's anchor, so it looks like a reference to @suggestion.ReferencedObjectTypeName.
                             </span>
-                            <span class="jim-sql-suggestion-actions">
+                            <span class="jim-sql-inline-alert-actions">
                                 <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="@(() => AcceptAsync(suggestion))"
                                              data-testid="jim-sql-reference-suggestion-accept">Add reference</AlertButton>
                                 <AlertButton Severity="Severity.Info" Secondary="true" Size="Size.Small" OnClick="@(() => DismissAsync(suggestion))">Dismiss</AlertButton>
@@ -177,11 +177,11 @@
                         }
                         else
                         {
-                            <span class="jim-sql-suggestion-text">
+                            <span class="jim-sql-inline-alert-text">
                                 <code class="jim-code-inline">@suggestion.ColumnName</code> has a foreign key to
                                 <code class="jim-code-inline">@Qualified(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName)</code>, which no Object Type reads from yet.
                             </span>
-                            <span class="jim-sql-suggestion-actions">
+                            <span class="jim-sql-inline-alert-actions">
                                 <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="@(() => OnAddObjectType.InvokeAsync(suggestion))">Add an Object Type for it</AlertButton>
                                 <AlertButton Severity="Severity.Info" Secondary="true" Size="Size.Small" OnClick="@(() => DismissAsync(suggestion))">Dismiss</AlertButton>
                             </span>
