@@ -9,11 +9,31 @@ audience: automation-author
 
 The configuration test cmdlets save test cases and run them. A test case holds inputs, and what an Attribute Flow, a Generated Value's base, a Synchronisation Rule's Scope or an Object Matching Rule should give for them. Running the cases after a change shows whether the change broke what they expect. What a test case is, how a run compares results and when a case needs review is covered in [Configuration tests](../configuration/configuration-tests.md).
 
+```jim-diagram
+archetype: anatomy
+title: What New-JIMConfigurationTestCase saves
+desc: 'A configuration test case has a name saying what it checks; what it covers, which is one Attribute Flow (-SyncRuleMappingId), a Generated Value''s base (with -Kind GeneratedValue), one Synchronisation Rule''s Scope (-SyncRuleId) or one Object Matching Rule (-ObjectMatchingRuleId); its inputs, given with -CsAttributes and -MvAttributes, or -Attributes for a Scope or Object Matching Rule case, where $null is no value; an optional time to run as of, -RunAsOf; and its expectation, -Expect with any -ExpectedValues. Its inputs take the shape the Test-JIMExpression, Test-JIMScope and Test-JIMMatchingRule cmdlets take, and are stored unencrypted, so prefer made-up values. Set-JIMConfigurationTestCase can change everything but what the case covers and what it tests, and Invoke-JIMConfigurationTest runs the cases.'
+subject:
+  kind: object
+  label: A test case
+  parts:
+  - {label: Name, detail: 'what it checks, in your own words'}
+  - {label: What it covers, detail: 'Attribute Flow, Scope or Object Matching Rule'}
+  - {label: Inputs, detail: '`-CsAttributes`, `-MvAttributes` or `-Attributes`'}
+  - {label: Run as of, detail: '`-RunAsOf`; omitted, when the case runs'}
+  - {label: Expectation, detail: '`-Expect`, with any `-ExpectedValues`'}
+properties:
+- {name: Inputs, value: as the Test-JIM cmdlets take them}
+- {name: Stored, value: 'unencrypted: prefer made-up values'}
+- {name: Cannot change, value: what it covers and tests}
+- {name: Run, value: by Invoke-JIMConfigurationTest}
+```
+
 A case's inputs take the shape `Test-JIMExpression`, `Test-JIMScope` and `Test-JIMMatchingRule` take, so a test you tried can be saved with the same values. Inputs are stored unencrypted, as other configuration is: prefer made-up values to a real person's.
 
 ---
 
-## Get-JIMConfigurationTestCase
+## :material-flask-outline: Get-JIMConfigurationTestCase
 
 Gets saved configuration test cases, each with its inputs: every case, those covering a Synchronisation Rule, those under a Connected System, or one by ID.
 
@@ -79,7 +99,7 @@ Get-JIMConfigurationTestCase -ConnectedSystemId 3 -Name 'Hire date*' | Select-Ob
 
 ---
 
-## New-JIMConfigurationTestCase
+## :material-plus-circle-outline: New-JIMConfigurationTestCase
 
 Saves a test case covering one Attribute Flow (`-SyncRuleMappingId`, with `-Kind GeneratedValue` for a Generated Value's base), one Synchronisation Rule's Scope (`-SyncRuleId`) or one Object Matching Rule (`-ObjectMatchingRuleId`). Give every attribute the configuration reads, with `$null` for one that should have no value.
 
@@ -142,7 +162,7 @@ New-JIMConfigurationTestCase -Name 'Matches on employee number' -ObjectMatchingR
 
 ---
 
-## Set-JIMConfigurationTestCase
+## :material-pencil-outline: Set-JIMConfigurationTestCase
 
 Changes a test case's name, description, inputs, run-as-of time or expectation; anything not given stays as it is. What the case covers and what it tests cannot change.
 
@@ -193,7 +213,7 @@ Set-JIMConfigurationTestCase -Id 4 -Description $null
 
 ---
 
-## Remove-JIMConfigurationTestCase
+## :material-delete-outline: Remove-JIMConfigurationTestCase
 
 Deletes a test case. Nothing it covered changes.
 
@@ -232,7 +252,7 @@ Get-JIMConfigurationTestCase -SyncRuleId 12 -Name 'Draft*' | Remove-JIMConfigura
 
 ---
 
-## Invoke-JIMConfigurationTest
+## :material-play-circle-outline: Invoke-JIMConfigurationTest
 
 Runs the test cases covering a Synchronisation Rule, those under a Connected System, or those piped in, and returns each result. `-FailOnUnsuccessful` also writes an error for each case that did not pass, so a script can stop on it.
 

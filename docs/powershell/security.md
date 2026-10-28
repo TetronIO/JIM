@@ -9,7 +9,20 @@ audience: automation-author
 
 Cmdlets for managing security roles and role membership in JIM. Roles define permissions that can be assigned to users or API keys.
 
-## Get-JIMRole
+```jim-diagram
+archetype: lifecycle
+title: Role membership, added and removed by cmdlet
+desc: "A Metaverse Object is either a member of a Role or not. Add-JIMRoleMember makes it a member, and Remove-JIMRoleMember takes it out again, except that no one can remove themselves from the Administrator role, nor remove its last member. Get-JIMRoleMember lists a Role's members, and Get-JIMMetaverseObjectRole lists the Roles a Metaverse Object is a member of."
+container: { label: "A Metaverse Object, in one Role", note: "`Get-JIMRoleMember` lists a Role's members; `Get-JIMMetaverseObjectRole` lists an object's Roles" }
+states:
+  - { id: out, label: Not a member }
+  - { id: in, label: Member, sub: "has the Role's permissions" }
+transitions:
+  - { from: out, to: in, label: "`Add-JIMRoleMember`" }
+  - { from: in, to: out, label: "`Remove-JIMRoleMember`", note: "Administrator: never yourself, nor its last member" }
+```
+
+## :material-account-lock-outline: Get-JIMRole
 
 Retrieves security role definitions from JIM.
 
@@ -77,7 +90,7 @@ New-JIMApiKey -Name "Admin Key" -RoleIds @($adminRole.Id) -PassThru
 
 ---
 
-## Get-JIMRoleMember
+## :material-account-multiple-outline: Get-JIMRoleMember
 
 Retrieves Metaverse Objects assigned to a security role.
 
@@ -133,7 +146,7 @@ Get-JIMRole | ForEach-Object {
 
 ---
 
-## Get-JIMMetaverseObjectRole
+## :material-account-key-outline: Get-JIMMetaverseObjectRole
 
 Lists the security roles a Metaverse Object is a member of.
 
@@ -183,7 +196,7 @@ Get-JIMRole -Name "Administrator" |
 
 ---
 
-## Add-JIMRoleMember
+## :material-account-plus-outline: Add-JIMRoleMember
 
 Adds a Metaverse Object to a security role.
 
@@ -233,7 +246,7 @@ Add-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -ChangeReason "Onb
 
 ---
 
-## Remove-JIMRoleMember
+## :material-account-remove-outline: Remove-JIMRoleMember
 
 Removes a Metaverse Object from a security role.
 
@@ -293,7 +306,7 @@ Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -Force -ChangeR
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Roles](../configuration/roles.md): role definitions, static membership, administrator-lockout safety, and Configuration Change History
 - [API Keys](api-keys.md)

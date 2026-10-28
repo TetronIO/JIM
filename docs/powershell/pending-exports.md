@@ -9,9 +9,30 @@ audience: automation-author
 
 The Pending Export cmdlet reads the changes JIM has worked out for a Connected System and not yet written to it: one Pending Export per Connected System Object to create, update or delete, each with its attribute changes. How they arise and are exported is covered in [Pending Exports](../configuration/connected-systems.md#pending-exports).
 
+```jim-diagram
+archetype: decision
+title: Choosing how to call Get-JIMPendingExport
+desc: 'To read the Pending Exports queued for a Connected System, give -ConnectedSystemId: it returns a page of them, every page with -All, or how many with -Count, filtered by -Search, -ChangeType, -Status or -Failing. To read one Pending Export, give its -Id. Alone, -Id returns it in full: its attribute changes, its unresolved references with the reason for each, and where each queued value came from. With -QueuedBy it returns the synchronisation runs that queued it, and why, which pipe into Get-JIMActivityExecutionItem -Causes. With -AttributeName it pages through that attribute''s value changes, for a large multi-valued attribute such as member.'
+start: {label: Reading exports}
+questions:
+- {id: which, label: 'Which Pending Exports?'}
+- {id: what, label: 'What do you need of it?'}
+outcomes:
+- {id: list, label: '`-ConnectedSystemId`', sub: 'a page, `-All` or `-Count`; filter by change type or status'}
+- {id: byid, label: '`-Id` alone', sub: 'attribute changes, unresolved references, value sources'}
+- {id: queued, label: '`-Id -QueuedBy`', sub: 'the runs that queued it, and why'}
+- {id: attr, label: '`-Id -AttributeName`', sub: 'one attribute''s changes, a page at a time'}
+answers:
+- {from: which, to: list, label: a Connected System's}
+- {from: which, to: what, label: 'one, by its ID'}
+- {from: what, to: byid, label: all of it}
+- {from: what, to: queued, label: why it was queued}
+- {from: what, to: attr, label: a large attribute}
+```
+
 ---
 
-## Get-JIMPendingExport
+## :material-export: Get-JIMPendingExport
 
 Gets the Pending Exports queued for a Connected System, and pages through the value changes of a large multi-valued attribute.
 
@@ -20,13 +41,13 @@ Gets the Pending Exports queued for a Connected System, and pages through the va
 
 ```powershell
 # List (default)
-Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] [-Page <int>] [-PageSize <int>] [-Failing]
+Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] [-Page <int>] [-PageSize <int>] [-Failing] [-ChangeType <string>] [-Status <string>]
 
 # Count
 Get-JIMPendingExport -ConnectedSystemId <int> -Count [-Failing] [-ChangeType <string>] [-Status <string>]
 
 # ListAll
-Get-JIMPendingExport -ConnectedSystemId <int> -All [-Search <string>] [-PageSize <int>] [-Force] [-Failing]
+Get-JIMPendingExport -ConnectedSystemId <int> -All [-Search <string>] [-PageSize <int>] [-Force] [-Failing] [-ChangeType <string>] [-Status <string>]
 
 # QueuedBy
 Get-JIMPendingExport -Id <guid> -QueuedBy
@@ -56,8 +77,8 @@ Get-JIMPendingExport -Id <guid>
 | `Force` | `switch` | No (ListAll, AttributeChangesAll) |  | With `-All`, fetches every page, past the 1000-page limit. |
 | `Count` | `switch` | Yes (Count) |  | Returns how many Pending Exports there are, rather than the Pending Exports. |
 | `Failing` | `switch` | No (List, Count, ListAll) |  | Returns, or with `-Count` counts, only the Pending Exports whose last attempt failed. JIM attempts each again at every export run until it succeeds; its FailingSince says since when it has been failing. |
-| `ChangeType` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports that make this kind of change. One of `Create`, `Update` or `Delete`. |
-| `Status` | `string` | No (Count) |  | With `-Count`, counts only the Pending Exports with this status. A failing Pending Export is Pending; use `-Failing` to count those. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
+| `ChangeType` | `string` | No (List, Count, ListAll) |  | Returns, or with `-Count` counts, only the Pending Exports that make this kind of change. One of `Create`, `Update` or `Delete`. |
+| `Status` | `string` | No (List, Count, ListAll) |  | Returns, or with `-Count` counts, only the Pending Exports with this status. A failing Pending Export is Pending; use `-Failing` to find those. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
 
 ### Output
 
@@ -175,6 +196,10 @@ Get-JIMPendingExport -ConnectedSystemId 3 -Search "jsmith" -PageSize 25
 Get-JIMPendingExport -ConnectedSystemId 3 -All
 ```
 
+```powershell title="Get only the deletions waiting to export"
+Get-JIMPendingExport -ConnectedSystemId 3 -ChangeType Delete -Status Pending -All
+```
+
 ```powershell title="View details of a specific Pending Export"
 Get-JIMPendingExport -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
@@ -197,7 +222,7 @@ Get-JIMPendingExport -Id "a1b2c3d4-..." -AttributeName "member" -Page 1 -PageSiz
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected System Objects](connected-system-objects.md): the objects the Pending Exports change
 - [Run Profiles](run-profiles.md): run the exports that write Pending Exports to the Connected System

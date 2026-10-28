@@ -14,8 +14,10 @@ exclude_docs: |
   requirements.txt
 
 # The changelog page publishes released versions only; see docs/hooks/changelog.py.
+# jim-diagram specs in a page are rendered to SVG; see docs/hooks/diagrams.py.
 hooks:
   - docs/hooks/changelog.py
+  - docs/hooks/diagrams.py
 
 watch:
   - CHANGELOG.md
@@ -286,8 +288,16 @@ extra_css:
 
 extra_javascript:
   - assets/javascripts/diagram-zoom.js
+  - assets/javascripts/docs-layout.js
 
 extra:
+  # Visitor analytics and session recorder; rendered by
+  # docs/overrides/partials/integrations/analytics/custom.html.
+  analytics:
+    provider: custom
+    host: https://m.docs.junctional.io
+    website_id: 302e531d-a0f1-4114-af08-c175bc9fc2c4
+    domains: docs.junctional.io
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/TetronIO/JIM

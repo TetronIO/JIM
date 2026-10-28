@@ -36,6 +36,14 @@ public static class GeneratedValueFormHelpers
         type is AttributeDataType.Number or AttributeDataType.LongNumber;
 
     /// <summary>
+    /// The uniqueness token a new generated mapping starts with: "Only if taken" where it can be used, which needs a
+    /// base expression and a target that is not a Number, and a sequence number everywhere else, so a new form never
+    /// opens on a choice that cannot be saved.
+    /// </summary>
+    public static GeneratedValueTokenKind DefaultTokenKind(bool hasBaseExpression, bool isNumberTarget) =>
+        hasBaseExpression && !isNumberTarget ? GeneratedValueTokenKind.OnlyIfTaken : GeneratedValueTokenKind.Sequence;
+
+    /// <summary>
     /// The "Room for N more numbers" hint under a fixed-width sequence's Width field: how many numbers remain
     /// between the sequence's start value and the width's ceiling (10^width - 1). Null when the width is not yet
     /// a valid digit count, or the start value already exceeds what the width can hold (the validator reports

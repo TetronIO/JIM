@@ -9,6 +9,29 @@ audience: automation-author
 
 The connection cmdlets manage authentication and session state with a JIM instance. You must establish a connection with [Connect-JIM](#connect-jim) before using any other JIM cmdlets. Use [Test-JIMConnection](#test-jimconnection) to verify your session is active, and [Disconnect-JIM](#disconnect-jim) to clean up when finished.
 
+```jim-diagram
+archetype: decision
+title: How Connect-JIM signs in
+desc: "Connect-JIM starts from the URL you give it. With -ApiKey, it checks that JIM accepts the key and connects with it, storing nothing. Without a key, it signs in interactively. If this PowerShell session already holds a single sign-on session with the same URL, and -Force is not given, it reuses that session, refreshing the access token if it is close to expiry. Otherwise, if the operating system's credential store holds a refresh token for the URL, and neither -Force nor -NoPersist is given, it connects silently using those cached credentials, with no browser. Failing that, it opens a browser to sign in, and saves the new refresh token to the credential store unless -NoPersist is given."
+start: { label: "`Connect-JIM`" }
+questions:
+  - { id: key, label: "`-ApiKey` given?" }
+  - { id: session, label: "Signed in to this URL already?", sub: "by SSO; ignored with `-Force`" }
+  - { id: stored, label: "Refresh token stored?", sub: "ignored with `-Force` or `-NoPersist`" }
+outcomes:
+  - { id: apikey, label: Connected by API key, sub: "key checked; nothing stored", good: true }
+  - { id: reused, label: Session reused, sub: refreshed if close to expiry, good: true }
+  - { id: cached, label: Cached credentials, sub: no browser sign-in, good: true }
+  - { id: browser, label: Browser sign-in, sub: "token saved unless `-NoPersist`", good: true }
+answers:
+  - { from: key, to: apikey, label: "yes" }
+  - { from: key, to: session, label: "no" }
+  - { from: session, to: reused, label: "yes" }
+  - { from: session, to: stored, label: "no" }
+  - { from: stored, to: cached, label: "yes" }
+  - { from: stored, to: browser, label: "no" }
+```
+
 !!! info "Running a cmdlet before connecting"
     If you run any JIM cmdlet before `Connect-JIM`, it produces no output and reports a clear, non-terminating error telling you to connect first, for example:
 
@@ -20,7 +43,7 @@ The connection cmdlets manage authentication and session state with a JIM instan
 
 ---
 
-## Connect-JIM
+## :material-login: Connect-JIM
 
 Establishes a connection to a JIM instance. This must be called before using any other JIM cmdlets.
 
@@ -106,7 +129,7 @@ Connect-JIM "https://jim.example.com" "jim_ak_7f3e..."
 
 ---
 
-## Disconnect-JIM
+## :material-logout: Disconnect-JIM
 
 Disconnects from a JIM instance and forgets its persisted credentials.
 
@@ -157,7 +180,7 @@ Disconnect-JIM -All
 
 ---
 
-## Test-JIMConnection
+## :material-lan-connect: Test-JIMConnection
 
 Tests whether the current connection to a JIM instance is active and healthy.
 
@@ -223,6 +246,6 @@ if ($status.TokenExpiresAt -and $status.TokenExpiresAt -lt (Get-Date).AddMinutes
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [API Authentication](../api/authentication.md): configuring API keys and SSO for the JIM server

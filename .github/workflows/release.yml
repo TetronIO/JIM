@@ -253,6 +253,9 @@ jobs:
       - name: Run Pester tests
         shell: pwsh
         run: |
+          # Register the default repository when the runner image has none (see the same step in ci.yml).
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
           $config = New-PesterConfiguration
           $config.Run.Path = @('./src/JIM.PowerShell/Tests', './scripts/Tests', './test/integration/utils', './test/integration/ad-lab')

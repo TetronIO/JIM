@@ -38,8 +38,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _inner.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
-        => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId, objectTypeId, createdOnOrAfter);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
 
     public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
         => _inner.GetConnectedSystemObjectTypeIdsInUseAsync(connectedSystemId);
@@ -266,12 +266,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
         => _inner.GetSyncRuleNamesByIdsAsync(syncRuleIds);
 
-    public Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
-        => _inner.GetLatestSyncRuleConfigurationChangeAsync();
-
-    public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
-        => _inner.GetConnectedSystemSynchronisationWatermarksAsync(connectedSystemId);
-
     public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
         => _inner.GetObjectMatchingRuleModeAsync(connectedSystemId);
 
@@ -330,6 +324,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
         => _inner.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
 
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+        => _inner.GetReferenceAnchorsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+
     public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
         => _inner.GetAttributeAsync(id);
 
@@ -349,8 +346,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
         => _inner.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
 
-    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
-        => _inner.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
+    public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        => _inner.GetRemainingDeferredExportIdsAsync(connectedSystemId, afterCreatedAt, afterId);
+
+    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+        => _inner.GetDeferredExportsByIdsAsync(pendingExportIds);
 
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _inner.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
@@ -586,6 +586,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(UpdatePendingExportsAsync));
+
+    public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports, IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+        => throw new PreviewWriteAttemptedException(nameof(PersistResolvedReferencesAsync));
 
     public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportsByConnectedSystemObjectIdsAsync));

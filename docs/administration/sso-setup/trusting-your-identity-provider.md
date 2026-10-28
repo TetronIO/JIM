@@ -9,6 +9,20 @@ audience: implementer
 
 JIM connects to your identity provider over HTTPS to read its configuration and signing keys, and to complete each sign-in. When the identity provider's certificate comes from your organisation's own certificate authority, as it usually does for AD FS and for Keycloak run on premises, JIM does not trust it out of the box and nobody can sign in. Trust that certificate authority for sign-in in JIM's certificate store and sign-in works straight away: no image rebuild, no restart.
 
+```jim-diagram
+archetype: lifecycle
+title: "The identity provider's certificate, untrusted and trusted"
+desc: "When the identity provider's certificate comes from your organisation's own certificate authority, JIM starts with it Untrusted, and sign-in is unavailable. Trusting the certificate for sign-in, with Add-JIMCertificate -FromIdentityProvider, Review and trust in the portal, or the REST API, makes it Trusted, and sign-in is available. If the certificate is later renewed onto a certificate authority JIM does not trust, or the certificate sign-in depends on is removed, it is Untrusted again. JIM checks the identity provider shortly after it starts and every 15 minutes after that."
+start: { label: Issued by your own CA }
+container: { label: "The identity provider's certificate", note: "JIM checks it after starting, then every 15 minutes" }
+states:
+  - { id: untrusted, label: Untrusted, sub: Sign-in is unavailable }
+  - { id: trusted, label: Trusted, sub: Sign-in is available }
+transitions:
+  - { from: untrusted, to: trusted, label: trusted for sign-in, note: "`Add-JIMCertificate`, the portal or REST" }
+  - { from: trusted, to: untrusted, label: renewed onto an untrusted CA, note: or its certificate removed }
+```
+
 You'll know you need this page when any of these happen:
 
 - JIM's log says `Sign-in is unavailable: JIM does not trust <host>'s certificate`, naming the certificate authority to trust.
@@ -17,13 +31,13 @@ You'll know you need this page when any of these happen:
 
 JIM keeps running while sign-in is unavailable: synchronisation, Schedules and API keys carry on, and nothing in the certificate store changes until someone trusts a certificate.
 
-## Before you begin
+## :material-clipboard-list-outline: Before you begin
 
 - **Who can do this**: an administrator signed in to the portal, or anyone holding an API key with the Administrator role. Before anyone can sign in, the infrastructure API key (`JIM_INFRASTRUCTURE_API_KEY`) is the way in; see [API keys](../../configuration/api-keys.md).
 - **The PowerShell module**, if you follow the PowerShell steps; see [Install the PowerShell module](../../powershell/index.md).
 - **The thumbprint your certificate authority publishes** for the certificate you will trust, to compare against the one JIM shows you. This check is what stops a certificate you did not expect being trusted.
 
-## Trust the certificate
+## :material-certificate-outline: Trust the certificate
 
 === "PowerShell"
 
@@ -74,19 +88,19 @@ Add-JIMCertificate -Name 'Contoso Root CA' -Path ./contoso-root.cer -TrustedFor 
 
 In the portal, upload it under **Admin** > **Certificates** with **Sign-in** ticked under **Trusted for**.
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 1. A browser left on **Sign-in is unavailable** turns to **Sign-in is available** within 10 seconds, without reloading. Select **Sign in**.
 2. `Get-JIMIdentityProviderTrust` reports `state` `Trusted` and `trustedBy` `TrustedByJimCertificateStore`.
 3. Under **Admin** > **Certificates**, the certificate shows **Sign-in** under **Trusted for**, and **In use by sign-in** as its status.
 
-## What trusted for sign-in means
+## :material-shield-check-outline: What trusted for sign-in means
 
 Every certificate in the store is trusted for Connectors, for sign-in, or both, and each only ever uses the certificates trusted for it. A certificate added for a Connected System's server never vouches for your identity provider: a certificate authority trusted for sign-in can vouch for the server that issues the tokens JIM signs people in with, so that is a decision on its own. A certificate already in the store for Connectors is trusted for sign-in as well when you trust it from the identity provider, rather than added twice.
 
 Trust is only ever added. JIM still checks that the certificate names the identity provider's host, is in date and is properly signed; nothing in the store switches a check off. A certificate that does not name the host (`NameMismatch`) cannot be fixed by trusting anything: the identity provider needs a certificate that names the host in `JIM_SSO_AUTHORITY`, or the authority must use a name its certificate carries.
 
-## When the certificate changes
+## :material-update: When the certificate changes
 
 JIM checks the identity provider shortly after it starts and every 15 minutes after that.
 
@@ -94,7 +108,7 @@ JIM checks the identity provider shortly after it starts and every 15 minutes af
 - **The certificate sign-in depends on expires within 30 days**: administrators see a notice naming it and the date. Trust its replacement before then.
 - **Removing the certificate sign-in depends on**: deleting it, disabling it or unticking **Sign-in** stops everyone signing in, including you. The portal warns and asks you to type its name; `Set-JIMCertificate` and `Remove-JIMCertificate` warn and ask first. If it happens anyway, the infrastructure API key and the steps above put it right.
 
-## Next steps
+## :material-arrow-right-circle-outline: Next steps
 
 - [Certificates](../../configuration/certificates.md): the certificate store, and what each certificate is trusted for.
 - [Certificates cmdlets](../../powershell/certificates.md): `Get-JIMIdentityProviderTrust` and `Add-JIMCertificate -FromIdentityProvider` in full.

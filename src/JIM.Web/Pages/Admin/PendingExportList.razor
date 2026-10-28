@@ -24,16 +24,24 @@
 @if (_connectedSystemHeader != null)
 {
     <MudPaper Elevation="0" Class="pa-4 mt-2" Outlined="true">
-        <MudStack Row AlignItems="AlignItems.Center" Spacing="4" Wrap="Wrap.Wrap">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="4" Wrap="Wrap.Wrap" Class="jim-filter-row">
             <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
                        SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
-                       MultiSelectionTextFunc="@GetStatusFilterText"
-                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
+                       MultiSelectionTextFunc="@GetFilterText"
+                       Variant="Variant.Outlined" Clearable="true" Dense="true">
                 <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
                 <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
                 <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
                 <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
                 <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Parked">Parked</MudSelectItem>
+            </MudSelect>
+            <MudSelect T="PendingExportChangeType" Label="Filter by Change Type" MultiSelection="true"
+                       SelectedValues="_changeTypeFilters" SelectedValuesChanged="OnChangeTypeFiltersChanged"
+                       MultiSelectionTextFunc="@GetFilterText"
+                       Variant="Variant.Outlined" Clearable="true" Dense="true">
+                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Create">Create</MudSelectItem>
+                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Update">Update</MudSelectItem>
+                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Delete">Delete</MudSelectItem>
             </MudSelect>
             @* A failing Pending Export is one whose last attempt failed (#2119). JIM attempts it again at every export
                run, so it stays Pending; this is how an administrator finds the ones to investigate. *@
@@ -43,8 +51,8 @@
     </MudPaper>
 
     @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, density, the
-       search box) lives in the shared grid; this page supplies the columns, the window loader, the Status filter
-       above and the empty states. *@
+       search box) lives in the shared grid; this page supplies the columns, the window loader, the Status and
+       Change Type filters above and the empty states. *@
     <VirtualisedDataGrid @ref="_grid" T="PendingExportHeader"
                          ContainerId="pending-export-list"
                          DefaultSortBy="created"
@@ -201,7 +209,7 @@
         </Columns>
         <EmptyContent Context="grid">
             @* An empty list means one of three different things, and the message says which: a search that matched
-               nothing, a Status filter that matched nothing (each with the way out as the action), or genuinely no
+               nothing, filters that matched nothing (each with the way out as the action), or genuinely no
                Pending Exports, which is the good state: everything has been exported. *@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
@@ -211,7 +219,7 @@
                                  ActionText="Clear Search"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
-            else if (_failingOnly && !_statusFilters.Any())
+            else if (_failingOnly && !_statusFilters.Any() && !_changeTypeFilters.Any())
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.TaskAlt"
                                  PrimaryText="No Pending Exports are failing"
@@ -219,11 +227,11 @@
                                  ActionText="Show All"
                                  OnAction="@(() => OnFailingOnlyChanged(false))" />
             }
-            else if (_statusFilters.Any() || _failingOnly)
+            else if (_statusFilters.Any() || _changeTypeFilters.Any() || _failingOnly)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
                                  PrimaryText="No Pending Exports match the filters"
-                                 SecondaryText="Try different statuses, or clear the filters."
+                                 SecondaryText="Try different filters, or clear them."
                                  ActionText="Clear Filters"
                                  OnAction="ClearFiltersAsync" />
             }
@@ -255,6 +263,7 @@ else
     private bool _failingOnly;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private IReadOnlyCollection<PendingExportStatus> _statusFilters = new HashSet<PendingExportStatus>();
+    private IReadOnlyCollection<PendingExportChangeType> _changeTypeFilters = new HashSet<PendingExportChangeType>();
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
@@ -291,12 +300,13 @@ else
             request.SortBy,
             request.SortDescending,
             includeTotalCount: request.IncludeTotalCount,
-            failingOnly: _failingOnly);
+            failingOnly: _failingOnly,
+            changeTypeFilters: _changeTypeFilters.Any() ? _changeTypeFilters : null);
 
         return new VirtualisedWindow<PendingExportHeader>(result.Results, result.TotalResults);
     }
 
-    private string GetStatusFilterText(IReadOnlyList<string> selectedValues)
+    private string GetFilterText(IReadOnlyList<string> selectedValues)
     {
         if (selectedValues == null || selectedValues.Count == 0)
             return "All";
@@ -324,6 +334,21 @@ else
     }
 
     /// <summary>
+    /// Applies a Change Type filter change and reloads the grid; re-counted and returned to the top for the same
+    /// reason as a Status filter change.
+    /// </summary>
+    private async Task OnChangeTypeFiltersChanged(IReadOnlyCollection<PendingExportChangeType> newFilters)
+    {
+        _changeTypeFilters = newFilters;
+
+        if (_grid != null)
+        {
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
+    }
+
+    /// <summary>
     /// Shows only failing Pending Exports, or all of them again, and reloads the grid; re-counted and returned to the
     /// top for the same reason as a Status filter change.
     /// </summary>
@@ -341,6 +366,7 @@ else
     private async Task ClearFiltersAsync()
     {
         _failingOnly = false;
+        _changeTypeFilters = new HashSet<PendingExportChangeType>();
         await OnStatusFiltersChanged(new HashSet<PendingExportStatus>());
     }
 

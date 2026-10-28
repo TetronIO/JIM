@@ -262,4 +262,22 @@ public class VirtualisedListUrlStateTests
 
         Assert.That(round, Is.EqualTo(original));
     }
+
+    [Test]
+    public void ToQueryParameters_StatesOnlyTheListsOwnParameters_RemovingThoseAtTheirDefault()
+    {
+        var state = new VirtualisedListUrlState { SearchText = "smith", SortBy = DefaultSort, FirstVisibleRow = 40 };
+
+        var parameters = state.ToQueryParameters(DefaultSort, "h-");
+
+        // Only its own four keys, so applying them in the browser leaves every other parameter on the page alone.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parameters.Keys, Is.EquivalentTo(new[] { "h-q", "h-sort", "h-desc", "h-row" }));
+            Assert.That(parameters["h-q"], Is.EqualTo(new[] { "smith" }));
+            Assert.That(parameters["h-row"], Is.EqualTo(new[] { "40" }));
+            Assert.That(parameters["h-sort"], Is.Null);
+            Assert.That(parameters["h-desc"], Is.Null);
+        }
+    }
 }

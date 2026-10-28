@@ -452,8 +452,25 @@
     /// <summary>Discards a built values load overtaken by a newer one.</summary>
     private int _builtValuesLoad;
 
+    /// <summary>
+    /// Whether the uniqueness token still follows the base expression: a sequence number while there is none, "Only if
+    /// taken" once there is. True only for a new Generated Value, and only until the administrator picks a token.
+    /// </summary>
+    private bool _tokenFollowsBaseExpression;
+
+    protected override void OnInitialized()
+    {
+        // "Only if taken" with no base expression cannot be added or saved, so a mapping arriving in that state is a new
+        // one still on the model's default; anything else is a choice already made, and is left alone.
+        _tokenFollowsBaseExpression = Mapping.Generation is { TokenKind: GeneratedValueTokenKind.OnlyIfTaken }
+            && string.IsNullOrWhiteSpace(BaseSource.Expression);
+        FollowBaseExpression();
+    }
+
     protected override async Task OnParametersSetAsync()
     {
+        FollowBaseExpression();
+
         var target = (Mapping.ResolveTargetMetaverseAttributeId(), Mapping.ResolveTargetConnectedSystemAttributeId());
         if (_participantsTarget == target)
             return;
@@ -601,11 +618,24 @@
         else if (!hasExpression && inSources)
             Mapping.Sources.Remove(BaseSource);
 
+        FollowBaseExpression();
         await NotifyChangedAsync();
+    }
+
+    /// <summary>Moves a token that still follows the base expression to the default for the form as it now stands.</summary>
+    private void FollowBaseExpression()
+    {
+        if (!_tokenFollowsBaseExpression || Mapping.Generation is not { } generation)
+            return;
+
+        generation.TokenKind = GeneratedValueFormHelpers.DefaultTokenKind(!string.IsNullOrWhiteSpace(BaseSource.Expression), IsNumberTarget);
+        if (generation.TokenKind == GeneratedValueTokenKind.Sequence)
+            generation.NeverReuse = true;
     }
 
     private async Task OnTokenKindChangedAsync(GeneratedValueTokenKind kind)
     {
+        _tokenFollowsBaseExpression = false;
         Mapping.Generation!.TokenKind = kind;
 
         // A Sequence never reuses a value whatever the setting (#242, Phase 6), so the stored flag is put back to

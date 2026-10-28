@@ -714,6 +714,66 @@ public class DriftDetectionService
     }
 
     /// <summary>
+    /// Drops the corrections that restate a change the object's Pending Export holds until an Initial Password is
+    /// delivered (#2039, #2501), and the drifted attributes left with no correction. The target holds an interim value
+    /// for such a change on purpose: staged, the correction would supersede the held change and re-send the value the
+    /// target refuses until the password arrives (Active Directory's <c>0000052D</c>). A correction to any other
+    /// attribute stands. The run and the synchronisation preview both apply it, so the preview proposes what the run
+    /// stages.
+    /// </summary>
+    /// <param name="drift">The object's drift, as <see cref="EvaluateDrift"/> found it; changed in place.</param>
+    /// <param name="heldPendingExport">The object's Pending Export holding the change.</param>
+    public static void DropCorrectionsRestatingHeldChanges(DriftDetectionResult drift, PendingExport heldPendingExport)
+    {
+        ArgumentNullException.ThrowIfNull(drift);
+        ArgumentNullException.ThrowIfNull(heldPendingExport);
+
+        foreach (var correction in drift.CorrectiveExports.ToList())
+        {
+            correction.AttributeValueChanges = SyncEngine.WithoutChangesRestatingAHeldChange(
+                correction.AttributeValueChanges, heldPendingExport.AttributeValueChanges);
+            if (correction.AttributeValueChanges.Count == 0)
+                drift.CorrectiveExports.Remove(correction);
+        }
+
+        var correctedAttributeIds = drift.CorrectiveExports
+            .SelectMany(correction => correction.AttributeValueChanges)
+            .Select(change => change.AttributeId)
+            .ToHashSet();
+        drift.DriftedAttributes.RemoveAll(drifted => !correctedAttributeIds.Contains(drifted.Attribute.Id));
+    }
+
+    /// <summary>
+    /// Carries the object's Pending Export into its drift correction (#2501). The page flush replaces an object's
+    /// Pending Export with the correction staged for it, so whatever the correction does not supersede travels with it,
+    /// keeping its place in the export lifecycle: a change held until an Initial Password is delivered stays held and
+    /// awaiting confirmation, rather than being deleted with its Pending Export and re-sent later to an account the
+    /// target will not enable without a password. As export evaluation's merge does, the correction continues the
+    /// export it replaces: it keeps a still-queued export's id, and its stagers. Call after
+    /// <see cref="DropCorrectionsRestatingHeldChanges"/>, and before the run records itself as the correction's stager.
+    /// </summary>
+    /// <param name="drift">The object's drift, its corrections already without restatements; changed in place.</param>
+    /// <param name="existingPendingExport">The object's Pending Export the correction replaces.</param>
+    public static void CarryOverReplacedPendingExport(DriftDetectionResult drift, PendingExport existingPendingExport)
+    {
+        ArgumentNullException.ThrowIfNull(drift);
+        ArgumentNullException.ThrowIfNull(existingPendingExport);
+
+        // One correction replaces the existing Pending Export; carried into more than one, its changes would be staged twice.
+        var correction = drift.CorrectiveExports.FirstOrDefault();
+        if (correction == null || existingPendingExport.ChangeType == PendingExportChangeType.Delete)
+            return;
+
+        correction.AttributeValueChanges.AddRange(SyncEngine
+            .SelectSurvivingDriftChanges(correction.AttributeValueChanges, existingPendingExport.AttributeValueChanges)
+            .Select(SyncEngine.CarryOverSurvivingChange));
+
+        if (existingPendingExport.Status == PendingExportStatus.Pending)
+            correction.Id = existingPendingExport.Id;
+        correction.InheritStagersFrom(existingPendingExport);
+    }
+
+    /// <summary>
     /// Builds a lookup dictionary of import mappings by (ConnectedSystemId, MvoAttributeId).
     /// Call this once at the start of a sync run for efficient drift detection.
     /// </summary>

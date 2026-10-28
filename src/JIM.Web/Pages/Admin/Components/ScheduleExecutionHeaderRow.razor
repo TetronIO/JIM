@@ -1,0 +1,47 @@
+@using JIM.Models.Scheduling
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The row heading a Schedule Execution's tasks in the Activity tab's Queued and In progress tables (#2549): the
+   Schedule's name, where it has got to, its step rail, and the two actions that act on the whole execution. *@
+<tr class="jim-activity-group-row">
+    <td colspan="8">
+        <div class="d-flex align-center flex-wrap gap-3">
+            <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Class="mud-text-secondary" />
+            <MudText Typo="Typo.body1"><b>@(ScheduleName ?? "Schedule")</b></MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Summary</MudText>
+            <ScheduleStepRail Progress="@Progress" />
+            <MudSpacer />
+            @if (ScheduleExecutionId is { } executionId)
+            {
+                <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced"
+                            Arrow="true" Placement="Placement.Top">
+                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew"
+                               Href="@($"/admin/operations/schedule-executions/{executionId}")">View execution</MudButton>
+                </MudTooltip>
+                <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                                   aria-label="Cancel Schedule" OnClick="() => OnCancel.InvokeAsync(executionId)" />
+                </MudTooltip>
+            }
+        </div>
+    </td>
+</tr>
+
+@code {
+    /// <summary>The Schedule Execution these rows belong to.</summary>
+    [Parameter] public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>The Schedule's name as at execution time.</summary>
+    [Parameter] public string? ScheduleName { get; set; }
+
+    /// <summary>The execution's shape, for its step rail.</summary>
+    [Parameter] public ScheduleExecutionProgress? Progress { get; set; }
+
+    /// <summary>Where the execution has got to, in a few words.</summary>
+    [Parameter] public string? Summary { get; set; }
+
+    /// <summary>Raised with the execution's id when Cancel Schedule is chosen.</summary>
+    [Parameter] public EventCallback<Guid> OnCancel { get; set; }
+}

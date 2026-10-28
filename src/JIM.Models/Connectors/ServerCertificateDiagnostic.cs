@@ -101,6 +101,13 @@ public class ServerCertificateDiagnostic
     /// </summary>
     public string? Remediation { get; set; }
 
+    /// <summary>
+    /// Whether only the root of the chain can be trusted to make this connection work. False for most connections,
+    /// which accept any certificate in the chain. True for Oracle Database over TCPS, whose driver accepts the chain only
+    /// when it ends at a root certificate authority trusted in JIM, so only the root is offered.
+    /// </summary>
+    public bool TrustAnchorMustBeRoot { get; set; }
+
     public bool IsExpired => ValidTo.HasValue && ValidTo.Value < DateTime.UtcNow;
 
     public bool IsNotYetValid => ValidFrom.HasValue && ValidFrom.Value > DateTime.UtcNow;

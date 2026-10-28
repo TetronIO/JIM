@@ -9,7 +9,34 @@ audience: administrator
 
 A Metaverse Object is one identity in the [Metaverse](metaverse.md): a single `User`, `Group`, or an object of a type you defined. Its page answers the questions asked of it most: where does this value come from, and why does this person have an account in that system, or not have one in this one? Both answers are read-only, and are available through the REST API and PowerShell too.
 
-## Where a value comes from
+```jim-diagram
+archetype: decision
+title: Why a Metaverse Object is not connected to a Connected System
+desc: "For each enabled export Synchronisation Rule whose Connected System holds no object joined to the Metaverse Object, the Connections tab gives one reason. If a criterion uses a comparison its attribute's type cannot use, the rule's scoping cannot be evaluated: Rule misconfigured. If the object fails the rule's scoping criteria: Not in scope. If the rule's Provision to Connected System is off: Rule doesn't provision. If nothing has been staged: Not yet provisioned. A connection already staged, as Pending Export or Awaiting confirmation, is a row in the Connections table instead."
+start: { label: Export rule }
+questions:
+  - { id: eval, label: "Can its scoping be evaluated?" }
+  - { id: scope, label: "Is the object in scope?" }
+  - { id: prov, label: "Does the rule provision?" }
+  - { id: staged, label: "Has anything been staged?" }
+outcomes:
+  - { id: misconfigured, label: Rule misconfigured, sub: "a comparison its attribute's type cannot use" }
+  - { id: notscope, label: Not in scope, sub: "fails the rule's scoping criteria" }
+  - { id: noprov, label: "Rule doesn't provision", sub: Provision to Connected System is off }
+  - { id: notyet, label: Not yet provisioned, sub: nothing staged }
+  - { id: row, label: A row in the Connections table, sub: Pending Export or Awaiting confirmation, good: true }
+answers:
+  - { from: eval, to: misconfigured, label: "no" }
+  - { from: eval, to: scope, label: "yes" }
+  - { from: scope, to: notscope, label: "no" }
+  - { from: scope, to: prov, label: "yes" }
+  - { from: prov, to: noprov, label: "no" }
+  - { from: prov, to: staged, label: "yes" }
+  - { from: staged, to: notyet, label: "no" }
+  - { from: staged, to: row, label: "yes" }
+```
+
+## :material-arrow-decision-outline: Where a value comes from
 
 A Metaverse Object's **Details** tab offers three views: **Form**, **Tabs** and **Inspect**. Form and Tabs show the values. **Inspect** shows where each value comes from, and is the view to use when a value looks wrong. You can also open it directly with `?view=inspect` on the object's address.
 
@@ -29,9 +56,9 @@ The same information is available through the REST API (`GET /api/v1/metaverse/o
 
 A value's source is not only in the Inspect view: the object's **Changes** tab names each attribute change's source alongside the change itself, and a [Pending Export's detail page](connected-systems.md#pending-exports) shows both where the outbound value came from and which Attribute Flow staged it. Both link back into Inspect so you can jump straight from a change or a queued export to the full picture.
 
-## Why it is connected, and why it is not
+## :material-link-variant: Why it is connected, and why it is not
 
-A Metaverse Object's **Connections** tab lists every Connected System Object joined to it, with its role, its state and a per-row **Preview Sync** (see [Sync Preview](sync-preview.md)). It also answers the two questions a helpdesk asks most: why does this person have an account in that system, and why don't they have one in this one? The tab is available to Administrators.
+A Metaverse Object's **Connections** tab lists every Connected System Object joined to it, with its role, its state and a per-row **Preview Sync** (see [Sync Preview](sync-preview.md)). The **Object** column names each one by its Secondary External ID where its Connected System has one (for an LDAP directory, the distinguished name), with its External ID beneath; otherwise by its External ID alone. An object still being provisioned shows the identifiers its Pending Export will give it, marked as pending. It also answers the two questions a helpdesk asks most: why does this person have an account in that system, and why don't they have one in this one? The tab is available to Administrators.
 
 **Why it is connected.** Expand a connection's row to see:
 
@@ -39,7 +66,7 @@ A Metaverse Object's **Connections** tab lists every Connected System Object joi
 - **Scoping**<br /> Each enabled Synchronisation Rule relevant to the connection, evaluated against current values: import rules against the Connected System Object's values for a source, export rules against the Metaverse Object's values for a target. It is labelled with the time it was evaluated, because it answers whether the connection is in scope now, not why it joined. A connection that is now out of scope of a rule (an import rule set to keep the join, or an export rule whose deprovisioning is under way) shows that rule as **Not in scope**, with the criteria it fails.
 - **Object Type conflicts**<br /> Another enabled export rule that targets the same Connected System for a different object type cannot connect this Metaverse Object, because a Metaverse Object has one Connected System Object per Connected System and this connection already holds it. The row says so, naming the rule.
 
-**Why it is not connected.** Below the table, the **Not connected** section lists every enabled export Synchronisation Rule for the Metaverse Object's type whose Connected System holds no object joined to it. It is collapsed until you open it; its heading counts the entries. When there are none it says the object is connected everywhere an enabled export rule targets. Rules on a Connected System being deleted are left out; rules on a disabled Connected System are listed, and their hint says the Connected System is disabled. A connection still being provisioned (**Pending Export** or **Awaiting confirmation**) is already a row in the table above, so it never appears here.
+**Why it is not connected.** Below the table, the **Not connected** section lists every enabled export Synchronisation Rule for the Metaverse Object's type whose Connected System holds no object joined to it. It is collapsed until you open it; its heading counts the entries. When there are none it says the object is connected to every Connected System it could be exported to. Rules on a Connected System being deleted are left out; rules on a disabled Connected System are listed, and their hint says the Connected System is disabled. A connection still being provisioned (**Pending Export** or **Awaiting confirmation**) is already a row in the table above, so it never appears here.
 
 Each entry shows the Connected System, the rule, one reason and a one-line hint naming what it fails on, without values:
 
@@ -58,7 +85,7 @@ Nothing on the Connections tab changes data: the explanations are evaluated in m
 
 The same explanations, in the same words, are available through the REST API (`GET /api/v1/metaverse/objects/{id}/connections`, adding `?includeNotConnected=true` for the Not connected entries; see the [interactive API reference](../../api/reference/)) and PowerShell ([`Get-JIMMetaverseObjectConnection`](../powershell/metaverse.md#get-jimmetaverseobjectconnection)).
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Metaverse](metaverse.md): Object Types, attributes and pending deletions.
 - [Attribute Priority](../concepts/attribute-priority.md): which source's value wins.

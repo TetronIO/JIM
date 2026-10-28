@@ -458,8 +458,8 @@ public partial class SyncRepository
     /// Persists an optimistic export apply delta: bulk-inserts new attribute value rows via COPY
     /// binary import and bulk-deletes superseded ones. Touches NO parent CSO row - see the remark
     /// on <see cref="JIM.Data.Repositories.ISyncRepository.ApplyExportedAttributeValuesAsync"/> for
-    /// why <c>LastUpdated</c> must stay untouched here (it is what re-arms the Full Synchronisation
-    /// unchanged-object watermark for a no-op confirming import).
+    /// why <c>LastUpdated</c> must stay untouched here (it is what keeps a no-op confirming import
+    /// out of the next Delta Synchronisation).
     /// </summary>
     public async Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
     {

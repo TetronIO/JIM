@@ -9,9 +9,20 @@ audience: automation-author
 
 The auxiliary class cmdlets choose which auxiliary object classes an LDAP Connected System's Object Types carry, name the structural class an auxiliary Object Type is created with, and read a directory's entries to find which auxiliary classes are in use.
 
+```jim-diagram
+archetype: flow
+title: Merging auxiliary classes into an Object Type, from discovery to schema
+desc: "Starting from an LDAP Connected System, an optional discovery run, Start-JIMConnectedSystemAuxiliaryClassDiscovery with -Scope QuickSample or FullScan, reads the directory's entries to find which auxiliary classes are in use; it changes no configuration. For one Object Type, Get-JIMConnectedSystemAuxiliaryClass -SuggestedOnly then lists the classes something suggests, from that run or from the directory's own rules. Set-JIMConnectedSystemAuxiliaryClass merges the classes you choose into the Object Type; it replaces the whole set, so name every class the Object Type should carry. The merged classes' attributes appear on the Object Type after the next Import-JIMConnectedSystemSchema."
+steps:
+  - { id: discover, label: Discover, sub: "`QuickSample` or `FullScan`", note: "optional; changes nothing" }
+  - { id: review, label: Review suggestions, sub: "`-SuggestedOnly`" }
+  - { id: merge, label: Merge classes, sub: replaces the whole set }
+  - { id: import, label: Import the schema, sub: attributes appear }
+```
+
 ---
 
-## Get-JIMConnectedSystemAuxiliaryClass
+## :material-shape-outline: Get-JIMConnectedSystemAuxiliaryClass
 
 Lists the auxiliary classes that can be merged into a Connected System Object Type, and which of them are merged already.
 
@@ -75,7 +86,7 @@ Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -Merge
 
 ---
 
-## Set-JIMConnectedSystemAuxiliaryClass
+## :material-pencil-outline: Set-JIMConnectedSystemAuxiliaryClass
 
 Sets which auxiliary classes a Connected System Object Type carries.
 
@@ -145,7 +156,7 @@ Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -Clear
 
 ---
 
-## Set-JIMConnectedSystemStructuralCarrierClass
+## :material-link-variant: Set-JIMConnectedSystemStructuralCarrierClass
 
 Sets the Structural Carrier Class of an auxiliary Connected System Object Type: the structural class JIM writes alongside the auxiliary one when creating an entry.
 
@@ -198,7 +209,7 @@ Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 |
 
 ---
 
-## Start-JIMConnectedSystemAuxiliaryClassDiscovery
+## :material-play-circle-outline: Start-JIMConnectedSystemAuxiliaryClassDiscovery
 
 Starts a run that reads a Connected System's entries to find which auxiliary classes they carry.
 
@@ -253,7 +264,7 @@ Get-JIMActivity -Id $run.ActivityId
 
 ---
 
-## Get-JIMConnectedSystemAuxiliaryClassDiscovery
+## :material-text-search: Get-JIMConnectedSystemAuxiliaryClassDiscovery
 
 Gets the last auxiliary class discovery run for a Connected System, whatever its outcome. Returns nothing when none has been started.
 
@@ -307,7 +318,7 @@ Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [LDAP Connector: Auxiliary Object Classes](../connectors/jim-ldap-connector-auxiliary-classes.md): what merging an auxiliary class does on a directory, and how JIM composes each entry's class membership on export
 - [Connected System Schema](connected-system-schema.md): import the schema the auxiliary classes come from

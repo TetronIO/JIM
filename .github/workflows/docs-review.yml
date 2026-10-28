@@ -119,7 +119,7 @@ jobs:
             The rules are in engineering/DOCUMENTATION_STANDARD.md. Read it first. Review
             against the Review-tier rules only: AUD-1, VOI-1 to VOI-5, SAFE-1, SAFE-2,
             HOME-1, the Review halves of LANG-5 and LANG-7, LANG-9, MNT-1, MNT-2, ACC-4,
-            A11Y-3 and STY-1 to STY-3. Do not report what the Block and Ratchet rules
+            A11Y-3, STY-2, the Review half of STY-3, and VIS-2 to VIS-4. Do not report what the Block and Ratchet rules
             cover: scripts in CI check those, and repeating them is noise. Words the
             standard leaves to the reviewer because they are usually right ("now",
             "currently", "no longer", "just", "easy", a lower-case product noun that is
@@ -128,6 +128,12 @@ jobs:
             For ACC-4, check a claim against the source code where it is cheap to do so
             (a setting's default, a cmdlet's parameter, what a button does), and say what
             you checked.
+
+            For VIS-2 to VIS-4, review each diagram from its source: a ```jim-diagram spec
+            in the page, an SVG it includes from docs/assets/diagrams/, or a Mermaid block.
+            For VIS-2, name the section that needs a diagram and what it would show; for
+            VIS-4, compare each label, step and outcome with the page's text, and with the
+            source where it is cheap to do so, as for ACC-4.
 
             Earlier runs may already have reviewed this pull request. Read
             .docs-review-existing-comments.jsonl in the checkout: one JSON object per

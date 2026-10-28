@@ -446,9 +446,23 @@ public partial class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemsAsync();
     }
 
+    /// <summary>
+    /// Every Connected System as a header, with its object, joined-object and Pending Export counts. The counts read
+    /// every Connected System Object, so a caller that only needs to name or pick a system should use
+    /// <see cref="GetConnectedSystemNamesAsync"/> instead.
+    /// </summary>
     public async Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync()
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemHeadersAsync();
+    }
+
+    /// <summary>
+    /// The name of every Connected System, keyed by id: the lookup for naming or picking a system without paying for
+    /// the counts a header carries.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync();
     }
 
     public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)
@@ -1856,6 +1870,7 @@ public partial class ConnectedSystemServer
                 DefaultStringValue = connectorSetting.DefaultStringValue,
                 DefaultIntValue = connectorSetting.DefaultIntValue,
                 Description = connectorSetting.Description,
+                Example = connectorSetting.Example,
                 DropDownValues = connectorSetting.DropDownValues,
                 Name = connectorSetting.Name,
                 Type = connectorSetting.Type,
@@ -9175,6 +9190,7 @@ public partial class ConnectedSystemServer
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
+    /// <param name="changeTypeFilters">Optional filter by one or more change types.</param>
     public async Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
         int connectedSystemId,
         int page,
@@ -9183,10 +9199,11 @@ public partial class ConnectedSystemServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool failingOnly = false)
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportHeadersAsync(
-            connectedSystemId, page, pageSize, statusFilters, searchQuery, sortBy, sortDescending, failingOnly);
+            connectedSystemId, page, pageSize, statusFilters, searchQuery, sortBy, sortDescending, failingOnly, changeTypeFilters);
     }
 
     /// <summary>
@@ -9205,10 +9222,11 @@ public partial class ConnectedSystemServer
         string? sortBy = null,
         bool sortDescending = true,
         bool includeTotalCount = true,
-        bool failingOnly = false)
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportHeadersRangeAsync(
-            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount, failingOnly);
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount, failingOnly, changeTypeFilters);
     }
 
     /// <summary>

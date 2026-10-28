@@ -60,7 +60,7 @@
 @if (MetaverseObject != null)
 {
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChanged"
-                      ActivePanelSlugChanged="OnActiveTabSlugChangedAsync" Class="mt-2" TabPanelsClass="pt-5">
+                      ActivePanelSlugChanged="OnActiveTabSlugChangedAsync" Class="mt-2" TabPanelsClass="pt-6">
         <Header Context="headerContext">
             <MudSpacer />
             @if (_activeTabIndex == 0)
@@ -993,8 +993,8 @@
                 CsoId: connection.ConnectedSystemObjectId,
                 CsoConnectedSystemId: connection.ConnectedSystemId,
                 CsoConnectedSystemName: connection.ConnectedSystemName,
-                CsoDisplayName: connection.DisplayName,
-                CsoExternalId: null,
+                CsoDisplayName: null,
+                CsoExternalId: connection.ExternalId ?? connection.PendingExternalId,
                 CsoObjectTypeName: connection.ObjectTypeName,
                 MvoTypeName: MetaverseObjectType?.Name,
                 MvoTypePluralName: MetaverseObjectType?.PluralName);

@@ -236,6 +236,7 @@
 
 @code {
     private VirtualisedDataGrid<SyncRuleHeader>? _grid;
+    private Task? _loading;
     private IList<SyncRuleHeader>? _syncRuleHeaders;
     private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
 
@@ -266,13 +267,13 @@
     /// <summary>
     /// Loads the Synchronisation Rule list, its filter options and its per-row indicator data once. The grid's
     /// window loader also calls this because the grid can request its first window before this page's
-    /// initialisation has completed.
+    /// initialisation has completed, so a caller arriving mid-load waits on the load already running rather than
+    /// starting another (or, once the headers had arrived, rendering rows before their indicator data had).
     /// </summary>
-    private async Task EnsureLoadedAsync()
-    {
-        if (_syncRuleHeaders != null)
-            return;
+    private Task EnsureLoadedAsync() => _loading ??= LoadAsync();
 
+    private async Task LoadAsync()
+    {
         using var jim = JimFactory.Create();
         _canCreateSyncRules = jim.ConnectedSystems.GetConnectedSystemCount() > 0;
         _syncRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync();

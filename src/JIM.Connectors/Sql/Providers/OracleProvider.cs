@@ -59,19 +59,17 @@ internal class OracleProvider : SqlProviderBase
     public override string SecureTransportName => "TCPS";
 
     /// <summary>
-    /// False for now, pending verification against a real server rather than as a settled conclusion.
-    /// ODP.NET exposes no server certificate validation callback and no per-connection trust anchor; its
-    /// only trust configuration is an Oracle wallet (<c>WalletLocation</c>), or the Microsoft Certificate
-    /// Store on Windows. Whether JIM can supply that wallet from managed code is genuinely open: the
-    /// driver's wallet reader takes a wallet password and has a PEM code path, which points at ordinary
-    /// PKCS#12 rather than only the auto-login wallets Oracle's own native tooling produces, and .NET can
-    /// write both. Settling it needs a live TCPS listener, so it is a question for the integration test
-    /// phase. Until then a TCPS connection validates against the operating system's bundle alone, and JIM
-    /// reports exactly which certificate was refused and why, so an administrator knows what to install.
-    /// Native Network Encryption is unaffected: it uses no certificate at all, which is one reason it is
-    /// the default Oracle encryption mode JIM offers.
+    /// True. ODP.NET exposes no server certificate validation callback; its trust configuration is an
+    /// Oracle wallet, set per connection through <c>WalletLocation</c>. JIM writes that wallet as a plain
+    /// <c>ewallet.pem</c> (no Oracle tooling and no password), and verified against Oracle Database Free
+    /// 23ai with ODP.NET 23.26.400 (#2581) the driver builds the chain from the wallet alone, ignoring the
+    /// intermediates the server sends, and accepts it only when it ends at a self-signed certificate there.
+    /// A root alone is refused when an intermediate stands between it and the server's certificate, and so
+    /// is an intermediate or the server's own certificate alone; the root and the intermediates together
+    /// connect. Native Network Encryption is unaffected: it uses no certificate at all, which is one reason
+    /// it is the default Oracle encryption mode JIM offers.
     /// </summary>
-    public override bool SupportsPinnedServerCertificate => false;
+    public override bool TrustAnchorMustBeRoot => true;
 
     public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => SqlGeneratedKeyRetrieval.OutputParameter;
 
@@ -200,7 +198,7 @@ internal class OracleProvider : SqlProviderBase
     /// preference to their equivalents on <c>OracleConfiguration</c>, which are static: setting those
     /// would let one Connected System's choice decide how every other one connects. Nothing is written
     /// for the other encryption modes, so TCPS keeps the transport it already has and a system configured
-    /// for no encryption is left alone.
+    /// for no encryption is left alone. A TCPS connection is handed its wallet here too, where JIM has one.
     /// </para>
     /// </summary>
     public override void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings)
@@ -208,10 +206,19 @@ internal class OracleProvider : SqlProviderBase
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(settings);
 
+        var oracleConnection = (OracleConnection)connection;
+
+        // TCPS on the retry after a refusal: the wallet JIM wrote of the root it trusts and the intermediates
+        // beneath it. Per connection, deliberately, as below: OracleConfiguration.WalletLocation is static and would
+        // let one Connected System's trust decide every other's.
+        if (settings.Encryption == SqlConnectionEncryption.Tls && !string.IsNullOrEmpty(settings.PinnedTrustPath))
+        {
+            oracleConnection.WalletLocation = settings.PinnedTrustPath;
+            return;
+        }
+
         if (settings.Encryption != SqlConnectionEncryption.OracleNativeNetworkEncryption)
             return;
-
-        var oracleConnection = (OracleConnection)connection;
 
         // REQUIRED rather than REQUESTED: a system an administrator has configured for encryption should
         // fail to connect rather than quietly fall back to plain text against a server that will not.
@@ -224,6 +231,52 @@ internal class OracleProvider : SqlProviderBase
         // two independently, so an estate configuring one configures both.
         oracleConnection.SqlNetCryptoChecksumClient = "REQUIRED";
         oracleConnection.SqlNetCryptoChecksumTypesClient = "SHA512, SHA384, SHA256";
+    }
+
+    /// <summary>
+    /// Leads with the most specific Oracle error in the exception chain, where ODP.NET has hidden it
+    /// beneath a more generic one.
+    /// </summary>
+    /// <remarks>
+    /// ODP.NET reports a failure during Oracle Net negotiation as <c>ORA-50201</c> ("Failed to connect to
+    /// server or failed to parse connect string"), which sends an administrator to check a host and
+    /// service name that are right, and keeps the cause (<c>ORA-12660</c> or <c>ORA-12650</c> for an
+    /// encryption mismatch) in an inner exception. Only the first line of each message is used: the
+    /// inner ones carry Oracle's help link on a second line, which a one-line report has no room for.
+    /// Where every level repeats the outer error's code, the driver's message is already the whole story.
+    /// </remarks>
+    public override string DescribeConnectionFailure(DbException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var reported = FirstLine(exception.Message);
+        var reportedCode = OracleErrorCode(reported);
+
+        string? cause = null;
+        for (var inner = exception.InnerException; inner != null; inner = inner.InnerException)
+        {
+            var line = FirstLine(inner.Message);
+            var code = OracleErrorCode(line);
+            if (code != null && code != reportedCode)
+                cause = line;
+        }
+
+        return cause == null ? exception.Message : $"{cause} (reported by the driver as {reported})";
+    }
+
+    private static string FirstLine(string message)
+    {
+        var end = message.IndexOfAny(['\r', '\n']);
+        return (end < 0 ? message : message[..end]).Trim();
+    }
+
+    /// <summary>
+    /// The <c>ORA-nnnnn</c> a message opens with, or null where it is not an Oracle error.
+    /// </summary>
+    private static string? OracleErrorCode(string message)
+    {
+        var colon = message.IndexOf(':');
+        return colon > 4 && message.StartsWith("ORA-", StringComparison.Ordinal) ? message[..colon] : null;
     }
 
     /// <summary>
@@ -357,7 +410,12 @@ internal class OracleProvider : SqlProviderBase
             throw new ArgumentException("An Oracle connection needs either a service name or a SID to identify the database.", nameof(settings));
         }
 
-        return $"(DESCRIPTION=(ADDRESS=(PROTOCOL={protocol})(HOST={settings.Host})(PORT={port}))(CONNECT_DATA={connectData}))";
+        // Over TCPS, the server's certificate must name the host JIM connects to. ODP.NET only checks that
+        // when told to: without SSL_SERVER_DN_MATCH it accepts a certificate issued for any host that
+        // chains to a trusted authority, which leaves the session open to interception (#2589).
+        var security = settings.Encryption == SqlConnectionEncryption.Tls ? "(SECURITY=(SSL_SERVER_DN_MATCH=TRUE))" : string.Empty;
+
+        return $"(DESCRIPTION=(ADDRESS=(PROTOCOL={protocol})(HOST={settings.Host})(PORT={port}))(CONNECT_DATA={connectData}){security})";
     }
 
     #endregion

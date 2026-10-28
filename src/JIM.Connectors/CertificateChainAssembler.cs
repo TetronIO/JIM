@@ -32,11 +32,13 @@ internal static class CertificateChainAssembler
     /// <param name="sentByServer">The other certificates the server sent during the handshake.</param>
     /// <param name="trustedCertificates">The JIM certificate store.</param>
     /// <param name="downloadTimeout">How long to wait for each issuer certificate JIM downloads.</param>
+    /// <param name="trustAnchorMustBeRoot">Whether only a root in the store counts as vouching for the chain; see <see cref="SecureEndpoint.TrustAnchorMustBeRoot"/>. Everything else in the store still links the chain.</param>
     internal static AssembledCertificateChain Assemble(
         X509Certificate2 leaf,
         IReadOnlyCollection<X509Certificate2> sentByServer,
         IReadOnlyCollection<X509Certificate2> trustedCertificates,
-        TimeSpan downloadTimeout)
+        TimeSpan downloadTimeout,
+        bool trustAnchorMustBeRoot = false)
     {
         ArgumentNullException.ThrowIfNull(leaf);
 
@@ -69,7 +71,7 @@ internal static class CertificateChainAssembler
             elements,
             root,
             missingIssuer: isComplete ? null : top.Issuer,
-            isTrusted: IsTrusted(leaf, sentByServer, trustedCertificates),
+            isTrusted: IsTrusted(leaf, sentByServer, trustedCertificates, trustAnchorMustBeRoot),
             problem: FindProblem(elements));
     }
 
@@ -116,9 +118,12 @@ internal static class CertificateChainAssembler
     /// Whether a connection would accept the chain: the JIM certificate store vouches for it, or the operating system
     /// trusts it. Judged on what the server sent, never on what JIM downloaded.
     /// </summary>
-    private static bool IsTrusted(X509Certificate2 leaf, IReadOnlyCollection<X509Certificate2> sentByServer, IReadOnlyCollection<X509Certificate2> trustedCertificates)
+    private static bool IsTrusted(X509Certificate2 leaf, IReadOnlyCollection<X509Certificate2> sentByServer, IReadOnlyCollection<X509Certificate2> trustedCertificates, bool trustAnchorMustBeRoot)
     {
-        if (CertificateStoreTrust.VouchesFor(leaf, sentByServer, trustedCertificates))
+        var vouched = trustAnchorMustBeRoot
+            ? CertificateStoreTrust.VouchesForThroughRoot(leaf, sentByServer, trustedCertificates)
+            : CertificateStoreTrust.VouchesFor(leaf, sentByServer, trustedCertificates);
+        if (vouched)
             return true;
 
         using var system = new X509Chain();

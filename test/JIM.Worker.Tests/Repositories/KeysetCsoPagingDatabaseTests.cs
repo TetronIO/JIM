@@ -114,7 +114,7 @@ public class KeysetCsoPagingDatabaseTests
         for (var page = 1; page <= 4; page++)
         {
             var result = await repository.Sync.GetConnectedSystemObjectsAsync(
-                systemId, page, pageSize: 3, knownTotalCount: 10, lastSyncTimestamp: null, afterId: afterId);
+                systemId, page, pageSize: 3, knownTotalCount: 10, afterId: afterId);
 
             seenIds.AddRange(result.Results.Select(cso => cso.Id));
             if (result.Results.Count > 0)
@@ -168,11 +168,10 @@ public class KeysetCsoPagingDatabaseTests
     }
 
     [Test]
-    public async Task GetConnectedSystemObjectsAsync_KeysetWithWatermark_LoadsChangedCsoAttributesAcrossPagesAsync()
+    public async Task GetConnectedSystemObjectsAsync_KeysetCursorChaining_LoadsAttributeValuesOnEveryPageAsync()
     {
-        // Arrange: watermark older than every CSO, so all are "changed" and attributes must load
+        // Arrange
         var (systemId, expectedIds) = await SeedCsosAsync(7);
-        var watermark = DateTime.UtcNow.AddDays(-1);
 
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
@@ -183,14 +182,12 @@ public class KeysetCsoPagingDatabaseTests
         for (var page = 1; page <= 3; page++)
         {
             var result = await repository.Sync.GetConnectedSystemObjectsAsync(
-                systemId, page, pageSize: 3, knownTotalCount: 7, lastSyncTimestamp: watermark, afterId: afterId);
+                systemId, page, pageSize: 3, knownTotalCount: 7, afterId: afterId);
 
             foreach (var cso in result.Results)
             {
-                Assert.That(cso.IsUnchangedSinceLastSync, Is.False,
-                    "All CSOs were created after the watermark, so none may take the unchanged fast path");
                 Assert.That(cso.AttributeValues, Is.Not.Empty,
-                    $"Changed CSO {cso.Id} must have its attribute values loaded on every keyset page");
+                    $"A Full Synchronisation evaluates every object, so CSO {cso.Id} must have its attribute values loaded on every keyset page");
             }
 
             seenIds.AddRange(result.Results.Select(cso => cso.Id));
@@ -217,7 +214,7 @@ public class KeysetCsoPagingDatabaseTests
         var offsetFirstPage = await repository.Sync.GetConnectedSystemObjectsAsync(
             systemId, page: 1, pageSize: 3);
         var keysetFirstPage = await repository.Sync.GetConnectedSystemObjectsAsync(
-            systemId, page: 1, pageSize: 3, knownTotalCount: null, lastSyncTimestamp: null, afterId: null);
+            systemId, page: 1, pageSize: 3, knownTotalCount: null, afterId: null);
 
         // Assert: identical first page either way
         Assert.That(

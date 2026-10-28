@@ -55,11 +55,8 @@ public class OperationsGeneratedValuesTabTests : JimComponentTestContext
     {
         _syncRepository.Reset();
         _connectedSystemRepository.Reset();
-        _connectedSystemRepository.Setup(r => r.GetConnectedSystemHeadersAsync()).ReturnsAsync(
-        [
-            new ConnectedSystemHeader { Id = CorporateAd, Name = "Corporate AD" },
-            new ConnectedSystemHeader { Id = ContractorLdap, Name = "Contractor LDAP" }
-        ]);
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(
+            new Dictionary<int, string> { [CorporateAd] = "Corporate AD", [ContractorLdap] = "Contractor LDAP" });
         _connectedSystemRepository.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(
             new List<SyncRuleHeader> { new() { Id = HrImportRule, Name = "HR Import", ConnectedSystemName = "HR" } });
         _syncRepository.Setup(r => r.GetAllSyncRulesAsync(It.IsAny<bool>())).ReturnsAsync(new List<JIM.Models.Logic.SyncRule>());

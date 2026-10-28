@@ -161,6 +161,47 @@ Describe 'Get-JIMPendingExport' {
         }
     }
 
+    Context 'Change Type and Status on the list' {
+
+        It 'Asks the list for one change type and status' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @() } }
+
+                Get-JIMPendingExport -ConnectedSystemId 2 -ChangeType Delete -Status Pending | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/2/pending-exports?page=1&pageSize=50&changeType=Delete&status=Pending'
+                }
+            }
+        }
+
+        It 'Sends the filters on every page of -All' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0; totalPages = 0 } }
+
+                Get-JIMPendingExport -ConnectedSystemId 2 -ChangeType Update -All | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter { $Endpoint -like '*changeType=Update*' }
+                Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Endpoint -notlike '*changeType=Update*' }
+            }
+        }
+
+        It 'Leaves both filters off unless asked' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @() } }
+
+                Get-JIMPendingExport -ConnectedSystemId 2 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -notlike '*changeType*' -and $Endpoint -notlike '*status*'
+                }
+            }
+        }
+    }
+
     Context 'Queued by' {
 
         It 'Has a QueuedBy parameter set' {

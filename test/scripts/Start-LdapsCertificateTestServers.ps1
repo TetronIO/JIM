@@ -597,11 +597,27 @@ if (Test-Path $WorkingDirectory) {
     Remove-Item $WorkingDirectory -Recurse -Force
 }
 
-# Any free loopback port; nothing listens on it until the test fixture serves the directory.
-$aiaListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-$aiaListener.Start()
-$aiaPort = ([System.Net.IPEndPoint]$aiaListener.LocalEndpoint).Port
-$aiaListener.Stop()
+# A free loopback port for the certificate download (AIA) server, which nothing listens on until
+# the test fixture serves the directory. It is chosen below the ephemeral range (Linux's
+# ip_local_port_range, 32768-60999), never by binding port 0: a port the OS hands out for 0 is
+# released at once, and Docker publishes the test servers' ports from that same range, so it can
+# hand the port straight to a container and the fixture then fails with "Address already in use".
+$aiaPort = $null
+foreach ($candidate in 20000..20999) {
+    $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $candidate)
+    try {
+        $probe.Start()
+        $aiaPort = $candidate
+        break
+    }
+    catch [System.Net.Sockets.SocketException] {
+        continue
+    }
+    finally {
+        $probe.Stop()
+    }
+}
+if (-not $aiaPort) { throw 'No free loopback port between 20000 and 20999 for the certificate download server.' }
 
 New-Certificates
 Start-TestServers

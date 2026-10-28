@@ -140,7 +140,7 @@ public partial class ConnectedSystemServer
             {
                 var page = await Application.SyncRepo.GetConnectedSystemObjectsAsync(
                     task.ConnectedSystemId, page: 1, pageSize: batchSize,
-                    knownTotalCount: activity.ObjectsToProcess, lastSyncTimestamp: null, afterId: cursor);
+                    knownTotalCount: activity.ObjectsToProcess, afterId: cursor);
                 if (page.Results.Count == 0)
                     break;
 

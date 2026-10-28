@@ -1,0 +1,114 @@
+[
+  {
+    "archetype": "flow",
+    "title": "What a Synchronisation Rule does to an object on its way in",
+    "desc": "An inbound Synchronisation Rule scopes, matches, projects and maps a Connected System Object.",
+    "in": {
+      "label": "Connected System Object",
+      "note": "Connector Space"
+    },
+    "out": {
+      "label": "Metaverse Object",
+      "note": "the Metaverse"
+    },
+    "container": {
+      "label": "Synchronisation Rule",
+      "tag": "Direction: inbound",
+      "badge": 1
+    },
+    "steps": [
+      {
+        "id": "scope",
+        "label": "Scoping criteria",
+        "badge": 2,
+        "note": "out of scope: skipped"
+      },
+      {
+        "id": "match",
+        "label": "Object Matching Rules",
+        "badge": 3,
+        "next": "match"
+      },
+      {
+        "id": "map",
+        "label": "Attribute mappings",
+        "badge": 5
+      }
+    ],
+    "detours": [
+      {
+        "from": "match",
+        "to": "map",
+        "label": "no match",
+        "step": {
+          "id": "project",
+          "label": "Projection",
+          "sub": "creates one",
+          "badge": 4
+        }
+      }
+    ]
+  },
+  {
+    "archetype": "flow",
+    "title": "Import, then synchronise, then export",
+    "desc": "A Full Import stages changes, a Full Synchronisation applies them, and an Export sends them to the target.",
+    "steps": [
+      {
+        "id": "i",
+        "label": "Full Import",
+        "next": "stages changes"
+      },
+      {
+        "id": "s",
+        "label": "Full Synchronisation"
+      },
+      {
+        "id": "e",
+        "label": "Export",
+        "sub": "to the target"
+      }
+    ]
+  },
+  {
+    "archetype": "flow",
+    "title": "Five steps, no container, ends with notes",
+    "desc": "A five-step flow between two ends, to exercise the widest common case.",
+    "in": {
+      "label": "Source system",
+      "note": "reads from"
+    },
+    "out": {
+      "label": "Target system",
+      "note": "writes to"
+    },
+    "steps": [
+      {
+        "id": "a",
+        "label": "Read",
+        "badge": 1
+      },
+      {
+        "id": "b",
+        "label": "Scope",
+        "badge": 2
+      },
+      {
+        "id": "c",
+        "label": "Match",
+        "badge": 3
+      },
+      {
+        "id": "d",
+        "label": "Map",
+        "badge": 4
+      },
+      {
+        "id": "e",
+        "label": "Queue",
+        "badge": 5,
+        "note": "Pending Export"
+      }
+    ]
+  }
+]

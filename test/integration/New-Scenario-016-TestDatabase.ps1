@@ -437,6 +437,83 @@ END;
 "@
 }
 
+function Get-OracleSessionEncryptionRecordScript {
+    <#
+    .SYNOPSIS
+        Record what each JIMTEST session negotiated, so the matrix can prove JIM's connections were encrypted.
+    .DESCRIPTION
+        Native Network Encryption leaves no trace in anything JIM reads back: an encrypted session and a
+        plain one import the same rows. So a logon trigger writes each JIMTEST session's negotiated
+        encryption and checksumming adapters (from V$SESSION_CONNECT_INFO) into a table, and the
+        Connection.OracleEncryption row reads it. JIM opens no pool, so its sessions are gone before
+        anything could inspect them afterwards; recording at logon is the only point they can be seen.
+
+        The table and trigger live in JIM_S16_AUDIT, a schema-only account no one can log in as, so
+        nothing JIM discovers or writes can touch them. The trigger never stops a logon: a failure to
+        record is swallowed, and the row then fails for finding no encrypted session, which is the loud
+        place for it. A trigger that does not compile would refuse every JIMTEST logon instead, so its
+        status is checked here and the seed fails on it.
+
+        Both the seed and the reset run this, and both empty the table, so the row sees this run's
+        sessions only.
+    #>
+    return @"
+DECLARE
+    object_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO object_count FROM ALL_USERS WHERE USERNAME = 'JIM_S16_AUDIT';
+    IF object_count = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE USER JIM_S16_AUDIT NO AUTHENTICATION';
+    END IF;
+    EXECUTE IMMEDIATE 'GRANT ADMINISTER DATABASE TRIGGER TO JIM_S16_AUDIT';
+    -- Granted directly, not through a role: a definer's-rights trigger cannot use a role's privileges.
+    EXECUTE IMMEDIATE 'GRANT SELECT ON SYS.V_`$SESSION_CONNECT_INFO TO JIM_S16_AUDIT';
+    EXECUTE IMMEDIATE 'ALTER USER JIM_S16_AUDIT QUOTA 10M ON USERS';
+
+    SELECT COUNT(*) INTO object_count FROM DBA_TABLES WHERE OWNER = 'JIM_S16_AUDIT' AND TABLE_NAME = 'SESSION_ENCRYPTION';
+    IF object_count = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE TABLE JIM_S16_AUDIT.SESSION_ENCRYPTION (LOGGED_AT TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL, ENCRYPTION VARCHAR2(30), CHECKSUM VARCHAR2(30))';
+    END IF;
+END;
+/
+
+-- ENCRYPTION and CHECKSUM hold the adapter's name (AES256, SHA256), or NULL where nothing was negotiated.
+-- An autonomous transaction, because the logon's own transaction belongs to JIM, which may roll it back.
+CREATE OR REPLACE TRIGGER JIM_S16_AUDIT.RECORD_SESSION_ENCRYPTION
+AFTER LOGON ON DATABASE
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+    IF SYS_CONTEXT('USERENV', 'SESSION_USER') = 'JIMTEST' THEN
+        INSERT INTO JIM_S16_AUDIT.SESSION_ENCRYPTION (ENCRYPTION, CHECKSUM)
+        SELECT MAX(CASE WHEN NETWORK_SERVICE_BANNER LIKE '% Encryption service adapter%' THEN REGEXP_SUBSTR(NETWORK_SERVICE_BANNER, '^\S+') END),
+               MAX(CASE WHEN NETWORK_SERVICE_BANNER LIKE '% Crypto-checksumming service adapter%' THEN REGEXP_SUBSTR(NETWORK_SERVICE_BANNER, '^\S+') END)
+          FROM V`$SESSION_CONNECT_INFO
+         WHERE SID = SYS_CONTEXT('USERENV', 'SID');
+        COMMIT;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+END;
+/
+
+DECLARE
+    trigger_status VARCHAR2(10);
+BEGIN
+    SELECT STATUS INTO trigger_status FROM DBA_OBJECTS
+     WHERE OWNER = 'JIM_S16_AUDIT' AND OBJECT_NAME = 'RECORD_SESSION_ENCRYPTION';
+    IF trigger_status <> 'VALID' THEN
+        RAISE_APPLICATION_ERROR(-20001, 'The session encryption logon trigger is ' || trigger_status || '; it would refuse every JIMTEST logon.');
+    END IF;
+END;
+/
+
+DELETE FROM JIM_S16_AUDIT.SESSION_ENCRYPTION;
+COMMIT;
+"@
+}
+
 function New-OracleSeedScript {
     param([int]$Rows)
 
@@ -464,6 +541,8 @@ END;
 /
 
 $(Get-OracleJimTestAccountScript)
+
+$(Get-OracleSessionEncryptionRecordScript)
 
 -- Everything from here builds inside JIMTEST's own schema.
 ALTER SESSION SET CURRENT_SCHEMA = JIMTEST;
@@ -711,6 +790,8 @@ SET DEFINE OFF
 SET FEEDBACK OFF
 
 $(Get-OracleJimTestAccountScript)
+
+$(Get-OracleSessionEncryptionRecordScript)
 
 ALTER SESSION SET CURRENT_SCHEMA = JIMTEST;
 

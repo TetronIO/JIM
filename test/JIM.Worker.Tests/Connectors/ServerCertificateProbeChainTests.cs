@@ -89,6 +89,57 @@ public class ServerCertificateProbeChainTests
     }
 
     [Test]
+    public void Read_ByDefault_AcceptsAnyCertificateInTheChainAsTheAnchor()
+    {
+        using var server = new TlsServer(_leaf, _intermediate);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_root)]);
+
+        Assert.That(reading.Diagnostic.TrustAnchorMustBeRoot, Is.False);
+    }
+
+    [Test]
+    public void Read_RootRequiredButOnlyTheIntermediateIsInTheStore_ReportsAnUntrustedIssuerNamingTheRoot()
+    {
+        // Oracle Database over TCPS: its driver builds the chain from its wallet and accepts it only when it ends at a
+        // self-signed certificate there, so an intermediate in the JIM store cannot make the connection work.
+        // Reporting the chain trusted would tell the administrator a refused connection is fine.
+        using var server = new TlsServer(_leaf, _intermediate, _root);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_intermediate)], trustAnchorMustBeRoot: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.UntrustedIssuer));
+            Assert.That(reading.Diagnostic.TrustAnchorMustBeRoot, Is.True);
+            Assert.That(reading.Diagnostic.Remediation, Does.Contain("Corp Root CA"));
+            Assert.That(reading.Diagnostic.Remediation, Does.Contain("only the root"));
+        }
+    }
+
+    [Test]
+    public void Read_RootRequiredAndTheRootIsInTheStore_FindsNothingWrong()
+    {
+        using var server = new TlsServer(_leaf, _intermediate);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_root)], trustAnchorMustBeRoot: true);
+
+        Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.None));
+    }
+
+    [Test]
+    public void Read_RootRequiredAndTheIntermediateLinkingItIsStoredAlongside_FindsNothingWrong()
+    {
+        // JIM stores the intermediates it downloaded beside a trusted root, because the server does not send them. They
+        // still link the chain; they just do not count as its anchor.
+        using var server = new TlsServer(_leaf);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_root), TestPki.PublicOnly(_intermediate)], trustAnchorMustBeRoot: true);
+
+        Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.None));
+    }
+
+    [Test]
     public void Read_IntermediateInTheJimStore_FindsNothingWrong()
     {
         // #1914: the probe demanded a root in the store, so an intermediate an administrator had added was still
@@ -189,10 +240,10 @@ public class ServerCertificateProbeChainTests
         }
     }
 
-    private ServerCertificateReading Read(TlsServer server, X509Certificate2[] trusted)
+    private ServerCertificateReading Read(TlsServer server, X509Certificate2[] trusted, bool trustAnchorMustBeRoot = false)
     {
         var reading = ServerCertificateProbe.Read(HostName, server.Port, trusted, TimeSpan.FromSeconds(10), _logger,
-            "database server", "TLS", SecureHandshakeFraming.DirectTls);
+            "database server", "TLS", SecureHandshakeFraming.DirectTls, trustAnchorMustBeRoot);
 
         Assert.That(reading, Is.Not.Null, "The server answered, so the probe must have seen its certificate.");
         return reading!;

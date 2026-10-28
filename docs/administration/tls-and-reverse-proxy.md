@@ -10,10 +10,42 @@ validated: v0.16.0
 
 JIM serves HTTPS itself, on both runtimes. In production, `jim.web` listens for HTTPS on container port `8443`, which the installation publishes on the standard HTTPS port, 443, so a fresh install can be signed into from any machine at `https://jim.example.com` with no reverse proxy.
 
+```jim-diagram
+archetype: comparison
+title: Where TLS ends in each supported setup
+desc: "Three setups are supported. With no proxy, the default, browsers connect over HTTPS straight to JIM, which terminates TLS itself; its certificate names every name users reach it at. With a re-encrypting proxy, the recommended way to use one, the proxy terminates the browser's HTTPS and opens its own HTTPS connection to JIM, checking JIM's certificate against a CA it trusts, so traffic is encrypted end to end; JIM's certificate carries both the name users type and the name the proxy connects to. With plain HTTP to JIM, a proxy on the JIM host terminates TLS and forwards plain HTTP to JIM on the host's loopback interface: that hop is unencrypted but never leaves the host, and JIM needs no certificate. With no proxy, JIM_TRUSTED_PROXIES is not needed. With either proxy, set it to the address the proxy connects from, which for a proxy on the JIM host is the gateway address of JIM's container network; with plain HTTP, sign-in fails without it. JIM accepts TLS 1.2 and 1.3."
+columns:
+  - { label: No proxy, sub: the default }
+  - { label: Re-encrypting proxy, sub: recommended }
+  - { label: Plain HTTP to JIM, sub: proxy on the JIM host }
+rows:
+  - label: Browser to the server
+    cells:
+      - { text: "HTTPS to JIM", sub: JIM terminates TLS }
+      - { text: "HTTPS to the proxy", sub: the proxy terminates TLS }
+      - { text: "HTTPS to the proxy", sub: the proxy terminates TLS }
+  - label: Proxy to JIM
+    cells:
+      - { text: no second hop }
+      - { text: "HTTPS", sub: "checked against a CA the proxy trusts" }
+      - { text: plain HTTP, sub: "loopback only, never leaves the host" }
+  - label: "JIM's certificate"
+    cells:
+      - { text: every name users reach JIM at }
+      - { text: both names, sub: "the one users type, and the proxy's" }
+      - { text: not needed }
+  - label: Trusted proxies
+    cells:
+      - { text: not needed }
+      - { text: "the address the proxy connects from" }
+      - { text: "the network gateway's address", sub: sign-in fails without it }
+footer: "Trusted proxies is the setting `JIM_TRUSTED_PROXIES`; JIM accepts TLS 1.2 and 1.3"
+```
+
 !!! warning "Browsers on other machines must use HTTPS"
     JIM's sign-in cookies are HTTPS-only in a production deployment, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: JIM stops it on a **Sign-in could not complete** page rather than send the browser back to your identity provider again (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
 
-## The Certificate
+## :material-certificate-outline: The Certificate
 
 JIM reads its certificate and private key from two PEM files in the `tls` folder of the installation (`/opt/jim/tls` when the installer ran as root):
 
@@ -44,7 +76,7 @@ chown 1654:1654 /opt/jim/tls/tls.key && chmod 400 /opt/jim/tls/tls.key
 
 If your key is encrypted, decrypt it first with `openssl pkey -in encrypted.key -out /opt/jim/tls/tls.key`.
 
-## A Certificate the Installer Creates
+## :material-file-certificate-outline: A Certificate the Installer Creates
 
 `setup.sh` writes these files to `tls/`:
 
@@ -77,7 +109,7 @@ Depending on its configuration, Firefox may use its own list rather than the ope
 
 The PowerShell module relies on the operating system's list, so machines that run `Connect-JIM` need the CA too.
 
-## Renewing the Certificate
+## :material-update: Renewing the Certificate
 
 JIM sends browsers an HSTS header, which tells them to refuse plain HTTP and certificate errors for JIM's name. Once a browser trusts JIM's certificate, an **expired** certificate therefore blocks access outright, with no option to continue. Renew before the expiry date, which the installer prints at install; to read it later:
 
@@ -93,7 +125,7 @@ openssl x509 -in /opt/jim/tls/tls.crt -noout -enddate
 
 - **Your organisation's certificate**<br /> Install the renewed one as in [Replacing the certificate](#replacing-the-certificate).
 
-## Replacing the Certificate
+## :material-swap-horizontal: Replacing the Certificate
 
 To install a renewed certificate from your CA, move to your organisation's certificate, or change the names a created certificate covers, run the installer's certificate step:
 
@@ -117,7 +149,7 @@ On Podman, put the new files in `tls/` the same way (no `chown` needed), store t
 
 When you move away from a certificate the installer created, delete `tls/ca.key`, and remove the JIM certificate authority from the machines that trusted it.
 
-## Behind a Reverse Proxy or Load Balancer
+## :material-server-network-outline: Behind a Reverse Proxy or Load Balancer
 
 JIM does not need a reverse proxy, but you may already route web applications through one, or want JIM on port 443 behind a load balancer. Two configurations are supported:
 
@@ -205,7 +237,7 @@ On a host with SELinux enforcing, as Red Hat Enterprise Linux is by default, htt
 setsebool -P httpd_can_network_connect 1
 ```
 
-## Trusting the Reverse Proxy
+## :material-shield-check-outline: Trusting the Reverse Proxy
 
 Set `JIM_TRUSTED_PROXIES` (in `.env` on Docker, `jim-config.yaml` on Podman) to the address the proxy connects to JIM from, so that JIM reads each client's real IP address, and the original scheme, from the proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers. Until you do:
 
@@ -231,7 +263,7 @@ JIM_TRUSTED_PROXIES=10.0.0.5
 
 Then run your `docker compose ... up -d` command again so `jim.web` restarts with the setting. On startup `jim.web` logs `Trusting forwarded headers from 1 known proxy address(es) and 0 known network(s)`, which confirms it read the value. List only your proxy: JIM believes whatever a trusted address tells it about the client's address and scheme. See the [Configuration Reference](configuration.md#reverse-proxy) for the setting's full format.
 
-## Plain HTTP for a Proxy on the Same Host
+## :material-lock-open-outline: Plain HTTP for a Proxy on the Same Host
 
 If a reverse proxy on the JIM host terminates TLS, JIM can serve it plain HTTP on the host's loopback interface instead, with no certificate of its own. Create `docker-compose.local-proxy.yml` next to the other compose files:
 
@@ -253,7 +285,7 @@ secrets: !reset {}
 
 Add `-f docker-compose.local-proxy.yml` after the other two files in every `docker compose` command for this deployment, point the proxy at `http://localhost:8080`, and set [`JIM_TRUSTED_PROXIES`](#trusting-the-reverse-proxy) to the `jim-network` gateway address. The `tls` folder is not needed. Traffic between the proxy and JIM is unencrypted, but it never leaves the host: other machines cannot reach port `8080`.
 
-## Port Mapping
+## :material-lan-connect: Port Mapping
 
 `jim.web` listens for HTTPS on port `8443` inside its container. The installation publishes it on the standard HTTPS port, 443, on every interface, so JIM's address needs no port. The installer asks for the port. To change it afterwards on Podman, edit `PublishPort=` in `jim.kube` (for example `PublishPort=8443:8443`), then reload systemd and restart `jim.service`; on Docker, set `JIM_WEB_PORT` in `.env` and run your `docker compose ... up -d` command again:
 

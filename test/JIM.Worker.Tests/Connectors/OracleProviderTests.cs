@@ -473,6 +473,35 @@ public class OracleProviderTests
     }
 
     [Test]
+    public void BuildConnectionString_Tcps_RequiresTheCertificateToNameTheHost()
+    {
+        // ODP.NET leaves SSL_SERVER_DN_MATCH off unless the descriptor turns it on, and then accepts a
+        // certificate issued for any host that chains to a trusted authority (#2589).
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.Tls };
+
+        var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
+
+        Assert.That(builder.DataSource, Does.Contain("(SECURITY=(SSL_SERVER_DN_MATCH=TRUE))"));
+    }
+
+    [Test]
+    public void BuildConnectionString_NotTcps_CarriesNoTlsSecurityClause()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var encryption in new[] { SqlConnectionEncryption.OracleNativeNetworkEncryption, SqlConnectionEncryption.None })
+            {
+                var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = encryption };
+
+                var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
+
+                Assert.That(builder.DataSource, Does.Not.Contain("SECURITY"),
+                    $"{encryption}: certificate checks belong to a TLS connection; there is no certificate on the ordinary listener.");
+            }
+        }
+    }
+
+    [Test]
     public void BuildConnectionString_NativeNetworkEncryption_UsesTheOrdinaryListenerAndProtocol()
     {
         // Native Network Encryption is negotiated on an ordinary TCP connection to the ordinary
@@ -541,6 +570,38 @@ public class OracleProviderTests
             Assert.That(connection.SqlNetEncryptionClient, Is.Null.Or.Empty);
             Assert.That(connection.SqlNetCryptoChecksumClient, Is.Null.Or.Empty);
         }
+    }
+
+    [Test]
+    public void ConfigureConnection_TcpsWithTrustHandedOver_PointsTheWalletLocationAtIt()
+    {
+        // The retry after a refusal: JIM wrote the root it trusts and the intermediates beneath it as a wallet, and
+        // ODP.NET reads it from the folder this connection's WalletLocation names (#2581).
+        var settings = new SqlConnectionSettings
+        {
+            Host = "oracle.example.local",
+            ServiceName = "HRPDB",
+            Encryption = SqlConnectionEncryption.Tls,
+            PinnedTrustPath = "/tmp/jim-sql-trust-wallet"
+        };
+        using var connection = (OracleConnection)_provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        _provider.ConfigureConnection(connection, settings);
+
+        Assert.That(connection.WalletLocation, Is.EqualTo("/tmp/jim-sql-trust-wallet"));
+    }
+
+    [Test]
+    public void ConfigureConnection_TcpsOnTheFirstAttempt_SetsNoWallet()
+    {
+        // The operating system's trust anchors always get the first say: no wallet until a refusal and a chain the JIM
+        // certificate store vouches for.
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.Tls };
+        using var connection = (OracleConnection)_provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        _provider.ConfigureConnection(connection, settings);
+
+        Assert.That(connection.WalletLocation, Is.Null.Or.Empty);
     }
 
     [Test]
@@ -655,6 +716,51 @@ public class OracleProviderTests
 
         Assert.That(((OracleCommand)command).BindByName, Is.True,
             "ODP.NET binds positionally by default, so a named parameter reused twice in one statement would bind to the wrong value.");
+    }
+
+    // The exception shape below is what ODP.NET 23.26.400 throws against Oracle Database Free 23ai whose
+    // sqlnet.ora sets SQLNET.ENCRYPTION_SERVER = REJECTED, with Native Network Encryption required: an
+    // OracleException and a NetworkException both saying ORA-50201, around a NetworkException carrying
+    // the cause and Oracle's help link on a second line.
+    private const string GenericConnectFailure = "ORA-50201: Oracle Communication: Failed to connect to server or failed to parse connect string";
+
+    [Test]
+    public void DescribeConnectionFailure_CauseBeneathTheGenericError_LeadsWithTheCause()
+    {
+        var failure = new FakeDbException(GenericConnectFailure,
+            new Exception(GenericConnectFailure,
+                new Exception("ORA-12660: Encryption or crypto-checksumming parameters incompatible\nhttps://docs.oracle.com/error-help/db/ora-12660/")));
+
+        var description = _provider.DescribeConnectionFailure(failure);
+
+        Assert.That(description, Is.EqualTo(
+            "ORA-12660: Encryption or crypto-checksumming parameters incompatible (reported by the driver as " + GenericConnectFailure + ")"));
+    }
+
+    [Test]
+    public void DescribeConnectionFailure_InnerErrorsRepeatTheSameCode_ReturnsTheDriversMessage()
+    {
+        // An unreachable host: every level says ORA-12545, so there is nothing more specific to report.
+        const string unreachable = "ORA-12545: Connect failed because target host or object does not exist";
+        var failure = new FakeDbException(unreachable, new Exception(unreachable + "\nhttps://docs.oracle.com/error-help/db/ora-12545/"));
+
+        Assert.That(_provider.DescribeConnectionFailure(failure), Is.EqualTo(unreachable));
+    }
+
+    [Test]
+    public void DescribeConnectionFailure_InnerErrorIsNotAnOracleError_ReturnsTheDriversMessage()
+    {
+        var failure = new FakeDbException(GenericConnectFailure, new IOException("Unable to read data from the transport connection."));
+
+        Assert.That(_provider.DescribeConnectionFailure(failure), Is.EqualTo(GenericConnectFailure));
+    }
+
+    [Test]
+    public void DescribeConnectionFailure_NoInnerError_ReturnsTheDriversMessage()
+    {
+        var failure = new FakeDbException("ORA-01017: invalid credential or not authorized; logon denied");
+
+        Assert.That(_provider.DescribeConnectionFailure(failure), Is.EqualTo("ORA-01017: invalid credential or not authorized; logon denied"));
     }
 
     #endregion

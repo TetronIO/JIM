@@ -1346,7 +1346,7 @@ public class ExportEvaluationServer
     /// Stages membership-removal Pending Exports for Metaverse Objects that referenced now-deleted
     /// Metaverse Objects (reference recall, #908). Without this, a target system without referential
     /// integrity keeps the deleted object (for example a leaver) as a group member forever: the
-    /// referencing group's CSOs never change, so the unchanged-skip means no sync ever re-evaluates
+    /// referencing group's CSOs never change, so no Delta Synchronisation ever re-evaluates
     /// them. Each referencing Metaverse Object is evaluated ONCE with every reference it lost in this
     /// batch, so a group losing many members in one run gets one Pending Export carrying all removals.
     /// Recall only updates existing target objects; provisioning remains the job of normal sync.
@@ -2914,32 +2914,7 @@ public class ExportEvaluationServer
                 // change on purpose). The rebuilt Pending Export is reconciled while any change awaits
                 // confirmation, whatever its own status (see SyncEngine.ReconcileCsoAgainstPendingExport).
                 var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges)
-                    .Select(avc => new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        AttributeId = avc.AttributeId,
-                        Attribute = avc.Attribute,
-                        StringValue = avc.StringValue,
-                        DateTimeValue = avc.DateTimeValue,
-                        IntValue = avc.IntValue,
-                        LongValue = avc.LongValue,
-                        DecimalValue = avc.DecimalValue,
-                        ByteValue = avc.ByteValue,
-                        GuidValue = avc.GuidValue,
-                        BoolValue = avc.BoolValue,
-                        UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
-                        ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId,
-                        ChangeType = avc.ChangeType,
-                        SyncRuleId = avc.SyncRuleId,
-                        SyncRuleName = avc.SyncRuleName,
-                        Status = avc.Status,
-                        ExportAttemptCount = avc.ExportAttemptCount,
-                        LastExportedAt = avc.LastExportedAt,
-                        LastImportedValue = avc.LastImportedValue,
-                        // A held change stays held through the rebuild (#2039); dropping the flag would have the next
-                        // import retry a value the target refuses until the Initial Password is delivered.
-                        AwaitsInitialPassword = avc.AwaitsInitialPassword
-                    })
+                    .Select(SyncEngine.CarryOverSurvivingChange)
                     .ToList();
 
                 var mergedChanges = new List<PendingExportAttributeValueChange>(attributeChanges);

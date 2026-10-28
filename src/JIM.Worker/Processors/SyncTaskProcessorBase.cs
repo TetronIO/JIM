@@ -71,10 +71,6 @@ public abstract class SyncTaskProcessorBase
     // disconnecting Metaverse Object's type. Created lazily at first disconnection; caches the rule map for the run.
     protected RemainingImportSourceEvaluator? _remainingImportSourceEvaluator;
 
-    // Object type IDs that have inbound import rules with reference attribute mappings.
-    // Used to skip reference attribute queueing for unchanged CSOs whose types have no reference rules.
-    protected HashSet<int>? _objectTypesWithReferenceRules;
-
     // Aggregate no-net-change counts for the entire sync run
     // Note: Target CSO attribute values for no-net-change detection are now pre-loaded in ExportEvaluationCache
     // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
@@ -267,6 +263,28 @@ public abstract class SyncTaskProcessorBase
     // ReferenceValueCount is the object's mapped reference values, all of which the step re-flows: it is what the
     // step's progress counts and its batches are budgeted by (#2492), since one object can hold 750,000 of them.
     protected readonly List<(Guid CsoId, List<int> SyncRuleIds, int ReferenceValueCount)> _unresolvedCrossPageReferences = [];
+
+    /// <summary>
+    /// How many objects this run sent to the cross-page reference step: those with a reference that could still resolve
+    /// later in the run.
+    /// </summary>
+    internal int CrossPageReferenceObjectCount { get; private set; }
+
+    /// <summary>
+    /// How many reference values this run could not flow because the object they reference is not joined to a Metaverse
+    /// Object and nothing later in the run could join it: out of scope, or of a type no Synchronisation Rule projects or
+    /// joins. Reported once at the end of the run rather than per value.
+    /// </summary>
+    internal int UnresolvableReferenceValueCount { get; private set; }
+
+    /// <summary>The objects holding <see cref="UnresolvableReferenceValueCount"/>'s values, for the run's summary.</summary>
+    private readonly HashSet<Guid> _unresolvableReferenceObjectIds = [];
+
+    /// <summary>
+    /// The run's page source, once created: it knows which Object Types have been walked, which decides whether an
+    /// unjoined referenced object could still be joined later in the run.
+    /// </summary>
+    protected TypeOrderedCsoPager? _csoPager;
 
     // Summary stats are accumulated incrementally during each FlushRpeisAsync call via
     // Worker.AccumulateActivitySummaryStats, so RPEIs can be released immediately without
@@ -1146,18 +1164,6 @@ public abstract class SyncTaskProcessorBase
 
         // Skip obsolete CSOs - already fully handled in Pass 1
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
-            return;
-
-        // Skip unchanged CSOs — their attributes haven't changed since the last completed sync,
-        // so Attribute Flow would produce zero changes. This avoids the overhead of loading and
-        // comparing attribute values for the majority of CSOs in large-scale repeat syncs.
-        // Exception: a CSO flagged by the Temporal Scope Reconciler (ScopeReviewPending, #892) has drifted in or
-        // out of scope with the clock despite static source data; it must be re-evaluated even though unchanged.
-        // (The loader already forces a full attribute load for such CSOs so Attribute Flow has real values.)
-        // Likewise a CSO marked because another system changed a Metaverse attribute that a derived flow on this
-        // system's rules reads (DerivedInputChangePending, #1750): its own data is unchanged, but its derived flows
-        // must be re-evaluated. (The loader already treats a marked CSO as changed and loads its attribute values.)
-        if (connectedSystemObject.IsUnchangedSinceLastSync && !connectedSystemObject.ScopeReviewPending && !connectedSystemObject.DerivedInputChangePending)
             return;
 
         // Skip if no Synchronisation Rules defined AND not in simple mode — nothing to join/project/flow.
@@ -3089,9 +3095,8 @@ public abstract class SyncTaskProcessorBase
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
 
-        // Keep the message's promise (#2309): nothing about the loser's own data changed, so without a mark neither
-        // Delta Synchronisation nor Full Synchronisation's unchanged-object skip would process it again, and two objects
-        // would keep the same value. This page's join-state write and guarded clears have already run (inside
+        // Keep the message's promise (#2309): nothing about the loser's own data changed, so without a mark no Delta
+        // Synchronisation would process it again, and two objects would keep the same value until a Full Synchronisation. This page's join-state write and guarded clears have already run (inside
         // PersistPendingMetaverseObjectsAsync), so the mark survives to the next run.
         var loserMarks = losers
             .Select(loser => new SynchronisationPendingMark(((MetaverseObject)loser.Request.CallerState!).Id, _connectedSystem.Id))
@@ -4270,7 +4275,8 @@ public abstract class SyncTaskProcessorBase
             foreach (var syncRule in syncRules)
             {
                 // Errors already captured in the first pass; reference-only pass does not repeat them
-                ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
+                ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true,
+                    cannotResolveThisRun: CannotResolveThisRun);
             }
 
             // Check for unresolved cross-page references after processing this CSO.
@@ -4278,30 +4284,25 @@ public abstract class SyncTaskProcessorBase
             // rule mappings. Checking ALL CSO attributes would incorrectly flag users with
             // unmapped reference attributes (e.g. managedBy), causing thousands of unnecessary
             // CSOs to be re-processed in the cross-page resolution pass.
-            var mappedRefAttributeIds = syncRules
-                .SelectMany(sr => sr.AttributeFlowRules)
-                .Where(afr => afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference)
-                .SelectMany(afr => afr.Sources)
-                .Where(s => s.ConnectedSystemAttributeId.HasValue)
-                .Select(s => s.ConnectedSystemAttributeId!.Value)
-                .ToHashSet();
+            var mappedRefAttributeIds = GetMappedReferenceAttributeIds(syncRules);
+            var unresolvedReferences = mappedRefAttributeIds.Count == 0
+                ? []
+                : cso.AttributeValues.Where(av => mappedRefAttributeIds.Contains(av.AttributeId) && IsUnresolvedReference(av)).ToList();
 
-            // A cross-page reference is unresolved if the referenced CSO has no MetaverseObjectId
-            // (it hasn't been joined/projected yet). ResolvedReferenceMetaverseObjectId (direct SQL)
-            // is the primary source; fall back to navigation for in-memory test compatibility.
-            var hasUnresolvedCrossPageRefs = mappedRefAttributeIds.Count > 0 &&
-                cso.AttributeValues.Any(av =>
-                    mappedRefAttributeIds.Contains(av.AttributeId) &&
-                    av.ReferenceValueId.HasValue &&
-                    !av.ResolvedReferenceMetaverseObjectId.HasValue &&
-                    (av.ReferenceValue == null || av.ReferenceValue.MetaverseObject == null));
-
-            if (hasUnresolvedCrossPageRefs)
+            // Only a reference that could still resolve later in the run sends the object to the cross-page step. One to
+            // an object this run has already processed and left unjoined (out of scope, or of a type nothing projects or
+            // joins) is final: the cross-page step would redo every reference the object holds and still not resolve it.
+            if (unresolvedReferences.Exists(av => !CannotResolveThisRun(av)))
             {
                 var syncRuleIds = syncRules.Select(sr => sr.Id).ToList();
                 var referenceValueCount = cso.AttributeValues.Count(av =>
                     mappedRefAttributeIds.Contains(av.AttributeId) && av.ReferenceValueId.HasValue);
                 _unresolvedCrossPageReferences.Add((cso.Id, syncRuleIds, referenceValueCount));
+            }
+            else if (unresolvedReferences.Count > 0)
+            {
+                // Counted here only when the object is not deferred; the cross-page step counts those it handles.
+                RecordUnresolvableReferences(cso.Id, unresolvedReferences.Count);
             }
 
             // Count changes from reference attribute processing
@@ -4464,12 +4465,21 @@ public abstract class SyncTaskProcessorBase
     protected async Task ResolveCrossPageReferencesAsync(List<SyncRule> activeSyncRules)
     {
         if (_unresolvedCrossPageReferences.Count == 0)
+        {
+            LogUnresolvableReferenceSummary();
             return;
+        }
 
         using var span = Diagnostics.Sync.StartSpan("ResolveCrossPageReferences");
         span.SetTag("csoCount", _unresolvedCrossPageReferences.Count);
 
         var totalCrossPagesToResolve = _unresolvedCrossPageReferences.Count;
+        CrossPageReferenceObjectCount = totalCrossPagesToResolve;
+
+        // The step counts its own work in reference values while it runs (below); the run's figures are objects, so they
+        // are put back when it finishes and the run's completion message counts objects, not reference values.
+        var runObjectsToProcess = _activity.ObjectsToProcess;
+        var runObjectsProcessed = _activity.ObjectsProcessed;
         var totalReferenceValuesToResolve = _unresolvedCrossPageReferences.Sum(x => (long)x.ReferenceValueCount);
         span.SetTag("referenceValueCount", totalReferenceValuesToResolve);
         Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs holding {ReferenceValueCount} reference values",
@@ -4610,12 +4620,17 @@ public abstract class SyncTaskProcessorBase
                 var beforeAdditions = mvo.PendingAttributeValueAdditions.Count;
                 var beforeRemovals = mvo.PendingAttributeValueRemovals.Count;
 
-                // Process ONLY reference attributes — now all references should resolve.
-                // isFinalReferencePass: true so any still-unresolved references are logged as warnings.
+                // Process ONLY reference attributes. Nothing later in the run can resolve a reference still unresolved here,
+                // so isFinalReferencePass: true lets the object's removals and provenance proceed without it.
                 foreach (var syncRule in applicableSyncRules)
                 {
                     ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true, isFinalReferencePass: true);
                 }
+
+                var mappedRefAttributeIds = GetMappedReferenceAttributeIds(applicableSyncRules);
+                var stillUnresolvedCount = cso.AttributeValues.Count(av => mappedRefAttributeIds.Contains(av.AttributeId) && IsUnresolvedReference(av));
+                if (stillUnresolvedCount > 0)
+                    RecordUnresolvableReferences(cso.Id, stillUnresolvedCount);
 
                 var additionsCount = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
                 var removalsCount = mvo.PendingAttributeValueRemovals.Count - beforeRemovals;
@@ -4910,6 +4925,8 @@ public abstract class SyncTaskProcessorBase
             (workingSetBytesAtEnd - workingSetBytesAtStart) / (1024.0 * 1024.0));
 
         _unresolvedCrossPageReferences.Clear();
+        _activity.ObjectsToProcess = runObjectsToProcess;
+        _activity.ObjectsProcessed = runObjectsProcessed;
 
         // Clear the change tracker (and the page identity map, #1612) after cross-page resolution completes.
         // The tracker contains entities loaded by the cross-page CSO query with deep Include chains
@@ -4919,8 +4936,68 @@ public abstract class SyncTaskProcessorBase
         // so the caller's next SaveChangesAsync starts with a clean tracker.
         // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling.
         ClearPageTrackingState();
+        LogUnresolvableReferenceSummary();
 
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// The Connected System attributes the Synchronisation Rules map to a reference-type Metaverse attribute: the only
+    /// reference values whose resolution matters to the run.
+    /// </summary>
+    private static HashSet<int> GetMappedReferenceAttributeIds(IEnumerable<SyncRule> syncRules) => syncRules
+        .SelectMany(sr => sr.AttributeFlowRules)
+        .Where(afr => afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference)
+        .SelectMany(afr => afr.Sources)
+        .Where(s => s.ConnectedSystemAttributeId.HasValue)
+        .Select(s => s.ConnectedSystemAttributeId!.Value)
+        .ToHashSet();
+
+    /// <summary>
+    /// Whether a reference value points at an object not joined to a Metaverse Object. The referenced object's join state
+    /// comes from <see cref="ConnectedSystemObjectAttributeValue.ResolvedReferenceMetaverseObjectId"/> (direct SQL), falling
+    /// back to the navigation for in-memory tests.
+    /// </summary>
+    private static bool IsUnresolvedReference(ConnectedSystemObjectAttributeValue av) =>
+        av.ReferenceValueId.HasValue &&
+        !av.ResolvedReferenceMetaverseObjectId.HasValue &&
+        (av.ReferenceValue == null || av.ReferenceValue.MetaverseObject == null);
+
+    /// <summary>
+    /// Whether an unresolved reference is final for this run: the referenced object's type has been walked to the end and
+    /// the object existed before the run began, so it has already been processed (or was not due) and nothing later in
+    /// the run can join it. Such a reference flows nothing, and must neither hold back the referencing object's removals
+    /// nor send it to the cross-page reference step. An object created around the run's start could still be handed out
+    /// by the closing sweep, so it is not final.
+    /// </summary>
+    private bool CannotResolveThisRun(ConnectedSystemObjectAttributeValue av)
+    {
+        if (_csoPager == null)
+            return false;
+
+        var typeId = av.ResolvedReferenceTypeId ?? av.ReferenceValue?.TypeId;
+        var created = av.ResolvedReferenceCreated ?? av.ReferenceValue?.Created;
+        return typeId.HasValue && created.HasValue && created.Value < _csoPager.CreatedFloor && _csoPager.HasFinishedWalking(typeId.Value);
+    }
+
+    private void RecordUnresolvableReferences(Guid csoId, int referenceValueCount)
+    {
+        UnresolvableReferenceValueCount += referenceValueCount;
+        _unresolvableReferenceObjectIds.Add(csoId);
+    }
+
+    /// <summary>
+    /// One line per run for the references that could not flow, in place of a warning per reference: in a directory they
+    /// are routine (a group's member out of every Synchronisation Rule's scope, or a contact no rule projects or joins).
+    /// </summary>
+    private void LogUnresolvableReferenceSummary()
+    {
+        if (UnresolvableReferenceValueCount == 0)
+            return;
+
+        Log.Information("Synchronisation: {ReferenceValueCount} reference values on {ObjectCount} objects point at objects not " +
+            "joined to a Metaverse Object (out of scope, or of a type no Synchronisation Rule projects or joins), so they did not flow",
+            UnresolvableReferenceValueCount, _unresolvableReferenceObjectIds.Count);
     }
 
     /// <summary>
@@ -5772,8 +5849,8 @@ public abstract class SyncTaskProcessorBase
 
         // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
         // that referenced the deleted objects. Without this, referencing groups' target CSOs never
-        // change, the unchanged-skip means no sync re-evaluates them, and a target without
-        // referential integrity keeps the deleted object as a member forever.
+        // change, so no Delta Synchronisation re-evaluates them, and a target without referential
+        // integrity keeps the deleted object as a member until a Full Synchronisation.
         if (deletedMvoIds.Count > 0)
         {
             using (Diagnostics.Sync.StartSpan("MvoDeletionStageRecallExports")
@@ -7127,12 +7204,14 @@ public abstract class SyncTaskProcessorBase
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Synchronisation Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Synchronisation Rule.</exception>
-    protected List<AttributeFlowError> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
+    protected List<AttributeFlowError> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false,
+        Func<ConnectedSystemObjectAttributeValue, bool>? cannotResolveThisRun = null)
     {
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");
 
-        return _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass, _attributePriorityContext);
+        return _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass, _attributePriorityContext,
+            cannotResolveThisRun);
     }
 
     /// <summary>
@@ -7611,7 +7690,8 @@ public abstract class SyncTaskProcessorBase
         if (order.TypeIds.Count == 0)
         {
             Log.Information("{RunKind} type order: no objects to page; sweeping for any created during the run", runKind);
-            return new TypeOrderedCsoPager(loadPage, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
+            _csoPager = new TypeOrderedCsoPager(loadPage, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
+            return _csoPager;
         }
 
         string NameOf(int id) => LogSanitiser.Sanitise(namesById.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture))) ?? string.Empty;
@@ -7623,24 +7703,8 @@ public abstract class SyncTaskProcessorBase
                 runKind, string.Join(", ", order.SelfReferencingTypeIds.Order().Select(NameOf)));
         }
 
-        return new TypeOrderedCsoPager(loadPage, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
-    }
-
-    /// <summary>
-    /// Builds a set of object type IDs that have inbound import rules with reference attribute mappings.
-    /// Used to determine whether unchanged CSOs need reference attribute processing.
-    /// </summary>
-    protected void BuildReferenceObjectTypeCache(List<SyncRule> activeSyncRules)
-    {
-        _objectTypesWithReferenceRules = activeSyncRules
-            .Where(sr => sr.Direction == SyncRuleDirection.Import)
-            .Where(sr => sr.AttributeFlowRules.Any(afr =>
-                afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference))
-            .Select(sr => sr.ConnectedSystemObjectTypeId)
-            .ToHashSet();
-
-        Log.Debug("BuildReferenceObjectTypeCache: {Count} object types have reference attribute rules",
-            _objectTypesWithReferenceRules.Count);
+        _csoPager = new TypeOrderedCsoPager(loadPage, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
+        return _csoPager;
     }
 
     /// <summary>
@@ -7664,33 +7728,28 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
-            var heldConnectedSystemObjectIds = await GetConnectedSystemObjectIdsHeldForInitialPasswordAsync();
+            var heldPendingExports = await GetPendingExportsHeldForInitialPasswordAsync();
 
-            foreach (var (cso, mvo) in _pendingDriftEvaluations.Where(pending => !heldConnectedSystemObjectIds.Contains(pending.Cso.Id)))
-                EvaluateDriftAndEnforceState(cso, mvo);
-
-            if (heldConnectedSystemObjectIds.Count > 0)
-            {
-                Log.Information("EvaluateQueuedDriftAsync: Skipped Drift Detection for {Count} Connected System Object(s) holding a change until its " +
-                    "Initial Password is delivered", heldConnectedSystemObjectIds.Count);
-            }
+            foreach (var (cso, mvo) in _pendingDriftEvaluations)
+                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id));
         }
 
         _pendingDriftEvaluations.Clear();
     }
 
     /// <summary>
-    /// The page's queued Connected System Objects whose Pending Export holds a change written with an interim value
-    /// until an Initial Password is delivered (#2039). Drift Detection skips them entirely, not just the held attribute:
-    /// a correction staged for any attribute makes the page flush delete every existing Pending Export for the object
-    /// (<see cref="FlushPendingExportOperationsAsync"/>), the held change with it, and the enabled value would then be
-    /// re-sent to an account the target will not enable until it has a password. One query per page, answered from a
-    /// partial index on the flag, and none at all when this run detects no drift.
+    /// The Pending Exports of the page's queued Connected System Objects that hold a change written with an interim
+    /// value until an Initial Password is delivered (#2039), keyed by object. Drift Detection still corrects such an
+    /// object's other attributes at once (#2501), but its correction must neither restate the held change nor drop it:
+    /// the page flush replaces the object's Pending Export with the correction (<see cref="FlushPendingExportOperationsAsync"/>),
+    /// so the held change has to travel with it. The first query reads the partial index on the flag, so a page with
+    /// nothing held costs one cheap query, and none at all when this run detects no drift; the Pending Exports are read
+    /// only for the objects it names.
     /// </summary>
-    private async Task<IReadOnlySet<Guid>> GetConnectedSystemObjectIdsHeldForInitialPasswordAsync()
+    private async Task<IReadOnlyDictionary<Guid, PendingExport>> GetPendingExportsHeldForInitialPasswordAsync()
     {
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
-            return new HashSet<Guid>();
+            return new Dictionary<Guid, PendingExport>();
 
         var connectedSystemObjectIds = _pendingDriftEvaluations
             .Select(pending => pending.Cso.Id)
@@ -7698,9 +7757,13 @@ public abstract class SyncTaskProcessorBase
             .Distinct()
             .ToList();
         if (connectedSystemObjectIds.Count == 0)
-            return new HashSet<Guid>();
+            return new Dictionary<Guid, PendingExport>();
 
-        return await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
+        var heldConnectedSystemObjectIds = await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
+        if (heldConnectedSystemObjectIds.Count == 0)
+            return new Dictionary<Guid, PendingExport>();
+
+        return await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(heldConnectedSystemObjectIds);
     }
 
     /// <summary>
@@ -7749,7 +7812,14 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     private const string DriftNotCheckedPrefix = "Drift Detection could not check this object, so no correction was staged. ";
 
-    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
+    /// <summary>
+    /// Evaluates one object's drift and stages its corrections for the page flush.
+    /// </summary>
+    /// <param name="cso">The Connected System Object that was just processed.</param>
+    /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
+    /// <param name="heldPendingExport">The object's Pending Export when it holds a change until an Initial Password is
+    /// delivered (#2039), whose held change the correction must neither restate nor drop (#2501); otherwise null.</param>
+    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo, PendingExport? heldPendingExport = null)
     {
         // Skip if no drift detection export rules exist
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
@@ -7827,6 +7897,12 @@ public abstract class SyncTaskProcessorBase
             errorRpei.ErrorType = errorType;
             errorRpei.ErrorMessage = errorMessage;
             _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+
+        if (heldPendingExport != null)
+        {
+            DriftDetectionService.DropCorrectionsRestatingHeldChanges(result, heldPendingExport);
+            DriftDetectionService.CarryOverReplacedPendingExport(result, heldPendingExport);
         }
 
         // A Drift Correction item is raised only where a correction was staged (#2180), never for a difference that

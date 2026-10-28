@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Connectors.Mock;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -13,6 +14,7 @@ using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
 using JIM.Worker.Tests.Models;
+using JIM.Worker.Tests.Workflows;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
@@ -3408,14 +3410,15 @@ public class FullSyncTests
             .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.DisplayName);
         Assert.That(csoBDisplayName?.StringValue, Is.EqualTo("The Manager"));
 
-        // Cross-page resolution is its own step with its own, much smaller, amount of work, so the
-        // Activity's counting window has to move to it. Left on the page loop's totals the step
-        // would report itself finished the moment it started, and the progress readout would show
-        // 100% and a time remaining of nothing for however long the pass actually took.
-        Assert.That(activity.ObjectsToProcess, Is.EqualTo(1),
-            "The counting window should describe the cross-page pass (one CSO to resolve), not the page loop it followed.");
-        Assert.That(activity.ObjectsProcessed, Is.EqualTo(1),
-            "Every CSO needing cross-page resolution was resolved, so the window should read as complete.");
+        // Cross-page resolution counts its own, much smaller, amount of work while it runs, then hands the
+        // Activity back the run's object counts, so the completion message reports objects synchronised and not
+        // the step's reference values.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(syncProcessor.CrossPageReferenceObjectCount, Is.EqualTo(1), "only CSO-A needed the cross-page step");
+            Assert.That(activity.ObjectsToProcess, Is.EqualTo(2), "the run's figures are objects: both CSOs");
+            Assert.That(activity.ObjectsProcessed, Is.EqualTo(2));
+        }
     }
 
     /// <summary>
@@ -3682,8 +3685,8 @@ public class FullSyncTests
             Assert.That(processedOrder, Is.EqualTo(new[] { u2.Id, u1.Id, group.Id }),
                 "Users must be paged before groups once their observed targets show members are users.");
             Assert.That(group.TypeId, Is.LessThan(u1.TypeId), "The fixture must give groups the lower type id.");
-            Assert.That(activity.ObjectsToProcess, Is.EqualTo(1),
-                "Only U2's one manager reference should reach the cross-page step; the group must not.");
+            Assert.That(syncProcessor.CrossPageReferenceObjectCount, Is.EqualTo(1),
+                "Only U2, for its manager reference, should reach the cross-page step; the group must not.");
             var member = group.MetaverseObject!.AttributeValues
                 .Single(av => av.AttributeId == (int)MockMetaverseAttributeName.Member);
             Assert.That(member.ReferenceValueId, Is.EqualTo(u1.MetaverseObject!.Id));
@@ -3789,7 +3792,12 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id &&
             q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        // The step's counting window is visible while it runs, each time it narrates its progress; when it finishes the
+        // Activity gets the run's object counts back.
+        var progressSnapshots = new List<(int ToProcess, int Processed)>();
+        var observedRepo = InterceptingSyncRepositoryProxy.Create(SyncRepo, nameof(ISyncRepository.UpdateActivityMessageAsync),
+            () => progressSnapshots.Add((activity.ObjectsToProcess, activity.ObjectsProcessed)));
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), observedRepo, connectedSystem!, runProfile, activity, new CancellationTokenSource());
 
         await syncProcessor.PerformFullSyncAsync();
 
@@ -3801,9 +3809,11 @@ public class FullSyncTests
                 .ToList();
             Assert.That(members, Is.EquivalentTo(new Guid?[] { user.MetaverseObject!.Id, groupB.MetaverseObject!.Id }),
                 "Both members, the nested group included, must resolve.");
-            Assert.That(activity.ObjectsToProcess, Is.EqualTo(2),
+            Assert.That(syncProcessor.CrossPageReferenceObjectCount, Is.EqualTo(1), "precondition: group A alone was deferred");
+            Assert.That(progressSnapshots, Does.Contain((2, 2)),
                 "The step's counting window should hold group A's two reference values, not its one object.");
-            Assert.That(activity.ObjectsProcessed, Is.EqualTo(2));
+            Assert.That(activity.ObjectsProcessed, Is.EqualTo(activity.ObjectsToProcess).And.GreaterThan(2),
+                "Once the step finishes, the run's figures count objects again.");
         }
     }
 

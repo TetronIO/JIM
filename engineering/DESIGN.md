@@ -257,7 +257,7 @@ JIM uses a three-tier type system. Each typeface has a defined role; do not mix 
 
 Body text, UI controls, navigation, list items, table content, and heading levels H2 to H6. The default voice everywhere except code and the display-accent layer. Designed by IBM, SIL Open Font License 1.1. Sharper character disambiguation (1/l/I, 0/O) than many grotesques, which matters where GUIDs, DNs, and command snippets appear.
 
-Self-hosted in the portal at `wwwroot/fonts/ibm-plex-sans/`. Loaded via Google Fonts on the docs site.
+Self-hosted in the portal at `wwwroot/fonts/ibm-plex-sans/`. Loaded via Google Fonts on the docs site as the variable font, so docs body text sits at weight 450 (IBM's text weight; 400 reads faint on screen), with bold at 600, at 16px on every screen width (Material's root-size growth above 1600px is pinned off) and a line height of 1.65.
 
 ### IBM Plex Mono (technical)
 
@@ -273,7 +273,7 @@ Used sparingly for hero titles, the portal sidebar wordmark, and publication-sty
 
 **Where not to use:** body text, sub-headings (H2 to H6), tables, UI controls, or marketing prose. Overuse tips the brand from "considered modern" toward "developer-tool studio".
 
-Self-hosted in the portal at `wwwroot/fonts/space-grotesk/`. Loaded via CSS `@import` from Google Fonts on the docs site.
+Self-hosted in the portal at `wwwroot/fonts/space-grotesk/`. Loaded from Google Fonts on the docs site, in the same request as the Plex faces (`docs/overrides/main.html`).
 
 ### Heading weight corrections
 
@@ -296,6 +296,12 @@ Cards and elevated surfaces use subtle background shifts between `background` an
 ### Docs site
 
 The MkDocs Material docs site uses a standard two-column layout (nav plus content). Table and admonition body text is set at 0.72rem (up from Material's 0.64rem default). Default Material hover shadow on cards is removed for a flatter look consistent with the portal.
+
+The header is a neutral surface in both themes: `#f3f3f3` in light mode and the navy surface `#0d1e30` in dark, each separated from the page by a hairline. Brand purple fills only the home page hero, and both themes light it the same way: a radial glow from the top centre. In light mode the glow sits over a vertical brand-purple gradient (`#4f3c9c` to `#3b2b80`), and a faint lavender band (`#f3f0fb` fading to white) carries the purple into the page behind the system diagram. In dark mode it is purple light rising from the header into the navy page (a radial glow over a gradient from `#0d1e30` to `#051526`), so the hero has no hard edge and no violet surface sits against the navy. Grid cards are white with a cool hairline (`#e4e1ec`) in light mode and the navy surface in dark, so the icon tiles read cleanly in both.
+
+Readers choose the content width with a header toggle: the reading width by default, or the full window, which everything fills, text included. Table columns can be resized by dragging the header cell's right edge. Both are described in `docs/CLAUDE.md` > Reader layout controls.
+
+Icons are Material Design Icons, never emoji (STY-1 in `DOCUMENTATION_STANDARD.md`). An icon opening an H2 (every H2 on every page has one; no lower heading does) or a grid card is drawn as a 4px-radius tile tinted with brand purple; table status marks use the success, error and warning colours.
 
 ## Components
 
@@ -339,6 +345,21 @@ Header row uses `background` token. Row content uses `body-sm` typography. Alter
 The diagram design system covers the docs site (`docs.junctional.io`) and marketing surfaces (`junctional.io`), so diagrams read as one family across both properties. Concept diagrams are **hand-authored SVGs inlined into the page** (via `pymdownx.snippets` on the docs site): geometry lives in the SVG, and every colour lives in the site stylesheet as a `--jimdg-*` custom property, so a single SVG serves both light and dark mode through the normal theme toggle. The reference implementation is `docs/assets/diagrams/hub-and-spoke.svg` plus the "Concept diagrams" section of `docs/assets/stylesheets/custom.css`.
 
 Diagrams use the **brand colours**, not the portal `--mud-palette-*` tokens, consistent with the brand-vs-theme rule above. The semantic roles mirror the causality-visualisation roles: purple for JIM/metaverse-side concepts, navy for Connected-System-side concepts.
+
+### Generated diagrams
+
+Most docs pages carry a **generated diagram**: a short `jim-diagram` spec in the page, rendered at build time by `docs/hooks/diagrams.py` in the same token language as the hand-drawn concept diagrams (authoring: `docs/CLAUDE.md` > Generated diagrams). The renderer owns layout, so every page's diagram is unique in content but consistent in form. Six archetypes cover what docs pages explain:
+
+| Archetype | Shape | Use it for |
+|-----------|-------|------------|
+| Flow | Input, steps in a frame, detours, output | Something that processes (a Synchronisation Rule) |
+| Lifecycle | States with labelled transitions, a start dot, a dashed terminal | Something that moves between states (a Connected System and its cmdlets) |
+| Anatomy | A value as a token with callouts, or an object as a card of parts; property chips | Something made of parts (an API key) |
+| Decision | Questions down the left, outcomes on the right; the wanted outcome solid | A branching outcome or diagnosis (matching, troubleshooting) |
+| Comparison | Options side by side against shared rows; a twelve-dot meter | "Which one do I use" (Full against Delta) |
+| Map | Nodes on a grid joined along rows and columns; nodes may be links | How several things connect (the glossary) |
+
+Each is drawn twice, wide (800 units) and narrow (360 units, for phones), and one shows per breakpoint. The visual vocabulary is shared: the hub frame for "inside this", stage boxes for steps and states, navy-outlined system boxes for what lies outside, solid purple (`--jimdg-core-*`) for the one thing to notice, lavender (`--jimdg-layer-*`) for questions and headers, purple edge labels and flows, and Plex Mono for code (`` `backticked` `` in a spec). Text renders at no less than 10px on screen at the reading width and on a phone; `scripts/Test-Diagrams.ps1` enforces that, along with labels inside their boxes, no overlaps and no line through text.
 
 ### Element tokens
 

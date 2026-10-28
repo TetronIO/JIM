@@ -9,12 +9,35 @@ audience: automation-author
 
 System cmdlets provide access to JIM health checks, Service Health, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. Service Health and user info require an active connection.
 
+```jim-diagram
+archetype: decision
+title: When Reset-JIMSystem goes ahead
+desc: "Once confirmed, Reset-JIMSystem is refused with HTTP 409 while any Activity is in progress: wait for it to finish, or cancel it. Otherwise, without -IncludeAdministrators, the reset goes ahead and keeps the administrators. With -IncludeAdministrators, it goes ahead and removes them only when JIM_SSO_INITIAL_ADMIN is set or -AcknowledgeAdministratorLockout is given; otherwise it is refused with HTTP 409, because nobody could sign in to the portal afterwards. Either way a reset records a Reset Activity and signs everyone out of the portal."
+start: { label: Factory reset confirmed }
+questions:
+  - { id: busy, label: "An Activity in progress?" }
+  - { id: admins, label: "`-IncludeAdministrators`?" }
+  - { id: guard, label: "`JIM_SSO_INITIAL_ADMIN` set?", sub: "or the lockout acknowledged" }
+outcomes:
+  - { id: busyno, label: "Refused: HTTP 409", sub: "wait for it to finish, or cancel it" }
+  - { id: kept, label: "Reset, administrators kept", sub: "everyone signs in to the portal again", good: true }
+  - { id: removed, label: "Reset, administrators removed", sub: "everyone signs in to the portal again", good: true }
+  - { id: lockout, label: "Refused: HTTP 409", sub: "nobody could sign in to the portal" }
+answers:
+  - { from: busy, to: busyno, label: "yes" }
+  - { from: busy, to: admins, label: "no" }
+  - { from: admins, to: kept, label: "no" }
+  - { from: admins, to: guard, label: "yes" }
+  - { from: guard, to: removed, label: "yes" }
+  - { from: guard, to: lockout, label: "no" }
+```
+
 !!! tip
     Health, version, and auth config cmdlets accept a `-Url` parameter for standalone use without `Connect-JIM`. When omitted, they fall back to the URL from the active session.
 
 ---
 
-## Get-JIMHealth
+## :material-heart-pulse: Get-JIMHealth
 
 Retrieves the health, readiness, or liveness status of a JIM instance. Does not require authentication.
 
@@ -77,7 +100,7 @@ Get-JIMHealth -Ready
 
 ---
 
-## Get-JIMServiceHealth
+## :material-stethoscope: Get-JIMServiceHealth
 
 Reports whether JIM's background services (the Worker and the Scheduler) are alive and what each is doing, from the heartbeat every service writes to the database every 5 seconds. This is the same report the Service Health strip on [Operations](../configuration/operations.md#service-health) shows. Requires an active `Connect-JIM` session with the **Administrator** role.
 
@@ -172,7 +195,7 @@ $health.Services | Where-Object { $_.Version -and $_.Version -ne $health.WebVers
 
 ---
 
-## Get-JIMVersion
+## :material-information-outline: Get-JIMVersion
 
 Retrieves the JIM application version. Does not require authentication.
 
@@ -216,7 +239,7 @@ Write-Host "JIM version: $($v.Version)"
 
 ---
 
-## Get-JIMAuthConfig
+## :material-shield-key-outline: Get-JIMAuthConfig
 
 Retrieves the OIDC/OAuth client discovery configuration. Does not require authentication. Useful for scripting SSO setup or validating configuration.
 
@@ -262,7 +285,7 @@ Write-Host "Scopes: $($config.Scopes -join ', ')"
 
 ---
 
-## Get-JIMUserInfo
+## :material-account-circle-outline: Get-JIMUserInfo
 
 Retrieves the current authenticated user's details, roles, and authorisation status. Requires an active `Connect-JIM` session.
 
@@ -320,7 +343,7 @@ if ($user.IsAdministrator) {
 
 ---
 
-## Reset-JIMSystem
+## :material-restart-alert: Reset-JIMSystem
 
 Performs a factory reset against the connected JIM instance, wiping all data and configuration while preserving the schema, seeded built-ins, and infrastructure access. By default the administrator users are preserved so you are not locked out of the portal. This operation is destructive and cannot be undone; take a database backup first.
 
@@ -399,7 +422,7 @@ $result = Reset-JIMSystem -Force
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Interactive API reference](../../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, Service Health, factory reset)
 - [Operations](../configuration/operations.md): the Service Health strip these cmdlets read from, and what each state means

@@ -374,19 +374,20 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Delta sync's "modified since" test, exactly the production query's: a CSO counts when it is marked pending
-    /// synchronisation (#2092) or for derived-input re-evaluation (#1750), or was created OR last updated after the
-    /// watermark. Strict, as PostgreSQL's is: an object last written at the instant the watermark records was processed
-    /// by the run that wrote the watermark. A newly imported CSO has no LastUpdated until something changes it, so
+    /// synchronisation (#2092), for derived-input re-evaluation (#1750) or for scope review (#892), or was created OR
+    /// last updated after the watermark. Strict, as PostgreSQL's is: an object last written at the instant the watermark
+    /// records was processed by the run that wrote the watermark. A newly imported CSO has no LastUpdated until something changes it, so
     /// testing LastUpdated alone hid every joiner from delta sync in tests (the production query never did).
     /// </summary>
     private static bool IsModifiedSince(ConnectedSystemObject cso, DateTime modifiedSince) =>
         cso.SynchronisationPending ||
         cso.DerivedInputChangePending ||
+        cso.ScopeReviewPending ||
         cso.Created > modifiedSince ||
         (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null,
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
         int? objectTypeId = null, DateTime? createdOnOrAfter = null)
     {
         if (afterId.HasValue)
@@ -402,16 +403,13 @@ public class SyncRepository : ISyncRepository
                 .ToList();
             var keysetResult = BuildPagedResult(remaining, 1, pageSize);
             keysetResult.CurrentPage = page;
-            FlagUnchangedObjects(keysetResult.Results, lastSyncTimestamp);
             return Task.FromResult(keysetResult);
         }
 
         var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
-        var result = BuildPagedResult(all, page, pageSize);
-        FlagUnchangedObjects(result.Results, lastSyncTimestamp);
-        return Task.FromResult(result);
+        return Task.FromResult(BuildPagedResult(all, page, pageSize));
     }
 
     /// <summary>
@@ -426,17 +424,6 @@ public class SyncRepository : ISyncRepository
         if (createdOnOrAfter.HasValue)
             csos = csos.Where(c => c.Created >= createdOnOrAfter.Value);
         return csos;
-    }
-
-    /// <summary>
-    /// The Full Synchronisation loader's partition, as the production loader applies it: with a watermark, an object
-    /// <see cref="ConnectedSystemObject.IsUnchangedSince"/> treats as unchanged is flagged, and Pass 2 skips it; without
-    /// one, nothing is. Set on every load, since this provider hands out its stored instances.
-    /// </summary>
-    private static void FlagUnchangedObjects(IEnumerable<ConnectedSystemObject> page, DateTime? lastSyncTimestamp)
-    {
-        foreach (var cso in page)
-            cso.IsUnchangedSinceLastSync = lastSyncTimestamp.HasValue && cso.IsUnchangedSince(lastSyncTimestamp.Value);
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
@@ -2131,6 +2118,16 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    // The changes and exports handed over are the stored instances, so they already hold what resolution wrote. Virtual
+    // for test-support subclasses that snapshot persisted state (see GetPendingExportsByIdsAsync).
+    public virtual Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+    {
+        foreach (var pe in pendingExports)
+            _pendingExports[pe.Id] = pe;
+        return Task.CompletedTask;
+    }
+
     public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
     {
         var deleted = 0;
@@ -2563,26 +2560,9 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(names);
     }
 
-    public Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
-    {
-        var timestamps = _syncRules.Values
-            .Select(r => r.LastUpdated ?? r.Created)
-            .Concat(_syncRules.Values.SelectMany(r => r.AttributeFlowRules).Select(m => m.LastUpdated ?? m.Created))
-            .ToList();
-        return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
-    }
-
     public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
     {
         return Task.FromResult(_connectedSystems.TryGetValue(connectedSystemId, out var cs) ? cs.ObjectMatchingRuleMode : (ObjectMatchingRuleMode?)null);
-    }
-
-    public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
-    {
-        (DateTime?, DateTime?)? watermarks = _connectedSystems.TryGetValue(connectedSystemId, out var cs)
-            ? (cs.LastSyncCompletedAt, cs.ConfigurationLastFullyAppliedAt)
-            : null;
-        return Task.FromResult(watermarks);
     }
 
     /// <summary>
@@ -3129,6 +3109,25 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+    {
+        var result = new Dictionary<Guid, ReferenceAnchorSummary>();
+        foreach (var mvoId in metaverseObjectIds)
+        {
+            if (!_csosByMvo.TryGetValue(mvoId, out var csoIds))
+                continue;
+
+            var cso = csoIds
+                .Select(csoId => _csos.TryGetValue(csoId, out var candidate) ? candidate : null)
+                .FirstOrDefault(candidate => candidate != null && candidate.ConnectedSystemId == connectedSystemId);
+            if (cso != null)
+                result[mvoId] = ReferenceAnchorSummary.Of(cso);
+        }
+
+        return Task.FromResult(result);
+    }
+
     public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
     {
         ConnectedSystemObjectTypeAttribute? result = null;
@@ -3221,12 +3220,12 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Collects all remaining executable exports with unresolved references (deferred) strictly
-    /// after the given keyset cursor, in a single call, mirroring the Postgres implementation.
-    /// Used to fast-path the export batch-collection loop once a batch is discovered to be made
-    /// up entirely of deferred exports (issue #985).
+    /// Collects the ids of all remaining executable exports with unresolved references (deferred)
+    /// strictly after the given keyset cursor, mirroring the Postgres implementation. Used to
+    /// fast-path the export batch-collection loop once a batch is discovered to be made up entirely
+    /// of deferred exports (issue #985).
     /// </summary>
-    public virtual Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    public virtual Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
     {
         var query = GetExecutableExportsForSystem(connectedSystemId)
             .Where(pe => pe.HasUnresolvedReferences);
@@ -3240,6 +3239,22 @@ public class SyncRepository : ISyncRepository
         }
 
         var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .Select(pe => pe.Id)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Loads one chunk of the deferred export pass by id, in (CreatedAt, Id) order. Virtual so a test can see the chunks
+    /// the pass takes.
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+    {
+        var result = pendingExportIds
+            .Where(_pendingExports.ContainsKey)
+            .Select(id => _pendingExports[id])
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
             .ToList();

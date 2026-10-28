@@ -52,27 +52,66 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// A Connected System Object with a change held until its Initial Password is delivered (#2039 Phase 2) is left
-    /// out of Drift Detection entirely. Skipping only the held attribute is not enough: staging a correction for any
-    /// other attribute makes the page flush delete every existing Pending Export for the object, the held one with
-    /// it, and the next evaluation would re-send the enabled value Active Directory refuses.
+    /// Drift on an object holding a change until its Initial Password is delivered (#2039) is corrected at once, not a
+    /// synchronisation later (#2501). The correction replaces the object's Pending Export at the page flush, so it
+    /// carries the held change over exactly as it was: still held, still awaiting confirmation, its attempt count kept.
+    /// Dropping it would have the next evaluation re-send the enabled value Active Directory refuses without a password.
     /// </summary>
     [Test]
-    public async Task FullSync_DriftOnAnObjectWithAChangeAwaitingInitialPassword_SkipsDriftAndKeepsTheHeldChangeAsync()
+    public async Task FullSync_DriftOnAnObjectWithAChangeAwaitingInitialPassword_CorrectsTheDriftAndKeepsTheHeldChangeAsync()
     {
         var (system, cso, displayNameAttr) = await ArrangeDriftedObjectAsync();
+        SeedHeldChange(system, cso, displayNameAttr, "Drift User");
 
-        var held = new PendingExportAttributeValueChange
+        var activity = await RunFullSyncAsync(system);
+
+        var changesForObject = await PendingChangesForAsync(system, cso);
+        using (Assert.EnterMultipleScope())
         {
-            Id = Guid.NewGuid(),
-            AttributeId = displayNameAttr.Id,
-            Attribute = displayNameAttr,
-            ChangeType = PendingExportAttributeChangeType.Update,
-            StringValue = "Drift User",
-            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
-            ExportAttemptCount = 1,
-            AwaitsInitialPassword = true
-        };
+            Assert.That(changesForObject.Count(c => c.AttributeId == displayNameAttr.Id), Is.EqualTo(1),
+                "the held change is carried over once, not duplicated");
+            Assert.That(changesForObject.Any(c => c.AttributeId == displayNameAttr.Id && c.AwaitsInitialPassword &&
+                    c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation && c.ExportAttemptCount == 1 &&
+                    c.StringValue == "Drift User"),
+                Is.True, "the held change must survive the page flush exactly as it was");
+            Assert.That(changesForObject.Any(c => c.StringValue == EnforcedValue && !c.AwaitsInitialPassword &&
+                    c.Status == PendingExportAttributeChangeStatus.Pending),
+                Is.True, "the drifted attribute is corrected now, not a synchronisation later");
+            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                    .Any(i => i.ConnectedSystemObjectId == cso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+                Is.True, "the correction is reported as a Drift Correction");
+        }
+    }
+
+    /// <summary>
+    /// Drift on the held attribute itself is no correction at all where the held change already asserts what the
+    /// Metaverse Object wants (#2039, #2501): the target holds its interim value until the Initial Password is delivered.
+    /// Staged, the correction would supersede the held change and re-send the value Active Directory refuses
+    /// (<c>0000052D</c>), so nothing is staged and nothing is reported.
+    /// </summary>
+    [Test]
+    public async Task FullSync_DriftOnlyOnTheHeldAttribute_RestatingTheHeldChange_StagesNothingAndKeepsTheHeldChangeAsync()
+    {
+        var (system, cso, _) = await ArrangeDriftedObjectAsync();
+        var descriptionAttr = cso.AttributeValues.Single(v => v.StringValue == DriftedValue).Attribute;
+        SeedHeldChange(system, cso, descriptionAttr, EnforcedValue);
+
+        var activity = await RunFullSyncAsync(system);
+
+        var changesForObject = await PendingChangesForAsync(system, cso);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changesForObject, Has.Count.EqualTo(1), "only the held change remains");
+            Assert.That(changesForObject.Single().AwaitsInitialPassword, Is.True);
+            Assert.That(changesForObject.Single().Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(changesForObject.Single().ExportAttemptCount, Is.EqualTo(1));
+            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                    .Any(i => i.ConnectedSystemObjectId == cso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+                Is.False, "restating the held change corrects nothing, so no Drift Correction is reported");
+        }
+    }
+
+    private void SeedHeldChange(ConnectedSystem system, ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string value) =>
         SyncRepo.SeedPendingExport(new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -81,25 +120,27 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.Exported,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = [held]
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = attribute.Id,
+                    Attribute = attribute,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    StringValue = value,
+                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    ExportAttemptCount = 1,
+                    AwaitsInitialPassword = true
+                }
+            ]
         });
 
-        var activity = await RunFullSyncAsync(system);
-
-        var changesForObject = (await SyncRepo.GetPendingExportsAsync(system.Id))
+    private async Task<List<PendingExportAttributeValueChange>> PendingChangesForAsync(ConnectedSystem system, ConnectedSystemObject cso) =>
+        (await SyncRepo.GetPendingExportsAsync(system.Id))
             .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
             .SelectMany(pe => pe.AttributeValueChanges)
             .ToList();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(changesForObject.Any(c => c.AttributeId == displayNameAttr.Id && c.AwaitsInitialPassword &&
-                    c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
-                Is.True, "the held change must survive the page flush with its hold intact");
-            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
-                    .Any(i => i.ConnectedSystemObjectId == cso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
-                Is.False, "Drift Detection must not run for an object with a held change");
-        }
-    }
 
     /// <summary>
     /// Control for the test above: the same drifted object with nothing held is corrected as usual, so the skip is

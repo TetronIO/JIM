@@ -374,22 +374,32 @@ public class SynchronisationPendingDatabaseTests
         }
     }
 
+    /// <summary>
+    /// The Temporal Scope Reconciler flags an object whose data has not changed but whose scope the clock has moved
+    /// (#892). Delta Synchronisation must select it, count it and load it like any changed object; before, only a Full
+    /// Synchronisation ever reached it.
+    /// </summary>
     [Test]
-    public async Task GetConnectedSystemObjectsAsync_WithWatermarkUnchangedButMarkedObject_IsPartitionedAsChangedAsync()
+    public async Task GetConnectedSystemObjectsModifiedSinceAsync_UnchangedButFlaggedForScopeReview_IsSelectedCountedAndLoadedAsync()
     {
         var s = await SeedAsync();
         var watermark = DateTime.UtcNow.AddHours(-1);
-        await SetMarkDirectlyAsync(s.JoinedCsoId, true);
+        await using (var flag = NewContext())
+        {
+            await flag.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystemObjects"" SET ""ScopeReviewPending"" = true WHERE ""Id"" = {0}", s.JoinedCsoId);
+        }
 
         await using var ctx = NewContext();
-        var page = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemObjectsAsync(
-            s.SystemId, 1, 100, knownTotalCount: 2, lastSyncTimestamp: watermark, afterId: Guid.Empty);
+        var repository = new PostgresDataRepository(ctx);
+        var count = await repository.Sync.GetConnectedSystemObjectModifiedSinceCountAsync(s.SystemId, watermark);
+        var page = await repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(s.SystemId, watermark, 1, 100, count, Guid.Empty);
 
-        var marked = page.Results.Single(c => c.Id == s.JoinedCsoId);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(marked.IsUnchangedSinceLastSync, Is.False, "Full Synchronisation's unchanged skip must not skip a marked object");
-            Assert.That(marked.AttributeValues, Has.Count.EqualTo(1), "a marked object's attribute values are loaded");
+            Assert.That(count, Is.EqualTo(1), "the flagged object is counted although its timestamps are older than the watermark");
+            Assert.That(page.Results.Select(c => c.Id), Is.EquivalentTo(new[] { s.JoinedCsoId }));
+            Assert.That(page.Results.Single().AttributeValues, Has.Count.EqualTo(1), "a flagged object is loaded with its attribute values");
         }
     }
 
@@ -419,7 +429,7 @@ public class SynchronisationPendingDatabaseTests
 
         await using var ctx = NewContext();
         var page = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemObjectsAsync(
-            s.SystemId, page: 3, pageSize: 1, knownTotalCount: 1, lastSyncTimestamp: null, afterId: Guid.Empty);
+            s.SystemId, page: 3, pageSize: 1, knownTotalCount: 1, afterId: Guid.Empty);
 
         Assert.That(page.Results, Has.Count.EqualTo(1), "a keyset page is returned whatever the count taken at the start implied");
     }

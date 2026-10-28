@@ -40,10 +40,10 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal bool SucceedsOnlyWithAPinnedCertificate { get; init; }
 
     /// <summary>
-    /// Whether this dialect's driver can be told to accept one specific server certificate. Settable so
-    /// a test can stand in for Oracle Database, whose driver cannot.
+    /// Whether this dialect's driver accepts only a root certificate authority as its trust anchor. Settable so a
+    /// test can stand in for Oracle Database, whose driver is handed a wallet of the chain rather than one certificate.
     /// </summary>
-    internal bool CanPinServerCertificate { get; init; } = true;
+    internal bool RequiresRootTrustAnchor { get; init; }
 
     /// <summary>
     /// What the connectivity query returns when the connection opens.
@@ -219,7 +219,7 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
     public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => GeneratedKeyRetrievalMode;
 
-    public override bool SupportsPinnedServerCertificate => CanPinServerCertificate;
+    public override bool TrustAnchorMustBeRoot => RequiresRootTrustAnchor;
 
     public override int GetDefaultPort(SqlConnectionEncryption encryption) => 1433;
 
@@ -281,6 +281,15 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         ConfiguredOpenConnectionSettings.Add(settings);
         ConnectionStatesWhenConfiguredOpen.Add(connection.State);
     }
+
+    /// <summary>
+    /// When set, how this dialect describes a failed connection, standing in for a driver (Oracle's) that
+    /// hides the cause beneath a generic error.
+    /// </summary>
+    internal Func<DbException, string>? ConnectionFailureDescription { get; init; }
+
+    public override string DescribeConnectionFailure(DbException exception) =>
+        ConnectionFailureDescription?.Invoke(exception) ?? base.DescribeConnectionFailure(exception);
 
     /// <summary>
     /// The Microsoft SQL Server page shape, because this stand-in quotes and prefixes the way that
@@ -762,7 +771,7 @@ internal sealed class FakeDbConnection : DbConnection
     {
         // The settings this connection was built from are the ones most recently handed to the provider,
         // which is what lets a pinned certificate change the outcome.
-        var pinned = _provider.BuiltConnectionSettings.LastOrDefault()?.PinnedServerCertificatePath != null;
+        var pinned = _provider.BuiltConnectionSettings.LastOrDefault()?.PinnedTrustPath != null;
 
         if (_provider.SucceedsOnlyWithAPinnedCertificate && !pinned)
             throw _provider.OpenFailure ?? new FakeDbException("The server's certificate is not trusted.");
@@ -1712,6 +1721,13 @@ internal sealed class FakeDbException : DbException
     internal FakeDbException(string message, string? sqlState = null) : base(message)
     {
         _sqlState = sqlState;
+    }
+
+    /// <summary>
+    /// A failure whose cause the driver keeps in an inner exception, as ODP.NET does.
+    /// </summary>
+    internal FakeDbException(string message, Exception innerException) : base(message, innerException)
+    {
     }
 
     public override string? SqlState => _sqlState;

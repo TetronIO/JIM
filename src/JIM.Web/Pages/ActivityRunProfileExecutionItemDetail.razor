@@ -38,7 +38,7 @@
            it created or failed on is another, with its own status, retries and attribute table. Keeping
            both inline made the page a scroll rather than an answer, so each has its own tab. The Pending
            Export tab appears only where there is one. *@
-        <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-5">
+        <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-6">
         <MudTabPanel Text="Overview">
 
         @* Summary Section *@
@@ -622,7 +622,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ? new List<BreadcrumbItem>
             {
                 new("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new("Operations", href: "/admin/operations?t=history"),
+                new("Operations", href: "/admin/operations?t=activity"),
                 new(activityName, href: activityHref),
                 new("Item Details", href: null, disabled: true)
             }

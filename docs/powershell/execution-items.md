@@ -9,9 +9,28 @@ audience: automation-author
 
 A Run Profile execution records one execution item (a Run Profile Execution Item) for each object it changed or failed to change. These cmdlets read one item in full, with its error message when the object failed, and follow the chain of causes behind it, or the consequences it went on to have, one cohort of objects at a time: the same story the [Lineage view](../configuration/causality.md) tells. List a run's items with [`Get-JIMActivity -ExecutionItems`](activities.md#get-jimactivity).
 
+```jim-diagram
+archetype: map
+title: How the execution item cmdlets pipe into each other
+desc: "Each row of a run's items, from Get-JIMActivity -ExecutionItems, pipes into Get-JIMActivityExecutionItem, which returns that one execution item in full. So does each row of an object's timeline, which Get-JIMActivityExecutionItem returns given a Connected System Object's or a Metaverse Object's ID. From one item, -Causes returns what caused it, and -Consequences what it went on to cause, one row per cohort. Each consequence row pipes into Get-JIMCausalCohortMember, which returns every member of that cohort. Each node links to the cmdlet that returns it."
+nodes:
+  - { id: timeline, label: "An object's timeline", link: "#get-jimactivityexecutionitem", row: 0, col: 1 }
+  - { id: runitems, label: "A run's items", link: "activities.md#get-jimactivity", row: 1, col: 0 }
+  - { id: item, label: One execution item, link: "#get-jimactivityexecutionitem", row: 1, col: 1 }
+  - { id: causes, label: What caused it, link: "#get-jimactivityexecutionitem", row: 1, col: 2 }
+  - { id: consequences, label: What it caused, link: "#get-jimactivityexecutionitem", row: 2, col: 1 }
+  - { id: cohort, label: Every cohort member, link: "#get-jimcausalcohortmember", row: 2, col: 2 }
+edges:
+  - { from: timeline, to: item, label: rows pipe into }
+  - { from: runitems, to: item, label: rows pipe into }
+  - { from: item, to: causes, label: "`-Causes`" }
+  - { from: item, to: consequences, label: "`-Consequences`" }
+  - { from: consequences, to: cohort, label: a row pipes into }
+```
+
 ---
 
-## Get-JIMActivityExecutionItem
+## :material-format-list-checks: Get-JIMActivityExecutionItem
 
 Retrieves one execution item of a Run Profile activity: what happened to one object and, when it failed, why. The list returned by `Get-JIMActivity -ExecutionItems` names each failed item's error type; this cmdlet returns the error message and stack trace as well, which is usually what tells you how to fix it. For a generated value that ran out, for example, the message names the attribute, the last value tried and what already holds it.
 
@@ -274,7 +293,7 @@ Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Consequ
 
 ---
 
-## Get-JIMCausalCohortMember
+## :material-account-group-outline: Get-JIMCausalCohortMember
 
 Pages through every member of one cohort of an execution item's consequences. `Get-JIMActivityExecutionItem -Consequences` counts a cohort exactly ("4218 Groups") but returns only its first members; this returns the rest, earliest first and then by name.
 
@@ -326,7 +345,7 @@ Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Consequ
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](activities.md): cmdlets for Activities, a run's statistics, and its child Activities
 - [Causality](../configuration/causality.md): what caused a change, and what it went on to cause, in the portal

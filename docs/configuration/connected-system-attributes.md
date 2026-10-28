@@ -9,7 +9,26 @@ audience: administrator
 
 Each attribute JIM discovers in a Connected System's schema carries what JIM learned about it: whether the system lets JIM write it, what type of value it holds, how finely it holds a date, and whether it is a credential. This page covers each.
 
-## Attribute writability
+```jim-diagram
+archetype: anatomy
+title: What JIM records about each attribute
+desc: "Each attribute JIM discovers in a Connected System's schema records its writability (Writable, Read-Only or Set on creation only), its data type, which decides the Metaverse Attributes it can be mapped to, its plurality (single-valued or multi-valued), for a Text attribute whether its values are case-exact, for a DateTime attribute its Date Resolution, the finest step of time kept, and whether it is a credential attribute, which is never managed. Each is discovered from the Connected System's schema; writability is never set by an administrator, and a data type, plurality, case-exact declaration or Date Resolution you set survives a schema refresh."
+subject:
+  kind: object
+  label: Connected System attribute
+  parts:
+    - { label: Writability, detail: "Writable, Read-Only or Set on creation only" }
+    - { label: Data type, detail: which Metaverse Attributes it maps to }
+    - { label: Plurality, detail: single-valued or multi-valued }
+    - { label: Case-exact, detail: "Text: are `JBloggs` and `jbloggs` two values?" }
+    - { label: Date Resolution, detail: "DateTime: the finest step of time kept" }
+    - { label: Credential, detail: "on the blocked list: never managed" }
+properties:
+  - { name: Discovered, value: from the Connected System's schema }
+  - { name: Set by you, value: survives a schema refresh }
+```
+
+## :material-pencil-lock-outline: Attribute writability
 
 When JIM retrieves a Connected System's schema, each discovered attribute is recorded with how the system will let JIM write to it. You can see this in the Schema tab's **Writability** column, filter the attribute list by it, and read it from the REST API and PowerShell as the attribute's `writability` value. It is discovered, never set by an administrator: it reflects what the Connected System told JIM.
 
@@ -35,7 +54,7 @@ If a source value feeding one of these attributes genuinely does change (an empl
 
 The Attribute Flow editor marks an export mapping whose target is set on creation only, so it is clear at a glance which mappings apply during provisioning alone, and a Connected System Object's detail page marks the attribute itself, so the same is obvious when looking at a single object's values.
 
-## Attribute data types
+## :material-tag-text-outline: Attribute data types
 
 Every discovered attribute is recorded with a JIM data type, shown in the Schema tab's **Type** column. An Attribute Flow requires its source and target to be the same type, so this is what decides which Metaverse Attributes an attribute can be mapped to.
 
@@ -91,7 +110,7 @@ An override survives a schema refresh. JIM records that the type was chosen rath
 !!! note "Existing Connected Systems"
     Improvements to how JIM infers a type apply when a schema is next retrieved. An existing Connected System keeps the types it already holds until you refresh its schema.
 
-## Plurality
+## :material-format-list-bulleted-square: Plurality
 
 Each attribute is either **single-valued** or **multi-valued**, shown in the Schema tab's **Plurality** column. Most Connectors read this from the Connected System's schema: a directory declares which attributes hold several values, and the SQL Connector treats a column gathered from a related table as multi-valued.
 
@@ -114,7 +133,7 @@ Through the REST API, the attribute update takes `plurality` (`PUT /api/v1/synch
 
 Your choice survives a schema refresh. JIM records that the plurality was set rather than discovered, so a refresh leaves it alone, even though the file itself never declares it.
 
-## Case-exact values
+## :material-text-short: Case-exact values
 
 Each Text attribute says whether its values are **case-exact**: whether `JBloggs` and `jbloggs` are two different values or one. Most identifiers are not case-exact (directory account names, email addresses, distinguished names), so a Text attribute ignores case unless its Connected System's schema says otherwise. [Case Sensitivity](../concepts/case-sensitivity.md#case-exact-attributes) lists what each Connector discovers, and what the declaration decides.
 
@@ -137,7 +156,7 @@ Your answer survives a schema refresh. JIM records that the declaration was set 
 !!! note "Existing Connected Systems"
     A Connected System created before JIM recorded case-exactness has every attribute ignoring case until its schema is next refreshed, when the discovered declarations are filled in. Refresh the schema to see them.
 
-## Date resolution
+## :material-calendar-month-outline: Date resolution
 
 Each DateTime attribute has a **Date Resolution**: the finest step of time the Connected System keeps for it. JIM holds every date to the microsecond, but Active Directory keeps whole seconds, a SQL `datetime2(3)` column keeps milliseconds and a `date` column keeps days. A date sent finer than that would come back changed, and JIM would send it again on every synchronisation.
 
@@ -168,7 +187,7 @@ In bulk, give `dateTimeResolution` in an attribute's hashtable; through the REST
 !!! note "Existing Connected Systems"
     A Connected System created before JIM recorded resolutions holds and sends its dates to the microsecond until its schema is next refreshed, when the discovered resolutions are filled in. Refresh the schema of any Connected System that holds dates less finely, such as Active Directory.
 
-## Credential attributes are never managed
+## :material-form-textbox-password: Credential attributes are never managed
 
 Some attributes hold credential material, or a hash of it. JIM will never import them, never let you select them for management, and never let you name them as the source or target of an Attribute Flow:
 

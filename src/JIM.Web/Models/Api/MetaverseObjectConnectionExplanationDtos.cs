@@ -52,8 +52,20 @@ public class MetaverseObjectConnectionExplanationDto
 {
     public Guid ConnectedSystemObjectId { get; set; }
 
-    /// <summary>The object's external id, or its id where the external id cannot be shown.</summary>
-    public string? DisplayName { get; set; }
+    /// <summary>The object's External ID; null when it has none yet (an object awaiting provisioning).</summary>
+    public string? ExternalId { get; set; }
+
+    /// <summary>
+    /// The object's Secondary External ID (for an LDAP Connected System, its distinguished name); null when the Connected
+    /// System has none or the object has no value for it yet.
+    /// </summary>
+    public string? SecondaryExternalId { get; set; }
+
+    /// <summary>The External ID a queued Pending Export will give the object, where it has none yet; null otherwise.</summary>
+    public string? PendingExternalId { get; set; }
+
+    /// <summary>The Secondary External ID a queued Pending Export will give the object, where it has none yet; null otherwise.</summary>
+    public string? PendingSecondaryExternalId { get; set; }
 
     public int ConnectedSystemId { get; set; }
 
@@ -90,7 +102,10 @@ public class MetaverseObjectConnectionExplanationDto
     public static MetaverseObjectConnectionExplanationDto FromModel(MetaverseObjectConnectionExplanation model) => new()
     {
         ConnectedSystemObjectId = model.ConnectedSystemObjectId,
-        DisplayName = model.DisplayName,
+        ExternalId = model.ExternalId,
+        SecondaryExternalId = model.SecondaryExternalId,
+        PendingExternalId = model.PendingExternalId,
+        PendingSecondaryExternalId = model.PendingSecondaryExternalId,
         ConnectedSystemId = model.ConnectedSystemId,
         ConnectedSystemName = model.ConnectedSystemName,
         ObjectTypeName = model.ObjectTypeName,

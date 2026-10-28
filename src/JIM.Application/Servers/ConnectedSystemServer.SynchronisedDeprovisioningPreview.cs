@@ -120,7 +120,7 @@ public partial class ConnectedSystemServer
         {
             cancellationToken.ThrowIfCancellationRequested();
             var page = await guard.GetConnectedSystemObjectsAsync(
-                connectedSystemId, page: 1, pageSize: batchSize, knownTotalCount: knownTotal, lastSyncTimestamp: null, afterId: cursor);
+                connectedSystemId, page: 1, pageSize: batchSize, knownTotalCount: knownTotal, afterId: cursor);
             if (page.Results.Count == 0)
                 break;
             cursor = page.Results[^1].Id;

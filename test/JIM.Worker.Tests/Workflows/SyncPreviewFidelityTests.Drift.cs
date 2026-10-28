@@ -57,63 +57,28 @@ public partial class SyncPreviewFidelityTests
         }
     }
 
-    /// <remarks>
-    /// Asserted against the run's rule rather than paired with a run: both loaders skip unchanged objects through the
-    /// same <see cref="ConnectedSystemObject.IsUnchangedSince"/> and <see cref="ConnectedSystem.GetUnchangedObjectWatermark(DateTime?)"/>
-    /// the preview reads (both covered in <c>UnchangedObjectOptimisationTests</c>).
-    /// </remarks>
-    [TestCase(false, 0, 1)]
-    [TestCase(true, 1, 0)]
-    public async Task PreviewFullSyncAsync_OfADriftedTargetObjectUnchangedSinceTheLastSynchronisation_ProposesOnlyWhatTheRunProcessesAsync(
-        bool configurationChangedSince, int expectedUpdates, int expectedUnchanged)
+    [Test]
+    public async Task PreviewFullSyncAsync_OfADriftedTargetObjectUnchangedSinceTheLastSynchronisation_ProposesTheCorrectionTheRunMakesAsync()
     {
         var ctx = await SetUpDriftAsync(enforceState: true);
 
-        // The drifted value was imported before the target's last synchronisation; with no configuration change since
-        // configuration was last fully applied, a Full Synchronisation skips the object, drift and all.
+        // The drifted value was imported before the target's last synchronisation, and nothing has changed since. A Full
+        // Synchronisation evaluates every object all the same (#891), so it corrects the drift, and the preview says so.
         var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
         targetCso.Created = DateTime.UtcNow.AddHours(-2);
         targetCso.LastUpdated = DateTime.UtcNow.AddHours(-1);
         // ...and processed by that synchronisation, which cleared the mark its provisioning set (#2092).
         targetCso.SynchronisationPending = false;
-        var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
-        target.LastSyncCompletedAt = DateTime.UtcNow;
-        target.ConfigurationLastFullyAppliedAt = configurationChangedSince ? DateTime.UtcNow.AddDays(-1) : DateTime.UtcNow;
+        SyncRepo.ConnectedSystems[ctx.Target.Id].LastSyncCompletedAt = DateTime.UtcNow;
 
         var preview = await Jim.SyncPreview.PreviewFullSyncAsync(ctx.Target.Id);
+        await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
 
+        var realUpdates = UpdatesStagedFor(ctx.Target);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(preview.Counts.ObjectsToUpdate, Is.EqualTo(expectedUpdates),
-                configurationChangedSince ? "a configuration change reaches every object" : "the run does not process an unchanged object");
-            Assert.That(preview.UnchangedObjectCount, Is.EqualTo(expectedUnchanged));
-        }
-    }
-
-    [Test]
-    public async Task StreamFullSyncPreviewAsync_OfAnObjectUnchangedSinceTheLastSynchronisation_SaysItWouldNotChangeAsync()
-    {
-        var ctx = await SetUpDriftAsync(enforceState: true);
-        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
-        targetCso.Created = DateTime.UtcNow.AddHours(-2);
-        targetCso.LastUpdated = DateTime.UtcNow.AddHours(-1);
-        // ...and processed by that synchronisation, which cleared the mark its provisioning set (#2092).
-        targetCso.SynchronisationPending = false;
-        var target = SyncRepo.ConnectedSystems[ctx.Target.Id];
-        target.LastSyncCompletedAt = DateTime.UtcNow;
-        target.ConfigurationLastFullyAppliedAt = DateTime.UtcNow;
-
-        var items = new List<FullSyncPreviewItem>();
-        await foreach (var item in Jim.SyncPreview.StreamFullSyncPreviewAsync(ctx.Target.Id))
-            items.Add(item);
-
-        var unchanged = items.Single(i => i.Kind == FullSyncPreviewItemKind.Unchanged);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(unchanged.ConnectedSystemObjectId, Is.EqualTo(targetCso.Id));
-            Assert.That(unchanged.DisplayName, Is.EqualTo("Edited in AD"), "named, so the row saying it would not change can be recognised");
-            Assert.That(unchanged.Preview, Is.Null, "the run does not process it, so there is nothing to evaluate");
-            Assert.That(items.Any(i => i.Kind == FullSyncPreviewItemKind.Evaluated), Is.False);
+            Assert.That(realUpdates, Is.EqualTo(1), "arrange: the run corrects the drift although the object is unchanged");
+            Assert.That(preview.Counts.ObjectsToUpdate, Is.EqualTo(realUpdates), "the preview proposes the correction the run stages");
         }
     }
 
@@ -139,39 +104,18 @@ public partial class SyncPreviewFidelityTests
     }
 
     /// <summary>
-    /// The run leaves an object holding a change until its Initial Password is delivered out of Drift Detection entirely
-    /// (#2039), because a correction for any attribute would replace the Pending Export holding the change. The preview
-    /// proposes no correction for it either, or an administrator reads a correction the run will not make.
+    /// Drift on the attribute an object holds a change for until its Initial Password is delivered is no correction
+    /// where the held change already asserts what the Metaverse Object wants (#2039, #2501): the run stages nothing that
+    /// would supersede it and re-send the value the target refuses. The preview proposes no correction either, or an
+    /// administrator reads a correction the run will not make.
     /// </summary>
     [Test]
-    public async Task PreviewSyncForCsoAsync_OfADriftedTargetObjectHoldingAChangeAwaitingInitialPassword_ProposesNoCorrectionTheRunDoesNotMakeAsync()
+    public async Task PreviewSyncForCsoAsync_OfATargetObjectDriftedOnlyOnTheAttributeItHoldsAChangeFor_ProposesNoCorrectionTheRunDoesNotMakeAsync()
     {
         var ctx = await SetUpDriftAsync(enforceState: true);
         var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
         var displayNameAttribute = targetCso.AttributeValues.Single(v => v.Attribute.Name == "DisplayName").Attribute;
-        SyncRepo.SeedPendingExport(new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = ctx.Target.Id,
-            ConnectedSystemObjectId = targetCso.Id,
-            ChangeType = PendingExportChangeType.Update,
-            Status = PendingExportStatus.Exported,
-            CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges =
-            [
-                new PendingExportAttributeValueChange
-                {
-                    Id = Guid.NewGuid(),
-                    AttributeId = displayNameAttribute.Id,
-                    Attribute = displayNameAttribute,
-                    ChangeType = PendingExportAttributeChangeType.Update,
-                    StringValue = "John Smith",
-                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
-                    ExportAttemptCount = 1,
-                    AwaitsInitialPassword = true
-                }
-            ]
-        });
+        SeedHeldChange(ctx, targetCso, displayNameAttribute, "John Smith");
 
         var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Target.Id, targetCso.Id);
         var activity = await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
@@ -180,13 +124,67 @@ public partial class SyncPreviewFidelityTests
         {
             Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
                     .Any(i => i.ConnectedSystemObjectId == targetCso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
-                Is.False, "arrange: the run makes no drift correction for an object holding a change");
+                Is.False, "arrange: the run makes no correction restating the held change");
             Assert.That(preview.DriftCorrections, Is.Empty, "the preview proposes no correction the run does not make");
             Assert.That(preview.Outbound.ProposedExports, Is.Empty);
             Assert.That(preview.OutcomeTree.Select(n => n.OutcomeType),
                 Has.No.Member(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection));
         }
     }
+
+    /// <summary>
+    /// An object holding a change until its Initial Password is delivered has its other attributes' drift corrected at
+    /// once (#2501), so the preview proposes that correction as the run makes it, and nothing for the held change.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_OfADriftedTargetObjectHoldingAChangeForAnotherAttribute_ProposesTheCorrectionTheRunMakesAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+        var otherAttribute = ctx.ExportRule.ConnectedSystemObjectType!.Attributes.First(a => a.Name != "DisplayName" && !a.IsExternalId);
+        SeedHeldChange(ctx, targetCso, otherAttribute, "interim");
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Target.Id, targetCso.Id);
+        var activity = await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                    .Any(i => i.ConnectedSystemObjectId == targetCso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+                Is.True, "arrange: the run corrects the drift although the object holds a change");
+            Assert.That(preview.DriftCorrections.Select(c => c.AttributeName), Is.EqualTo(new[] { "DisplayName" }));
+            Assert.That(preview.Outbound.ProposedExports.SelectMany(pe => pe.AttributeValueChanges).Select(c => c.AttributeId),
+                Is.EqualTo(new[] { targetCso.AttributeValues.Single(v => v.Attribute.Name == "DisplayName").AttributeId }),
+                "the preview proposes the correction alone: the held change is not proposed again");
+            Assert.That(preview.OutcomeTree.Select(n => n.OutcomeType),
+                Has.Member(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection));
+        }
+    }
+
+    private void SeedHeldChange(DriftContext ctx, ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string value) =>
+        SyncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ctx.Target.Id,
+            ConnectedSystemObjectId = cso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = attribute.Id,
+                    Attribute = attribute,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    StringValue = value,
+                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    ExportAttemptCount = 1,
+                    AwaitsInitialPassword = true
+                }
+            ]
+        });
 
     /// <summary>
     /// Where the enforced export expression fails, or Fail this mapping stops it, the run records the error against the

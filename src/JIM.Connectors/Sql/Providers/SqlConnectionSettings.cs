@@ -73,19 +73,19 @@ internal sealed record SqlConnectionSettings
     internal TimeZoneInfo DatabaseTimeZone { get; init; } = TimeZoneInfo.Utc;
 
     /// <summary>
-    /// A file holding the one server certificate this connection may accept in addition to whatever the
-    /// operating system's bundle already vouches for. Null on every ordinary connection.
+    /// What this connection may accept in addition to whatever the operating system's bundle already
+    /// vouches for: a file holding the server's own certificate where the provider matches that exactly,
+    /// or a wallet folder holding a trusted root and the intermediates beneath it where the provider
+    /// declares <see cref="ISqlProvider.TrustAnchorMustBeRoot"/>. Null on every ordinary connection.
     /// <para>
-    /// Set only after a TLS connection has been refused, and only for a certificate JIM's own
-    /// certificate store vouches for, so it can never widen trust beyond what an administrator added in
-    /// Admin &gt; Certificates. Honoured only by providers declaring
-    /// <see cref="ISqlProvider.SupportsPinnedServerCertificate"/>.
+    /// Set only after a TLS connection has been refused, and only for a chain JIM's own certificate store
+    /// vouches for, so it can never widen trust beyond what an administrator added in Admin &gt; Certificates.
     /// </para>
     /// </summary>
-    internal string? PinnedServerCertificatePath { get; init; }
+    internal string? PinnedTrustPath { get; init; }
 
     public override string ToString()
     {
-        return $"{nameof(SqlConnectionSettings)} {{ Host = {Host}, Port = {Port?.ToString() ?? "(default)"}, DatabaseName = {DatabaseName}, ServiceName = {ServiceName}, Sid = {Sid}, Username = {Username}, Password = (redacted), Encryption = {Encryption}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, DatabaseTimeZone = {DatabaseTimeZone.Id}, PinnedServerCertificatePath = {PinnedServerCertificatePath} }}";
+        return $"{nameof(SqlConnectionSettings)} {{ Host = {Host}, Port = {Port?.ToString() ?? "(default)"}, DatabaseName = {DatabaseName}, ServiceName = {ServiceName}, Sid = {Sid}, Username = {Username}, Password = (redacted), Encryption = {Encryption}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, DatabaseTimeZone = {DatabaseTimeZone.Id}, PinnedTrustPath = {PinnedTrustPath} }}";
     }
 }

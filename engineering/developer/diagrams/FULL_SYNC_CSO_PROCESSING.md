@@ -5,7 +5,7 @@
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
 Both Full Sync and Delta Sync use identical processing logic per-CSO. The only difference is CSO selection:
-- **Full Sync**: processes ALL CSOs in the Connected System. A CSO unchanged since the last completed synchronisation skips Attribute Flow, unless Synchronisation Rule configuration has changed since `ConfigurationLastFullyAppliedAt` (the start of the last completed Full Synchronisation), in which case the skip is disabled for the whole run so the new configuration reaches every object
+- **Full Sync**: processes ALL CSOs in the Connected System, every run, whether or not they changed (#891). It does not read `LastSyncCompletedAt` or any mark to decide what to process, so it is the backstop for anything a Delta Sync missed
 - **Delta Sync**: processes only CSOs modified since `LastSyncCompletedAt`
 
 A Run Profile's partition (#353) scopes imports and their deletion detection only; synchronisation always works across the whole Connector Space.
@@ -19,7 +19,7 @@ Since v0.7.1, sync decisions are split across three layers:
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284<br/>Configuration changed since last fully applied?<br/>Disable the unchanged-object skip for this run]
+    Start([Start Sync]) --> Prepare[Prepare: count CSOs<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
     PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance<br/>Keyset cursor on Id, Full and Delta #1858<br/>Seed page identity map #1612 with<br/>the page's joined MVOs]
@@ -29,7 +29,7 @@ flowchart TD
     CheckCancel -->|Yes| FlushBeforeCancel[Complete current page flush<br/>before stopping]
     FlushBeforeCancel --> Return([Return - activity<br/>finalised by caller])
     CheckCancel -->|No| Pass1[Pass 1: for every CSO in page<br/>ProcessObsoleteConnectedSystemObjectTeardownAsync<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
-    Pass1 --> Pass2[Pass 2: for every non-obsolete CSO<br/>ProcessActiveConnectedSystemObjectAsync<br/>See Per-CSO Processing below<br/>Skips if IsUnchangedSinceLastSync<br/>unless flagged ScopeReviewPending]
+    Pass1 --> Pass2[Pass 2: for every non-obsolete CSO<br/>ProcessActiveConnectedSystemObjectAsync<br/>See Per-CSO Processing below]
     Pass2 --> IncrProgress[Increment ObjectsProcessed]
     IncrProgress --> CsoLoop
 
@@ -51,7 +51,7 @@ flowchart TD
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across pages<br/>Merge new attribute-flow rows under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
     CrossPage --> DeferredRecall[FlushDeferredRecallRpeisAsync:<br/>one RPEI per referencing CSO whose<br/>reference-recall Pending Export was staged]
     DeferredRecall --> ScopeReview[ProcessScopeReviewPendingMetaverseObjectsAsync:<br/>re-evaluate export scope for flagged MVOs:<br/>the Temporal Scope Reconciler's #892 and an<br/>export rule configuration change's #1925<br/>Batches of 500, change detection off as in the<br/>page flush; the clear keeps the flags and<br/>stops if an export rule changed since this run<br/>read its rules, for the next run to review<br/>Keeps an execution item, named after the MVO,<br/>only for an object export evaluation changed]
-    ScopeReview --> Watermark[Record ConfigurationLastFullyAppliedAt<br/>Full Sync only<br/>Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow]
+    ScopeReview --> Watermark[Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow]
     Watermark --> Sweep{Full Sync, and armed by<br/>a Connector Space clear?}
     Sweep -->|No| End([Sync Complete])
     Sweep -->|Yes| StrandedSweep[Stranded-value sweep #1549 #1605<br/>See Stranded-Value Sweep below]
@@ -182,11 +182,11 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 
 - **Attribute recall, re-election and hand-over via ContributedBySystemId**<br /> Every MVO attribute value tracks which Connected System contributed it. When a CSO is obsoleted, attributes contributed by that system are recalled (marked for removal from the MVO) when **both** of the following hold: the CSO type has `RemoveContributedAttributesOnObsoletion` enabled, and the MVO is not slated for immediate deletion (the immediate-deletion check avoids nugatory work when the MVO is about to be deleted at page flush, per #390). A configured deletion grace period no longer skips recall wholesale (Attribute Priority, #91): before clearing, `ReElectSurvivingContributorsAsync` hands each recalled attribute to the next-priority still-joined contributor where one survives, a change-of-value rather than a clear. Only an attribute with no surviving contributor is affected by the freeze: it is preserved rather than cleared when a deletion is pending (for the grace window) or when no remaining joined system carries an enabled import Synchronisation Rule for the object's type (as the object's last known state, surfaced as a `ValuesPreserved` outcome, #1570), so identity-critical single-source values that feed expression-based exports (for example an LDAP Distinguished Name) are not cleared. While an import source remains, the departed system's leftovers are recalled. The recalled and re-elected values are queued for export evaluation so target systems receive the removals or the change-of-value; the only export-evaluation skip is for MVOs pending immediate deletion, whose Delete Pending Exports are created by `FlushPendingMvoDeletionsAsync` instead.
 
-- **Cross-page reference resolution**<br /> After all pages are processed, CSOs with unresolved reference attributes are reloaded from the database. At this point, all MVOs exist, so cross-page references can be resolved. The standard flush pipeline (persist MVOs, evaluate exports, flush PEs) runs again for the resolved references.
+- **Cross-page reference resolution**<br /> After all pages are processed, CSOs with unresolved reference attributes are reloaded from the database. At this point, all MVOs exist, so cross-page references can be resolved. The standard flush pipeline (persist MVOs, evaluate exports, flush PEs) runs again for the resolved references. Only a reference that could still resolve later in the run defers its object. One to an object whose Object Type has already been walked and that existed before the run began (less the sweep's clock-skew margin) is final: nothing later in the run can join it, so it flows nothing, defers nothing and does not hold back the attribute's removals. The run counts final references in one Information line instead of warning per reference, and the Activity's object counts are restored when the step ends.
 
 - **Partition scope is an import concern (#353)**<br /> A Run Profile's partition filters which containers an import reads and scopes that import's deletion detection. Synchronisation does not filter by partition: CSO counting and page loading always cover the whole Connector Space.
 
-- **Configuration changes reach every object (v0.15.0)**<br /> The unchanged-object skip is only safe while configuration is unchanged too. When any Synchronisation Rule or mapping (on any Connected System, because another system's priority affects this one's resolution) changed after `ConfigurationLastFullyAppliedAt`, a Full Synchronisation loads CSOs without the watermark so every object is re-evaluated, then records its own start time as the new baseline. A Delta Synchronisation never advances this baseline.
+- **Every object, every run (#891)**<br /> A Full Synchronisation once skipped joined objects unchanged since the last synchronisation, switching the skip off only when Synchronisation Rule configuration had changed. It was removed because it made the run trust the same timestamps and marks a Delta Synchronisation relies on, so it could not remediate what they missed (#2092, #2309), apply a fixed engine defect to existing data, or apply a time-driven scope change. Delta Synchronisation is the fast path; Full Synchronisation is the complete one.
 
 - **Orphaned-contribution recall (#1533, #1537)**<br /> After the live mappings have flowed, a value this system contributed through an Attribute Flow mapping that has since been deleted has nothing asserting it any more, so it is staged for removal; the withdrawal re-election then hands the attribute to the next surviving contributor or lets it clear. A disabled mapping, or a mapping on a disabled rule, is dormant rather than gone, so its values are retained. Deleting a Synchronisation Rule with contributed values recalls them through its own queued task instead.
 

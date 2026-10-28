@@ -9,9 +9,28 @@ audience: automation-author
 
 Cmdlets for managing certificates in JIM's trusted certificate store. Each certificate is trusted for Connectors (the TLS connections JIM makes to Connected Systems, LDAP over TLS for instance), for sign-in (the connection to JIM's identity provider), or both. `Get-JIMIdentityProviderTrust` and `Add-JIMCertificate -FromIdentityProvider` check and trust the identity provider's certificate; the last two cmdlets read the certificate a Connected System's server presents, and approve it into the store.
 
+```jim-diagram
+archetype: decision
+title: Which cmdlet puts a certificate in the trusted store
+desc: "If you hold the certificate, as a file, a Base64 string or bytes, add it with Add-JIMCertificate and -Path, -CertificateBase64 or -CertificateData. If not, it depends on who presents it. For the identity provider's certificate, check it with Get-JIMIdentityProviderTrust, then add it with Add-JIMCertificate -FromIdentityProvider and the thumbprint you checked. For the certificate a Connected System's server presents, read it with Get-JIMConnectedSystemServerCertificate, which stores nothing, then trust it with Approve-JIMConnectedSystemServerCertificate and its thumbprint."
+start: { label: A certificate to trust }
+questions:
+  - { id: hold, label: "Do you hold it?", sub: "as a file, Base64 or bytes" }
+  - { id: who, label: "Who presents it?" }
+outcomes:
+  - { id: file, label: "`Add-JIMCertificate`", sub: "with `-Path`, `-CertificateBase64` or `-CertificateData`" }
+  - { id: idp, label: "`Add-JIMCertificate`", sub: "with `-FromIdentityProvider` and the `-Thumbprint` you checked" }
+  - { id: server, label: "Read it, then approve it", sub: "the server certificate cmdlets, by `-Thumbprint`" }
+answers:
+  - { from: hold, to: file, label: "yes" }
+  - { from: hold, to: who, label: "no" }
+  - { from: who, to: idp, label: the identity provider }
+  - { from: who, to: server, label: "a Connected System's server" }
+```
+
 ---
 
-## Get-JIMCertificate
+## :material-certificate-outline: Get-JIMCertificate
 
 Retrieves certificates from the trusted store.
 
@@ -113,7 +132,7 @@ Get-JIMCertificate -Page 2 -PageSize 50
 
 ---
 
-## Add-JIMCertificate
+## :material-plus-circle-outline: Add-JIMCertificate
 
 Adds a certificate to the trusted store.
 
@@ -209,7 +228,7 @@ Add-JIMCertificate -FromIdentityProvider
 
 ---
 
-## Set-JIMCertificate
+## :material-pencil-outline: Set-JIMCertificate
 
 Updates a certificate's editable properties (name, notes, enabled status, what it is trusted for). Certificate data cannot be changed; to replace a certificate, remove the existing one and add a new one.
 
@@ -271,7 +290,7 @@ Set-JIMCertificate -Id "a1b2c3d4-..." -TrustedFor SignIn, Connectors
 
 ---
 
-## Remove-JIMCertificate
+## :material-delete-outline: Remove-JIMCertificate
 
 Permanently deletes a certificate from the trusted store.
 
@@ -330,7 +349,7 @@ Get-JIMCertificate | Where-Object { -not $_.IsEnabled } | Remove-JIMCertificate 
 
 ---
 
-## Test-JIMCertificate
+## :material-clipboard-check-outline: Test-JIMCertificate
 
 Validates a certificate, checking expiry, chain trust, and other properties.
 
@@ -390,7 +409,7 @@ Get-JIMCertificate | ForEach-Object {
 
 ---
 
-## Export-JIMCertificate
+## :material-export: Export-JIMCertificate
 
 Downloads certificate data in DER format, either to a file or as a byte array.
 
@@ -446,7 +465,7 @@ Get-JIMCertificate -EnabledOnly | ForEach-Object {
 
 ---
 
-## Get-JIMIdentityProviderTrust
+## :material-shield-key-outline: Get-JIMIdentityProviderTrust
 
 Shows whether JIM trusts its identity provider's TLS certificate, by what, and the chain the identity provider presents.
 
@@ -497,7 +516,7 @@ Get-JIMIdentityProviderTrust
 
 ---
 
-## Get-JIMConnectedSystemServerCertificate
+## :material-server-network-outline: Get-JIMConnectedSystemServerCertificate
 
 Reads the certificate the Connected System's server is presenting, without storing anything.
 
@@ -523,7 +542,7 @@ The certificate the server presented, the chain JIM built from it, which check i
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Certificate` | `object` | The certificate the server presented and which check it fails, judged with the JIM certificate store taken into account. It has `Host`, `Port`, `FailureReason`, `Subject`, `Issuer`, `SubjectAlternativeNames`, `ValidFrom`, `ValidTo`, `Thumbprint`, `SignatureAlgorithm`, `IsSelfSigned`, `IssuerThumbprint`, `IsIssuerCertificateAvailable`, `Chain`, `IsChainComplete`, `MissingIssuer`, `RootThumbprint`, `RootSubject`, `Remediation`, `IsExpired` and `IsNotYetValid`. |
+| `Certificate` | `object` | The certificate the server presented and which check it fails, judged as the connection will be: with the JIM certificate store taken into account, counting only a root trusted there where the connection needs one (`TrustAnchorMustBeRoot`). It has `Host`, `Port`, `FailureReason`, `Subject`, `Issuer`, `SubjectAlternativeNames`, `ValidFrom`, `ValidTo`, `Thumbprint`, `SignatureAlgorithm`, `IsSelfSigned`, `IssuerThumbprint`, `IsIssuerCertificateAvailable`, `Chain`, `IsChainComplete`, `MissingIssuer`, `RootThumbprint`, `RootSubject`, `Remediation`, `TrustAnchorMustBeRoot`, `IsExpired` and `IsNotYetValid`. |
 | `ReadAt` | `datetime` | When the server was asked, so a caller knows how current the answer is. |
 <!-- END GENERATED: Get-JIMConnectedSystemServerCertificate -->
 
@@ -555,7 +574,7 @@ Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -SettingValues @{ 
 
 ---
 
-## Approve-JIMConnectedSystemServerCertificate
+## :material-check-decagram-outline: Approve-JIMConnectedSystemServerCertificate
 
 Trusts the certificate the Connected System's server is presenting, adding it to the Trusted Certificates store.
 
@@ -584,7 +603,7 @@ With `-PassThru`, the outcome; otherwise nothing.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Outcome` | `string` | What happened: Trusted when the certificate was added to the certificate store, AlreadyTrusted when it was there already, ThumbprintMismatch when the server presented a different certificate from the one named. The other values say why nothing could be trusted. One of `Trusted`, `AlreadyTrusted`, `ThumbprintMismatch`, `ConnectedSystemNotFound`, `NotConfiguredForSecureConnection`, `ServerUnreachable` or `InvalidChain`. |
+| `Outcome` | `string` | What happened: Trusted when the certificate was added to the certificate store, AlreadyTrusted when it was there already, ThumbprintMismatch when the server presented a different certificate from the one named. The other values say why nothing could be trusted. One of `Trusted`, `AlreadyTrusted`, `ThumbprintMismatch`, `ConnectedSystemNotFound`, `NotConfiguredForSecureConnection`, `ServerUnreachable`, `InvalidChain` or `RootRequired`. |
 | `Message` | `string` | A sentence explaining the outcome. |
 | `Certificate` | `object` | The certificate as it now sits in the certificate store; empty unless the Outcome is Trusted. It has `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `SerialNumber`, `ValidFrom`, `ValidTo`, `SourceType`, `FilePath`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `Notes`, `IsExpired`, `IsExpiringSoon`, `DaysUntilExpiry`, `TrustedFor`, `UsedBySignIn` and `SignInDependsOnIt`. |
 | `ExpectedThumbprint` | `string` | The thumbprint named in the request; set when the Outcome is ThumbprintMismatch. |
@@ -617,6 +636,7 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 
 - **Check the thumbprint against the server's administrator before running this.** It is the only thing standing between an unattended script and trusting whatever is presented.
 - **Any certificate in the chain works; the root lasts longest.** JIM accepts the server when any certificate in its chain is in the Trusted Certificates store. `rootThumbprint` is populated when JIM reached the root, and trusting it survives the renewal of every certificate beneath it; trusting the server's own certificate has to be repeated at every renewal. Where `isChainComplete` is `$false`, trust the highest certificate JIM found, or add `missingIssuer` under Admin > Certificates. A self-signed certificate is its own root.
+- **Oracle Database over TCPS accepts only the root.** The read reports `trustAnchorMustBeRoot` as `$true`, and trusting anything but `rootThumbprint` is refused with `RootRequired`; nothing is stored. Where `isChainComplete` is `$false`, get the root from whoever runs your PKI and add it under Admin > Certificates.
 - **A changed certificate stops the action.** If the server is presenting anything other than the thumbprint you named, nothing is trusted and the outcome is `ThumbprintMismatch`, with both values returned so you can compare them. Expected after a renewal; worth investigating otherwise.
 - Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries. A chain through a broken certificate authority is refused with `InvalidChain` and nothing is trusted.
 - Supports `ShouldProcess`.
@@ -624,7 +644,7 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Certificates](../configuration/certificates.md): what certificates are, source types, expiry awareness, and rotation workflows
 - [Connected Systems](connected-systems.md): configure Connected Systems that use trusted certificates

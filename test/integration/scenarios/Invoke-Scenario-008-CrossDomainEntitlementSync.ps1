@@ -285,11 +285,13 @@ try {
             -Filter $filter `
             -Attributes @($userNameAttr)
         if ($null -eq $result) { return @() }
-        $users = @()
+        # A List, not `$users += ...`: += copies the whole array on every add, which at 750k users took ~5 minutes
+        # of single-core time per call.
+        $users = [System.Collections.Generic.List[string]]::new()
         $lines = $result -split "`n"
         foreach ($line in $lines) {
             if ($line -match "^${userNameAttr}:\s*(.+)$") {
-                $users += $matches[1].Trim()
+                $users.Add($matches[1].Trim())
             }
         }
         return $users
@@ -1833,16 +1835,17 @@ try {
                 Start-Sleep -Seconds ([int][Math]::Ceiling($remainingSeconds))
             }
 
-            # Step 7.6: Negative control. NO data has changed since the pre-boundary cycle, so the
-            # hot path (which skips unchanged objects) must miss the scope transition entirely.
-            Write-Host "  Negative control: full sync with no data changes (must deprovision nothing)..." -ForegroundColor Gray
-            $controlSync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $controlSync.activityId -Name "LeaverCohort negative-control Full Sync"
+            # Step 7.6: Negative control. NO data has changed since the pre-boundary cycle, so a Delta
+            # Synchronisation (which selects only changed objects) must miss the scope transition entirely.
+            # A Full Synchronisation would not: it evaluates every object (#891).
+            Write-Host "  Negative control: delta sync with no data changes (must deprovision nothing)..." -ForegroundColor Gray
+            $controlSync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $controlSync.activityId -Name "LeaverCohort negative-control Delta Sync"
             $controlDisconnected = Get-ActivityChangeCount -ActivityId $controlSync.activityId -ChangeType "DisconnectedOutOfScope"
             if ($controlDisconnected -ne 0) {
-                throw "LeaverCohort negative control failed: a plain full sync disconnected $controlDisconnected object(s) without the reconciler. Either the unchanged-skip is not working or something else changed the cohort."
+                throw "LeaverCohort negative control failed: a delta sync with no data changes disconnected $controlDisconnected object(s). Something changed the cohort."
             }
-            Write-Host "    OK Hot path missed the static-data transition (0 disconnections)" -ForegroundColor Green
+            Write-Host "    OK Delta sync missed the static-data transition (0 disconnections)" -ForegroundColor Green
 
             # Step 7.7: Reconciler sweep. The built-in schedule is disabled by setup; trigger it
             # manually and wait for a terminal state (same pattern as Scenarios 012/13).
@@ -1865,13 +1868,13 @@ try {
             Assert-ScheduleExecutionSuccess -ExecutionId $reconExec.id -Name "Temporal Scope Reconciler"
             Write-Host "    OK Reconciler sweep completed" -ForegroundColor Green
 
-            # Step 7.8: Apply. The sweep flagged the cohort's CSOs (ScopeReviewPending); this sync
-            # re-evaluates them past the unchanged-skip, disconnects them out of scope, and the
-            # User deletion rule (WhenAuthoritativeSourceDisconnected, zero grace) deletes their
-            # Metaverse Objects synchronously, staging Target deprovisioning.
-            Write-Host "  Running full sync to process the flagged cohort..." -ForegroundColor Gray
-            $applySync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $applySync.activityId -Name "LeaverCohort apply Full Sync"
+            # Step 7.8: Apply. The sweep flagged the cohort's CSOs (ScopeReviewPending); a delta sync
+            # selects them by the flag (the run a schedule makes most often), disconnects them out of
+            # scope, and the User deletion rule (WhenAuthoritativeSourceDisconnected, zero grace)
+            # deletes their Metaverse Objects synchronously, staging Target deprovisioning.
+            Write-Host "  Running delta sync to process the flagged cohort..." -ForegroundColor Gray
+            $applySync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $applySync.activityId -Name "LeaverCohort apply Delta Sync"
             $applyDisconnected = Get-ActivityChangeCount -ActivityId $applySync.activityId -ChangeType "DisconnectedOutOfScope"
             if ($applyDisconnected -ne $cohortUids.Count) {
                 throw "LeaverCohort apply sync disconnected $applyDisconnected object(s) but the cohort has $($cohortUids.Count). The reconciler must flag the whole cohort in one sweep and the sync must process every flagged object."
@@ -1888,11 +1891,17 @@ try {
             # its nearest recorded cause, so the change waiting to export can be explained without opening the run.
             Write-Host "  Validating Queued by on the staged Target exports..." -ForegroundColor Gray
             $queuedByFailures = [System.Collections.Generic.List[string]]::new()
-            $stagedExports = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -All)
+            # Ask for just the two exports needed rather than every staged export: at Scale750k40kGroups the Target
+            # holds over 15,000, and listing them all walked 300+ pages.
             $groupsLosingMembers = @($verificationGroups | Where-Object { $groupBaselines[$_].CohortInGroup.Count -gt 0 })
-            $groupExport = $stagedExports | Where-Object {
-                $_.ChangeType -eq 'Update' -and $groupsLosingMembers -contains $_.SourceMetaverseObjectDisplayName } | Select-Object -First 1
-            $accountExport = $stagedExports | Where-Object { $_.ChangeType -eq 'Delete' -and $_.ConnectedSystemObjectId } | Select-Object -First 1
+            $groupExport = $null
+            foreach ($groupName in $groupsLosingMembers) {
+                $groupExport = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -ChangeType Update -Search $groupName -All) |
+                    Where-Object { $_.SourceMetaverseObjectDisplayName -eq $groupName } | Select-Object -First 1
+                if ($groupExport) { break }
+            }
+            $accountExport = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -ChangeType Delete -PageSize 100) |
+                Where-Object { $_.ConnectedSystemObjectId } | Select-Object -First 1
             foreach ($staged in @(
                     @{ Label = "the Group export"; Export = $groupExport },
                     @{ Label = "the account deletion"; Export = $accountExport })) {

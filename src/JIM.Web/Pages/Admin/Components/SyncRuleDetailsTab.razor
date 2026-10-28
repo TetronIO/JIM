@@ -22,14 +22,14 @@
            strip beneath the breadcrumbs (Shared/SyncRuleIdentityStrip.razor), not here among the fields. *@
         @if (SyncRule.Id == 0)
         {
-            @if (ConnectedSystemHeaders != null)
+            @if (ConnectedSystemNames != null)
             {
                 <MudSelect T="string" Label="Connected System" Placeholder="Please select a Connected System..." Required="true"
                            ValueChanged="HandleConnectedSystemSelectedAsync" AdornmentIcon="@Icons.Material.Filled.Power"
                            Adornment="Adornment.Start" Variant="Variant.Outlined" Class="mt-5">
-                    @foreach (var header in ConnectedSystemHeaders)
+                    @foreach (var (id, name) in ConnectedSystemNames.OrderBy(n => n.Value))
                     {
-                        <MudSelectItem Value="@header.Id.ToString()">@header.Name</MudSelectItem>
+                        <MudSelectItem Value="@id.ToString()">@name</MudSelectItem>
                     }
                 </MudSelect>
             }
@@ -165,7 +165,7 @@
     public SyncRule SyncRule { get; set; } = null!;
 
     [Parameter]
-    public List<ConnectedSystemHeader>? ConnectedSystemHeaders { get; set; }
+    public IReadOnlyDictionary<int, string>? ConnectedSystemNames { get; set; }
 
     [Parameter]
     public List<MetaverseObjectType>? MetaverseObjectTypes { get; set; }

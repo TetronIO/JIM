@@ -288,6 +288,7 @@ public class AccessTokenAuthenticationAuditTests
     {
         var services = new ServiceCollection();
         services.AddSingleton(recorder);
+        services.AddSingleton(new SignInProblemLog(TimeProvider.System));
         var httpContext = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse(ClientIp);
         return httpContext;

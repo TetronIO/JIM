@@ -140,7 +140,7 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on a set of Connected System Objects (issue #892) once the sync
-    /// engine has re-evaluated them past the unchanged-skip. Called at page flush during synchronisation. No-op when
+    /// engine has re-evaluated them. Called at page flush during synchronisation. No-op when
     /// <paramref name="ids"/> is empty.
     /// </summary>
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
@@ -242,16 +242,26 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Collects all remaining executable exports with unresolved references (deferred) strictly
-    /// after the given keyset cursor, in a single query. Used to fast-path the export batch-collection
-    /// loop once a batch is discovered to be made up entirely of deferred exports (issue #985). Same
-    /// Include chain and keyset predicate as <see cref="GetExecutableExportBatchAsync"/>, restricted
-    /// to HasUnresolvedReferences exports, with no page size limit.
+    /// after the given keyset cursor, in a single query, by id only. Used to fast-path the export
+    /// batch-collection loop once a batch is discovered to be made up entirely of deferred exports
+    /// (issue #985); the deferred pass then loads them a chunk at a time with
+    /// <see cref="GetDeferredExportsByIdsAsync"/>. Same keyset predicate and eligibility as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports,
+    /// with no page size limit.
     /// </summary>
-    /// <param name="connectedSystemId">The Connected System to load exports for.</param>
+    /// <param name="connectedSystemId">The Connected System to read exports for.</param>
     /// <param name="afterCreatedAt">CreatedAt of the last row already collected, or null to start from the beginning.</param>
     /// <param name="afterId">Id of the last row already collected, or null to start from the beginning.</param>
-    /// <returns>Untracked, deferred Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
-    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+    /// <returns>The deferred Pending Export ids, in (CreatedAt, Id) order.</returns>
+    public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Loads one chunk of the deferred export pass: the given Pending Exports, untracked, in
+    /// (CreatedAt, Id) order, with the graph reference resolution and the Connector read (each
+    /// change's attribute; the object, its type, and its attribute values with their attributes).
+    /// An id with no row is left out.
+    /// </summary>
+    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
 
     /// <summary>
     /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
@@ -337,6 +347,16 @@ public interface IConnectedSystemRepository
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Writes what reference resolution changed, and nothing else: each Pending Export's
+    /// HasUnresolvedReferences, and each resolved change's StringValue, UnresolvedReferenceValue and
+    /// ResolvedReferenceCsoId. One transaction; tracked copies of the rows written are detached.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports whose HasUnresolvedReferences to write.</param>
+    /// <param name="resolvedChanges">The attribute value changes resolution stamped.</param>
+    public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges);
+
+    /// <summary>
     /// Marks Pending Exports as Executing using a single raw SQL UPDATE statement.
     /// Sets Status to Executing and LastAttemptedAt to the current UTC time.
     /// This bypasses EF Core change tracking for maximum efficiency on simple status updates.
@@ -414,6 +434,7 @@ public interface IConnectedSystemRepository
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
+    /// <param name="changeTypeFilters">Optional filter by one or more change types.</param>
     public Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
         int connectedSystemId,
         int page,
@@ -422,7 +443,8 @@ public interface IConnectedSystemRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool failingOnly = false);
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null);
 
     /// <summary>
     /// Retrieves a window of Pending Export headers addressed by absolute offset and count, for virtualised
@@ -440,6 +462,7 @@ public interface IConnectedSystemRepository
     /// <param name="sortDescending">Whether to sort in descending order.</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
     /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
+    /// <param name="changeTypeFilters">Optional filter by one or more change types.</param>
     public Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
         int connectedSystemId,
         int offset,
@@ -449,7 +472,8 @@ public interface IConnectedSystemRepository
         string? sortBy = null,
         bool sortDescending = true,
         bool includeTotalCount = true,
-        bool failingOnly = false);
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null);
 
     /// <summary>
     /// Retrieves a single Pending Export by ID.
@@ -715,6 +739,17 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The Connected System ID to search within.</param>
     /// <returns>A dictionary keyed by MVO ID for O(1) lookup.</returns>
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
+
+    /// <summary>
+    /// What references to the given Metaverse Objects are written as in a Connected System: per
+    /// Metaverse Object joined to an object there, that object's id and anchor. Summary-tier, so export
+    /// execution can resolve hundreds of thousands of group members without materialising the objects.
+    /// A Metaverse Object with no object in the system is absent.
+    /// </summary>
+    /// <param name="metaverseObjectIds">The referenced Metaverse Objects.</param>
+    /// <param name="connectedSystemId">The Connected System the references are written into.</param>
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
     /// Batch loads all Connected System Objects that are joined to Metaverse Objects, grouped by target Connected System.
@@ -1213,7 +1248,7 @@ public interface IConnectedSystemRepository
         CancellationToken cancellationToken = default);
     /// <param name="objectTypeId">Keyset callers only: restricts the page to one Object Type; see <see cref="ISyncRepository.GetConnectedSystemObjectsAsync"/>.</param>
     /// <param name="createdOnOrAfter">Keyset callers only: restricts the page to objects created at or after this instant.</param>
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for

@@ -22,12 +22,34 @@ The LDAP service account used by JIM should follow the principle of least privil
 - **For reading the password policy (OpenLDAP)**<br /> Two optional reads, each buying something different. Read on the policy entry named by `olcPPolicyDefault` (and its siblings) gives JIM the rules themselves. Read on the overlay's configuration under `cn=config` (the `olcOverlay=ppolicy` entries) tells JIM which policy is the default where more than one exists, and whether a check module is configured; without it, a directory with a single policy entry is still read in full, while one with several is reported as not readable.
 - **For a definite answer on policy overrides (OpenLDAP and 389 Directory Server)**<br /> Read access over the objects JIM manages that includes the operational `pwdPolicySubentry` attribute (OpenLDAP) or the policy containers (389) lets JIM report that overrides exist. Neither directory offers a way to prove that none do, so the best answer there is could not tell, and the figures shown remain a floor.
 
+```jim-diagram
+archetype: anatomy
+title: The rights JIM's service account needs
+desc: "JIM binds as a dedicated service account, never a directory administrator (a Domain Admin, the rootDN or the Directory Manager), and the access is granted to a group the account is a member of. For import, it needs read on the containers and attributes JIM imports. For export, create, modify and delete in the target containers; with Create containers as needed? on, it may also create organisational units. For Delta Import, read on where the directory records its changes. On Active Directory, importing deletions needs List Contents, Read Property and Read Permissions on the Deleted Objects container. Probing generated values needs read on the probed attributes across the whole partition. Setting passwords needs Reset Password on the containers JIM manages. Reading the password policy is optional, and buys a definite answer."
+subject:
+  kind: object
+  label: The service account's rights
+  parts:
+    - { label: Import, detail: read what JIM imports }
+    - { label: Export, detail: "create, modify, delete in the targets" }
+    - { label: "Create containers as needed?", detail: create organisational units }
+    - { label: Delta Import, detail: read where changes are recorded }
+    - { label: Deleted Objects, detail: "Active Directory: list and read it" }
+    - { label: Probing, detail: read probed attributes partition-wide }
+    - { label: Passwords, detail: Reset Password where JIM manages }
+properties:
+  - { name: Bind as, value: a dedicated account }
+  - { name: Grant to, value: a group it is in }
+  - { name: Never, value: a directory administrator }
+  - { name: Optional, value: password policy reads }
+```
+
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.
 
 The bullets above say what access JIM needs; the three subsections below are the concrete recipes for granting it. Active Directory delegates on a container, through control access rights and inheritable access control entries. OpenLDAP has none of that machinery: permissions come from `olcAccess` rules on the directory's own configuration. 389 Directory Server keeps access control instructions as `aci` values on the entries themselves. The mechanics differ; the goal, least privilege, does not.
 
-## Active Directory
+## :material-microsoft-windows: Active Directory
 
 Bind JIM as a dedicated account, never a Domain Admin. An ordinary user object is enough; JIM needs no rights at all outside the branch it manages.
 
@@ -68,7 +90,7 @@ List Contents and Read Property are what the tombstone search needs, and JIM onl
 
 Read over the Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`) stays optional and is deliberately not in the entries above. Without it JIM reports that it could not tell whether Fine-Grained Password Policies exist, and treats the domain policy as a floor; with it, the Password Channel panel gives a definite answer.
 
-## OpenLDAP
+## :material-server-outline: OpenLDAP
 
 Bind JIM as a dedicated service account, never the directory's rootDN. Any entry with a `userPassword` attribute can bind; a typical shape is an `organizationalRole` plus `simpleSecurityObject` entry such as `cn=svc-jim,ou=Services,dc=example,dc=com`.
 
@@ -120,7 +142,7 @@ JIM discovers the `ppolicy` overlay's default policy (see [Password policy disco
 --8<-- "test/integration/docker/openldap/acl/jim-ppolicy-overlay.ldif"
 ```
 
-## 389 Directory Server
+## :material-folder-network-outline: 389 Directory Server
 
 Bind JIM as a dedicated service account, never `cn=Directory Manager`. Any entry with a `userPassword` attribute can bind; `cn=svc-jim,ou=Services,dc=example,dc=com` is the shape. The Directory Manager bypasses every access control instruction and the password policy, which is exactly why it is the wrong identity for JIM.
 

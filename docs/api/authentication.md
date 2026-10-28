@@ -15,7 +15,26 @@ Authorization: Bearer <credential>
 
 JIM tells the two apart by the credential itself: a value beginning `jim_ak_` is an API key, and anything else is treated as an SSO access token.
 
-## JWT Bearer Tokens
+```jim-diagram
+archetype: decision
+title: How JIM reads and checks a request's credential
+desc: "JIM reads a credential only from the Authorization header, as a Bearer token; a key sent in any other header, such as X-Api-Key, is ignored. A request with no Bearer credential is unauthenticated and receives 401 Unauthorized with WWW-Authenticate: Bearer realm=\"JIM\". A credential beginning jim_ak_ is checked as an API key, which must be known, enabled and not expired, and the request gets the key's Roles. Anything else is checked as an SSO access token, validated against your OIDC provider for expiry, audience and issuer, and the request gets the roles of the Metaverse Object it identifies. A credential that fails its check receives 401 with error=\"invalid_token\" added; the reason is recorded in the security audit log, not in the response."
+start: {label: API request}
+questions:
+- {id: bearer, label: "A Bearer credential?", sub: "in `Authorization`, the only header read"}
+- {id: prefix, label: "Begins `jim_ak_`?"}
+outcomes:
+- {id: none, label: Unauthenticated, sub: '`401`, `Bearer realm="JIM"`'}
+- {id: key, label: Checked as an API key, sub: "known, enabled, not expired; gets the key's Roles"}
+- {id: token, label: Checked as an access token, sub: "expiry, audience, issuer; gets the person's roles"}
+answers:
+- {from: bearer, to: none, label: "no"}
+- {from: bearer, to: prefix, label: "yes"}
+- {from: prefix, to: key, label: "yes"}
+- {from: prefix, to: token, label: "no"}
+```
+
+## :material-shield-key-outline: JWT Bearer Tokens
 
 JWT Bearer authentication is for people: an administrator signed in through your organisation's single sign-on (SSO), whether through the PowerShell module or an application acting on their behalf. JIM gives a token the roles of the Metaverse Object it identifies, matched on the claim set by `JIM_SSO_CLAIM_TYPE`, so the token must represent a person with a JIM identity. A token issued to an identity provider service account (the client credentials grant) identifies no Metaverse Object and gets no roles, so JIM refuses it everywhere that needs a role. Scripts and services use an [API key](#api-keys) instead.
 
@@ -35,7 +54,7 @@ curl -H "Authorization: Bearer <token>" \
 
 Tokens are validated against the configured OIDC provider. Standard JWT claims (expiry, audience, issuer) are enforced; the audience required is described under [Confidential vs public clients](../administration/sso-setup.md#confidential-vs-public-clients).
 
-## API Keys
+## :material-key-outline: API Keys
 
 API keys are suitable for service-to-service integrations, scripts, scheduled tasks, and automated workflows, particularly in environments where interactive OIDC authentication is not practical.
 
@@ -59,7 +78,7 @@ curl -H "Authorization: Bearer jim_ak_xxxxxxxxxxxx" \
 
 The `Authorization` header is the only place JIM reads an API key from. A key sent in any other header (for example `X-Api-Key`) is ignored, and the request is treated as unauthenticated.
 
-## Examples
+## :material-file-document-outline: Examples
 
 ### Listing Connected Systems with a Bearer Token
 
@@ -88,7 +107,7 @@ Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_xxxxxxxxxxxx"
 Get-JIMConnectedSystem
 ```
 
-## Authentication Failures
+## :material-alert-octagon-outline: Authentication Failures
 
 A request that is not authenticated receives `401 Unauthorized` with a `WWW-Authenticate` header naming the Bearer scheme, as RFC 6750 describes:
 
@@ -99,7 +118,7 @@ A request that is not authenticated receives `401 Unauthorized` with a `WWW-Auth
 
 The response does not say why a credential was rejected. Each failed API key or access token attempt is recorded in JIM's [security audit log](../administration/security-audit-events.md), with the reason, which administrators can review.
 
-## Security Recommendations
+## :material-shield-lock-outline: Security Recommendations
 
 - **Rotate API keys regularly.** Treat API keys as credentials; if a key is compromised, revoke it immediately via the web UI or PowerShell module.
 - **Use the principle of least privilege.** Create separate API keys for different integrations so that keys can be revoked independently.
@@ -108,7 +127,7 @@ The response does not say why a credential was rejected. Each failed API key or 
 - **Do not embed API keys in source code.** Store keys in environment variables, secrets managers, or other secure configuration stores.
 - **Monitor API key usage.** Review API access logs and revoke unused keys.
 
-## Further Reading
+## :material-book-open-outline: Further Reading
 
 - [API Reference](index.md): resource overview, conventions, and endpoint documentation
 - [PowerShell Module](../powershell/index.md): scripting and automation via PowerShell

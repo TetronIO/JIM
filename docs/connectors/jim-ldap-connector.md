@@ -12,7 +12,32 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 
 **Capabilities:** Full Import, Delta Import, Export, Probe
 
-## Supported Directories
+```jim-diagram
+archetype: decision
+title: How JIM tells which directory it has reached
+desc: "During schema discovery JIM reads the directory's Root DSE and asks up to three questions. If the Root DSE advertises the Active Directory capability in supportedCapabilities, the directory is Samba AD when its vendor name says Samba, and Active Directory otherwise; an AD LDS instance lands here too. If not, a vendor name or Root DSE class naming OpenLDAP makes it OpenLDAP. If not, a vendor name of 389 Project, or a vendor version beginning 389-Directory, makes it 389 Directory Server. Anything else is a generic directory. The type decides how JIM behaves: Active Directory and Samba AD Delta Imports track update sequence numbers (USNs), OpenLDAP's read cn=accesslog, and 389 Directory Server's and generic directories' read the changelog."
+start: { label: Root DSE }
+questions:
+  - { id: ad, label: "Active Directory capability?", sub: "in `supportedCapabilities`" }
+  - { id: openldap, label: "OpenLDAP?", sub: "vendor name, or the Root DSE's class" }
+  - { id: dirsrv, label: "389 Directory Server?", sub: "vendor `389 Project`, or version `389-Directory`" }
+outcomes:
+  - { id: samba, label: Samba AD, sub: Delta Import tracks USNs }
+  - { id: msad, label: Active Directory, sub: "Delta Import tracks USNs; AD LDS too" }
+  - { id: oldap, label: OpenLDAP, sub: "Delta Import reads `cn=accesslog`" }
+  - { id: ds389, label: 389 Directory Server, sub: Delta Import reads the changelog }
+  - { id: generic, label: Generic, sub: Delta Import reads the changelog }
+answers:
+  - { from: ad, to: samba, label: "yes, Samba vendor" }
+  - { from: ad, to: msad, label: "yes" }
+  - { from: ad, to: openldap, label: "no" }
+  - { from: openldap, to: oldap, label: "yes" }
+  - { from: openldap, to: dirsrv, label: "no" }
+  - { from: dirsrv, to: ds389, label: "yes" }
+  - { from: dirsrv, to: generic, label: "no" }
+```
+
+## :material-server-outline: Supported Directories
 
 | Directory | Notes |
 |-----------|-------|
@@ -25,7 +50,7 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 
 JIM automatically detects the directory type during schema discovery by inspecting the Root DSE and adjusts its behaviour accordingly. No manual directory type configuration is required.
 
-## Features
+## :material-star-four-points-outline: Features
 
 ### Import
 
@@ -105,7 +130,7 @@ These are read from data JIM already captured during a previous connection; view
 
 Available to automation via `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
-## Connection Settings
+## :material-lan-connect: Connection Settings
 
 ### Connectivity
 
@@ -179,11 +204,11 @@ A naming context or crossRef partition the service account cannot read (a least-
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 [Troubleshooting the LDAP Connector](jim-ldap-connector-troubleshooting.md) covers connection, sign-in, import, Delta Import and export failures, each by the message it shows.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [LDAP Connector Delta Import](jim-ldap-connector-delta-import.md): how each directory type reports its changes, and the checks a Delta Import makes first.
 - [LDAP Connector Values Already in Use](jim-ldap-connector-values-in-use.md): values already in place, and probing for values already in use.

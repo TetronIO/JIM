@@ -264,7 +264,12 @@ function Invoke-JIMApiRequest {
                 }
             }
             403 {
-                throw "Access denied. You are authenticated but not authorised to perform this operation. This usually means your identity has not been provisioned in JIM. Identities are created when you are synchronised into JIM from a connected system, or provisioned by an administrator. Contact your JIM administrator if this is unexpected."
+                # JIM refuses someone it knows whose roles do not allow the operation, as well as someone it has no
+                # identity for, so the message names both; an API key has no identity to provision.
+                if ($script:JIMConnection.AuthMethod -eq 'ApiKey') {
+                    throw "Access denied (403): none of this API key's roles allows this operation. Contact your JIM administrator if this is unexpected."
+                }
+                throw "Access denied (403): you are signed in, but none of your JIM roles allows this operation, or your identity has not been provisioned in JIM yet (identities are created when you are synchronised into JIM from a connected system, or provisioned by an administrator). Run Get-JIMUserInfo to see your roles, and contact your JIM administrator if this is unexpected."
             }
             429 {
                 # Rate limited. A well-behaved client honours the server's Retry-After and retries with bounded
