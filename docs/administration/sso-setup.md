@@ -155,9 +155,9 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 
 In production, the recommended way to test API access with SSO is via the JIM PowerShell module (see step 6 below), which supports interactive browser-based authentication.
 
-If you are configuring SSO against a non-production JIM instance and configured a Scalar single-page-application redirect URI on your identity provider (see [Microsoft Entra ID Step 5a](sso-setup/microsoft-entra-id.md#step-5a-configure-scalar-api-reference-authentication-development-only-optional) for an example), you can also test the API interactively via the Scalar API reference:
+Every JIM instance also serves the interactive API reference at `/api/reference`, and its **Try It** signs in through your identity provider. For that sign-in to work, your identity provider must have `https://your-jim-url/api/reference` registered as a single-page-application redirect URI for JIM's client (see [Microsoft Entra ID Step 5a](sso-setup/microsoft-entra-id.md#step-5a-configure-scalar-api-reference-authentication-optional) for an example). Without it, use an API key in **Try It** instead. To test it:
 
-1. Navigate to `https://your-jim-dev-url/api/reference`
+1. Navigate to `https://your-jim-url/api/reference`
 2. Select an endpoint and choose the **OAuth2** security scheme
 3. Log in with your identity provider
 4. Try an API endpoint (e.g. `GET /api/v1/health`)
