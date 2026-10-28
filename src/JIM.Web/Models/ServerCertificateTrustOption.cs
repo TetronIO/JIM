@@ -6,20 +6,26 @@ using JIM.Models.Connectors;
 namespace JIM.Web.Models;
 
 /// <summary>
-/// One certificate in a server's chain that an administrator can choose to trust.
+/// One certificate in a server's chain, and whether an administrator can choose to trust it.
 /// </summary>
 /// <remarks>
 /// JIM accepts a server when any certificate in its chain is in the JIM certificate store, so every certificate in
 /// the chain is a working choice (#1914). What differs is how long the decision lasts: the higher the certificate,
 /// the more renewals it survives, which is why the options are ordered from the top. The exception is a connection
 /// that accepts only a root (Oracle Database over TCPS, #2581), which is offered the root alone, or nothing where JIM
-/// could not find it.
+/// could not find it; the rest of its chain is still shown, for reference.
 /// </remarks>
 public class ServerCertificateTrustOption
 {
     public ServerCertificateChainElement Element { get; init; } = null!;
 
     public ServerCertificateChainRole Role { get; init; }
+
+    /// <summary>
+    /// Whether trusting this certificate would make the connection work. False only on a connection that accepts
+    /// only a root, for every certificate but the root.
+    /// </summary>
+    public bool CanBeTrusted { get; init; }
 
     /// <summary>
     /// The most durable choice, where there is more than one.
@@ -45,7 +51,13 @@ public class ServerCertificateTrustOption
     /// <summary>
     /// The certificates in the chain an administrator could trust, the most durable first.
     /// </summary>
-    public static List<ServerCertificateTrustOption> For(ServerCertificateDiagnostic diagnostic)
+    public static List<ServerCertificateTrustOption> For(ServerCertificateDiagnostic diagnostic) =>
+        Chain(diagnostic).Where(option => option.CanBeTrusted).ToList();
+
+    /// <summary>
+    /// Every certificate in the chain, the root first, each saying whether it can be trusted.
+    /// </summary>
+    public static List<ServerCertificateTrustOption> Chain(ServerCertificateDiagnostic diagnostic)
     {
         ArgumentNullException.ThrowIfNull(diagnostic);
 
@@ -55,12 +67,14 @@ public class ServerCertificateTrustOption
         for (var index = chain.Count - 1; index >= 0; index--)
         {
             var element = chain[index];
+            var role = element.IsSelfSigned ? ServerCertificateChainRole.Root
+                : index == 0 ? ServerCertificateChainRole.Server
+                : ServerCertificateChainRole.Intermediate;
             options.Add(new ServerCertificateTrustOption
             {
                 Element = element,
-                Role = element.IsSelfSigned ? ServerCertificateChainRole.Root
-                    : index == 0 ? ServerCertificateChainRole.Server
-                    : ServerCertificateChainRole.Intermediate,
+                Role = role,
+                CanBeTrusted = !diagnostic.TrustAnchorMustBeRoot || role == ServerCertificateChainRole.Root,
                 IsRecommended = chain.Count > 1 && index == chain.Count - 1,
                 AddressGivenBy = element.Source == ServerCertificateChainElementSource.Downloaded && index > 0
                     ? PresentedServerCertificate.CommonNameOf(chain[index - 1].Subject)
@@ -69,9 +83,7 @@ public class ServerCertificateTrustOption
             });
         }
 
-        return diagnostic.TrustAnchorMustBeRoot
-            ? options.Where(option => option.Role == ServerCertificateChainRole.Root).ToList()
-            : options;
+        return options;
     }
 
     /// <summary>

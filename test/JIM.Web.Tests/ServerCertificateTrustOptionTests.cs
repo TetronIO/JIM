@@ -179,6 +179,31 @@ public class ServerCertificateTrustOptionTests
     }
 
     [Test]
+    public void Chain_WhereOnlyARootCanBeTrusted_ListsEveryCertificateAndMarksOnlyTheRootAsTrustable()
+    {
+        // The card shows the whole chain the server presented, so an administrator sees what it sent; only the root is
+        // a choice that would make the connection work.
+        var diagnostic = Diagnostic(Server, IssuingCa, Root);
+        diagnostic.TrustAnchorMustBeRoot = true;
+
+        var chain = ServerCertificateTrustOption.Chain(diagnostic);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chain.Select(o => o.Thumbprint), Is.EqualTo(new[] { "CC", "BB", "AA" }));
+            Assert.That(chain.Select(o => o.CanBeTrusted), Is.EqualTo(new[] { true, false, false }));
+        }
+    }
+
+    [Test]
+    public void Chain_WhereAnyCertificateCanBeTrusted_MarksEveryOneAsTrustable()
+    {
+        var chain = ServerCertificateTrustOption.Chain(Diagnostic(Server, IssuingCa, Root));
+
+        Assert.That(chain.Select(o => o.CanBeTrusted), Is.All.True);
+    }
+
+    [Test]
     public void For_WhereOnlyARootCanBeTrustedAndTheChainReachesNone_OffersNothing()
     {
         var diagnostic = Diagnostic(Server, IssuingCa);

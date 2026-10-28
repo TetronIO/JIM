@@ -90,7 +90,7 @@ SQL Server sends only its own certificate, not the authorities above it. JIM fet
 
 An expired certificate, or one issued for a different name from the host you connect to, is still refused; renew it, or connect by a name the certificate carries. So is a chain through a certificate authority that has expired or is not marked as one; that has to be fixed on the server.
 
-For Oracle over TCPS, JIM shows the same detail and refuses a certificate issued for a different name in the same way, but only the root of the chain can be trusted: the Oracle driver accepts the chain only when it ends at a root JIM hands it, so trusting an intermediate or the server's own certificate would not make the connection work, and the card offers the root alone. Oracle usually sends its whole chain, root included; where it does not, get the root from whoever runs your PKI, add it under **Admin > Certificates**, and test again. Native Network Encryption needs no certificate at all, which is one reason it is the default.
+For Oracle over TCPS, JIM shows the same detail and refuses a certificate issued for a different name in the same way, but only the root of the chain can be trusted: the Oracle driver accepts the chain only when it ends at a root JIM hands it, so trusting an intermediate or the server's own certificate would not make the connection work. The card still shows the whole chain, but marks the root as the one to trust and offers nothing else. Oracle usually sends its whole chain, root included; where it does not, get the root from whoever runs your PKI, add it under **Admin > Certificates**, and test again. Native Network Encryption needs no certificate at all, which is one reason it is the default.
 
 ## :material-shield-lock-outline: Credentials and logging
 
