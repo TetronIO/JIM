@@ -9,6 +9,30 @@ audience: automation-author
 
 Cmdlets for querying Configuration Change History, querying deleted objects, searching changes to Metaverse Objects, reading every value a large change recorded, and managing change history retention. These cmdlets provide access to the configuration audit trail, the audit trail for deleted objects and the history of every Metaverse Object, and let you control how long change history records are kept.
 
+```jim-diagram
+archetype: map
+title: What the history cmdlets read, and what the clean-up removes
+desc: "Get-JIMConfigurationChangeHistory reads a configuration object's changes, and with -Version or -CompareFrom and -CompareTo, one version or two compared. Search-JIMMetaverseObjectChange searches the changes to Metaverse Objects, and Get-JIMMetaverseObjectChangeValue reads every value one large change recorded; for a Connected System Object, its changes come from Get-JIMConnectedSystemObjectChangeHistory and every value of one from Get-JIMConnectedSystemObjectChangeValue. Get-JIMHistoryCount counts a Connected System's change records, and Get-JIMDeletedObject finds the deletion records of Metaverse Objects and Connected System Objects. Invoke-JIMHistoryCleanup removes change history, deletion records included, once it is older than its retention period, as the daily History Retention Cleanup Schedule does. Each node links to its cmdlet."
+nodes:
+  - { id: count, label: Change record count, link: "#get-jimhistorycount", row: 0, col: 0 }
+  - { id: deleted, label: Deleted objects, link: "#get-jimdeletedobject", row: 0, col: 1 }
+  - { id: cso, label: Connector Space changes, link: "connected-system-objects.md#get-jimconnectedsystemobjectchangehistory", row: 1, col: 0 }
+  - { id: cleanup, label: Retention cleanup, link: "#invoke-jimhistorycleanup", row: 1, col: 1 }
+  - { id: mvo, label: Metaverse Object changes, link: "#search-jimmetaverseobjectchange", row: 1, col: 2 }
+  - { id: config, label: Configuration changes, link: "#get-jimconfigurationchangehistory", row: 1, col: 3 }
+  - { id: csovalues, label: Every value of a change, link: "#get-jimconnectedsystemobjectchangevalue", row: 2, col: 0 }
+  - { id: mvovalues, label: Every value of a change, link: "#get-jimmetaverseobjectchangevalue", row: 2, col: 2 }
+  - { id: version, label: "One version, or two compared", link: "#get-jimconfigurationchangehistory", row: 2, col: 3 }
+edges:
+  - { from: count, to: cso, label: counts }
+  - { from: cleanup, to: deleted, label: removes old }
+  - { from: cleanup, to: cso, label: removes old }
+  - { from: cleanup, to: mvo, label: removes old }
+  - { from: cso, to: csovalues, label: for a large one }
+  - { from: mvo, to: mvovalues, label: for a large one }
+  - { from: config, to: version, label: "`-Version`" }
+```
+
 ---
 
 ## :material-history: Get-JIMConfigurationChangeHistory

@@ -1,8 +1,8 @@
 # A Diagram on Every Docs Page: Implementation Plan
 
-- **Status:** Doing (Phase 1, the renderer and the flow archetype)
+- **Status:** Done
 - **Issue:** [#2564](https://github.com/TetronIO/JIM/issues/2564)
-- **PRD:** [`PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md`](../../prd/doing/PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md)
+- **PRD:** [`PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md`](../../prd/done/PRD_DOCS_DIAGRAM_ON_EVERY_PAGE.md)
 
 ## Overview
 
@@ -103,7 +103,7 @@ docs/configuration/api-keys.md          docs/hooks/diagrams.py               bui
 
 Each phase is its own pull request. Phases 1 to 3 land before any page gets a diagram, so the Configuration batch is pure authoring.
 
-### Phase 1: Renderer foundation and the first archetype
+### Phase 1: Renderer foundation and the first archetype ✅
 
 - `docs/hooks/diagrams.py` with the fence parser, spec validation, the metrics loader, text wrapping and the **flow** archetype (wide and narrow).
 - `scripts/Update-DiagramFontMetrics.ps1` and the committed `docs/hooks/diagram_metrics.json`.
@@ -117,12 +117,12 @@ Each phase is its own pull request. Phases 1 to 3 land before any page gets a di
     - the label-cut check passes.
 - Wire both into `changelog-lint` when `docs/hooks/**`, `custom.css` or the scripts change.
 
-### Phase 2: The remaining archetypes
+### Phase 2: The remaining archetypes ✅
 
 - Lifecycle, anatomy, decision, comparison and relationship map, each with wide and narrow layouts, each with unit and browser tests.
 - The **glossary relationship map** lands here as the relationship map's showcase: JIM's core terms with each node linking to its glossary anchor.
 
-### Phase 3: The rules and the tooling
+### Phase 3: The rules and the tooling ✅
 
 - `engineering/DOCUMENTATION_STANDARD.md`: a new "Visuals" section with VIS-1 to VIS-4 and rule index rows; VOI-5 links to it.
 - VIS-1 in `Test-DocsConformance.ps1` (added to `KnownRules`, with its check and tests), tier `Ratchet`, baseline seeded, and the changelog's `allow-page` marker.
@@ -130,7 +130,7 @@ Each phase is its own pull request. Phases 1 to 3 land before any page gets a di
 - `scripts/New-DiagramContactSheet.ps1`.
 - `engineering/DESIGN.md` > Diagrams documents the archetypes; `docs/CLAUDE.md` gets "Adding a diagram" (the spec format per archetype, placement and the section rule).
 
-### Phase 4: The Configuration batch
+### Phase 4: The Configuration batch ✅
 
 All 41 pages, in three pull requests of about 14 pages, each approved from its contact sheet. The archetype for each page is a first pass, settled when its spec is written against the page:
 
@@ -180,7 +180,9 @@ All 41 pages, in three pull requests of about 14 pages, each approved from its c
 
 Each batch lowers the VIS-1 baseline with `-UpdateBaseline`.
 
-### Phase 5: The remaining sections
+**Landed:** the 35 remaining pages went in one pull request, reviewed from contact sheets, after the four mock-ups landed with Phase 3. Writing each spec against its page changed some of the first-pass archetypes above (Connected System Schema, Removing a Connected System, Unresolved References, Configuration Changes, Activity Execution Items and Data Flow became comparisons; Schedules, Initial Password, Configuration Tests, Roles and Metaverse Objects became decisions; Causality and Export Performance became flows; Service Settings became a lifecycle). The batch surfaced renderer fixes that landed with it: flow notes are measured and wrap within their room, lifecycle forward notes are drawn, phone start and end arrows meet their states, and specs that would draw overlapping lines now fail the build.
+
+### Phase 5: The remaining sections ✅
 
 Each in turn, as section batches with contact sheets, in this order:
 
@@ -191,6 +193,8 @@ Each in turn, as section batches with contact sheets, in this order:
 5. API, Getting Started and Reference (10, the glossary already done in Phase 2)
 
 The plan document records each batch as it lands. VIS-1 is promoted from Ratchet to Block when the baseline is empty.
+
+**Landed:** all five sections in the same pull request as Phase 4, drafted in batches by parallel agents against a shared brief and reviewed from contact sheets; every page but the changelog now has a diagram, the baseline is empty, and VIS-1 is Block. The batches surfaced the rest of the renderer fixes: code spans keep their punctuation and render in chips, a lifecycle end clears its frame, and a map node's page link resolves to the built URL (MkDocs does not rewrite links in raw HTML, so the site's link check caught the raw `.md` paths).
 
 ## Success Criteria
 

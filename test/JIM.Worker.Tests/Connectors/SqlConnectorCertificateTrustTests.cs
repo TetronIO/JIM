@@ -57,10 +57,10 @@ public class SqlConnectorCertificateTrustTests
         Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(2));
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(provider.BuiltConnectionSettings[0].PinnedServerCertificatePath, Is.Null,
+            Assert.That(provider.BuiltConnectionSettings[0].PinnedTrustPath, Is.Null,
                 "The operating system's own trust anchors must always get the first say; JIM's store can only ever add to them.");
-            Assert.That(provider.BuiltConnectionSettings[1].PinnedServerCertificatePath, Is.Not.Null);
-            Assert.That(System.IO.File.Exists(provider.BuiltConnectionSettings[1].PinnedServerCertificatePath!), Is.True,
+            Assert.That(provider.BuiltConnectionSettings[1].PinnedTrustPath, Is.Not.Null);
+            Assert.That(System.IO.File.Exists(provider.BuiltConnectionSettings[1].PinnedTrustPath!), Is.True,
                 "The driver takes a trust anchor as a path, so the certificate has to exist on disk while the connection lives.");
         }
     }
@@ -125,25 +125,69 @@ public class SqlConnectorCertificateTrustTests
     }
 
     [Test]
-    public void ValidateSettingValues_DriverThatCannotBeToldToAcceptACertificate_ReportsTheFailureInstead()
+    public void ValidateSettingValues_RootRequiredAndTheJimStoreTrustsTheRoot_RetriesWithAWalletOfTheChainAboveTheServer()
     {
-        // Oracle Database's driver is this case: it takes trust anchors from an Oracle wallet only, so
-        // there is nothing JIM can hand it, and pretending otherwise would report trust it does not have.
+        // Oracle Database over TCPS: ODP.NET builds the chain from its wallet alone and accepts it only when it ends at a
+        // self-signed certificate there, so the wallet needs the root and every intermediate beneath it (#2581).
+        using var root = TestPki.CreateRoot("Corp Root CA");
+        using var intermediate = TestPki.CreateIntermediate("Corp Issuing CA 2", root);
+        using var leaf = TestPki.CreateServer("db.example.com", intermediate);
+        var provider = new FakeSqlProvider { RequiresRootTrustAnchor = true, SucceedsOnlyWithAPinnedCertificate = true };
+        using var connector = CreateConnector(provider, SoundCertificateReading(leaf, sentIntermediate: intermediate, root: root),
+            trustedCertificate: TestPki.PublicOnly(root));
+
+        var results = connector.ValidateSettingValues(CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps), _logger);
+
+        Assert.That(results, Is.Empty, "The root is one the administrator added, so the connection is expected to succeed on the second attempt.");
+        Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(2));
+        var walletPath = provider.BuiltConnectionSettings[1].PinnedTrustPath;
+        Assert.That(walletPath, Is.Not.Null);
+        var walletFile = Path.Combine(walletPath!, "ewallet.pem");
+        Assert.That(File.Exists(walletFile), Is.True, "ODP.NET reads a PEM wallet from a folder named by WalletLocation.");
+
+        var inWallet = new X509Certificate2Collection();
+        inWallet.ImportFromPemFile(walletFile);
+        Assert.That(inWallet.Select(certificate => certificate.Thumbprint), Is.EquivalentTo(new[] { root.Thumbprint, intermediate.Thumbprint }),
+            "The root and the intermediate between it and the server's certificate, and nothing else.");
+    }
+
+    [Test]
+    public void ValidateSettingValues_RootRequiredButTheChainReachesNoRoot_ReportsTheFailureInstead()
+    {
+        // Without the root there is no wallet the driver would accept, so a retry would only fail again.
+        using var root = TestPki.CreateRoot("Corp Root CA");
+        using var intermediate = TestPki.CreateIntermediate("Corp Issuing CA 2", root);
+        using var leaf = TestPki.CreateServer("db.example.com", intermediate);
         var provider = new FakeSqlProvider
         {
-            CanPinServerCertificate = false,
-            OpenFailure = new FakeDbException("ORA-28759: failure to open file")
+            RequiresRootTrustAnchor = true,
+            OpenFailure = new FakeDbException("ORA-50201: Oracle Communication: Failed to connect to server")
         };
-        using var connector = CreateConnector(provider, SoundCertificateReading(), trustedCertificate: _serverCertificate);
+        using var connector = CreateConnector(provider, SoundCertificateReading(leaf, sentIntermediate: intermediate),
+            trustedCertificate: TestPki.PublicOnly(intermediate));
 
-        var results = connector.ValidateSettingValues(CreateSettingValues(), _logger);
+        var results = connector.ValidateSettingValues(CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps), _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(results[0].ErrorMessage, Does.Contain("ORA-28759"));
-            Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(1));
-        }
+        Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void Dispose_AfterAcceptingAChainThroughAWallet_RemovesTheWallet()
+    {
+        using var root = TestPki.CreateRoot("Corp Root CA");
+        using var intermediate = TestPki.CreateIntermediate("Corp Issuing CA 2", root);
+        using var leaf = TestPki.CreateServer("db.example.com", intermediate);
+        var provider = new FakeSqlProvider { RequiresRootTrustAnchor = true, SucceedsOnlyWithAPinnedCertificate = true };
+        var connector = CreateConnector(provider, SoundCertificateReading(leaf, sentIntermediate: intermediate, root: root),
+            trustedCertificate: TestPki.PublicOnly(root));
+        connector.ValidateSettingValues(CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps), _logger);
+        var walletPath = provider.BuiltConnectionSettings[1].PinnedTrustPath!;
+        Assert.That(Directory.Exists(walletPath), Is.True, "The wallet has to exist while the connection lives.");
+
+        connector.Dispose();
+
+        Assert.That(Directory.Exists(walletPath), Is.False);
     }
 
     [Test]
@@ -187,7 +231,7 @@ public class SqlConnectorCertificateTrustTests
         // Microsoft SQL Server connection.
         var provider = new FakeSqlProvider
         {
-            CanPinServerCertificate = false,
+            RequiresRootTrustAnchor = true,
             OpenFailure = new FakeDbException("ORA-29024: Certificate validation failure")
         };
         using var connector = CreateConnector(provider, UntrustedCertificateReading(), trustedCertificate: null);
@@ -207,7 +251,7 @@ public class SqlConnectorCertificateTrustTests
         var provider = new FakeSqlProvider { SucceedsOnlyWithAPinnedCertificate = true };
         var connector = CreateConnector(provider, SoundCertificateReading(), trustedCertificate: _serverCertificate);
         connector.ValidateSettingValues(CreateSettingValues(), _logger);
-        var trustFilePath = provider.BuiltConnectionSettings[1].PinnedServerCertificatePath!;
+        var trustFilePath = provider.BuiltConnectionSettings[1].PinnedTrustPath!;
 
         connector.Dispose();
 
@@ -278,7 +322,7 @@ public class SqlConnectorCertificateTrustTests
     /// What the probe reports for a CA-issued certificate that passes every check JIM makes of it, where the server
     /// sent its issuing CA alongside.
     /// </summary>
-    private static ServerCertificateReading SoundCertificateReading(X509Certificate2 leaf, X509Certificate2 sentIntermediate)
+    private static ServerCertificateReading SoundCertificateReading(X509Certificate2 leaf, X509Certificate2 sentIntermediate, X509Certificate2? root = null)
     {
         return new ServerCertificateReading
         {
@@ -297,7 +341,8 @@ public class SqlConnectorCertificateTrustTests
                 Port = 1433,
                 ReadAt = DateTime.UtcNow,
                 Leaf = Presented(leaf, ServerCertificateChainElementSource.SentByServer),
-                Intermediates = [Presented(sentIntermediate, ServerCertificateChainElementSource.SentByServer)]
+                Intermediates = [Presented(sentIntermediate, ServerCertificateChainElementSource.SentByServer)],
+                Root = root == null ? null : Presented(root, ServerCertificateChainElementSource.JimCertificateStore)
             }
         };
     }

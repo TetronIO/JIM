@@ -9,9 +9,36 @@ audience: automation-author
 
 JIM's REST API is protected by configurable rate limiting, so a misbehaving integration, a brute-force credential attempt, or a runaway script cannot exhaust server resources or degrade the service for other clients. This is an application-layer control (OWASP Top 10 A02: Security Misconfiguration); it complements, but does not replace, [brute-force protection and MFA at your identity provider](../administration/sso-setup.md#brute-force-protection-and-mfa).
 
+```jim-diagram
+archetype: comparison
+title: The three limits, and who shares each one
+desc: "An authenticated request is limited per client, by the signed-in user's Metaverse Object or by the API key, in a sliding one-minute window, at 300 requests a minute by default. A SCIM request made with a key scoped to a Connected System is limited per Connected System, shared by all of its keys, in a sliding one-minute window, at 1,500 requests a minute by default. An unauthenticated request, including one that failed API key authentication, is limited per client IP address, in a fixed one-minute window, at 30 requests a minute by default. The health endpoints and the infrastructure API key are exempt, and the web UI and static assets are never limited."
+columns:
+- {label: Authenticated}
+- {label: SCIM, sub: a key scoped to a Connected System}
+- {label: Unauthenticated, sub: including a failed API key}
+rows:
+- label: Limited per
+  cells:
+  - {text: client, sub: "the user, or the API key"}
+  - {text: Connected System, sub: shared by all its keys}
+  - {text: IP address}
+- label: Window
+  cells:
+  - {text: "sliding, one minute"}
+  - {text: "sliding, one minute"}
+  - {text: "fixed, one minute"}
+- label: Default limit
+  cells:
+  - {text: 300 a minute}
+  - {text: "1,500 a minute"}
+  - {text: 30 a minute}
+footer: "Exempt: the health endpoints and the infrastructure API key. Never limited: the web UI and static assets"
+```
+
 ## :material-speedometer: What is limited
 
-The REST API (paths under `/api/`) and the SCIM 2.0 Service Provider endpoint (paths under `/scim/`) are throttled. The Blazor web UI, the SignalR/Blazor Server connection, and static assets are never rate limited.
+The REST API (paths under `/api/`) and the SCIM 2.0 Service Provider endpoint (paths under `/scim/`) are throttled. The portal, the live connection it keeps open to the browser, and static assets are never rate limited.
 
 `/api/v1/health` (and its `/ready`, `/live`, `/version` sub-routes) is exempt: load balancer and orchestrator health probes must never be throttled, and the endpoint is cheap and carries no data.
 

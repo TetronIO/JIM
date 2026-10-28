@@ -9,6 +9,19 @@ audience: implementer
 
 If your organisation's policy requires every step by hand, these steps do what the [installer](deployment.md#what-the-installer-does) does on Podman. [Running on Podman](podman.md) explains the files they put in place, and the choice between rootful and rootless.
 
+```jim-diagram
+archetype: flow
+title: Installing JIM on Podman by hand, step by step
+desc: "Installing by hand takes six steps, run as root. 1: put the files in place: the pod files and settings in /opt/jim, and the Quadlet units in systemd's folder. 2: fill in the settings in jim-config.yaml, such as the identity provider's. 3: load JIM's images from the release bundle, or pull them. 4: store the secrets jim-secrets and jim-tls in Podman. 5: prepare the host's network: firewalld and NetworkManager on RHEL and its derivatives, AppArmor on Ubuntu 24.04. 6: start JIM with systemctl. For a rootless installation, the same steps run as the jim account, with the units in that account's folder."
+steps:
+  - { id: files, label: Put the files in place, badge: 1, sub: pod files and units }
+  - { id: config, label: Fill in the settings, badge: 2, sub: identity provider }
+  - { id: images, label: Load images, badge: 3, sub: or pull them }
+  - { id: secrets, label: Store the secrets, badge: 4, sub: in Podman }
+  - { id: network, label: Prepare the network, badge: 5, sub: "firewall or AppArmor" }
+  - { id: start, label: Start JIM, badge: 6 }
+```
+
 ## :material-clipboard-list-outline: Before you begin
 
 - A server that meets the [Requirements](podman.md#requirements) for Podman.

@@ -79,7 +79,7 @@ function Get-JIMAdfsRegistrationPlan {
         Works out what has to change on AD FS for JIM's registration to be as it should be.
 
     .PARAMETER Url
-        JIM's address, as people reach it.
+        JIM's addresses, as people reach it.
 
     .PARAMETER Name
         The Application Group's name, which is also its identifier.
@@ -96,18 +96,20 @@ function Get-JIMAdfsRegistrationPlan {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string[]]$Url,
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][object]$Current,
         [switch]$ResetClientSecret
     )
 
-    $baseUrl = $Url.TrimEnd('/')
     $serverName = "$Name - Portal"
     $nativeName = "$Name - PowerShell"
     $apiName = "$Name - API"
-    $serverRedirects = @("$baseUrl/signin-oidc", "$baseUrl/signout-callback-oidc")
-    $nativeRedirects = Get-JIMLoopbackRedirectUri
+    $serverRedirects = @($Url | ForEach-Object { $baseUrl = $_.TrimEnd('/'); "$baseUrl/signin-oidc"; "$baseUrl/signout-callback-oidc" })
+    # The API reference's Try It signs in from the browser through the same public client, redirected back to the page
+    # itself (#2594). AD FS answers its token request only once CORS is on for JIM's origin, a farm-wide setting the SSO
+    # guide gives; it is not part of the Application Group, so it is left to the administrator.
+    $nativeRedirects = @(Get-JIMLoopbackRedirectUri) + @($Url | ForEach-Object { "$($_.TrimEnd('/'))/api/reference" })
     $rules = Get-JIMAdfsIssuanceTransformRule
     $changes = [System.Collections.Generic.List[object]]::new()
 
@@ -146,7 +148,7 @@ function Get-JIMAdfsRegistrationPlan {
         $publicClientId = [string]$native.Identifier
         if (-not (Test-JIMSameSet $native.RedirectUri $nativeRedirects)) {
             $changes.Add((New-JIMAdfsChange -Action 'SetNativeApplication' -Target $native.Name `
-                -Description "Set the redirect URIs to the loopback ports $($script:JIMLoopbackPorts[0]) to $($script:JIMLoopbackPorts[-1])" `
+                -Description "Set the redirect URIs to the loopback ports $($script:JIMLoopbackPorts[0]) to $($script:JIMLoopbackPorts[-1]) and $(@($nativeRedirects | Select-Object -Skip $script:JIMLoopbackPorts.Count) -join ', ')" `
                 -Arguments @{ TargetIdentifier = $publicClientId; RedirectUri = $nativeRedirects }))
         }
     }

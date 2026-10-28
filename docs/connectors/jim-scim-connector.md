@@ -11,6 +11,23 @@ The JIM SCIM 2.0 Client Connector synchronises identities with any system that e
 
 JIM acts as the **SCIM client**: it connects out to the service provider, discovers what it can do, imports its resources, and exports provisioning changes to it. One standards-based connector therefore reaches every system that speaks SCIM, without a separate connector per product.
 
+```jim-diagram
+archetype: map
+title: What JIM calls, as the SCIM client
+desc: "JIM, as the SCIM client, makes every call; the service provider only answers. JIM reads the provider's features from /ServiceProviderConfig, and its schema from /Schemas and /ResourceTypes, which become the Connected System's Object Types. It imports the provider's resources and exports changes to them. With OAuth 2.0 Client Credentials, JIM first gets an access token from the token endpoint. Each part links to its section of this page."
+nodes:
+  - { id: features, label: "Provider's features", link: "#supported-service-providers", row: 0, col: 1 }
+  - { id: token, label: OAuth 2.0 token endpoint, link: "#authentication", row: 1, col: 0 }
+  - { id: jim, label: "JIM, the SCIM client", row: 1, col: 1 }
+  - { id: resources, label: "Provider's resources", link: "#features", row: 1, col: 2 }
+  - { id: schema, label: "Provider's schema", link: "#schema-discovery", row: 2, col: 1 }
+edges:
+  - { from: jim, to: features, label: "`/ServiceProviderConfig`" }
+  - { from: jim, to: token, label: gets a token }
+  - { from: jim, to: resources, label: imports and exports }
+  - { from: jim, to: schema, label: "`/Schemas`, `/ResourceTypes`" }
+```
+
 !!! note "Direction matters"
     This connector is for systems that **publish** a SCIM interface for JIM to call. For the reverse arrangement, where an identity provider pushes Users and Groups to JIM, use the [JIM SCIM 2.0 Service Provider Connector](jim-scim-service-provider-connector.md).
 

@@ -27,7 +27,10 @@
       A11Y-1  every Mermaid diagram carries accTitle and accDescr
       A11Y-2  every image has alt text; every included diagram has a <title>
               and a <desc>
-      TYP-1   a page that declares a type has the shape that type requires
+      VIS-1   the page has at least one diagram: a jim-diagram spec, an
+              included concept diagram, an inline diagram SVG or a Mermaid
+              diagram, outside any other code block
+      TYP-1  a page that declares a type has the shape that type requires
       TUT-2   every bold label in a tutorial's Portal tab exists in the portal
       PRI-1   a conformant priority page records the release it was last
               checked against (validated: vX.Y.Z), no later than VERSION, and
@@ -40,6 +43,9 @@
       LANG-6  no promises about the future
       LANG-7  no minimisers ("simply")
       LANG-8  no GitHub issue or pull request numbers
+      LANG-10 no names of what JIM is built with (frameworks, libraries, its
+              own project names, its development infrastructure), in running
+              text, a diagram spec, or the text of an included SVG diagram
       TERM-1  the vocabulary and the glossary agree, and every product noun
               has a home page
       EXC-1   every exception marker is well formed, names a rule, gives a
@@ -63,7 +69,10 @@
       Warn     findings are reported, never fail.
 
     A page in a conformant folder, or listed as a conformant page, carries no
-    baseline: its Ratchet findings fail outright. A conformant priority page
+    baseline: its Ratchet findings fail outright. The exception is a Ratchet
+    rule listed in BaselineOnConformant, introduced after its pages were
+    conformant (VIS-1): it keeps its baseline everywhere, so the pages that
+    predate it are held at their debt while a new page has none. A conformant priority page
     also fails on warnings, and has the smaller priority size budget.
 
     Exceptions live in the page, where the next author reads them, and must
@@ -162,7 +171,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
-    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'STY-3', 'EXC-1')
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'LANG-10', 'TERM-1', 'STY-1', 'STY-3', 'VIS-1', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
@@ -205,6 +214,13 @@ function Read-Configuration {
     }
     # EXC-1 guards the exception mechanism itself, so it can be neither relaxed nor suppressed.
     $config.Rules['EXC-1'] = 'Block'
+    # Ratchet rules that keep their baseline on conformant pages (optional; see the help above).
+    if (-not $config.ContainsKey('BaselineOnConformant')) { $config.BaselineOnConformant = @() }
+    foreach ($r in $config.BaselineOnConformant) {
+        if ($config.Rules[$r] -ne 'Ratchet') {
+            throw "Configuration '$Path' lists '$r' in BaselineOnConformant, but only a Ratchet rule can keep a baseline."
+        }
+    }
     return $config
 }
 
@@ -752,6 +768,25 @@ function Test-Accessibility {
     }
 }
 
+# VIS-1: the page has at least one diagram, in any of the forms the site draws. Only a fence
+# Get-PageModel recorded counts, so a diagram shown inside another code block (a ````markdown
+# example of how to write one) is text, not a diagram; the same goes for the snippet and SVG
+# lines, which are skipped inside code blocks.
+function Test-Visuals {
+    param($Page)
+
+    if (@($Page.Fences | Where-Object { $_.Info -match '^(?:jim-diagram|mermaid)\b' }).Count -gt 0) { return }
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
+        if ($Page.InFenceLine[$i]) { continue }
+        $line = $Page.Lines[$i]
+        if ($line -match '^\s*--8<--\s*"(?:docs/)?assets/diagrams/[^"]+\.svg"') { return }
+        if ($line -match '<svg\b[^>]*\bclass\s*=\s*"(?:[^"]*\s)?jim-diagram(?:\s[^"]*)?"') { return }
+    }
+    $h1 = $Page.Headings | Where-Object Level -eq 1 | Select-Object -First 1
+    $line = if ($h1) { $h1.Line } else { 1 }
+    New-Finding 'VIS-1' $line "the page has no diagram; add one that shows this page's own subject: a jim-diagram spec (docs/CLAUDE.md > Generated diagrams), an included concept diagram, or a Mermaid diagram."
+}
+
 function Test-Validation {
     param($Page, [bool]$Priority, [bool]$Conformant, [string]$VersionPath)
 
@@ -961,6 +996,7 @@ function New-LanguageModel {
         TimeRelative  = @($Config.TimeRelativePatterns | ForEach-Object { [regex]::new($_, $options) })
         Future        = @($Config.FuturePatterns | ForEach-Object { [regex]::new($_, $options) })
         Minimisers    = @($Config.MinimiserPatterns | ForEach-Object { [regex]::new($_, $options) })
+        InternalTerms = @($Config.InternalTermPatterns | ForEach-Object { [regex]::new($_, $options) })
     }
 }
 
@@ -1008,6 +1044,20 @@ function Format-LikeWord {
     param([string]$Word, [string]$Suggestion)
     if ($Word.Length -gt 0 -and [char]::IsUpper($Word[0])) { return $Suggestion.Substring(0, 1).ToUpperInvariant() + $Suggestion.Substring(1) }
     return $Suggestion
+}
+
+# LANG-10: a name for what JIM is built with (a framework, a library, one of JIM's own projects, or its
+# development infrastructure) tells the reader nothing they act on (VOI-4, VOI-6). The names are distinctive,
+# unlike VOI-1's everyday words, so a list catches them without false positives; one the reader types sits in
+# code, which the prose text has already dropped.
+function Find-InternalTerm {
+    param([string]$Text, [int]$Line, $Language)
+
+    foreach ($r in $Language.InternalTerms) {
+        foreach ($m in $r.Matches($Text)) {
+            New-Finding 'LANG-10' $Line "'$($m.Value)' names how JIM is built; say what it is to the reader (the portal, the database, the web container), or leave it out (VOI-6)."
+        }
+    }
 }
 
 function Test-Language {
@@ -1101,10 +1151,33 @@ function Test-Language {
             New-Finding 'LANG-8' $p.Line "a link to a GitHub issue or pull request; a public page leaves JIM's own workings out (VOI-4)."
         }
 
+        # LANG-10
+        foreach ($finding in Find-InternalTerm -Text $text -Line $p.Line -Language $Language) { $finding }
+
         # STY-1 (the pattern is described where $script:EmojiRegex is defined).
         foreach ($m in $script:EmojiRegex.Matches($text)) {
             New-Finding 'STY-1' $p.Line "an emoji ('$($m.Value)'); use a Material Design icon instead, such as :material-check-circle-outline:{ .jim-yes role=`"img`" aria-label=`"Yes`" } for a tick in a table (see STY-1 and STY-3)."
         }
+    }
+
+    # LANG-10 reads a diagram spec too: its labels and its description are text the reader sees, though
+    # they sit in a code fence the other language rules skip. Code spans in a label are what the reader
+    # types, as they are in running text.
+    foreach ($fence in @($Page.Fences | Where-Object { $_.Info -match '^jim-diagram\b' })) {
+        for ($k = 0; $k -lt $fence.Content.Count; $k++) {
+            $spec = [regex]::Replace($fence.Content[$k], '(`+).+?\1', ' ')
+            foreach ($finding in Find-InternalTerm -Text $spec -Line ($fence.Line + 1 + $k) -Language $Language) { $finding }
+        }
+    }
+
+    # And the text of an SVG diagram the page includes: its labels, title and description reach the reader through
+    # the page, so a name in them is the page's, reported at the line that includes it.
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
+        if ($Page.InFenceLine[$i] -or $Page.Lines[$i] -notmatch '--8<--\s*"(?<path>[^"]+\.svg)"') { continue }
+        $svgPath = Join-Path $DocsPath $Matches['path']
+        if (-not (Test-Path -LiteralPath $svgPath -PathType Leaf)) { continue }
+        $svgText = ([regex]::Matches((Get-Content -LiteralPath $svgPath -Raw), '>([^<>]+)<') | ForEach-Object { $_.Groups[1].Value }) -join ' '
+        foreach ($finding in Find-InternalTerm -Text ([System.Net.WebUtility]::HtmlDecode($svgText)) -Line ($i + 1) -Language $Language) { $finding }
     }
 }
 
@@ -1225,6 +1298,7 @@ foreach ($file in $files) {
         Test-SizeBudget -Page $page -Budget $budget
         Test-Growth -Page $page -Budget $budget -BaseRef $BaseRef -RepositoryRoot $repositoryFull -DocsRepoPath $docsRepoPath
         Test-Accessibility -Page $page -DocsFullPath $docsFull -RepositoryRoot $repositoryFull
+        Test-Visuals -Page $page
         Test-PageShape -Page $page -Config $config -RepositoryRoot $repositoryFull
         Test-Validation -Page $page -Priority $priority -Conformant $conformant -VersionPath (Join-Path $repositoryFull 'VERSION')
         Test-PortalLabel -Page $page -Config $config -RepositoryRoot $repositoryFull
@@ -1268,7 +1342,7 @@ foreach ($file in $files) {
     foreach ($finding in @($kept) + $markerFindings) {
         if (-not $finding) { continue }
         $mode = $config.Rules[$finding.Rule]
-        if ($conformant -and $mode -eq 'Ratchet') { $mode = 'Block' }
+        if ($conformant -and $mode -eq 'Ratchet' -and $finding.Rule -notin $config.BaselineOnConformant) { $mode = 'Block' }
         if ($conformant -and $priority -and $mode -eq 'Warn') { $mode = 'Block' }
         $findings.Add([pscustomobject]@{
                 Rule        = $finding.Rule
@@ -1316,7 +1390,8 @@ foreach ($f in $findings | Where-Object Mode -eq 'Ratchet') {
 function Test-BaselineEntryApplies {
     param([string]$Key)
     $ruleId, $pagePath = $Key.Split("`t")
-    return $pageSet.ContainsKey($pagePath) -and -not $conformantSet.ContainsKey($pagePath) -and $config.Rules[$ruleId] -eq 'Ratchet'
+    return $pageSet.ContainsKey($pagePath) -and $config.Rules[$ruleId] -eq 'Ratchet' -and
+        (-not $conformantSet.ContainsKey($pagePath) -or $ruleId -in $config.BaselineOnConformant)
 }
 
 if ($SeedBaseline) {
@@ -1387,7 +1462,7 @@ foreach ($key in $baseline.Keys) {
     $ruleId, $pagePath = $key.Split("`t")
     $display = "$docsDisplayPrefix/$pagePath"
     $reason = if (-not $pageSet.ContainsKey($pagePath)) { "$pagePath is not a page this check covers" }
-    elseif ($conformantSet.ContainsKey($pagePath)) { "$pagePath is conformant, so it carries no baseline" }
+    elseif ($conformantSet.ContainsKey($pagePath) -and $ruleId -notin $config.BaselineOnConformant) { "$pagePath is conformant, so it carries no baseline" }
     elseif ($config.Rules[$ruleId] -ne 'Ratchet') { "$ruleId is no longer a Ratchet rule" }
     else { "no $ruleId findings remain on $pagePath" }
     $errors.Add([pscustomobject]@{

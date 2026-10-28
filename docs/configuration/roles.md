@@ -9,6 +9,29 @@ audience: administrator
 
 **Roles** determine what authenticated principals (users and [API keys](api-keys.md)) can do within JIM. The current model is coarse-grained: most administrative operations require the **Administrator** role.
 
+```jim-diagram
+archetype: decision
+title: When JIM refuses to remove a Role member
+desc: 'Removing a member from any Role but Administrator goes ahead. For the Administrator role, JIM rejects the request if you are removing yourself, or if the member is the last remaining one; otherwise the member is removed. To transfer administrator access, add the new administrator first, then remove the old one.'
+start: {label: Remove a Role member}
+questions:
+- {id: admin, label: 'The Administrator role?'}
+- {id: self, label: 'Removing yourself?'}
+- {id: last, label: 'The last remaining member?'}
+outcomes:
+- {id: removed, label: Removed, sub: the membership is deleted, good: true}
+- {id: notself, label: Rejected, sub: no one can remove themselves}
+- {id: notlast, label: Rejected, sub: 'add the new admin first, then remove the old'}
+- {id: removedadmin, label: Removed, sub: other administrators remain, good: true}
+answers:
+- {from: admin, to: removed, label: 'no'}
+- {from: admin, to: self, label: 'yes'}
+- {from: self, to: notself, label: 'yes'}
+- {from: self, to: last, label: 'no'}
+- {from: last, to: notlast, label: 'yes'}
+- {from: last, to: removedadmin, label: 'no'}
+```
+
 ## :material-account-lock-outline: Built-in roles
 
 Roles marked **built-in** ship with JIM and cannot be deleted. They can have members added or removed like any other role.

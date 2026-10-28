@@ -70,7 +70,8 @@ function Get-TutorialStep {
         # A non-indented, non-blank line ends a content tab.
         if ($inPowerShellTab -and $line -match '^\S') { $inPowerShellTab = $false }
 
-        if ($line -match '^(?<indent>\s*)```(?<lang>\w+)?\s*$') {
+        # A language may hold a hyphen (jim-diagram), so it is any run of characters but a space or backtick.
+        if ($line -match '^(?<indent>\s*)```(?<lang>[^\s`]+)?\s*$') {
             $isTabbed = $Matches.indent.Length -ge 4
             $fence = @{ Indent = $Matches.indent; Run = ($inPowerShellTab -and $isTabbed -and $Matches.lang -eq 'powershell') }
             $code = @()

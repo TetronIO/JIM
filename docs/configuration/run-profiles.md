@@ -10,6 +10,25 @@ validated: v0.16.0
 
 A **Run Profile** defines a synchronisation operation that can be executed against a [Connected System](connected-systems.md). Each Run Profile specifies the type of operation (import, sync, or export), a batch size, and (where applicable) a target partition or file path.
 
+```jim-diagram
+archetype: comparison
+title: Full and Delta runs compared
+desc: "A Full Import reads every object from the Connected System, and an object it no longer returns is deleted; a Delta Import reads only the changes since the last import, and needs a connector that tracks changes. A Full Synchronisation evaluates every Connected System Object, and can be previewed before it runs; a Delta Synchronisation evaluates only objects with pending changes. Export flushes the Pending Exports either way: it has no Full or Delta form."
+columns:
+- {label: Full, sub: 'every object, every time'}
+- {label: Delta, sub: 'only what changed, faster'}
+rows:
+- label: Import
+  cells:
+  - {text: reads every object, sub: one no longer returned is deleted, meter: 12}
+  - {text: reads changes since the last import, sub: needs a connector that tracks changes, meter: 3}
+- label: Synchronisation
+  cells:
+  - {text: evaluates every Connected System Object, sub: previewable before it runs, meter: 12}
+  - {text: evaluates objects with pending changes, meter: 3}
+footer: 'Export flushes the Pending Exports either way: it has no Full or Delta form'
+```
+
 Run Profiles are the building blocks of [Schedules](schedules.md): each step of a Schedule runs a Run Profile. A Run Profile can also be run directly, for a one-off operation.
 
 ## :material-play-circle-outline: Run types
@@ -22,7 +41,7 @@ A Run Profile is one of:
 - **Delta Synchronisation**<br /> Evaluate only objects with pending changes since the last sync. Faster.
 - **Export**<br /> Flush Pending Exports out to the Connected System.
 
-A synchronisation works through the Connected System's Object Types in dependency order, so people come before the groups they belong to, and membership resolves as each group is processed. Where the schema does not say which type an attribute points at (LDAP `member` and `manager`), a Full Synchronisation reads which types its values point at; a Delta Synchronisation assumes any type. References within one type (managers, nested groups) can still need the **Resolving cross-page references** step. The worker's service log records the order in a line starting `Full Synchronisation type order:` or `Delta Synchronisation type order:`.
+A synchronisation works through the Connected System's Object Types in dependency order, so people come before their groups and membership resolves as each group is processed. Where the schema does not name an attribute's target type (LDAP `member` and `manager`), a Full Synchronisation reads the types its values point at; a Delta Synchronisation assumes any. References within one type (managers, nested groups) can still need the **Resolving cross-page references** step. A member JIM never joins to a Metaverse Object (a contact, or an object outside every Synchronisation Rule's scope) is skipped; the rest of the membership flows, removals included. The service log records the order in a line starting `Full Synchronisation type order:` or `Delta Synchronisation type order:`.
 
 ## :material-file-document-outline: Page size
 

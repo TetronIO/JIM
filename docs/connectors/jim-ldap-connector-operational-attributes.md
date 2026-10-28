@@ -9,6 +9,29 @@ audience: administrator
 
 An RFC 4512 directory keeps some of the most useful facts about an entry in operational attributes, which the directory maintains itself rather than holding as data you write: `createTimestamp`, `modifyTimestamp`, `creatorsName` and `memberOf`, and with OpenLDAP's password policy overlay `pwdChangedTime`, `pwdAccountLockedTime` and `pwdFailureTime`. An operational attribute belongs to no object class, and a directory returns one only when it is asked for by name.
 
+```jim-diagram
+archetype: decision
+title: Whether an operational attribute's value reaches JIM
+desc: "Schema discovery adds an operational attribute unselected. If you do not select it, JIM does not ask for it and nothing is imported. If you select it, JIM asks for it by name, and two things decide whether a value arrives. If the account JIM connects as cannot read it, no value arrives; an access rule that lists attributes must list it. If the directory does not maintain a value for the entry, there is none to arrive; OpenLDAP records pwdFailureTime only on an entry a password policy applies to. Otherwise the value is imported, read-only: JIM never exports it."
+start: { label: An operational attribute }
+questions:
+  - { id: selected, label: "Selected?", sub: unselected after discovery }
+  - { id: readable, label: "Can the account read it?", sub: "a rule listing `attrs=` must name it" }
+  - { id: kept, label: "Does the directory maintain it?", sub: "`pwdFailureTime` needs a password policy" }
+outcomes:
+  - { id: unasked, label: Nothing imported, sub: JIM does not ask for it }
+  - { id: unread, label: No value arrives, sub: grant read access }
+  - { id: unkept, label: No value to arrive, sub: the directory keeps none }
+  - { id: imported, label: Imported, sub: "read-only: never exported", good: true }
+answers:
+  - { from: selected, to: unasked, label: "no" }
+  - { from: selected, to: readable, label: "yes" }
+  - { from: readable, to: unread, label: "no" }
+  - { from: readable, to: kept, label: "yes" }
+  - { from: kept, to: unkept, label: "no" }
+  - { from: kept, to: imported, label: "yes" }
+```
+
 Schema discovery adds each operational attribute the directory publishes to every structural Object Type. Each one is:
 
 - **Unselected**<br /> Nothing is imported until you select it, so an operational attribute costs nothing until then.

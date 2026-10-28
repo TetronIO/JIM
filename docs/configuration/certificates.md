@@ -9,6 +9,25 @@ audience: administrator
 
 **Certificates** store the certificate authorities, and server certificates, that JIM trusts: for [Connectors](../connectors/index.md)' LDAPS, HTTPS and SQL Server connections, for signing in through your identity provider, or both. Each certificate can be enabled or disabled independently without removing it.
 
+```jim-diagram
+archetype: comparison
+title: Trusted for Connectors, or for Sign-in
+desc: 'A certificate trusted for Connectors vouches for the servers Connected Systems connect to, over LDAPS, HTTPS and SQL Server connections, and is the default for a certificate you add. A certificate trusted for Sign-in vouches for your identity provider, when its certificate comes from your organisation''s own certificate authority; trust one for sign-in only when that is what you mean. Disabling a certificate removes it from the trust set without deleting it; disabling, deleting or unticking the certificate sign-in relies on stops everyone signing in, so the portal and the cmdlets warn first. A certificate can be trusted for both, each purpose uses only the certificates trusted for it, and all of them add to the operating system''s trust store rather than replacing it.'
+columns:
+- {label: Connectors, sub: the default}
+- {label: Sign-in, sub: only when that is what you mean}
+rows:
+- label: Vouches for
+  cells:
+  - {text: the servers Connected Systems connect to, sub: 'LDAPS, HTTPS and SQL Server'}
+  - {text: your identity provider, sub: when your own certificate authority issued its certificate}
+- label: Disabling it
+  cells:
+  - {text: it leaves the trust set, sub: without losing its metadata}
+  - {text: it leaves the trust set, sub: 'if sign-in relies on it, this stops everyone signing in; JIM warns first'}
+footer: 'A certificate can be trusted for both; each purpose uses only its own, on top of the operating system''s trust store'
+```
+
 Certificates added here are trusted **in addition to** the operating system's own trust store, never in place of it, so adding one can only ever allow more connections to succeed. A directory server's own self-signed certificate can be added directly, not just the certificate authority that issued it. Certificate validation itself cannot be switched off for an individual Connected System; see [certificate validation](../connectors/jim-ldap-connector-certificates.md#certificate-validation) in the LDAP Connector documentation for what is checked.
 
 ## :material-shield-check-outline: Trusted for

@@ -9,6 +9,33 @@ audience: automation-author
 
 The Metaverse Object Type cmdlets manage the kinds of identity JIM stores, such as User and Group: list them, create custom ones, rename them, set how their Metaverse Objects are deleted, and delete them. The attributes an Object Type carries are managed with the [Metaverse Attribute](metaverse-attributes.md) cmdlets. What Object Types are, and how each deletion rule behaves, are covered in [Metaverse](../configuration/metaverse.md).
 
+```jim-diagram
+archetype: decision
+title: What Remove-JIMMetaverseObjectType checks before it deletes
+desc: 'Remove-JIMMetaverseObjectType refuses to delete a built-in Object Type, such as User or Group. It refuses a custom one that any Metaverse Object belongs to, until those objects are deleted, and one that any Synchronisation Rule targets, until those rules are removed; each refusal says which, and changes nothing. With -WhatIf it stops there, having checked that the deletion is allowed and said how many references it would remove. Otherwise it deletes the Object Type, once you confirm or with -Force, removing its Predefined Searches, Example Data Template entries and attribute bindings with it and keeping the attributes themselves; each removal is recorded as an Activity.'
+start: {label: Deleting an Object Type}
+questions:
+- {id: builtin, label: 'Built-in?', sub: such as User or Group}
+- {id: objects, label: 'Any Metaverse Objects of the type?'}
+- {id: rules, label: 'Any Synchronisation Rule targeting it?'}
+- {id: whatif, label: '`-WhatIf`?'}
+outcomes:
+- {id: never, label: Refused, sub: a built-in type is never deleted}
+- {id: objs, label: Refused, sub: delete the objects first}
+- {id: rls, label: Refused, sub: remove those rules first}
+- {id: check, label: Checked only, sub: says what it would remove}
+- {id: deleted, label: Deleted, sub: 'with its Predefined Searches, templates and bindings', good: true}
+answers:
+- {from: builtin, to: never, label: 'yes'}
+- {from: builtin, to: objects, label: 'no'}
+- {from: objects, to: objs, label: 'yes'}
+- {from: objects, to: rules, label: 'no'}
+- {from: rules, to: rls, label: 'yes'}
+- {from: rules, to: whatif, label: 'no'}
+- {from: whatif, to: check, label: 'yes'}
+- {from: whatif, to: deleted, label: 'no: once confirmed'}
+```
+
 ---
 
 ## :material-shape-outline: Get-JIMMetaverseObjectType
@@ -53,7 +80,7 @@ By default, one page of Object Types, each in summary. With `-Id` or `-Name`, th
 | `Created` | `datetime` | When the Object Type was created (UTC). |
 | `AttributesCount` | `int` | How many attributes are bound to the Object Type. Counted only when the request includes child objects; 0 otherwise. |
 | `BuiltIn` | `bool` | Whether JIM provides the Object Type. A built-in Object Type cannot be renamed or deleted, but its deletion settings can be changed. |
-| `Icon` | `string` | The name of the MudBlazor icon the portal shows for the Object Type; empty when none is set. |
+| `Icon` | `string` | The name of the Material Design icon the portal shows for the Object Type, such as Devices; empty when none is set. |
 | `HasPredefinedSearches` | `bool` | Whether any Predefined Search lists objects of this type. |
 | `DeletionRule` | `string` | When JIM deletes this type's Metaverse Objects on its own. One of `Manual`, `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionTriggerMode` | `string` | For the WhenAuthoritativeSourceDisconnected deletion rule, whether every selected source must disconnect before an object is deleted (AllSourcesDisconnect) or any one is enough (SpecificSourcesDisconnect). It has no effect under the other rules. One of `SpecificSourcesDisconnect` or `AllSourcesDisconnect`. |
@@ -68,7 +95,7 @@ By default, one page of Object Types, each in summary. With `-Id` or `-Name`, th
 | `PluralName` | `string` | The Object Type's plural name, such as Users or Groups. |
 | `Created` | `datetime` | When the Object Type was created (UTC). |
 | `BuiltIn` | `bool` | Whether JIM provides the Object Type. A built-in Object Type cannot be renamed or deleted, but its deletion settings can be changed. |
-| `Icon` | `string` | The name of the MudBlazor icon the portal shows for the Object Type; empty when none is set. |
+| `Icon` | `string` | The name of the Material Design icon the portal shows for the Object Type, such as Devices; empty when none is set. |
 | `DeletionRule` | `string` | When JIM deletes this type's Metaverse Objects on its own. One of `Manual`, `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `string` | How long JIM waits, once the deletion rule is met, before it deletes an object; empty or zero deletes at once. |
 | `DeletionTriggerMode` | `string` | For the WhenAuthoritativeSourceDisconnected deletion rule, whether every selected source must disconnect before an object is deleted (AllSourcesDisconnect) or any one is enough (SpecificSourcesDisconnect). It has no effect under the other rules. One of `SpecificSourcesDisconnect` or `AllSourcesDisconnect`. |
@@ -117,7 +144,7 @@ New-JIMMetaverseObjectType -Name <string> -PluralName <string> [-Icon <string>] 
 |------|------|----------|---------|-------------|
 | `Name` | `string` | Yes |  | The singular name of the new Object Type, such as Device. It must be unique. |
 | `PluralName` | `string` | Yes |  | The plural name of the new Object Type, such as Devices. It must be unique. |
-| `Icon` | `string` | No |  | The name of the MudBlazor icon the portal shows for the Object Type, such as Devices. |
+| `Icon` | `string` | No |  | The name of the Material Design icon the portal shows for the Object Type, such as Devices or AccountCircle. A name JIM does not recognise shows a default icon. |
 | `AttributeIds` | `int[]` | No |  | The IDs of existing Metaverse Attributes to bind to the new Object Type. Attributes can also be bound later, with `Add-JIMMetaverseObjectTypeAttribute`. |
 | `DeletionRule` | `string` | No |  | When JIM deletes this type's Metaverse Objects on its own. With Manual, it never does. With WhenLastConnectorDisconnected, it deletes an object once no Connected System Object is joined to it; an account JIM has provisioned counts as one. With WhenAuthoritativeSourceDisconnected, it deletes an object when the sources named in `-DeletionTriggerConnectedSystemIds` disconnect, as `-DeletionTriggerMode` decides. WhenLastConnectorDisconnected is the default, as in the portal. One of `Manual`, `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `timespan` | No |  | How long JIM waits, once the deletion rule is met, before it deletes the object. [TimeSpan]::Zero deletes at once. Ignored when `-DeletionRule` is Manual. |
@@ -186,7 +213,7 @@ Set-JIMMetaverseObjectType -InputObject <PSCustomObject> [-NewName <string>] [-P
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | An Object Type from the pipeline, for example from `Get-JIMMetaverseObjectType`. Accepts pipeline input. |
 | `NewName` | `string` | No |  | A new singular name for the Object Type. It must be unique, ignoring case. A built-in Object Type cannot be renamed. |
 | `PluralName` | `string` | No |  | A new plural name for the Object Type. It must be unique, ignoring case. A built-in Object Type keeps its plural name. |
-| `Icon` | `string` | No |  | The name of the MudBlazor icon the portal shows for the Object Type, such as Devices. `$null` or '' clears it. A built-in Object Type keeps its icon. |
+| `Icon` | `string` | No |  | The name of the Material Design icon the portal shows for the Object Type, such as Devices or AccountCircle. A name JIM does not recognise shows a default icon. `$null` or '' clears it. A built-in Object Type keeps its icon. |
 | `DeletionRule` | `string` | No |  | When JIM deletes this type's Metaverse Objects on its own. With Manual, it never does. With WhenLastConnectorDisconnected, it deletes an object once no Connected System Object is joined to it; an account JIM has provisioned counts as one. With WhenAuthoritativeSourceDisconnected, it deletes an object when the sources named in `-DeletionTriggerConnectedSystemIds` disconnect, as `-DeletionTriggerMode` decides. One of `Manual`, `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `timespan` | No |  | How long JIM waits, once the deletion rule is met, before it deletes the object, for example [TimeSpan]::FromDays(30). [TimeSpan]::Zero deletes at once. |
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No |  | The IDs of the Connected Systems whose disconnection triggers deletion. Required when the deletion rule is WhenAuthoritativeSourceDisconnected, and ignored otherwise. |

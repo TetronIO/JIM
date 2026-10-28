@@ -9,6 +9,24 @@ audience: implementer
 
 Use this guide to let people sign in to JIM with their Active Directory accounts through AD FS (Active Directory Federation Services), both in the portal and in the PowerShell module with `Connect-JIM`. One command registers JIM on AD FS, and you give JIM the values it returns. JIM identifies each person by their Active Directory `objectGUID`, so they sign in as the Metaverse Object that synchronisation from Active Directory created for them, and stay that person when they are renamed. This configuration is verified against AD FS on Windows Server 2025 before every JIM release.
 
+```jim-diagram
+archetype: map
+title: How AD FS and synchronisation meet at the objectGUID
+desc: "A person's Active Directory account carries an objectGUID, which reaches JIM by two routes. At sign-in, the claim rule of JIM's API application on AD FS issues it as the oid claim in their token. Beforehand, the import Synchronisation Rule for your Active Directory users maps it to the Metaverse Object's built-in Object GUID attribute. JIM matches the oid claim to Object GUID (JIM_SSO_CLAIM_TYPE=oid and JIM_SSO_MV_ATTRIBUTE=Object GUID), so the person signs in as the Metaverse Object synchronisation created for them."
+nodes:
+  - { id: ad, label: Active Directory account, row: 0, col: 0 }
+  - { id: rule, label: AD FS claim rule, row: 0, col: 1 }
+  - { id: oid, label: "`oid` claim in the token", row: 0, col: 2 }
+  - { id: sync, label: Synchronisation Rule, row: 1, col: 0 }
+  - { id: mvo, label: "Metaverse Object", row: 1, col: 2 }
+edges:
+  - { from: ad, to: rule, label: "`objectGUID` read by" }
+  - { from: rule, to: oid, label: issues it as }
+  - { from: ad, to: sync, label: imported by }
+  - { from: sync, to: mvo, label: "maps it to `Object GUID` of" }
+  - { from: oid, to: mvo, label: matched to }
+```
+
 !!! info "Read the overview first"
     This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the [confidential and public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, [how JIM recognises people](../sso-setup.md#how-jim-recognises-people), and the [testing steps](../sso-setup.md#testing-your-configuration) you can run once configuration is complete.
 
@@ -101,6 +119,20 @@ JIM_SSO_INITIAL_ADMIN=3f2504e0-4f89-11d3-9a0c-0305e82c3301
 4. Sign in as someone synchronised from Active Directory who holds no JIM role. JIM signs them in with the `User` role only, and refuses them administration.
 
 To check sign-out too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
+
+## :material-api: Let the API reference sign in (optional)
+
+The API reference at `https://jim.example.com/api/reference` can call JIM's API with an API key as it stands. Its **Try It** can also sign you in through AD FS, using the PowerShell module's application. `Register-JIMIdentityProvider` adds `https://jim.example.com/api/reference` to that application's redirect URIs, so AD FS returns you to the page after you sign in. The browser then asks AD FS for the token itself, and AD FS answers a browser on another site only when Cross-Origin Resource Sharing (CORS) is on for JIM's address. CORS is a setting for the whole AD FS farm, not the Application Group, so the command leaves it to you. It needs AD FS 2019 or later.
+
+On the AD FS server, in PowerShell as an AD FS administrator, turn CORS on and add JIM's address to the trusted origins. `-CORSTrustedOrigins` replaces the list, so this keeps any origins already trusted:
+
+```powershell
+Set-AdfsResponseHeaders -EnableCORS $true
+$origins = @((Get-AdfsResponseHeaders).CORSTrustedOrigins) + 'https://jim.example.com' | Where-Object { $_ } | Select-Object -Unique
+Set-AdfsResponseHeaders -CORSTrustedOrigins $origins
+```
+
+The origin is JIM's address without a path: `https://jim.example.com`, or `https://jim.example.com:8443` on another port. See Microsoft's [guide to AD FS response headers](https://learn.microsoft.com/windows-server/identity/ad-fs/operations/customize-http-security-headers-ad-fs#cors-customization).
 
 ## :material-check-all: Keep the registration right
 

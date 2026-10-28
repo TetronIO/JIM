@@ -54,6 +54,7 @@
         'Set-JIMConnectedSystemContainer',
         'Get-JIMConnectedSystemContainerScopeText',
         'Set-JIMConnectedSystemContainerScopeText',
+        'Get-JIMConnectedSystemCatalogue',
         'Get-JIMConnectedSystemDirectoryServer',
         'Get-JIMConnectedSystemObject',
         'Get-JIMConnectedSystemObjectType',
@@ -228,6 +229,7 @@
         'Export-JIMCertificate',
         'Get-JIMIdentityProviderTrust',
         'Register-JIMIdentityProvider',
+        'Get-JIMSignInDiagnostic',
 
         # Security
         'Get-JIMRole',

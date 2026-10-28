@@ -10,6 +10,21 @@ validated: v0.16.0
 
 On Podman, an upgrade replaces the pod files, which name the release's images, and restarts JIM. Do the steps in [Before you upgrade](upgrading.md#before-you-upgrade) first. The commands are for the default, rootful installation, run as root; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
+```jim-diagram
+archetype: lifecycle
+title: An upgrade on Podman, and the way back
+desc: "With the old release running, steps 1 and 2 stop JIM, leaving the bundled database running, take the backup, and keep the current pod files as jim.yaml.previous and jim-database.yaml.previous. While JIM is stopped, the backup and the .previous files hold the old release. Steps 3 and 4 put the new release's files and images in place and start JIM, restarting the database first, so the new release runs. To roll back, stop JIM again, restore the backup, put the .previous files back, and start JIM on the old release."
+states:
+  - { id: old, label: Old release }
+  - { id: stopped, label: JIM stopped, sub: "backup, `.previous` files" }
+  - { id: new, label: New release }
+transitions:
+  - { from: old, to: stopped, label: "steps 1 and 2", note: "stop, back up" }
+  - { from: stopped, to: new, label: "steps 3 and 4", note: "new files, start" }
+  - { from: new, to: stopped, label: "roll back: stop" }
+  - { from: stopped, to: old, label: "restore, start" }
+```
+
 ## :material-update: Upgrade JIM
 
 1. **Stop JIM**, leaving the bundled database running, and **take your backup** per [Backup & Disaster Recovery](backup-recovery.md):

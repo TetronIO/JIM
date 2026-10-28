@@ -9,6 +9,33 @@ audience: operator
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
 
+```jim-diagram
+archetype: comparison
+title: The Lineage, Timeline and Table views compared
+desc: 'An execution item''s story can be read in three views. The Lineage, the default, shows the object graph as columns, answering what happened and why on one canvas, and is the one view that shows what the item went on to cause in later runs. The Timeline is a vertical narrative with attribute changes inline, for the whole story in one scroll. The Table is a flat, filterable change list, for scanning many changes at once. The Timeline and Table describe the run alone. The view you choose is remembered for your next visit.'
+columns:
+- {label: Lineage, sub: the default}
+- {label: Timeline, sub: top to bottom}
+- {label: Table, sub: 'filter chips, sortable columns'}
+rows:
+- label: Shows
+  cells:
+  - {text: 'the object graph, as columns', sub: source to Metaverse Object to target}
+  - {text: a vertical narrative, sub: attribute changes inline}
+  - {text: 'a flat, filterable change list', sub: narrowed object by object}
+- label: Best for
+  cells:
+  - {text: what happened and why, sub: on one canvas}
+  - {text: 'the whole story, every attribute', sub: in one scroll}
+  - {text: scanning many changes at once}
+- label: After this run
+  cells:
+  - {text: what the item went on to cause}
+  - {text: this run alone}
+  - {text: this run alone}
+footer: The view you choose is remembered for your next visit
+```
+
 An execution item's detail page is split over tabs. **Overview** carries the item's own story: the execution summary, the Connected System Object it processed, the causality panel and what caused it, and any error. Where the item created or failed on a Pending Export, that gets its own **Pending Export** tab, because a queued export is a separate subject with its own status, retry count and staged attribute changes. Most items have only the one tab, and the tab bar is hidden entirely in that case rather than offering a choice of one.
 
 The Overview tab opens with a causality panel that answers "what happened to this object, and what did it cause?" without any digging. A summary band leads with a single plain-English sentence describing the run's effect on the object, with every entity mentioned (Connected Systems, Metaverse Objects, Synchronisation Rules) highlighted as a clickable token, and a strip of colour-coded outcome pills beneath it summarising the outcomes at a glance (for example "Projected to the Metaverse", "11 attributes flowed", "Export queued").

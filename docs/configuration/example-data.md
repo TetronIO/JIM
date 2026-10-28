@@ -9,6 +9,18 @@ audience: evaluator
 
 Example Data fills the Metaverse with realistic people and groups, so you can explore JIM, demonstrate it, or try a feature without first connecting systems and waiting for a synchronisation. An **Example Data Template** describes what to generate; **Example Data Sets** supply the names, departments, job titles and other values it draws on. Both are under Administration, then **Example Data**.
 
+```jim-diagram
+archetype: flow
+title: How Example Data fills the Metaverse
+desc: "Example Data Sets supply the values. An Example Data Template names the Metaverse Object Types, how many objects of each to create, and the rules that make each attribute's values. Execute Template queues the work for the Worker, which records it as a Data Generation Activity. The generated objects stay in the Metaverse permanently: only a Factory Reset clears them."
+in: { label: Example Data Sets, note: the values to draw on }
+steps:
+  - { id: template, label: Example Data Template, sub: "Object Types, counts, rules" }
+  - { id: execute, label: Execute Template, sub: queued for the Worker }
+  - { id: generate, label: Data Generation, sub: recorded as an Activity }
+out: { label: Metaverse, note: kept until a Factory Reset }
+```
+
 !!! warning "Generated objects stay"
     Generated objects are added to the Metaverse permanently. JIM never deletes them automatically, whatever the Object Type's Deletion Rule, and no command removes them one by one; a [Factory Reset](../administration/factory-reset.md) is the only way to clear them. Generate data on a system you can reset, never on one already synchronising real identities.
 

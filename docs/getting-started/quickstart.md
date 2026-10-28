@@ -9,6 +9,29 @@ audience: evaluator
 
 Install JIM on one Linux server, with Docker or Podman, in a few minutes, and sign in. The installer makes sensible choices for you; for a production installation, where you make each one yourself, follow the [Deployment Guide](../administration/deployment.md) instead.
 
+```jim-diagram
+archetype: comparison
+title: Installing connected or air-gapped
+desc: "On a connected server, you run the installer straight from the internet, as root, and it downloads what JIM needs. On an air-gapped server, you download the release bundle on a connected machine, carry it across, extract it, and run the installer inside it, which installs from the bundle without the internet. Either way, the installer asks about your database, identity provider, HTTPS port and certificate, installs and starts JIM, and waits until it is ready for you to sign in."
+columns:
+- {label: Connected}
+- {label: Air-gapped}
+rows:
+- label: Get the installer
+  cells:
+  - {text: straight from the internet, sub: "`curl … | sudo bash`"}
+  - {text: in the release bundle, sub: carried across from a connected machine}
+- label: Run it
+  cells:
+  - {text: as root, sub: downloads what JIM needs}
+  - {text: "`sudo ./setup.sh`", sub: installs from the bundle}
+- label: Internet on the server
+  cells:
+  - {text: needed}
+  - {text: not needed}
+footer: "Either way it asks its questions, installs and starts JIM, and waits until it is ready"
+```
+
 ## :material-clipboard-list-outline: Before you begin
 
 - A Linux server with Docker or Podman, sized as [Prerequisites](prerequisites.md) describes.
@@ -68,4 +91,3 @@ To install it without the internet, see [PowerShell Module](../administration/de
 
 - [Your First Synchronisation](first-synchronisation.md) synchronises 25 people from one file to another, in the portal or with PowerShell.
 - The [Deployment Guide](../administration/deployment.md) covers a production installation, upgrades and monitoring.
-- Contributing to JIM? The contributor guides in the repository's [engineering documentation](https://github.com/TetronIO/JIM/tree/main/engineering) set up a development environment, with GitHub Codespaces or a local devcontainer.

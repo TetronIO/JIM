@@ -9,6 +9,29 @@ audience: automation-author
 
 The Attribute Mapping cmdlets list, create, change and delete the Attribute Flows on a Synchronisation Rule: what each Connected System or Metaverse attribute, expression or generated value flows to. How Attribute Flows work, and how the value that wins is chosen, is covered in [Attribute Mappings](../configuration/attribute-mappings.md).
 
+```jim-diagram
+archetype: decision
+title: Which cmdlet changes an Attribute Flow
+desc: 'To change what an Attribute Flow targets, or whether its source is an attribute or an expression, remove it with Remove-JIMSyncRuleMapping and create it again with New-JIMSyncRuleMapping, because those changes revalidate it and reopen its place in the Attribute Priority order. To change its place in that order, use Set-JIMMetaverseAttributePriority or Move-JIMMetaverseAttributePriority. To change any other setting, use Set-JIMSyncRuleMapping, which changes only what you give; a setting that does not apply to the mapping, such as -NullIsValue on an export mapping, is refused rather than ignored, and so is a call that names no setting.'
+start: {label: Changing a mapping}
+questions:
+- {id: target, label: 'Change its target or kind of source?', sub: 'attribute or expression'}
+- {id: priority, label: 'Change its Attribute Priority place?'}
+- {id: applies, label: 'Does the setting apply to it?', sub: 'the mapping''s direction and kind'}
+outcomes:
+- {id: recreate, label: 'Remove it, then create it', sub: '`Remove-` then `New-JIMSyncRuleMapping`'}
+- {id: reorder, label: Reorder the priority, sub: with the Metaverse Attribute priority cmdlets}
+- {id: set, label: '`Set-JIMSyncRuleMapping`', sub: 'only what you give changes', good: true}
+- {id: refused, label: Refused, sub: 'such as `-NullIsValue` on an export mapping'}
+answers:
+- {from: target, to: recreate, label: 'yes'}
+- {from: target, to: priority, label: 'no'}
+- {from: priority, to: reorder, label: 'yes'}
+- {from: priority, to: applies, label: 'no'}
+- {from: applies, to: set, label: 'yes'}
+- {from: applies, to: refused, label: 'no'}
+```
+
 ---
 
 ## :material-swap-vertical: Get-JIMSyncRuleMapping

@@ -12,124 +12,124 @@
    on one page in time order, later at the top. It replaced the Queue and History tabs, between which an administrator
    had to flick to see what the system was doing as a whole. *@
 
+@{
+    var activeChips = _filters.ActiveChips(ScheduleNameFor);
+}
+
 @* ─── Toolbar ─── *@
 @* mt-5 rather than a tab-panel padding: the Operations page hands its tabs no top padding of their own, because
    the Schedules tab opens straight onto a grid that already supplies this same gap. *@
+@* The filter row sits behind its button, closed on arrival even when the URL carries filters: the chips beside the
+   button say what narrows the view, each closing to put that one filter back, so the row is for changing filters
+   rather than for reading them. Which rows are shown is said by the sections themselves, in their headings. *@
 <div class="d-flex align-center flex-wrap gap-3 mt-5 mb-4">
-    <MudText Typo="Typo.body2" Class="mud-text-secondary">Show</MudText>
-    <MudChipSet T="ActivitySection" SelectionMode="SelectionMode.MultiSelection"
-                SelectedValues="_sections.Selected()" SelectedValuesChanged="OnSectionsChangedAsync"
-                CheckMark="true" Class="d-contents">
-        <MudChip Value="ActivitySection.Queued" Variant="Variant.Text" Color="Color.Warning" SelectedColor="Color.Warning"
-                 Icon="@Icons.Material.Filled.PendingActions" data-testid="toggle-queued">Queued @CountText(_queuedCount)</MudChip>
-        <MudChip Value="ActivitySection.InProgress" Variant="Variant.Text" Color="Color.Info" SelectedColor="Color.Info"
-                 Icon="@Icons.Material.Filled.Autorenew" data-testid="toggle-in-progress">In Progress @CountText(_runningCount)</MudChip>
-        <MudChip Value="ActivitySection.Completed" Variant="Variant.Text" Color="Color.Success" SelectedColor="Color.Success"
-                 Icon="@Icons.Material.Filled.TaskAlt" data-testid="toggle-completed">Completed</MudChip>
-    </MudChipSet>
+    <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Tune" OnClick="@(() => _filtersOpen = !_filtersOpen)"
+               aria-expanded="@(_filtersOpen ? "true" : "false")" aria-controls="activity-filters" data-testid="toggle-filters">
+        Filters
+    </MudButton>
+    @foreach (var chip in activeChips)
+    {
+        <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Class="ma-0" @key="chip.Kind"
+                 OnClose="@(_ => SetFiltersAsync(_filters.Without(chip.Kind)))" data-testid="active-filter">@chip.Label</MudChip>
+    }
+    @if (activeChips.Count > 0)
+    {
+        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ClearFiltersAsync" data-testid="clear-filters">Clear</MudButton>
+    }
     <MudSpacer />
     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistAdd"
                OnClick="QueueRunProfileAsync">Queue a Run Profile</MudButton>
 </div>
 
 @* ─── Filters ─── *@
-@* They apply to every section shown, except Result and Has child activities, which only mean something for work
-   that has finished. *@
-<MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="flex-wrap mb-6">
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true"
-                   SelectedValues="_filters.ConnectedSystems"
-                   SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { ConnectedSystems = values.ToList() }))"
-                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            @if (_filterOptions != null)
-            {
-                @foreach (var cs in _filterOptions.ConnectedSystems)
-                {
-                    <MudSelectItem T="string" Value="@cs">@cs</MudSelectItem>
-                }
-            }
-        </MudSelect>
-    </MudItem>
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true"
-                   SelectedValues="_filters.RunProfiles"
-                   SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { RunProfiles = values.ToList() }))"
-                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            @if (_filterOptions != null)
-            {
-                @foreach (var rp in _filterOptions.RunProfiles)
-                {
-                    <MudSelectItem T="string" Value="@rp">@rp</MudSelectItem>
-                }
-            }
-        </MudSelect>
-    </MudItem>
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true"
-                   SelectedValues="_filters.Schedules"
-                   SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { Schedules = values.ToList() }))"
-                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetScheduleMultiSelectText))">
-            @if (_filterOptions != null)
-            {
-                @foreach (var schedule in _filterOptions.Schedules)
-                {
-                    <MudSelectItem T="Guid" Value="@schedule.Id">@schedule.Name</MudSelectItem>
-                }
-            }
-        </MudSelect>
-    </MudItem>
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="ActivityStatus" Label="Result" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true" Disabled="@(!_sections.Completed)"
-                   SelectedValues="_filters.Results"
-                   SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { Results = values.ToList() }))"
-                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
-            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
-        </MudSelect>
-    </MudItem>
-    <MudItem Class="flex-grow-1">
-        <SearchField Value="@_filters.InitiatedBy"
-                     ValueChanged="@(text => SetFiltersAsync(_filters with { InitiatedBy = text }))"
-                     Label="Initiated By"
-                     Placeholder="Search by name..."
-                     DebounceInterval="500"
-                     Margin="Margin.None" />
-    </MudItem>
-    <MudItem Class="d-flex align-end">
-        <MudCheckBox T="bool" Value="_filters.HasChildActivities" Disabled="@(!_sections.Completed)"
-                     ValueChanged="@(value => SetFiltersAsync(_filters with { HasChildActivities = value }))"
-                     Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
-    </MudItem>
-    <MudItem Class="d-flex align-end">
-        <MudCheckBox T="bool" Value="_filters.ScheduledOnly"
-                     ValueChanged="@(value => SetFiltersAsync(_filters with { ScheduledOnly = value }))"
-                     Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
-    </MudItem>
-</MudStack>
+@* They apply to every section, except Result and Has child activities, which only mean something for work that
+   has finished. *@
+@if (_filtersOpen)
+{
+    <MudPaper Outlined="true" Class="pa-4 mb-6" id="activity-filters" data-testid="activity-filters">
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="flex-wrap">
+            <MudItem Class="flex-grow-1">
+                <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filters.ConnectedSystems"
+                           SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { ConnectedSystems = values.ToList() }))"
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
+                    @if (_filterOptions != null)
+                    {
+                        @foreach (var cs in _filterOptions.ConnectedSystems)
+                        {
+                            <MudSelectItem T="string" Value="@cs">@cs</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="flex-grow-1">
+                <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filters.RunProfiles"
+                           SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { RunProfiles = values.ToList() }))"
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
+                    @if (_filterOptions != null)
+                    {
+                        @foreach (var rp in _filterOptions.RunProfiles)
+                        {
+                            <MudSelectItem T="string" Value="@rp">@rp</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="flex-grow-1">
+                <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filters.Schedules"
+                           SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { Schedules = values.ToList() }))"
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetScheduleMultiSelectText))">
+                    @if (_filterOptions != null)
+                    {
+                        @foreach (var schedule in _filterOptions.Schedules)
+                        {
+                            <MudSelectItem T="Guid" Value="@schedule.Id">@schedule.Name</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="flex-grow-1">
+                <MudSelect T="ActivityStatus" Label="Result" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filters.Results"
+                           SelectedValuesChanged="@(values => SetFiltersAsync(_filters with { Results = values.ToList() }))"
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="d-flex align-end">
+                <MudCheckBox T="bool" Value="_filters.HasChildActivities"
+                             ValueChanged="@(value => SetFiltersAsync(_filters with { HasChildActivities = value }))"
+                             Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
+            </MudItem>
+            <MudItem Class="d-flex align-end">
+                <MudCheckBox T="bool" Value="_filters.ScheduledOnly"
+                             ValueChanged="@(value => SetFiltersAsync(_filters with { ScheduledOnly = value }))"
+                             Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
+            </MudItem>
+        </MudStack>
+    </MudPaper>
+}
 
 @* ─── Sections, later at the top ─── *@
-<div class="d-flex flex-column gap-6">
-    <OperationsQueueSections ShowQueued="_sections.Queued" ShowInProgress="_sections.InProgress"
-                             Filters="_filters" ScheduleName="ScheduleNameFor" CountsChanged="OnCountsChanged" />
-
-    @if (_sections.Completed)
-    {
-        <OperationsCompletedSection Filters="_filters" OnClearFilters="ClearFiltersAsync" />
-    }
-
-    @if (_sections.NothingSelected)
-    {
-        <MudPaper Outlined="true" Class="pa-6 d-flex justify-center">
-            <MudText Class="mud-text-secondary">Nothing to show. Choose Queued, In Progress or Completed above.</MudText>
-        </MudPaper>
-    }
+@* Every section is always on the page. The tab owns which are unfolded, because it keeps that in the URL; each
+   section's chevron asks for its own to be flipped. *@
+<div class="d-flex flex-column gap-4">
+    <OperationsQueueSections QueuedExpanded="_sections.Queued" InProgressExpanded="_sections.InProgress"
+                             ToggleRequested="OnToggleSectionAsync"
+                             Filters="_filters" ScheduleName="ScheduleNameFor" />
+    <OperationsCompletedSection Expanded="_sections.Completed"
+                                ToggleRequested="@(() => OnToggleSectionAsync(ActivitySection.Completed))"
+                                Filters="_filters" OnClearFilters="ClearFiltersAsync" />
 </div>
 
 @code {
@@ -138,8 +138,7 @@
     private ActivitySectionState _sections = ActivitySectionState.All;
     private OperationsActivityFilters _filters = OperationsActivityFilters.None;
     private ActivityFilterOptions? _filterOptions;
-    private int? _queuedCount;
-    private int? _runningCount;
+    private bool _filtersOpen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -160,24 +159,13 @@
 
     private Task ClearFiltersAsync() => SetFiltersAsync(OperationsActivityFilters.None);
 
-    private void OnCountsChanged((int Queued, int Running) counts)
-    {
-        _queuedCount = counts.Queued;
-        _runningCount = counts.Running;
-    }
-
     /// <summary>
-    /// Applies the toggles and writes them to the URL in place, so the view can be bookmarked and survives a refresh
-    /// without the navigation that would re-run the page's load.
+    /// Flips one section between unfolded and folded and writes the choice to the URL in place, so the view can be
+    /// bookmarked and survives a refresh without the navigation that would re-run the page's load.
     /// </summary>
-    private async Task OnSectionsChangedAsync(IReadOnlyCollection<ActivitySection>? selected)
+    private async Task OnToggleSectionAsync(ActivitySection section)
     {
-        var chosen = selected ?? [];
-        _sections = new ActivitySectionState(
-            chosen.Contains(ActivitySection.Queued),
-            chosen.Contains(ActivitySection.InProgress),
-            chosen.Contains(ActivitySection.Completed));
-
+        _sections = _sections.Toggle(section);
         var value = _sections.ToQueryValue();
         await UpdateUrlAsync(new Dictionary<string, string[]?> { [SectionsQueryParameter] = value == null ? null : [value] });
     }
@@ -202,8 +190,6 @@
     private async Task QueueRunProfileAsync() => await QueueRunProfileDialog.ShowAsync(DialogService);
 
     private string? ScheduleNameFor(Guid scheduleId) => _filterOptions?.Schedules.FirstOrDefault(s => s.Id == scheduleId)?.Name;
-
-    private static string CountText(int? count) => count is { } value ? value.ToString("N0") : string.Empty;
 
     private static string GetMultiSelectText(IReadOnlyList<string> selectedValues) => selectedValues.Count switch
     {

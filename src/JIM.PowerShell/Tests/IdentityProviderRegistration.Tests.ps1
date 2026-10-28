@@ -37,7 +37,7 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
                     })
                     NativeApplications = @([PSCustomObject]@{
                         Name = 'JIM Identity Management - PowerShell'; Identifier = '22222222-2222-2222-2222-222222222222'
-                        RedirectUri = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" })
+                        RedirectUri = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference'
                     })
                     WebApiApplications = @([PSCustomObject]@{
                         Name = 'JIM Identity Management - API'; Identifier = @('api://11111111-1111-1111-1111-111111111111')
@@ -83,15 +83,32 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
             $server.Arguments.RedirectUri | Should -Be @('https://jim.example.com/signin-oidc', 'https://jim.example.com/signout-callback-oidc')
 
             $native = $plan.Changes | Where-Object Action -eq 'NewNativeApplication'
-            $native.Arguments.RedirectUri | Should -HaveCount 10
+            $native.Arguments.RedirectUri | Should -HaveCount 11
             $native.Arguments.RedirectUri[0] | Should -Be 'http://localhost:8400/callback/'
             $native.Arguments.RedirectUri[9] | Should -Be 'http://localhost:8409/callback/'
+            # The API reference's Try It signs in through the same public client (#2594).
+            $native.Arguments.RedirectUri[10] | Should -Be 'https://jim.example.com/api/reference'
 
             $api = $plan.Changes | Where-Object Action -eq 'NewWebApiApplication'
             $api.Arguments.Identifier | Should -Be @($plan.ApiIdentifier)
             $api.Arguments.AccessControlPolicyName | Should -Be 'Permit everyone'
             $api.Arguments.IssueOAuthRefreshTokensTo | Should -Be 'AllDevices'
             $api.Arguments.IssuanceTransformRules | Should -Match 'objectGUID'
+        }
+    }
+
+    It 'Redirects the portal to each of JIM''s addresses' {
+        InModuleScope JIM {
+            $current = [PSCustomObject]@{
+                HostName = 'adfs.example.com'; Identifier = 'http://adfs.example.com/adfs/services/trust'; GroupExists = $false
+                ServerApplications = @(); NativeApplications = @(); WebApiApplications = @(); Permissions = @()
+            }
+
+            $plan = Get-JIMAdfsRegistrationPlan -Url 'https://jim.example.com', 'https://jim2.example.com/' -Name 'JIM Identity Management' -Current $current
+
+            ($plan.Changes | Where-Object Action -eq 'NewServerApplication').Arguments.RedirectUri | Should -Be @(
+                'https://jim.example.com/signin-oidc', 'https://jim.example.com/signout-callback-oidc'
+                'https://jim2.example.com/signin-oidc', 'https://jim2.example.com/signout-callback-oidc')
         }
     }
 

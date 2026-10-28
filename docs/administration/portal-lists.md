@@ -9,6 +9,25 @@ audience: administrator
 
 Most of what you look at in the JIM portal is a list: Metaverse Objects, the Connector Space, Pending Exports, Activities, Synchronisation Rules, Connected Systems, and the rest. They all behave the same way, so what you learn on one applies to every other.
 
+```jim-diagram
+archetype: anatomy
+title: What every portal list is made of
+desc: "Every portal list has a search box, which matches against the whole list on the server; a count, which reads 12 of 3,868 when a search or filter is narrowing the list; column headings, which sort the whole list and reverse on a second click; rows, which load as you scroll, with no pages; a compact-rows toggle, dense or comfortable, which is remembered; and an address that keeps the search, the sort and your position, so a copied link opens where you left it. An empty list says why it is empty. The REST API and the PowerShell module are paged instead."
+subject:
+  kind: object
+  label: A portal list
+  parts:
+  - {label: Search box, detail: 'searches the whole list, on the server'}
+  - {label: Count, detail: '`12 of 3,868`: a search or filter is on'}
+  - {label: Column headings, detail: 'sort the whole list; again to reverse'}
+  - {label: Rows, detail: 'load as you scroll; no pages'}
+  - {label: Compact-rows toggle, detail: 'dense or comfortable; remembered'}
+  - {label: Address, detail: 'keeps search, sort and position'}
+properties:
+- {name: Empty list, value: says why}
+- {name: REST and PowerShell, value: paged}
+```
+
 ## :material-arrow-expand-vertical: Scrolling, not paging
 
 Lists have no page size and no page controls. Rows load as you scroll towards them, so a list of eight objects and a list of eight hundred thousand are read the same way: scroll until you find what you want, or narrow the list first.
@@ -84,11 +103,7 @@ The table of one object's attributes is the exception to one line per row: a Con
 
 All three tables have a search box, which matches an attribute's name or any of its values shown on the page, and column headers you can click to sort. The search and sort are kept in the page address, so a refresh or a shared link shows the same view.
 
-<<<<<<< HEAD
 ## :material-tray-full: The Operations Activity tab
-=======
-## :material-tray-full: The Operations queue
->>>>>>> origin/main
 
 Of the Activity tab's three sections, only **Completed** is a scrolling list: it holds everything the Worker has ever finished. **Queued** and **In Progress** are ordinary tables, because they only ever hold work in flight. Queued shows as many rows as fit the window while In Progress stays in view, keeping the rows nearest In Progress (the work about to run), and never fewer than three; **Show more** reveals the rest. A Schedule Execution's tasks sit under a header row that names the Schedule, draws its rail and carries **View execution** and the option to cancel it.
 

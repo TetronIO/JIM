@@ -1,6 +1,6 @@
 # A Diagram on Every Docs Page
 
-- **Status:** Doing (Phase 1, the renderer and the flow archetype)
+- **Status:** Done
 - **Created:** 2026-10-27
 - **Author:** Jay Van der Zant (drafted with Claude)
 - **Issue:** [#2564](https://github.com/TetronIO/JIM/issues/2564)

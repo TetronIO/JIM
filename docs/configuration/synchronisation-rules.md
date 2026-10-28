@@ -10,6 +10,24 @@ validated: v0.16.0
 
 A **Synchronisation Rule** defines the complete relationship between a [Connected System](connected-systems.md) and the Metaverse. It controls which objects are in scope, how objects are matched, when new Metaverse Objects are created, and how attributes flow between systems.
 
+```jim-diagram
+archetype: flow
+title: What a Synchronisation Rule does to an object on its way in
+desc: 'An inbound Synchronisation Rule (1, its direction) takes a Connected System Object from the Connector Space and checks its Scoping criteria (2); an object out of scope is skipped. Object Matching Rules (3) look for an existing Metaverse Object: on a match, the Attribute mappings (5) flow values to it; on no match, Projection (4) creates one first. The Metaverse Object is the result. An outbound rule runs the same steps from the Metaverse Object to the Connected System Object, with Provisioning in place of Projection.'
+in: {label: Connected System Object, note: Connector Space}
+out: {label: Metaverse Object, note: the Metaverse}
+container: {label: Synchronisation Rule, tag: 'Direction: inbound', badge: 1}
+steps:
+- {id: scope, label: Scoping criteria, badge: 2, note: 'out of scope: skipped'}
+- {id: match, label: Object Matching Rules, badge: 3, next: match}
+- {id: map, label: Attribute mappings, badge: 5}
+detours:
+- from: match
+  to: map
+  label: no match
+  step: {id: project, label: Projection, sub: creates one, badge: 4}
+```
+
 Synchronisation Rules are the central configuration mechanism for identity synchronisation in JIM. Every Connected System needs at least one Synchronisation Rule to participate in synchronisation.
 
 ## :material-link-variant: What a Synchronisation Rule ties together

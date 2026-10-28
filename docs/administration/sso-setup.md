@@ -9,6 +9,18 @@ audience: implementer
 
 JIM requires an OIDC-compliant identity provider for authentication. This page is the high-level guide to configuring Single Sign-On (SSO): what JIM needs from your identity provider, how the client model works, and how to test and troubleshoot the result. The provider-specific, step-by-step setup lives on its own page per provider (see [Choose your identity provider](#choose-your-identity-provider) below).
 
+```jim-diagram
+archetype: flow
+title: How a person signs in to the JIM portal
+desc: "A person opens JIM in a browser, and JIM sends them to the identity provider, where they sign in. The identity provider returns them to JIM with an authorisation code, which JIM's backend exchanges at the identity provider's token endpoint, sending the confidential client's secret; the browser never sees the secret. JIM then reads one claim from the token, JIM_SSO_CLAIM_TYPE (usually sub), and finds the User whose Metaverse Attribute JIM_SSO_MV_ATTRIBUTE holds the same value. The person is signed in as that Metaverse Object."
+in: { label: Browser opens JIM }
+steps:
+  - { id: idp, label: Identity provider, sub: the person signs in }
+  - { id: token, label: Token endpoint, sub: "code and client secret", note: from JIM's backend only }
+  - { id: match, label: Match the claim, sub: "usually `sub`", note: to a Metaverse Attribute }
+out: { label: Signed in, note: as a Metaverse Object }
+```
+
 !!! info "Before you begin"
     Ensure you have:
 
@@ -62,7 +74,7 @@ JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider
 
 | Client | Used by | Authentication | Configured via |
 |--------|---------|----------------|----------------|
-| **Confidential** | The JIM web application (Blazor UI) | A stored client secret sent directly from the backend to the IdP's token endpoint. Never exposed to the browser. | `JIM_SSO_CLIENT_ID` and `JIM_SSO_SECRET` |
+| **Confidential** | The JIM portal | A stored client secret sent directly from the backend to the IdP's token endpoint. Never exposed to the browser. | `JIM_SSO_CLIENT_ID` and `JIM_SSO_SECRET` |
 | **Public** | Interactive clients that run on the user's machine (PowerShell module, future CLI tools) | PKCE with a loopback redirect URI (`http://localhost:8400/callback/`). No secret; the IdP relies on PKCE to bind the authorisation response to the original client. | `JIM_SSO_PUBLIC_CLIENT_ID` (falls back to `JIM_SSO_CLIENT_ID` when unset) |
 
 **When are these the same registration?**
@@ -143,9 +155,15 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 
 In production, the recommended way to test API access with SSO is via the JIM PowerShell module (see step 6 below), which supports interactive browser-based authentication.
 
-If you are configuring SSO against a non-production JIM instance and configured a Scalar single-page-application redirect URI on your identity provider (see [Microsoft Entra ID Step 5a](sso-setup/microsoft-entra-id.md#step-5a-configure-scalar-api-reference-authentication-development-only-optional) for an example), you can also test the API interactively via the Scalar API reference:
+Every JIM instance also serves the interactive API reference at `/api/reference`, and its **Try It** signs in through your identity provider. It signs in from the browser with no secret, so it uses the public client, as the PowerShell module does: `JIM_SSO_PUBLIC_CLIENT_ID`, or `JIM_SSO_CLIENT_ID` when that is unset. The public client needs `https://your-jim-url/api/reference` as a redirect URI, and the identity provider must answer the browser's token request from JIM's address:
 
-1. Navigate to `https://your-jim-dev-url/api/reference`
+- **Keycloak**: `Register-JIMIdentityProvider` registers both.
+- **AD FS**: `Register-JIMIdentityProvider` registers the redirect URI. Turning on CORS for JIM's address is a farm-wide setting you make yourself; see [Let the API reference sign in](sso-setup/ad-fs.md#let-the-api-reference-sign-in-optional).
+- **Microsoft Entra ID**: register the address as a single-page-application redirect URI; see [Step 5a](sso-setup/microsoft-entra-id.md#step-5a-configure-scalar-api-reference-authentication-optional).
+
+Without these, use an API key in **Try It** instead. To test it:
+
+1. Navigate to `https://your-jim-url/api/reference`
 2. Select an endpoint and choose the **OAuth2** security scheme
 3. Log in with your identity provider
 4. Try an API endpoint (e.g. `GET /api/v1/health`)
@@ -239,7 +257,7 @@ When your identity provider changes the key it signs tokens with, you need do no
 
 JIM delegates interactive authentication entirely to your identity provider and never sees or stores user credentials, whichever kind your provider is configured to require, i.e. Kerberos, passwords, smart cards, other certificate-based authentication types, FIDO2 passkeys, etc. Defences against credential attacks therefore belong **at the identity provider**, not in JIM:
 
-- **Where password authentication is in use, we recommend you enable brute-force/lockout protection**<br /> Entra ID (Smart Lockout), AD FS (the built-in Extranet Lockout Policy), and Keycloak (**Realm settings > Security defences > Brute force detection**) all offer this. The bundled devcontainer Keycloak realm ships with brute-force detection enabled by default.
+- **Where password authentication is in use, we recommend you enable brute-force/lockout protection**<br /> Entra ID (Smart Lockout), AD FS (the built-in Extranet Lockout Policy), and Keycloak (**Realm settings > Security defences > Brute force detection**) all offer this.
 - **Enable multi-factor authentication where available**<br /> MFA at the identity provider protects every application behind it, including JIM, without any JIM-side configuration.
 - **Prefer phishing-resistant methods where your provider supports them**<br /> Kerberos, certificate-based authentication, and FIDO2 passkeys remove the guessable secret altogether, protecting users against credential-stuffing and password-guessing.
 

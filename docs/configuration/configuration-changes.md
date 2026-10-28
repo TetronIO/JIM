@@ -9,6 +9,28 @@ audience: administrator
 
 Some configuration edits are harmless. Others decide whether accounts are deleted. The two sit side by side on the same pages, so JIM judges every save by the properties that actually changed, and reacts only where it matters.
 
+```jim-diagram
+archetype: comparison
+title: The three classes of configuration change
+desc: 'JIM classes each property a save changes. A Cosmetic change, such as a name, a description or an icon, goes straight through. A Sync-affecting change, such as scope, mappings or matching, asks you to confirm, listing each change from its old value to its new one. A Destructive change, such as a Deprovisioning Action or a deletion rule, asks you to confirm and also states in plain terms what the change will do. A save is judged by the properties that changed, not the page they are on.'
+columns:
+- {label: Cosmetic, sub: labels and display}
+- {label: Sync-affecting, sub: what synchronisation does}
+- {label: Destructive, sub: whether objects are removed}
+rows:
+- label: For example
+  cells:
+  - {text: 'a name, a description, an icon'}
+  - {text: 'scope, mappings, matching'}
+  - {text: 'Deprovisioning Actions, deletion rules'}
+- label: On save
+  cells:
+  - {text: goes straight through}
+  - {text: asks you to confirm, sub: 'each change, old value to new'}
+  - {text: asks you to confirm, sub: and says what it will do}
+footer: 'Judged by the properties changed: a rename saved with a Deprovisioning Action change is destructive'
+```
+
 ## :material-tag-text-outline: How JIM classifies a change
 
 Every configuration property carries one of three classes:

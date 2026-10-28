@@ -22,6 +22,28 @@ The LDAP service account used by JIM should follow the principle of least privil
 - **For reading the password policy (OpenLDAP)**<br /> Two optional reads, each buying something different. Read on the policy entry named by `olcPPolicyDefault` (and its siblings) gives JIM the rules themselves. Read on the overlay's configuration under `cn=config` (the `olcOverlay=ppolicy` entries) tells JIM which policy is the default where more than one exists, and whether a check module is configured; without it, a directory with a single policy entry is still read in full, while one with several is reported as not readable.
 - **For a definite answer on policy overrides (OpenLDAP and 389 Directory Server)**<br /> Read access over the objects JIM manages that includes the operational `pwdPolicySubentry` attribute (OpenLDAP) or the policy containers (389) lets JIM report that overrides exist. Neither directory offers a way to prove that none do, so the best answer there is could not tell, and the figures shown remain a floor.
 
+```jim-diagram
+archetype: anatomy
+title: The rights JIM's service account needs
+desc: "JIM binds as a dedicated service account, never a directory administrator (a Domain Admin, the rootDN or the Directory Manager), and the access is granted to a group the account is a member of. For import, it needs read on the containers and attributes JIM imports. For export, create, modify and delete in the target containers; with Create containers as needed? on, it may also create organisational units. For Delta Import, read on where the directory records its changes. On Active Directory, importing deletions needs List Contents, Read Property and Read Permissions on the Deleted Objects container. Probing generated values needs read on the probed attributes across the whole partition. Setting passwords needs Reset Password on the containers JIM manages. Reading the password policy is optional, and buys a definite answer."
+subject:
+  kind: object
+  label: The service account's rights
+  parts:
+    - { label: Import, detail: read what JIM imports }
+    - { label: Export, detail: "create, modify, delete in the targets" }
+    - { label: "Create containers as needed?", detail: create organisational units }
+    - { label: Delta Import, detail: read where changes are recorded }
+    - { label: Deleted Objects, detail: "Active Directory: list and read it" }
+    - { label: Probing, detail: read probed attributes partition-wide }
+    - { label: Passwords, detail: Reset Password where JIM manages }
+properties:
+  - { name: Bind as, value: a dedicated account }
+  - { name: Grant to, value: a group it is in }
+  - { name: Never, value: a directory administrator }
+  - { name: Optional, value: password policy reads }
+```
+
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.
 
@@ -35,7 +57,7 @@ Grant the access to a **group** and make the account a member of it, rather than
 
 Delegate on the **container at the top of the branch JIM manages**, normally the OU holding the accounts and groups it provisions. Every entry below is inheritable, so objects and containers created later are covered without a second delegation. That inheritance is also what covers moving an object between containers, which needs delete in the source and create in the target.
 
-These are the access control entries, as SDDL. JIM's integration lab runs against exactly these, which is what keeps them honest: they are the lab's own file, published here verbatim.
+These are the access control entries, as SDDL. JIM's own testing runs against exactly these, so they are proven working, not illustrative.
 
 ```text
 --8<-- "test/integration/docker/samba-ad-prebuilt/delegation/jim-ad-delegation.acl"
@@ -74,7 +96,7 @@ Bind JIM as a dedicated service account, never the directory's rootDN. Any entry
 
 Access is granted to a **group**, not to an individual service account's DN. Create `cn=jim,ou=Services,dc=example,dc=com` (a `groupOfNames`) on each suffix and add the service account(s) allowed to manage that suffix as a `member`. Delegating a new Connected System, or adding a second one against the same suffix, is then a membership change, never an ACL edit. A Connected System that imports more than one partition from the same server (one import scoped across two suffix databases) uses a single service account that is a member of each suffix's group, rather than needing a bespoke rule per suffix for that account; OpenLDAP resolves group membership server-wide, so the group and the ACL that names it can live in different databases.
 
-The access-control and password-policy rules below are exactly what JIM's own integration tests run under, so they are proven working, not illustrative. Two placeholders run through the access-control files: the suffix DN (`__SUFFIX__`, for example `dc=example,dc=com`) and the suffix database's configuration entry (`__DB_DN__`, its `olcDatabase={n}mdb,cn=config` DN, found with `ldapsearch -b cn=config "(olcSuffix=<suffix>)" dn`). The accesslog file's placeholders name the group(s) instead (`__JIM_GROUP_DN__`, `__JIM_GROUP_DN_2__`). The ppolicy overlay file's modify form takes the overlay's own DN (`__OVERLAY_DN__`) rather than `__DB_DN__`: slapd assigns the overlay an ordinal RDN when it is added (`olcOverlay={0}ppolicy,<database DN>`, not the unindexed name used to add it), so a later modify has to address the DN slapd actually assigned, found with `ldapsearch -b '<database DN>' "(objectClass=olcPPolicyConfig)" dn`.
+The access-control and password-policy rules below are exactly what JIM's own testing runs under, so they are proven working, not illustrative. Two placeholders run through the access-control files: the suffix DN (`__SUFFIX__`, for example `dc=example,dc=com`) and the suffix database's configuration entry (`__DB_DN__`, its `olcDatabase={n}mdb,cn=config` DN, found with `ldapsearch -b cn=config "(olcSuffix=<suffix>)" dn`). The accesslog file's placeholders name the group(s) instead (`__JIM_GROUP_DN__`, `__JIM_GROUP_DN_2__`). The ppolicy overlay file's modify form takes the overlay's own DN (`__OVERLAY_DN__`) rather than `__DB_DN__`: slapd assigns the overlay an ordinal RDN when it is added (`olcOverlay={0}ppolicy,<database DN>`, not the unindexed name used to add it), so a later modify has to address the DN slapd actually assigned, found with `ldapsearch -b '<database DN>' "(objectClass=olcPPolicyConfig)" dn`.
 
 Apply the access-control files bound as the configuration administrator (`cn=admin,cn=config`), since `olcAccess` and `olcOverlay` entries live under `cn=config`; apply the password policy files bound as the suffix's own administrator, since those are ordinary directory entries. Substitute the placeholders in a copy of each file, then apply it with `ldapmodify`.
 
@@ -96,9 +118,9 @@ Delta import reads `cn=accesslog` one level deep. Grant that database's own acce
 --8<-- "test/integration/docker/openldap/acl/jim-accesslog-access.ldif"
 ```
 
-How long the accesslog keeps entries is the overlay's own `olcAccessLogPurge` (the integration lab keeps 7 days: `07+00:00 01+00:00`). Keep that maximum age longer than the longest gap between Delta Imports; a Delta Import that finds the purge has gone past its watermark asks for a Full Import (see [Import](jim-ldap-connector.md#import)).
+How long the accesslog keeps entries is the overlay's own `olcAccessLogPurge` (for example 7 days: `07+00:00 01+00:00`). Keep that maximum age longer than the longest gap between Delta Imports; a Delta Import that finds the purge has gone past its watermark asks for a Full Import (see [Import](jim-ldap-connector.md#import)).
 
-OpenLDAP enforces `olcSizeLimit` against non-rootDN clients even with paging controls in play, so lift it for JIM on the accesslog database too, or, as the integration lab does, set it unlimited there. A Delta Import the limit stops part-way fails, naming the limit, rather than carry on from a point that could miss a change. A server hosting only one suffix has only one group: delete the second `by group.exact=... read` clause and its placeholder. Under this rule a suffix administrator can no longer read `cn=accesslog` themselves; that is intended, since only the service accounts that run delta imports need to. An administrator who needs to inspect it can still bind as the accesslog database's own rootDN.
+OpenLDAP enforces `olcSizeLimit` against non-rootDN clients even with paging controls in play, so lift it for JIM on the accesslog database too, or set it unlimited there. A Delta Import the limit stops part-way fails, naming the limit, rather than carry on from a point that could miss a change. A server hosting only one suffix has only one group: delete the second `by group.exact=... read` clause and its placeholder. Under this rule a suffix administrator can no longer read `cn=accesslog` themselves; that is intended, since only the service accounts that run delta imports need to. An administrator who needs to inspect it can still bind as the accesslog database's own rootDN.
 
 A frontend rule covers what every client, including anonymous ones, needs for ordinary connection setup:
 
@@ -126,7 +148,7 @@ Bind JIM as a dedicated service account, never `cn=Directory Manager`. Any entry
 
 As on OpenLDAP, access is granted to a **group**, not to an individual service account's DN. Create `cn=jim,ou=Services,<suffix>` (a `groupOfNames`) on each suffix and add the service account(s) allowed to manage that suffix as a `member`. A Connected System that imports more than one partition from the same server uses a single service account that is a member of each suffix's group; 389 Directory Server resolves group membership server-wide, so the group and the entry carrying the rule can live in different backends.
 
-389 Directory Server denies whatever no rule allows. The three files below are exactly what JIM's own integration lab applies to its 389 Directory Server (`test/integration/docker/dirsrv/aci/`), so they are proven working, not illustrative. Three placeholders run through them: the suffix DN (`__SUFFIX__`, for example `dc=example,dc=com`), the suffix's group DN (`__JIM_GROUP_DN__`, its `cn=jim,ou=Services,<suffix>`), and a second suffix's group DN (`__JIM_GROUP_DN_2__`) in the two files whose rules serve every suffix on the server. Substitute them in a copy of each file, then apply it with `ldapmodify` bound as `cn=Directory Manager`.
+389 Directory Server denies whatever no rule allows. The three files below are exactly what JIM's own testing applies to 389 Directory Server, so they are proven working, not illustrative. Three placeholders run through them: the suffix DN (`__SUFFIX__`, for example `dc=example,dc=com`), the suffix's group DN (`__JIM_GROUP_DN__`, its `cn=jim,ou=Services,<suffix>`), and a second suffix's group DN (`__JIM_GROUP_DN_2__`) in the two files whose rules serve every suffix on the server. Substitute them in a copy of each file, then apply it with `ldapmodify` bound as `cn=Directory Manager`.
 
 Two things in the rules will look odd to a reader used to OpenLDAP, and both are deliberate. The rules say `targetattr != "aci"` rather than `targetattr = "*"`, because on 389 Directory Server `*` means user attributes only: the operational `entryUUID` that identifies every object to JIM is only reachable through the negated form. And every rule with an explicit attribute list includes `objectClass`, because the directory requires the bound account to have search rights on the attribute a filter names, and JIM's base reads use `(objectClass=*)`; without it the read returns nothing at all, with no error.
 

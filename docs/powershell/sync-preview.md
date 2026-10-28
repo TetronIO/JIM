@@ -9,6 +9,33 @@ audience: automation-author
 
 A Sync Preview answers what synchronising one object would do right now, with the configuration already saved. It changes nothing: it stages no exports and writes no objects. Unlike a [Configuration Change Preview](previews.md), it is synchronous and needs no Activity id: it evaluates one object against the Synchronisation Rules already saved and returns immediately. See [Sync Preview](../configuration/sync-preview.md) for what the outcome tree and the destructive cascade mean.
 
+```jim-diagram
+archetype: comparison
+title: The two Sync Preview cmdlets compared
+desc: 'Get-JIMConnectedSystemObjectSyncPreview starts from a Connected System Object, named by -ConnectedSystemId and -Id. It previews the inbound chain (scope, join or projection, and Attribute Flow), then the outbound decisions the resulting Metaverse Object state would produce, and, where the object would fall out of scope and disconnect, the destructive cascade. Get-JIMMetaverseObjectSyncPreview starts from a Metaverse Object, named by -Id, as it stands now: it has no inbound chain, so Inbound is always empty and there is no cascade, and it previews only the outbound decisions its current state would produce. Either way the would-be Pending Exports are listed in ProposedExports and nothing is staged. Both return the same object, and nothing changes: check HasBlockingErrors first.'
+columns:
+- {label: Connected System Object, sub: '`Get-JIMConnectedSystemObjectSyncPreview`'}
+- {label: Metaverse Object, sub: '`Get-JIMMetaverseObjectSyncPreview`'}
+rows:
+- label: Starts from
+  cells:
+  - {text: the object, sub: '`-ConnectedSystemId` and `-Id`'}
+  - {text: the object as it stands now, sub: '`-Id`'}
+- label: Inbound
+  cells:
+  - {text: 'scope, join or projection, Attribute Flow'}
+  - {text: none, sub: '`Inbound` is always empty'}
+- label: Outbound
+  cells:
+  - {text: what the resulting Metaverse Object would export, sub: '`ProposedExports`; nothing is staged'}
+  - {text: what its current state would export, sub: '`ProposedExports`; nothing is staged'}
+- label: Destructive cascade
+  cells:
+  - {text: where it would leave scope and disconnect, sub: 'Metaverse Object deletion, downstream deprovisioning'}
+  - {text: none, sub: no inbound chain to leave}
+footer: 'Both return the same object and change nothing: check `HasBlockingErrors` first'
+```
+
 Both return the same object, tabled under [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview). Check `HasBlockingErrors` before reading anything else: a preview that surfaced a blocking error describes a synchronisation that would fail, not one that would succeed as shown.
 
 ---

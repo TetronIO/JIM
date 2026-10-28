@@ -9,6 +9,21 @@ audience: automation-author
 
 The Connected Systems cmdlets manage the full lifecycle of Connected Systems in JIM: creating, configuring, clearing and deleting them. The Connectors a Connected System is created from are on [Connectors](connectors.md), a server's TLS certificate on [Certificates](certificates.md), and which Connected Systems receive passwords on [Password Synchronisation](password-synchronisation.md). Importing a schema and choosing Object Types and attributes are on [Connected System Schema](connected-system-schema.md), auxiliary object classes on [Auxiliary Object Classes](connected-system-auxiliary-classes.md), partitions and containers on [Partitions and Containers](partitions-and-containers.md), the objects in the Connector Space on [Connected System Objects](connected-system-objects.md), and the changes waiting to be exported on [Pending Exports](pending-exports.md). Most cmdlets support pipeline input for scripting and automation workflows.
 
+```jim-diagram
+archetype: lifecycle
+title: A Connected System's lifecycle, one cmdlet per step
+desc: "New-JIMConnectedSystem creates a Connected System from a Connector. It starts configured but empty, with no Connected System Objects. An import Run Profile fills its Connector Space. Clear-JIMConnectedSystem empties the Connector Space again, as a queued background task, and keeps its settings, schema and Synchronisation Rules. In either state, Get-JIMConnectedSystem reads it and Set-JIMConnectedSystem changes its settings. Remove-JIMConnectedSystem deletes it from either state, with its objects, Synchronisation Rules and Run Profiles; check first what that removes with Get-JIMConnectedSystem -DeletionPreview."
+start: { label: "`New-JIMConnectedSystem`" }
+container: { label: Connected System, note: "`Get-JIMConnectedSystem` reads it and `Set-JIMConnectedSystem` changes it, in either state" }
+states:
+  - { id: empty, label: Configured, sub: no objects yet }
+  - { id: holding, label: Holding objects, sub: Connector Space filled }
+transitions:
+  - { from: empty, to: holding, label: an import Run Profile }
+  - { from: holding, to: empty, label: "`Clear-JIMConnectedSystem`", note: "keeps schema and Synchronisation Rules" }
+end: { from: container, label: "`Remove-JIMConnectedSystem`", note: "check first with `-DeletionPreview`", state: { label: Deleted, sub: "objects, Synchronisation Rules, Run Profiles" } }
+```
+
 ---
 
 ## :material-server-network-outline: Get-JIMConnectedSystem

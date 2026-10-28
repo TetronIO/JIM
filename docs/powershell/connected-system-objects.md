@@ -9,6 +9,24 @@ audience: automation-author
 
 The Connected System Object cmdlets read what JIM holds in a Connected System's Connector Space: its Connected System Objects, their attribute values and change history, and the references among them JIM could not resolve. One sets an object's password. The changes waiting to be written to the Connected System are on [Pending Exports](pending-exports.md). What the Connector Space is, and how objects arrive in it, is covered in [Connected Systems](../configuration/connected-systems.md#the-connector-space).
 
+```jim-diagram
+archetype: anatomy
+title: What the cmdlets read and set on one Connected System Object
+desc: "For one Connected System Object, Get-JIMConnectedSystemObject -Id reads its attribute values, with each multi-valued attribute capped at ten values; -AttributeName pages through every value of a large one, such as member. Get-JIMConnectedSystemObjectChangeHistory reads its changes, most recent first. Get-JIMConnectedSystemObjectUnresolvedReference lists the reference values JIM could not link to another object, each with its likely cause and what to do. Set-JIMConnectedSystemObjectPassword sets its password, which needs the object to be joined to a Metaverse Object. Across the whole Connector Space, Get-JIMConnectedSystemObject lists objects a page at a time, or all of them with -All, and counts them with -Count; Get-JIMConnectedSystemUnresolvedReferenceCount and Get-JIMConnectedSystemUnresolvedReferenceSummary count and summarise its unresolved references."
+subject:
+  kind: object
+  label: Connected System Object
+  parts:
+    - { label: Attribute values, detail: "`Get-JIMConnectedSystemObject -Id`" }
+    - { label: Every value of a large attribute, detail: "`-AttributeName`, a page at a time" }
+    - { label: Change history, detail: "`Get-JIMConnectedSystemObjectChangeHistory`" }
+    - { label: Unresolved references, detail: "each with its likely cause and remedy" }
+    - { label: Password, detail: "`Set-JIMConnectedSystemObjectPassword`" }
+properties:
+  - { name: Password, value: needs the object joined }
+  - { name: Multi-valued, value: "ten values, unless paged" }
+```
+
 ---
 
 ## :material-cube-outline: Get-JIMConnectedSystemObject

@@ -159,4 +159,66 @@ public class ServerCertificateTrustOptionTests
             Assert.That(options[0].CommonName, Is.EqualTo("Corp Issuing CA 2"));
         }
     }
+
+    [Test]
+    public void For_WhereOnlyARootCanBeTrusted_OffersTheRootAlone()
+    {
+        // Oracle Database over TCPS: its driver accepts the chain only when it ends at a root trusted in JIM, so
+        // offering the intermediate or the server's own certificate would invite a click that changes nothing (#2581).
+        var diagnostic = Diagnostic(Server, IssuingCa, Root);
+        diagnostic.TrustAnchorMustBeRoot = true;
+
+        var options = ServerCertificateTrustOption.For(diagnostic);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.Select(o => o.Thumbprint), Is.EqualTo(new[] { "CC" }));
+            Assert.That(options[0].AlsoStored.Select(e => e.Thumbprint), Is.EqualTo(new[] { "BB" }),
+                "The downloaded intermediate is still stored beside the root, so the connection can link the two.");
+        }
+    }
+
+    [Test]
+    public void Chain_WhereOnlyARootCanBeTrusted_ListsEveryCertificateAndMarksOnlyTheRootAsTrustable()
+    {
+        // The card shows the whole chain the server presented, so an administrator sees what it sent; only the root is
+        // a choice that would make the connection work.
+        var diagnostic = Diagnostic(Server, IssuingCa, Root);
+        diagnostic.TrustAnchorMustBeRoot = true;
+
+        var chain = ServerCertificateTrustOption.Chain(diagnostic);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chain.Select(o => o.Thumbprint), Is.EqualTo(new[] { "CC", "BB", "AA" }));
+            Assert.That(chain.Select(o => o.CanBeTrusted), Is.EqualTo(new[] { true, false, false }));
+        }
+    }
+
+    [Test]
+    public void Chain_WhereAnyCertificateCanBeTrusted_MarksEveryOneAsTrustable()
+    {
+        var chain = ServerCertificateTrustOption.Chain(Diagnostic(Server, IssuingCa, Root));
+
+        Assert.That(chain.Select(o => o.CanBeTrusted), Is.All.True);
+    }
+
+    [Test]
+    public void For_WhereOnlyARootCanBeTrustedAndTheChainReachesNone_OffersNothing()
+    {
+        var diagnostic = Diagnostic(Server, IssuingCa);
+        diagnostic.TrustAnchorMustBeRoot = true;
+
+        Assert.That(ServerCertificateTrustOption.For(diagnostic), Is.Empty);
+    }
+
+    [Test]
+    public void For_WhereOnlyARootCanBeTrustedAndTheServerCertificateIsSelfSigned_OffersIt()
+    {
+        var selfSigned = Element("hr-db.corp.local", "hr-db.corp.local", "DD");
+        var diagnostic = Diagnostic(selfSigned);
+        diagnostic.TrustAnchorMustBeRoot = true;
+
+        Assert.That(ServerCertificateTrustOption.For(diagnostic).Select(o => o.Thumbprint), Is.EqualTo(new[] { "DD" }));
+    }
 }

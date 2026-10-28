@@ -9,6 +9,25 @@ audience: administrator
 
 This guide sets up a Delta Import for the [JIM SQL Connector](jim-sql-connector.md) in **Watermark Column** mode. It needs nothing extra in the database beyond a column that moves when a row changes, which many application tables already carry, and it detects creates and updates only. Read [What it cannot see](#what-it-cannot-see) before choosing it.
 
+```jim-diagram
+archetype: decision
+title: Which rows a Watermark Column Delta Import picks up
+desc: "A Delta Import in Watermark Column mode asks two questions of each object. First, has its row been deleted, or dropped out of a view? If so, the deletion is not seen: a deleted row has no watermark left to compare, and only the next Full Import finds that it has gone. If not, has a watermark moved past the value saved last time, either the row's own or that of one of its related-table rows? If so, the object is imported whole, exactly as a Full Import would read it, and reported as an update even when it is new. If not, it is not read; a related-table row deleted outright moves no watermark, so its removal goes unseen until the next Full Import."
+start: { label: Each object }
+questions:
+  - { id: gone, label: "Row deleted?", sub: "or dropped out of a view" }
+  - { id: moved, label: "A watermark moved?", sub: "its own, or a related row's" }
+outcomes:
+  - { id: missed, label: Deletion not seen, sub: until the next Full Import }
+  - { id: imported, label: Imported whole, sub: "as an update, even when new", good: true }
+  - { id: unread, label: Not read, sub: a related row deleted outright is missed too }
+answers:
+  - { from: gone, to: missed, label: "yes" }
+  - { from: gone, to: moved, label: "no" }
+  - { from: moved, to: imported, label: "yes" }
+  - { from: moved, to: unread, label: "no" }
+```
+
 ## :material-cog-outline: How it works
 
 Each Object Type's source, and each of its related tables, names a **watermark column**: a last-modified timestamp or a version number that goes up whenever the row changes. On each Delta Import, JIM:

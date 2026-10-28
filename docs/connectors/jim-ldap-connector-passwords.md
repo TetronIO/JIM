@@ -9,6 +9,29 @@ audience: administrator
 
 Where you configure it, the LDAP Connector sets passwords on the accounts JIM manages, over JIM's password channel. This page covers setting passwords on each directory type, and the password policy JIM discovers from the directory.
 
+```jim-diagram
+archetype: comparison
+title: How a password is set on each directory type
+desc: "On Active Directory and Samba AD, JIM sets a password by writing unicodePwd, which the Connector encodes; it applies every choice under After the password is set, and enables the account through userAccountControl where asked. On OpenLDAP, 389 Directory Server and generic directories, JIM uses the LDAP Password Modify extended operation (RFC 3062) and never writes userPassword directly; a directory that does not advertise the operation is reported as a configuration fault. Those directories apply only the Connected System's own expiry policy, and have no enabled flag, so another expiry choice, or an enable, is not applied and the password is reported as set with a warning. On every directory, use LDAPS: a password set puts the password on the wire."
+columns:
+  - { label: Active Directory and Samba AD }
+  - { label: Other directories, sub: "OpenLDAP, 389 Directory Server, generic" }
+rows:
+  - label: Sets it by
+    cells:
+      - { text: "writing `unicodePwd`", sub: encoded by the Connector }
+      - { text: the Password Modify extended operation, sub: "never `userPassword`; a fault if not advertised" }
+  - label: Expiry choice
+    cells:
+      - { text: every choice applied, sub: under After the password is set }
+      - { text: the Connected System's own policy, sub: "for any other, set with a warning" }
+  - label: Enable as it is set
+    cells:
+      - { text: applied, sub: "where asked, through `userAccountControl`" }
+      - { text: not applied, sub: "no enabled flag; set, with a warning" }
+footer: "Every directory: use LDAPS, because a password set puts the password on the wire"
+```
+
 ## :material-form-textbox-password: Setting Passwords
 
 Credential attributes such as `unicodePwd` and `userPassword` are never imported and can never be used in an Attribute Flow; see [Credential attributes are never managed](../configuration/connected-system-attributes.md#credential-attributes-are-never-managed) for the full list and the reasoning. The LDAP Connector writes passwords itself, on a separate channel ([Passwords](../concepts/passwords.md) covers that channel across all Connectors), with two rules specific to directories.
@@ -37,7 +60,7 @@ Active Directory refuses to hold a user account enabled while it has no password
 
 1. **The account is held disabled.**<br /> When the `userAccountControl` value is a single number with ACCOUNTDISABLE (`0x2`) clear, JIM sends it with ACCOUNTDISABLE added: `512` is sent as `514`, and `66048` as `66050`. A Create is sent that way whenever an Initial Password follows it. An Update that enables the account is sent as your flow asks, and is sent again with ACCOUNTDISABLE added only if Active Directory refuses it for want of a password while one is still owed to the account, so an account that already has a password is enabled straight away. Only the value sent to the directory changes. The Pending Export keeps the value your Attribute Flow asked for, and that is what the account is checked against. Until the confirming import reports what the account holds, the Connected System Object shows no `userAccountControl` value from the export, because the directory was not given the value your flow asked for.
 2. **The password enables it.**<br /> The [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) sets the password and enables the account, because your Attribute Flow asks for it enabled, typically within seconds of the password becoming due. It does so whatever **Enable the Connected System Object once the password is set** says: the account was disabled only until it had a password. The delivery's Activity says that JIM held the enable back until the account had a password.
-3. **The confirming import waits for the password.**<br /> An import that still finds the account disabled while its password is owed (queued, being delivered, or parked) holds the change: it is not retried, no "not confirmed" warning is raised, [Enforce State](../configuration/synchronisation-rules.md#export-outbound) does not correct the account in the meantime, and a synchronisation preview proposes no correction for it either. Once the password is delivered, the next import that returns the account confirms the value your Attribute Flow asked for: the delivery clears only ACCOUNTDISABLE, so `66050` becomes `66048`, and leaves "Password never expires" as your flow set it (see the next paragraph).
+3. **The confirming import waits for the password.**<br /> An import that still finds the account disabled while its password is owed (queued, being delivered, or parked) holds the change: it is not retried, no "not confirmed" warning is raised, [Enforce State](../configuration/synchronisation-rules.md#export-outbound) does not put the enabled value back in the meantime, and a synchronisation preview proposes no such correction either. Enforce State still corrects the account's other attributes at once: a value changed in the directory while the password is owed is put back by the next synchronisation that processes the account, as on any other account. Once the password is delivered, the next import that returns the account confirms the value your Attribute Flow asked for: the delivery clears only ACCOUNTDISABLE, so `66050` becomes `66048`, and leaves "Password never expires" as your flow set it (see the next paragraph).
 
 **Your `userAccountControl` Attribute Flow decides "Password never expires" too.** The flag (DONT_EXPIRE_PASSWORD, `0x10000`) lives in `userAccountControl` beside the enabled state, so where an export has written an account's `userAccountControl` by the time its Initial Password is delivered, the delivery leaves the flag as your flow set it, whatever **After the password is set** says. To have such passwords never expire, set the flag in the flow itself. For the read-modify-write flow most directories use, start from `66048` rather than `512`, or set the bit on whatever the flow computes:
 

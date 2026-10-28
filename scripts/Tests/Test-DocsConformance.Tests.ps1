@@ -33,9 +33,11 @@ BeforeAll {
                 'STR-6' = 'Ratchet'; 'STR-7' = 'Warn'; 'STR-8' = 'Warn'; 'MNT-3' = 'Block'
                 'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'; 'PRI-1' = 'Block'
                 'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
-                'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
+                'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'LANG-10' = 'Block'; 'TERM-1' = 'Block'
                 # STY-3 warns here so every other rule's fixtures can use plain H2s; its own tests block.
                 'STY-1' = 'Block'; 'STY-3' = 'Warn'
+                # VIS-1 warns here so every other rule's fixtures need no diagram; its own tests block.
+                'VIS-1' = 'Warn'
             }
             RequiredFrontMatter = @('title', 'description', 'type', 'audience')
             AllowedFrontMatter  = @('title', 'description', 'type', 'audience', 'template', 'hide', 'scenario', 'validated')
@@ -66,6 +68,7 @@ BeforeAll {
             TimeRelativePatterns = $script:ShippedConfig.TimeRelativePatterns
             FuturePatterns      = $script:ShippedConfig.FuturePatterns
             MinimiserPatterns   = $script:ShippedConfig.MinimiserPatterns
+            InternalTermPatterns = $script:ShippedConfig.InternalTermPatterns
         }
     }
 
@@ -592,14 +595,65 @@ Describe 'Test-DocsConformance: conformant and priority pages' {
     }
 }
 
+Describe 'Test-DocsConformance: a Ratchet rule that keeps its baseline on conformant pages' {
+    BeforeAll {
+        # VIS-1 arrived after every folder was conformant, so it is listed in BaselineOnConformant:
+        # the pages that predate it keep their baseline, and a new page has none.
+        function New-RatchetFixture {
+            param([hashtable]$Pages, [string]$Baseline = '', [string[]]$Keep = @('VIS-1'), [string]$Tier = 'Ratchet')
+            $rules = (Get-DefaultConfig).Rules
+            $rules['VIS-1'] = $Tier
+            New-Fixture -Pages $Pages -Baseline $Baseline -ConfigOverrides @{
+                Rules = $rules; ConformantFolders = @('concepts'); BaselineOnConformant = $Keep
+            }
+        }
+    }
+
+    It 'allows a conformant page the debt its baseline records' {
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = (New-Page) } -Baseline "VIS-1`tconcepts/a.md`t1`n"
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'fails a conformant page the baseline does not cover, so a new page needs a diagram' {
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = (New-Page) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'VIS-1'
+    }
+
+    It 'still fails a conformant page on a Ratchet rule that is not listed' {
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = (New-Page) } -Baseline "VIS-1`tconcepts/a.md`t1`n" -Keep @()
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+    }
+
+    It 'asks for the entry to be removed once the page has its diagram' {
+        $page = New-Page -Body "A Connected System is an external system JIM synchronises identities with.`n`n``````mermaid`nflowchart LR`n    accTitle: t`n    accDescr: d`n    A --> B`n```````n"
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = $page } -Baseline "VIS-1`tconcepts/a.md`t1`n"
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'no VIS-1 findings remain'
+    }
+
+    It 'refuses a listed rule that is not a Ratchet rule' {
+        $f = New-RatchetFixture -Pages @{ 'concepts/a.md' = (New-Page) } -Tier 'Block'
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Not -Be 0
+        $r.Output | Should -Match 'BaselineOnConformant'
+    }
+}
+
 Describe 'Test-DocsConformance: PRI-1 priority pages record the release they were checked against' {
     BeforeAll {
         $script:Priority = @{ PriorityPages = @('cs.md'); ConformantPages = @('cs.md') }
         $script:Version = @{ 'VERSION' = "0.16.0`n" }
+        # A conformant priority page fails on warnings, so the pages expected to pass carry the diagram VIS-1 asks for.
+        $script:WithDiagram = "A Connected System is an external system JIM synchronises identities with.`n`n``````mermaid`nflowchart LR`n    accTitle: Two steps`n    accDescr: Import leads to export.`n    A --> B`n```````n"
     }
 
     It 'passes a conformant priority page validated against a released version' {
-        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.16.0' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $script:WithDiagram -ExtraFrontMatter @{ validated = 'v0.16.0' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
         $r = Invoke-Conformance -Fixture $f
         $r.Output | Should -Match 'Docs conformance passed'
         $r.ExitCode | Should -Be 0
@@ -639,7 +693,7 @@ Describe 'Test-DocsConformance: PRI-1 priority pages record the release they wer
     }
 
     It 'accepts a pre-release version' {
-        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -ExtraFrontMatter @{ validated = 'v0.16.0-alpha' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $script:WithDiagram -ExtraFrontMatter @{ validated = 'v0.16.0-alpha' }) } -ConfigOverrides $script:Priority -OtherFiles $script:Version
         (Invoke-Conformance -Fixture $f).ExitCode | Should -Be 0
     }
 
@@ -988,6 +1042,133 @@ Describe 'Test-DocsConformance: STY-3 an icon on every H2, and on no other headi
         $f = New-IconFixture -Pages @{ 'save.md' = (New-Page -Title 'Save a Connected System' -Type 'how-to' -Body $body) }
         $r = Invoke-Conformance -Fixture $f
         $r.Output | Should -Not -Match 'TYP-1'
+        $r.ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: VIS-1 every page has a diagram' {
+    BeforeAll {
+        # VIS-1 at Block, which the shared configuration relaxes to Warn for every other rule's fixtures.
+        function New-VisualFixture {
+            param([hashtable]$Pages, [hashtable]$OtherFiles = @{})
+            $rules = (Get-DefaultConfig).Rules
+            $rules['VIS-1'] = 'Block'
+            New-Fixture -Pages $Pages -OtherFiles $OtherFiles -ConfigOverrides @{ Rules = $rules }
+        }
+        $script:Opening = "A Connected System is an external system JIM synchronises identities with.`n`n"
+    }
+
+    It 'fails a page with no diagram, on its H1' {
+        $f = New-VisualFixture -Pages @{ 'cs.md' = (New-Page) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'cs\.md:8\s+VIS-1.*no diagram'
+    }
+
+    It 'passes a page with a jim-diagram spec' {
+        $body = $script:Opening + "``````jim-diagram`narchetype: flow`ntitle: Import, then export`n```````n"
+        $f = New-VisualFixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'VIS-1'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'passes a page with a Mermaid diagram' {
+        $body = $script:Opening + "``````mermaid`nflowchart LR`n    accTitle: Two steps`n    accDescr: Import leads to export.`n    A --> B`n```````n"
+        $f = New-VisualFixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'VIS-1'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'passes a page that includes a concept diagram' {
+        $body = $script:Opening + "--8<-- `"assets/diagrams/d.svg`"`n"
+        $f = New-VisualFixture -Pages @{ 'cs.md' = (New-Page -Body $body) } `
+            -OtherFiles @{ 'docs/assets/diagrams/d.svg' = '<svg class="jim-diagram" role="img"><title>Hub</title><desc>Systems meet in the Metaverse.</desc></svg>' }
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'VIS-1'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'passes a page with an inline diagram SVG' {
+        $body = $script:Opening + "<svg class=`"jim-diagram`" viewBox=`"0 0 10 10`" role=`"img`"><title>Hub</title><desc>Systems meet in the Metaverse.</desc></svg>`n"
+        $f = New-VisualFixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'VIS-1'
+        $r.ExitCode | Should -Be 0
+    }
+
+    It 'does not count a diagram shown inside another code block' {
+        $body = $script:Opening + "````````markdown`n``````jim-diagram`narchetype: flow`n```````n``````mermaid`nflowchart LR`n    A --> B`n```````n<svg class=`"jim-diagram`"></svg>`n--8<-- `"assets/diagrams/d.svg`"`n`````````n"
+        $f = New-VisualFixture -Pages @{ 'cs.md' = (New-Page -Body $body) } `
+            -OtherFiles @{ 'docs/assets/diagrams/d.svg' = '<svg class="jim-diagram" role="img"><title>Hub</title><desc>Systems meet in the Metaverse.</desc></svg>' }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'cs\.md:8\s+VIS-1'
+    }
+
+    It 'excuses a page with an allow-page marker that gives a reason' {
+        $body = $script:Opening + "<!-- conformance: allow-page VIS-1 `"released changelog entries, generated from CHANGELOG.md`" -->`n"
+        $f = New-VisualFixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.Output | Should -Not -Match 'VIS-1|EXC-1'
+        $r.ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-10 no names of what JIM is built with' {
+    It 'fails a framework name in running text' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "The portal is built with Blazor Server.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'Blazor'"
+    }
+
+    It 'fails a project name, but not the container name a reader types' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Every response JIM.Web sends carries these headers, and jim.web serves them.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'JIM.Web'"
+        $r.Output | Should -Not -MatchExactly "'jim.web'"
+    }
+
+    It 'fails a name of JIM''s development infrastructure' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "The recipe is what JIM's integration lab runs.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'integration lab'"
+    }
+
+    It 'fails a name in a diagram spec, whose labels the reader sees' {
+        $body = "Every response carries these headers.`n`n``````jim-diagram`narchetype: flow`ntitle: Headers`ndesc: Headers.`nin: { label: JIM.Web response }`n``````n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'JIM.Web'"
+    }
+
+    It 'fails a name in the text of an SVG diagram the page includes' {
+        $svg = '<svg class="jim-diagram"><title>Layers</title><desc>The portal, built with Blazor.</desc><text>JIM.Web</text></svg>'
+        $body = "The layers.`n`n--8<-- `"assets/diagrams/layers.svg`"`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body); 'assets/diagrams/layers.svg' = $svg }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'Blazor'"
+        $r.Output | Should -Match "LANG-10.*'JIM.Web'"
+    }
+
+    It 'passes a name in code, which the reader types' {
+        $body = "Set ``ASPNETCORE_Kestrel__Certificates__Default__Path`` to the certificate.`n`n``````yaml`n- ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/jim.pem`n``````n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 0
+        $r.Output | Should -Not -Match 'LANG-10'
+    }
+
+    It 'passes a name a marker excuses, with its reason' {
+        $body = "<!-- conformance: allow LANG-10 `"the log line names it`" -->`nThe message comes from Npgsql.`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
         $r.ExitCode | Should -Be 0
     }
 }

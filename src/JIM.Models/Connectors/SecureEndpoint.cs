@@ -17,10 +17,12 @@ namespace JIM.Models.Connectors;
 /// <param name="ServerDescription">What to call the far end, for example "directory server" or "SCIM service provider".</param>
 /// <param name="SecureTransportName">The secure transport in use, for example "LDAPS" or "HTTPS".</param>
 /// <param name="HandshakeFraming">How the TLS handshake has to reach the server for its certificate to be read. Plain TLS unless the protocol wraps it, as Microsoft SQL Server's does.</param>
+/// <param name="TrustAnchorMustBeRoot">Whether only a root certificate authority in the JIM certificate store makes the connection work. False for most connections, which accept any certificate in the chain. True where the driver builds the chain from what JIM hands it and requires it to end at a self-signed certificate, as Oracle Database's does over TCPS; trusting an intermediate or the server's own certificate is then refused rather than reported as a success that changes nothing.</param>
 public sealed record SecureEndpoint(
     string Host,
     int Port,
     TimeSpan Timeout,
     string ServerDescription,
     string SecureTransportName,
-    SecureHandshakeFraming HandshakeFraming = SecureHandshakeFraming.DirectTls);
+    SecureHandshakeFraming HandshakeFraming = SecureHandshakeFraming.DirectTls,
+    bool TrustAnchorMustBeRoot = false);

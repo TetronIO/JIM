@@ -9,6 +9,23 @@ audience: automation-author
 
 Cmdlets for viewing and modifying JIM runtime configuration. Settings use dot-notation keys and control operational behaviour such as change tracking, sync page sizes, and history retention.
 
+```jim-diagram
+archetype: anatomy
+title: What a Service Setting holds, as the cmdlets return it
+desc: "Get-JIMServiceSetting returns each Service Setting with its Key, in dot notation such as Sync.PageSize; its ValueType, which says how the string value is read; its DefaultValue, the built-in default; its Value, the override Set-JIMServiceSetting writes; and its EffectiveValue, which is Value if set, otherwise DefaultValue. IsOverridden is true while Value is set and differs from the default, and is false again after Reset-JIMServiceSetting clears the override. IsReadOnly marks a setting mirrored from an environment variable, which Set-JIMServiceSetting and Reset-JIMServiceSetting both refuse to change."
+subject:
+  kind: object
+  label: "A setting, from `Get-JIMServiceSetting`"
+  parts:
+    - { label: "`Key`", detail: "dot notation, such as `Sync.PageSize`" }
+    - { label: "`ValueType`", detail: "how the string value is read" }
+    - { label: "`DefaultValue`", detail: "the built-in default" }
+    - { label: "`Value`", detail: "the override `Set-JIMServiceSetting` writes" }
+    - { label: "`EffectiveValue`", detail: "`Value` if set, otherwise `DefaultValue`" }
+    - { label: "`IsOverridden`", detail: "`$false` again after `Reset-JIMServiceSetting`" }
+    - { label: "`IsReadOnly`", detail: "mirrors an environment variable; cannot be set or reset" }
+```
+
 !!! info
     Setting values are always transmitted as strings. The server interprets the type based on the setting definition (Boolean, Integer, TimeSpan, etc.).
 

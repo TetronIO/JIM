@@ -9,6 +9,27 @@ audience: automation-author
 
 The Metaverse is the central identity store in JIM. These cmdlets find and read Metaverse Objects, explain where each value and connection comes from, and review the Metaverse Objects pending deletion. A Metaverse Object's password is set with the [Password Synchronisation](password-synchronisation.md#set-jimmetaverseobjectpassword) cmdlets, and the values JIM generated for it are listed with the [Generated Values](generated-values.md) cmdlets. The Metaverse schema is managed with the [Metaverse Object Type](metaverse-object-types.md) and [Metaverse Attribute](metaverse-attributes.md) cmdlets.
 
+```jim-diagram
+archetype: map
+title: The cmdlets that find a Metaverse Object and explain it
+desc: 'Search-JIMMetaverseObject runs a Predefined Search and returns each match in summary, quickly at scale; pick one, and Get-JIMMetaverseObject gets that Metaverse Object in full. From a Metaverse Object, Get-JIMMetaverseObjectProvenance shows the source of each value, the Connected System and Synchronisation Rule it came from; Get-JIMMetaverseObjectConnection explains its joins, covering each Connected System Object joined to it, and with -IncludeNotConnected why it is not connected elsewhere; and Get-JIMMetaverseObjectChangeHistory lists its changes, newest first. Each box links to the cmdlet or page that covers it.'
+nodes:
+- {id: search, label: Predefined Search, link: predefined-searches.md, row: 0, col: 0}
+- {id: results, label: Search results, link: '#search-jimmetaverseobject', row: 0, col: 1}
+- {id: mvo, label: Metaverse Object, link: '#get-jimmetaverseobject', row: 1, col: 1}
+- {id: provenance, label: Provenance, link: '#get-jimmetaverseobjectprovenance', row: 1, col: 0}
+- {id: connection, label: Connections, link: '#get-jimmetaverseobjectconnection', row: 1, col: 2}
+- {id: cso, label: Connected System Objects, link: connected-system-objects.md, row: 1, col: 3}
+- {id: history, label: Change history, link: '#get-jimmetaverseobjectchangehistory', row: 2, col: 1}
+edges:
+- {from: search, to: results, label: returns}
+- {from: results, to: mvo, label: pick one}
+- {from: mvo, to: provenance, label: sources in}
+- {from: mvo, to: connection, label: joins in}
+- {from: connection, to: cso, label: cover its}
+- {from: mvo, to: history, label: changes in}
+```
+
 ---
 
 ## :material-magnify: Search-JIMMetaverseObject

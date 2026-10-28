@@ -27,7 +27,7 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorCatalogue, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -74,7 +74,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     /// one connection's: a Connector opens several over its life (a settings test, a schema discovery, a
     /// run), and each of them needs the file again.
     /// </summary>
-    private SqlTrustedServerCertificateFile? _trustedServerCertificateFile;
+    private SqlTrustedServerCertificates? _trustedServerCertificates;
 
     /// <summary>
     /// How a provider is obtained for a database type. Tests substitute the dialect seam here so that
@@ -248,7 +248,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             {
                 Name = SqlConnectorConstants.SettingOracleEncryption,
                 DefaultStringValue = SqlConnectorConstants.DefaultOracleEncryption,
-                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate; where that certificate is not one the operating system already vouches for, add it in Admin > Certificates.",
+                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate. One from your own certificate authority works once the root of its chain is trusted in Admin > Certificates: the Oracle driver accepts only the root, not an intermediate or the server's own certificate.",
                 Category = ConnectedSystemSettingCategory.Connectivity,
                 Type = ConnectedSystemSettingType.DropDown,
                 DropDownValues =
@@ -304,6 +304,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 Name = SqlConnectorConstants.SettingObjectTypes,
                 Required = true,
                 Description = ObjectTypesSettingDescription,
+                Example = SqlConnectorConstants.ObjectTypesExample,
                 Category = ConnectedSystemSettingCategory.Schema,
                 Type = ConnectedSystemSettingType.Text
             },
@@ -316,6 +317,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 // nobody has said exists.
                 Name = SqlConnectorConstants.SettingDeltaImportMode,
                 Description = DeltaImportModeSettingDescription,
+                Example = SqlConnectorConstants.DeltaConfigurationExample,
                 Category = ConnectedSystemSettingCategory.Schema,
                 Type = ConnectedSystemSettingType.DropDown,
                 DropDownValues = new List<string> { SqlConnectorConstants.DeltaImportModeChangeLogTable, SqlConnectorConstants.DeltaImportModeWatermarkColumn }
@@ -324,14 +326,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     }
 
     /// <summary>
-    /// The Object Types setting's description: what the document says, and a complete example to start
-    /// from. Long, deliberately. It is the only place an administrator writing the document by hand can
-    /// learn its shape from inside JIM, and an empty box with no example is the worst first experience
-    /// this Connector could offer.
+    /// The Object Types setting's description: what the document says. Long, deliberately. It is the only
+    /// place an administrator writing the document by hand can learn its shape from inside JIM, and an empty
+    /// box with no example is the worst first experience this Connector could offer.
     /// </summary>
     /// <remarks>
-    /// The example itself lives in <see cref="SqlConnectorConstants.ObjectTypesExample"/> and is parsed
-    /// by the Connector's own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// The example to start from is the setting's Example, from <see cref="SqlConnectorConstants.ObjectTypesExample"/>,
+    /// which the portal shows as a code block beneath the field. It is parsed by the Connector's own unit
+    /// tests, so it cannot drift out of step with what the parser accepts.
     /// </remarks>
     private static string ObjectTypesSettingDescription =>
         "Which Connected System Object Types this database holds, and where each one's objects come from, as a JSON document. " +
@@ -341,16 +343,16 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         "JIM never guesses that from a foreign key, but it does suggest one where the database declares it. " +
         "'relatedTables' turns a table of one row per value into a multi-valued attribute: name the attribute, its 'valueColumn', and the 'joinColumns' " +
         "that join a row back to its parent (one per anchor column, in the same order), plus 'referencesObjectType' where those values are references, as group membership is. " +
-        "Every other column is discovered and typed automatically. Example:" + Environment.NewLine + Environment.NewLine +
-        SqlConnectorConstants.ObjectTypesExample;
+        "Every other column is discovered and typed automatically. The example below is a complete document to start from.";
 
     /// <summary>
     /// The Delta Import Mode setting's description: what each mode reads, what each one can and cannot
     /// observe, and what each needs adding to the Object Types document.
     /// </summary>
     /// <remarks>
-    /// The example lives in <see cref="SqlConnectorConstants.DeltaConfigurationExample"/> and is parsed
-    /// by the Connector's own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// The example is the setting's Example, from <see cref="SqlConnectorConstants.DeltaConfigurationExample"/>,
+    /// shown as a code block beneath the field. It is parsed by the Connector's own unit tests, so it cannot
+    /// drift out of step with what the parser accepts.
     /// </remarks>
     private static string DeltaImportModeSettingDescription =>
         "How a Delta Import finds out what has changed. Leave this unanswered where this Connected System only runs Full Imports. " +
@@ -361,8 +363,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn', " +
         "and one on each of its related tables, named the same way, so that a phone number or a group membership changing is detected as a change to the object it belongs to. " +
         "It needs nothing extra in the database, but it detects creates and updates only: a row that has been deleted has no column left to move, " +
-        "so deletions are found only by a Full Import. Example:" + Environment.NewLine + Environment.NewLine +
-        SqlConnectorConstants.DeltaConfigurationExample;
+        "so deletions are found only by a Full Import. The example below shows both, added to an Object Types document.";
 
     /// <summary>
     /// Validates SqlConnector setting values using custom business logic. Whether the configured Delta Import
@@ -479,6 +480,175 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         var schema = new SqlConnectorSchema(provider, connection, configuration, BuildTypeMappingOptions(settings), logger);
         return await schema.GetSchemaAsync();
     }
+    #endregion
+
+    #region IConnectorCatalogue members
+    /// <summary>
+    /// The catalogue helps write the Object Types document, so that is the setting the portal's catalogue-driven
+    /// editor stands in for.
+    /// </summary>
+    public ConnectorCatalogueDeclaration Catalogue { get; } = new(SqlConnectorConstants.SettingObjectTypes);
+
+    /// <summary>
+    /// The tables and views the configured account can see. Tables first, then views, each in the order the
+    /// database reports them.
+    /// </summary>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    public async Task<List<ConnectorCatalogueObject>> GetCatalogueObjectsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        logger.Verbose($"GetCatalogueObjectsAsync() called for {Name}");
+
+        var (provider, connection) = await OpenCatalogueConnectionAsync(settings, logger);
+        using (connection)
+        {
+            var objects = await ReadCatalogueObjectsAsync(provider, connection, cancellationToken);
+            logger.Debug("GetCatalogueObjectsAsync: the database account can see {ObjectCount} table(s) and view(s)", objects.Count);
+            return [.. objects.Select(o => new ConnectorCatalogueObject { SchemaName = o.Object.SchemaName, Name = o.Object.ObjectName, Kind = o.Kind })];
+        }
+    }
+
+    /// <summary>
+    /// One table or view's columns and keys. A name is matched as schema discovery matches it, ignoring case, so
+    /// what the catalogue finds is what discovery will find.
+    /// </summary>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    /// <exception cref="ArgumentException">No schema was given and the name is in more than one.</exception>
+    public async Task<ConnectorCatalogueObjectDetail?> GetCatalogueObjectAsync(List<ConnectedSystemSettingValue> settings, string? schemaName, string objectName, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectName);
+        logger.Verbose($"GetCatalogueObjectAsync() called for {Name}");
+
+        var (provider, connection) = await OpenCatalogueConnectionAsync(settings, logger);
+        using (connection)
+        {
+            var candidates = (await ReadCatalogueObjectsAsync(provider, connection, cancellationToken))
+                .Where(candidate => string.Equals(candidate.Object.ObjectName, objectName, StringComparison.OrdinalIgnoreCase))
+                .Where(candidate => string.IsNullOrWhiteSpace(schemaName) || string.Equals(candidate.Object.SchemaName, schemaName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (candidates.Count == 0)
+                return null;
+
+            if (candidates.Count > 1)
+                throw new ArgumentException(
+                    $"'{objectName}' exists in more than one schema ({string.Join(", ", candidates.Select(candidate => candidate.Object.SchemaName))}). Say which schema to read it from.");
+
+            // Everything below is read with the names as the database spells them, which is what its catalogue
+            // queries compare against.
+            var (resolved, kind) = candidates[0];
+            var columns = await SqlCatalogueReader.ReadColumnsAsync(provider, connection, resolved.SchemaName, resolved.ObjectName, cancellationToken);
+
+            // Views declare no keys, so they are not asked.
+            var primaryKey = kind == ConnectorCatalogueObjectKind.Table
+                ? await SqlCatalogueReader.ReadPrimaryKeyColumnsAsync(provider, connection, resolved.SchemaName, resolved.ObjectName, cancellationToken)
+                : [];
+            var foreignKeys = kind == ConnectorCatalogueObjectKind.Table
+                ? await SqlCatalogueReader.ReadForeignKeysAsync(provider, connection, resolved.SchemaName, resolved.ObjectName, cancellationToken)
+                : [];
+
+            return new ConnectorCatalogueObjectDetail
+            {
+                SchemaName = resolved.SchemaName,
+                Name = resolved.ObjectName,
+                Kind = kind,
+                Columns = [.. columns.Select(ToCatalogueColumn)],
+                PrimaryKey = primaryKey,
+                ForeignKeys = GroupForeignKeys(foreignKeys)
+            };
+        }
+    }
+
+    /// <summary>
+    /// The columns a query would return, learnt from the database without reading a row. The statement is held
+    /// to the same rule as an Object Type's 'select', and checked against it before anything is connected to.
+    /// </summary>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    /// <exception cref="ArgumentException">The statement is not a single query, or the database would not accept it.</exception>
+    public async Task<ConnectorCatalogueObjectDetail> DescribeStatementAsync(List<ConnectedSystemSettingValue> settings, string statement, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentException.ThrowIfNullOrWhiteSpace(statement);
+        logger.Verbose($"DescribeStatementAsync() called for {Name}");
+
+        switch (SqlSchemaConfiguration.CheckSelectStatement(statement))
+        {
+            case SqlSchemaConfiguration.SelectStatementProblem.NotAQuery:
+                throw new ArgumentException("The statement does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.");
+            case SqlSchemaConfiguration.SelectStatementProblem.MoreThanOneStatement:
+                throw new ArgumentException("The statement contains a semicolon. It must be a single statement, with no terminator.");
+        }
+
+        var (provider, connection) = await OpenCatalogueConnectionAsync(settings, logger);
+        using (connection)
+        {
+            List<SqlDiscoveredColumn> columns;
+            try
+            {
+                columns = await SqlCatalogueReader.ReadStatementColumnsAsync(provider, connection, statement.Trim(), cancellationToken);
+            }
+            catch (DbException ex)
+            {
+                throw new ArgumentException($"The database would not accept the statement: {ex.Message}", ex);
+            }
+
+            return new ConnectorCatalogueObjectDetail
+            {
+                Kind = ConnectorCatalogueObjectKind.Statement,
+                Columns = [.. columns.Select(ToCatalogueColumn)]
+            };
+        }
+    }
+
+    /// <summary>
+    /// Opens a connection for a catalogue read, as schema discovery does: on the thread pool, because opening is
+    /// synchronous all the way down and this is asked from a Blazor Server circuit.
+    /// </summary>
+    private async Task<(ISqlProvider Provider, DbConnection Connection)> OpenCatalogueConnectionAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+    {
+        var provider = TryResolveProvider(settings)
+            ?? throw new InvalidSettingValuesException($"Choose a {SqlConnectorConstants.SettingDatabaseType} before browsing the database.");
+        var connectionSettings = BuildConnectionSettings(settings);
+
+        var connection = await Task.Run(() => OpenConnection(provider, connectionSettings, settings, logger));
+        return (provider, connection);
+    }
+
+    private static async Task<List<(SqlCatalogueObject Object, ConnectorCatalogueObjectKind Kind)>> ReadCatalogueObjectsAsync(
+        ISqlProvider provider, DbConnection connection, CancellationToken cancellationToken)
+    {
+        var tables = await SqlCatalogueReader.ReadCatalogueObjectsAsync(provider, connection, provider.TablesCommandText, cancellationToken);
+        var views = await SqlCatalogueReader.ReadCatalogueObjectsAsync(provider, connection, provider.ViewsCommandText, cancellationToken);
+
+        return [.. tables.Select(table => (table, ConnectorCatalogueObjectKind.Table)), .. views.Select(view => (view, ConnectorCatalogueObjectKind.View))];
+    }
+
+    private static ConnectorCatalogueColumn ToCatalogueColumn(SqlDiscoveredColumn column) => new()
+    {
+        Name = column.Name,
+        DataTypeName = column.ColumnType.TypeName,
+        MaxLength = column.ColumnType.MaxLength,
+        Precision = column.ColumnType.Precision,
+        Scale = column.ColumnType.Scale,
+        IsNullable = column.IsNullable
+    };
+
+    /// <summary>
+    /// The catalogue reports a foreign key one column per row; a composite key is one constraint, so it is one
+    /// entry, its columns kept in key order and paired with the columns they reference.
+    /// </summary>
+    private static List<ConnectorCatalogueForeignKey> GroupForeignKeys(List<SqlDiscoveredForeignKey> foreignKeyColumns) =>
+        [.. foreignKeyColumns
+            .GroupBy(column => column.ConstraintName, StringComparer.Ordinal)
+            .Select(constraint => new ConnectorCatalogueForeignKey
+            {
+                ConstraintName = constraint.Key,
+                Columns = [.. constraint.Select(column => column.ColumnName)],
+                ReferencedSchemaName = constraint.First().ReferencedSchema,
+                ReferencedObjectName = constraint.First().ReferencedTable,
+                ReferencedColumns = [.. constraint.Select(column => column.ReferencedColumn)]
+            })];
     #endregion
 
     #region IConnectorImportUsingCalls members
@@ -765,7 +935,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         var port = GetInt(settingValues, SqlConnectorConstants.SettingPort) ?? provider.GetDefaultPort(SqlConnectionEncryption.Tls);
         var timeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds;
 
-        return new SecureEndpoint(host, port, TimeSpan.FromSeconds(timeoutSeconds), "database server", provider.SecureTransportName, provider.SecureHandshakeFraming);
+        return new SecureEndpoint(host, port, TimeSpan.FromSeconds(timeoutSeconds), "database server", provider.SecureTransportName, provider.SecureHandshakeFraming,
+            TrustAnchorMustBeRoot: provider.TrustAnchorMustBeRoot);
     }
     #endregion
 
@@ -791,6 +962,33 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
 
     #region Connections
     /// <summary>
+    /// Opens a connection to the database this Connected System is configured for. A failure is reported
+    /// in terms of its cause where the driver hides that beneath a generic error, which is what a
+    /// connection test, an Activity or a log line then shows.
+    /// </summary>
+    /// <remarks>
+    /// The description is applied here, at the outermost point, so the certificate handling below still
+    /// sees the driver's own exception, as it must to diagnose it.
+    /// </remarks>
+    /// <exception cref="ServerCertificateRejectedException">The server's certificate was refused, and this says which certificate and why.</exception>
+    /// <exception cref="SqlConnectionFailedException">The connection failed, and the driver's message hid the cause; the driver's exception is the inner one.</exception>
+    private DbConnection OpenConnection(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
+        try
+        {
+            return OpenTrustingJimCertificateStore(provider, connectionSettings, settingValues, logger);
+        }
+        catch (DbException ex) when (ex is not SqlConnectionFailedException)
+        {
+            var description = provider.DescribeConnectionFailure(ex);
+            if (description == ex.Message)
+                throw;
+
+            throw new SqlConnectionFailedException(description, ex);
+        }
+    }
+
+    /// <summary>
     /// Opens a connection to the database this Connected System is configured for, supplying JIM's own
     /// certificate store as an additional trust anchor where the driver has a way of taking one.
     /// </summary>
@@ -802,7 +1000,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     /// of it (validity period, the name it was issued for), is then accepted for a second attempt.
     /// </remarks>
     /// <exception cref="ServerCertificateRejectedException">The server's certificate was refused, and this says which certificate and why.</exception>
-    private DbConnection OpenConnection(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    private DbConnection OpenTrustingJimCertificateStore(ISqlProvider provider, SqlConnectionSettings connectionSettings, List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         try
         {
@@ -813,7 +1011,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             // A driver reports a refused certificate as an ordinary connection failure, so before
             // reporting one, go and look at what the server actually presented. No further check that
             // TLS is in use is needed here: ResolveSecureEndpoint returns nothing unless it is.
-            byte[]? vouchedForCertificate = null;
+            List<byte[]>? toHandOver = null;
 
             var rejection = ServerCertificateDiagnosis.Describe(this, settingValues, _certificateProvider, ex, logger,
                 (endpoint, trustedCertificates) =>
@@ -825,7 +1023,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                     // bundle, and the driver only knows about the latter.
                     if (reading is { Diagnostic.FailureReason: ServerCertificateFailureReason.None, Chain: { } chain } &&
                         IsVouchedForByJimCertificateStore(chain, trustedCertificates))
-                        vouchedForCertificate = chain.Leaf.Data;
+                        toHandOver = WhatToHandTheDriver(provider, chain, trustedCertificates);
 
                     return reading?.Diagnostic;
                 });
@@ -833,39 +1031,62 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             if (rejection != null)
                 throw rejection;
 
-            // Nothing to add to what the driver already decided: no certificate JIM vouches for, no way
-            // to tell this driver about one, or this attempt was already the retry.
-            if (vouchedForCertificate == null || !provider.SupportsPinnedServerCertificate || connectionSettings.PinnedServerCertificatePath != null)
+            // Nothing to add to what the driver already decided: nothing JIM can vouch for in a form this
+            // driver accepts, or this attempt was already the retry.
+            if (toHandOver == null || connectionSettings.PinnedTrustPath != null)
                 throw;
 
             // A failure to prepare the file is reported as the connection failure it accompanies, rather
             // than replacing the driver's account of what went wrong with a filesystem one.
-            if (!TryPrepareTrustedServerCertificateFile(vouchedForCertificate, logger))
+            if (!TryPrepareTrustedServerCertificates(provider, toHandOver, logger))
                 throw;
 
-            logger.Information("The {Transport} connection to {Host} was refused by the driver, but the server's certificate is one the JIM certificate store vouches for, so it is being supplied to the driver as an additional trust anchor",
+            logger.Information("The {Transport} connection to {Host} was refused by the driver, but the server's certificate chain is one the JIM certificate store vouches for, so it is being supplied to the driver as an additional trust anchor",
                 provider.SecureTransportName, LogSanitiser.Sanitise(connectionSettings.Host));
 
-            return Open(provider, connectionSettings with { PinnedServerCertificatePath = _trustedServerCertificateFile!.FilePath });
+            return Open(provider, connectionSettings with { PinnedTrustPath = _trustedServerCertificates!.Path });
         }
     }
 
     /// <summary>
-    /// Materialises the certificate for the driver, which will only take a trust anchor as a path.
+    /// The certificates to hand the driver for a chain the JIM certificate store vouches for, or null where this
+    /// driver could not be satisfied by anything the store holds.
     /// </summary>
-    /// <returns>Whether the file is ready to be handed to a connection.</returns>
-    private bool TryPrepareTrustedServerCertificateFile(byte[] derEncodedCertificate, ILogger logger)
+    /// <remarks>
+    /// A driver that matches exactly gets the server's own certificate, whichever certificate in the chain the store
+    /// vouches through. One that accepts only a root (Oracle Database) builds the chain from what it is handed, ignoring
+    /// what the server sends, so it gets the trusted root and every intermediate beneath it, and nothing at all unless
+    /// the root itself is trusted: an intermediate alone would be refused again.
+    /// </remarks>
+    private static List<byte[]>? WhatToHandTheDriver(ISqlProvider provider, PresentedServerCertificateChain chain, IReadOnlyCollection<X509Certificate2> trustedCertificates)
+    {
+        if (!provider.TrustAnchorMustBeRoot)
+            return [chain.Leaf.Data];
+
+        if (chain.Root == null || !trustedCertificates.Any(c => string.Equals(c.Thumbprint, chain.Root.Thumbprint, StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        return [chain.Root.Data, .. chain.Intermediates.Select(intermediate => intermediate.Data)];
+    }
+
+    /// <summary>
+    /// Materialises the certificates for the driver, which will only take a trust anchor as a path.
+    /// </summary>
+    /// <returns>Whether they are ready to be handed to a connection.</returns>
+    private bool TryPrepareTrustedServerCertificates(ISqlProvider provider, List<byte[]> derEncodedCertificates, ILogger logger)
     {
         try
         {
-            _trustedServerCertificateFile?.Dispose();
-            _trustedServerCertificateFile = SqlTrustedServerCertificateFile.Create(derEncodedCertificate, logger);
+            _trustedServerCertificates?.Dispose();
+            _trustedServerCertificates = provider.TrustAnchorMustBeRoot
+                ? SqlTrustedServerCertificates.CreateWallet(derEncodedCertificates, logger)
+                : SqlTrustedServerCertificates.CreateFile(derEncodedCertificates[0], logger);
             return true;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException or NotSupportedException or System.Security.SecurityException or CryptographicException)
         {
-            _trustedServerCertificateFile = null;
-            logger.Warning(ex, "Could not prepare the server certificate from the JIM certificate store for this connection. The connection will use the operating system trust anchors only");
+            _trustedServerCertificates = null;
+            logger.Warning(ex, "Could not prepare the certificates from the JIM certificate store for this connection. The connection will use the operating system trust anchors only");
             return false;
         }
     }
@@ -880,7 +1101,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     internal virtual ServerCertificateReading? ReadServerCertificate(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates, ILogger logger)
     {
         return ServerCertificateProbe.Read(endpoint.Host, endpoint.Port, trustedCertificates, endpoint.Timeout,
-            logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming);
+            logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming, endpoint.TrustAnchorMustBeRoot);
     }
 
     /// <summary>
@@ -1264,8 +1485,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             _probeConnection = null;
             _uniquenessProbe = null;
 
-            _trustedServerCertificateFile?.Dispose();
-            _trustedServerCertificateFile = null;
+            _trustedServerCertificates?.Dispose();
+            _trustedServerCertificates = null;
         }
 
         _disposed = true;

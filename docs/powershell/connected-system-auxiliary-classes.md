@@ -9,6 +9,17 @@ audience: automation-author
 
 The auxiliary class cmdlets choose which auxiliary object classes an LDAP Connected System's Object Types carry, name the structural class an auxiliary Object Type is created with, and read a directory's entries to find which auxiliary classes are in use.
 
+```jim-diagram
+archetype: flow
+title: Merging auxiliary classes into an Object Type, from discovery to schema
+desc: "Starting from an LDAP Connected System, an optional discovery run, Start-JIMConnectedSystemAuxiliaryClassDiscovery with -Scope QuickSample or FullScan, reads the directory's entries to find which auxiliary classes are in use; it changes no configuration. For one Object Type, Get-JIMConnectedSystemAuxiliaryClass -SuggestedOnly then lists the classes something suggests, from that run or from the directory's own rules. Set-JIMConnectedSystemAuxiliaryClass merges the classes you choose into the Object Type; it replaces the whole set, so name every class the Object Type should carry. The merged classes' attributes appear on the Object Type after the next Import-JIMConnectedSystemSchema."
+steps:
+  - { id: discover, label: Discover, sub: "`QuickSample` or `FullScan`", note: "optional; changes nothing" }
+  - { id: review, label: Review suggestions, sub: "`-SuggestedOnly`" }
+  - { id: merge, label: Merge classes, sub: replaces the whole set }
+  - { id: import, label: Import the schema, sub: attributes appear }
+```
+
 ---
 
 ## :material-shape-outline: Get-JIMConnectedSystemAuxiliaryClass

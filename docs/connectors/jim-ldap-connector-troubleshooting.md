@@ -9,6 +9,32 @@ audience: administrator
 
 Each entry is titled by what you see on a run or in the log. For a run that ends with a warning or an error whatever the Connector, see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md).
 
+```jim-diagram
+archetype: decision
+title: Where an LDAP Connected System stops, and the first fix
+desc: "First, does JIM reach the directory server? If not, check the Host, the port (389 for LDAP, 636 for LDAPS) and the firewall, from inside the JIM container. If an LDAPS connection fails and JIM shows the certificate, read it: JIM names the check it failed and what to do. Second, does the sign-in succeed? On invalid credentials, check the username format for the authentication type, and the password. If the directory requires LDAP signing or encryption, turn on Use Secure Connection (LDAPS)? with port 636, trusting a private certificate authority under Admin > Certificates first. Third, if an import stops at the directory's search limit, exempt the JIM group from the limits rather than raising them for every client; if a Delta Import fails with a domain controller mismatch, run a Full Import."
+questions:
+  - { id: reach, label: "Does JIM reach the server?" }
+  - { id: bind, label: "Does the sign-in succeed?" }
+  - { id: run, label: "What does the run report?" }
+outcomes:
+  - { id: network, label: "Check Host, port and firewall", sub: from inside the JIM container }
+  - { id: cert, label: Read the certificate JIM shows, sub: the check it failed and the fix }
+  - { id: creds, label: Check the username and password, sub: its format must suit the authentication type }
+  - { id: ldaps, label: Turn on LDAPS, sub: "port 636; trust a private CA first" }
+  - { id: limits, label: Exempt the JIM group from the limits, sub: not the limit for every client }
+  - { id: full, label: Run a Full Import, sub: it records a new watermark }
+answers:
+  - { from: reach, to: network, label: "no" }
+  - { from: reach, to: cert, label: "no, over LDAPS" }
+  - { from: reach, to: bind, label: "yes" }
+  - { from: bind, to: creds, label: invalid credentials }
+  - { from: bind, to: ldaps, label: signing or encryption required }
+  - { from: bind, to: run, label: "yes" }
+  - { from: run, to: limits, label: stopped at a search limit }
+  - { from: run, to: full, label: domain controller mismatch }
+```
+
 ## :material-lan-disconnect: Connection failures
 
 If JIM cannot connect to the directory server:

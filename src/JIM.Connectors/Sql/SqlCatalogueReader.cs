@@ -103,6 +103,92 @@ internal static class SqlCatalogueReader
                 column.AllowDBNull ?? true))];
     }
 
+    /// <summary>
+    /// The tables (or views, by <paramref name="commandText"/>) the database account can see.
+    /// </summary>
+    internal static async Task<List<SqlCatalogueObject>> ReadCatalogueObjectsAsync(
+        ISqlProvider provider,
+        DbConnection connection,
+        string commandText,
+        CancellationToken cancellationToken = default)
+    {
+        var catalogueObjects = new List<SqlCatalogueObject>();
+
+        using var command = provider.CreateCommand(connection, commandText);
+        using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var schemaNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.SchemaName);
+        var objectNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ObjectName);
+
+        while (await reader.ReadAsync(cancellationToken))
+            catalogueObjects.Add(new SqlCatalogueObject(GetNullableString(reader, schemaNameOrdinal), reader.GetString(objectNameOrdinal)));
+
+        return catalogueObjects;
+    }
+
+    /// <summary>
+    /// A table's primary key columns in key order, which is what makes a composite anchor reproducible.
+    /// </summary>
+    /// <returns>An empty list where the object declares none, which is always so for a view.</returns>
+    internal static async Task<List<string>> ReadPrimaryKeyColumnsAsync(
+        ISqlProvider provider,
+        DbConnection connection,
+        string? schemaName,
+        string objectName,
+        CancellationToken cancellationToken = default)
+    {
+        var columnNames = new List<string>();
+
+        using var command = provider.CreateCommand(connection, provider.PrimaryKeyColumnsCommandText);
+        command.Parameters.Add(provider.CreateParameter(SqlCatalogueParameters.SchemaName, schemaName));
+        command.Parameters.Add(provider.CreateParameter(SqlCatalogueParameters.ObjectName, objectName));
+
+        using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var columnNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ColumnName);
+        while (await reader.ReadAsync(cancellationToken))
+            columnNames.Add(reader.GetString(columnNameOrdinal));
+
+        return columnNames;
+    }
+
+    /// <summary>
+    /// A table's foreign key columns, one row per column, ordered by constraint and then by key position.
+    /// </summary>
+    internal static async Task<List<SqlDiscoveredForeignKey>> ReadForeignKeysAsync(
+        ISqlProvider provider,
+        DbConnection connection,
+        string? schemaName,
+        string objectName,
+        CancellationToken cancellationToken = default)
+    {
+        var foreignKeys = new List<SqlDiscoveredForeignKey>();
+
+        using var command = provider.CreateCommand(connection, provider.ForeignKeyColumnsCommandText);
+        command.Parameters.Add(provider.CreateParameter(SqlCatalogueParameters.SchemaName, schemaName));
+        command.Parameters.Add(provider.CreateParameter(SqlCatalogueParameters.ObjectName, objectName));
+
+        using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var constraintNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ConstraintName);
+        var columnNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ColumnName);
+        var referencedSchemaOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ReferencedSchema);
+        var referencedTableOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ReferencedTable);
+        var referencedColumnOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ReferencedColumn);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            foreignKeys.Add(new SqlDiscoveredForeignKey(
+                reader.GetString(constraintNameOrdinal),
+                reader.GetString(columnNameOrdinal),
+                GetNullableString(reader, referencedSchemaOrdinal),
+                reader.GetString(referencedTableOrdinal),
+                reader.GetString(referencedColumnOrdinal)));
+        }
+
+        return foreignKeys;
+    }
+
     internal static string? GetNullableString(DbDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
 

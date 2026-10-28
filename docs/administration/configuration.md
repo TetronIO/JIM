@@ -9,6 +9,33 @@ audience: administrator
 
 JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The installer sets them for you; to change one later, edit the file. The settings and their names are the same on both runtimes.
 
+```jim-diagram
+archetype: comparison
+title: Environment variables and Service Settings compared
+desc: "Environment variables are kept in a file on the server, .env, or jim-config.yaml on Podman; you change one by editing the file, and it takes effect when JIM restarts. They suit infrastructure: the database connection, the OIDC authority, log paths. Service Settings are kept in the database; an Administrator changes them in the portal at Admin > Service Settings, which records who changed each and when, and most take effect at once, without a restart. They suit day-to-day operation, such as history retention, API rate limits and the synchronisation page size. A read-only Service Setting that mirrors a variable shows the value JIM started with."
+columns:
+- {label: Environment variables, sub: '`.env`, or `jim-config.yaml` on Podman'}
+- {label: Service Settings, sub: Admin > Service Settings}
+rows:
+- label: Kept in
+  cells:
+  - {text: a file on the server}
+  - {text: the database}
+- label: Changed by
+  cells:
+  - {text: editing the file}
+  - {text: an Administrator, sub: 'audited: who and when'}
+- label: Takes effect
+  cells:
+  - {text: when JIM restarts}
+  - {text: 'most at once', sub: no restart}
+- label: Suits
+  cells:
+  - {text: infrastructure, sub: 'database, OIDC authority, log paths'}
+  - {text: day-to-day operation, sub: 'retention, rate limits, page size'}
+footer: 'A read-only Service Setting that mirrors a variable shows the value JIM started with'
+```
+
 !!! tip
     A fully commented `.env.example` template is included with every release and is available in the [GitHub repository](https://github.com/TetronIO/JIM/releases).
 
@@ -137,8 +164,8 @@ These variables configure JIM's OIDC-based single sign-on. For provider-specific
 | `JIM_SSO_SECRET`      | OAuth client secret. **Keep this value secure.**                                                 | *(from your IdP)*                                            |
 | `JIM_SSO_API_SCOPE`   | API scope for JWT bearer authentication (API endpoints).                                         | `api://{client-id}/access_as_user`                           |
 | `JIM_SSO_VALID_ISSUERS` | Comma-separated list of trusted token issuers. Usually not needed: JIM accepts the issuers the provider's discovery document names, `issuer` and, where it publishes one, `access_token_issuer` (so AD FS needs no setting), and detects both Entra ID issuer formats. Issuers set here are accepted as well as those. Only set this if your provider's issuer URL differs from its authority URL, or you need to trust multiple issuers (e.g. during a provider migration). | `https://login.microsoftonline.com/{tenant}/v2.0` |
-| `JIM_SSO_PUBLIC_AUTHORITY` | Client-facing OIDC authority URL, advertised to interactive clients (browsers, the PowerShell module) via the `/api/v1/auth/config` discovery endpoint. Optional. Only set this when the backend reaches the identity provider at a different URL than clients do (e.g. a dev devcontainer where the JIM container reaches Keycloak via Docker DNS while the host reaches it via `localhost`, or a reverse-proxy topology where the internal and external URLs differ). When unset, clients are given `JIM_SSO_AUTHORITY`. Backend token validation and JWKS lookups always use `JIM_SSO_AUTHORITY` and are unaffected by this setting. | `http://localhost:8181/realms/jim` |
-| `JIM_SSO_PUBLIC_CLIENT_ID` | Client ID advertised to interactive public clients (PowerShell module, etc.) via the `/api/v1/auth/config` discovery endpoint. Optional. Required when the identity provider needs a separate registration for PKCE/loopback clients (Keycloak mandates this; Entra ID and AD FS allow a shared registration with multiple platforms). When unset, clients receive `JIM_SSO_CLIENT_ID`. Backend token validation is unaffected; tokens from either client must still carry the `JIM_SSO_API_SCOPE` audience. | `jim-powershell` |
+| `JIM_SSO_PUBLIC_AUTHORITY` | Client-facing OIDC authority URL, advertised to interactive clients (browsers, the PowerShell module) via the `/api/v1/auth/config` discovery endpoint. Optional. Only set this when the backend reaches the identity provider at a different URL than clients do (for example where the JIM containers reach the identity provider by its name on the container network while browsers reach it at `localhost`, or a reverse-proxy topology where the internal and external URLs differ). When unset, clients are given `JIM_SSO_AUTHORITY`. Backend token validation and JWKS lookups always use `JIM_SSO_AUTHORITY` and are unaffected by this setting. | `http://localhost:8181/realms/jim` |
+| `JIM_SSO_PUBLIC_CLIENT_ID` | Client ID advertised to interactive public clients (PowerShell module, etc.) via the `/api/v1/auth/config` discovery endpoint, and the client the API reference's **Try It** signs in with. Optional. Required when the identity provider needs a separate registration for PKCE/loopback clients (Keycloak mandates this; Entra ID and AD FS allow a shared registration with multiple platforms). When unset, clients receive `JIM_SSO_CLIENT_ID`. Backend token validation is unaffected; tokens from either client must still carry the `JIM_SSO_API_SCOPE` audience. | `jim-powershell` |
 
 **Authority URL examples by provider:**
 

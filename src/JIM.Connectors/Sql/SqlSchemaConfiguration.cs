@@ -3,8 +3,12 @@
 
 using JIM.Connectors.Sql.Providers;
 using JIM.Models.Enums;
+using System.Globalization;
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace JIM.Connectors.Sql;
 
@@ -26,7 +30,10 @@ namespace JIM.Connectors.Sql;
 /// </summary>
 internal sealed record SqlSchemaConfiguration
 {
-    private static readonly JsonSerializerOptions ParsingOptions = new()
+    /// <summary>
+    /// How the document is read, by the parser and by <see cref="SqlObjectTypesDocument.FromJson"/> alike.
+    /// </summary>
+    internal static readonly JsonSerializerOptions ParsingOptions = new()
     {
         PropertyNameCaseInsensitive = true,
 
@@ -45,49 +52,272 @@ internal sealed record SqlSchemaConfiguration
     /// <exception cref="SqlSchemaConfigurationException">The document is missing, is not valid JSON, or says something the Connector cannot act on. The message names the object type and field at fault.</exception>
     internal static SqlSchemaConfiguration Parse(string? document)
     {
-        if (string.IsNullOrWhiteSpace(document))
-            throw new SqlSchemaConfigurationException(
-                $"{SqlConnectorConstants.SettingObjectTypes} is empty. A Connected System needs at least one object type before JIM can discover its schema; see the setting's description for an example to start from.");
+        var faults = new List<Fault>();
+        var configuration = Read(document, faults);
 
-        ObjectTypesDocument? parsed;
+        // The first fault is the one the parser has always reported, in the order it has always found them,
+        // so every existing message (and every caller relying on one) is unchanged.
+        if (faults.Count > 0)
+            ExceptionDispatchInfo.Throw(faults[0].Exception);
+
+        return configuration!;
+    }
+
+    /// <summary>
+    /// Everything wrong with an Object Types document, in document order, each located as precisely as it
+    /// can be; empty when <see cref="Parse"/> would accept the document.
+    /// </summary>
+    internal static IReadOnlyList<SqlObjectTypesProblem> Validate(string? document)
+    {
+        var faults = new List<Fault>();
+        Read(document, faults);
+        return [.. faults.Select(fault => fault.Problem)];
+    }
+
+    /// <summary>
+    /// Reads the document, recording every fault rather than stopping at the first. A fault in one Object Type
+    /// is recorded against it and reading moves on to the next, because the Object Types are independent of
+    /// each other until their references are checked; a fault that stops the document being read at all (it
+    /// is empty, or not JSON) is the only fault recorded.
+    /// </summary>
+    /// <returns>The configuration, or null when there is any fault.</returns>
+    private static SqlSchemaConfiguration? Read(string? document, List<Fault> faults)
+    {
+        if (string.IsNullOrWhiteSpace(document))
+        {
+            AddFault(faults, new SqlSchemaConfigurationException(
+                $"{SqlConnectorConstants.SettingObjectTypes} is empty. A Connected System needs at least one object type before JIM can discover its schema; see the setting's description for an example to start from."));
+            return null;
+        }
+
+        SqlObjectTypesDocument? parsed;
         try
         {
-            parsed = JsonSerializer.Deserialize<ObjectTypesDocument>(document, ParsingOptions);
+            parsed = JsonSerializer.Deserialize<SqlObjectTypesDocument>(document, ParsingOptions);
         }
         catch (JsonException ex)
         {
-            throw new SqlSchemaConfigurationException($"{SqlConnectorConstants.SettingObjectTypes} could not be read as JSON: {ex.Message}", ex);
+            faults.Add(DescribeJsonFault(document, ex));
+            return null;
         }
 
         if (parsed?.ObjectTypes == null || parsed.ObjectTypes.Count == 0)
-            throw new SqlSchemaConfigurationException($"{SqlConnectorConstants.SettingObjectTypes} must declare at least one object type in its 'objectTypes' list.");
+        {
+            AddFault(faults, new SqlSchemaConfigurationException($"{SqlConnectorConstants.SettingObjectTypes} must declare at least one object type in its 'objectTypes' list."));
+            return null;
+        }
 
-        var objectTypes = new List<SqlObjectTypeConfiguration>(parsed.ObjectTypes.Count);
+        var objectTypes = new List<(SqlObjectTypeConfiguration ObjectType, int Index)>(parsed.ObjectTypes.Count);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         for (var index = 0; index < parsed.ObjectTypes.Count; index++)
         {
-            var objectType = ReadObjectType(parsed.ObjectTypes[index], index);
+            var objectTypeDocument = parsed.ObjectTypes[index];
+            SqlObjectTypeConfiguration objectType;
+            try
+            {
+                objectType = ReadObjectType(objectTypeDocument, index);
+            }
+            catch (SqlSchemaConfigurationException ex)
+            {
+                AddFault(faults, ex, index, objectTypeDocument?.Name?.Trim());
+                continue;
+            }
 
             if (!names.Add(objectType.Name))
-                throw new SqlSchemaConfigurationException($"Object Type '{objectType.Name}' is declared more than once. Object type names identify them to JIM, so each must be unique.");
+            {
+                AddFault(faults, new SqlSchemaConfigurationException($"Object Type '{objectType.Name}' is declared more than once. Object type names identify them to JIM, so each must be unique.") { Field = "name" },
+                    index, objectType.Name);
+                continue;
+            }
 
-            objectTypes.Add(objectType);
+            objectTypes.Add((objectType, index));
         }
 
         // References are cross-checked only once every name is known, so that an object type may
         // reference one declared after it (a manager reference on the first object type is the usual
-        // case, and ordering a document around that would be an odd thing to ask for).
-        ValidateReferences(objectTypes, names);
+        // case, and ordering a document around that would be an odd thing to ask for). Every declared
+        // name counts, including one whose Object Type has a fault of its own: that fault is already
+        // reported, and calling the reference undeclared as well would send the administrator looking
+        // for a problem that is not there.
+        var declaredNames = new HashSet<string>(
+            parsed.ObjectTypes.Where(objectType => !string.IsNullOrWhiteSpace(objectType?.Name)).Select(objectType => objectType!.Name!.Trim()),
+            StringComparer.OrdinalIgnoreCase);
 
-        return new SqlSchemaConfiguration { ObjectTypes = objectTypes };
+        foreach (var (objectType, index) in objectTypes)
+        {
+            try
+            {
+                ValidateReferences(objectType, declaredNames);
+            }
+            catch (SqlSchemaConfigurationException ex)
+            {
+                AddFault(faults, ex, index, objectType.Name);
+            }
+        }
+
+        return faults.Count == 0
+            ? new SqlSchemaConfiguration { ObjectTypes = [.. objectTypes.Select(objectType => objectType.ObjectType)] }
+            : null;
     }
 
-    private static SqlObjectTypeConfiguration ReadObjectType(ObjectTypeDocument document, int index)
+    private static void AddFault(List<Fault> faults, SqlSchemaConfigurationException exception, int? objectTypeIndex = null, string? objectTypeName = null) =>
+        faults.Add(new Fault(new SqlObjectTypesProblem(exception.Message, objectTypeIndex, objectTypeName, exception.Field), exception));
+
+    /// <summary>
+    /// A problem as an editor sees it, paired with the exception <see cref="Parse"/> throws for it.
+    /// </summary>
+    private sealed record Fault(SqlObjectTypesProblem Problem, SqlSchemaConfigurationException Exception);
+
+    #region JSON faults
+
+    /// <summary>
+    /// The names of the fields each level of the document may have, in the camel case the document is written
+    /// in, read from the model itself so a field added there is known here without anyone remembering to.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<DocumentLevel, string[]> FieldNames = new Dictionary<DocumentLevel, string[]>
     {
+        [DocumentLevel.Document] = FieldNamesOf<SqlObjectTypesDocument>(),
+        [DocumentLevel.ObjectType] = FieldNamesOf<SqlObjectTypeDocument>(),
+        [DocumentLevel.Column] = FieldNamesOf<SqlColumnDocument>(),
+        [DocumentLevel.RelatedTable] = FieldNamesOf<SqlRelatedTableDocument>(),
+        [DocumentLevel.ChangeLog] = FieldNamesOf<SqlChangeLogDocument>()
+    };
+
+    private static string[] FieldNamesOf<T>() =>
+        [.. typeof(T).GetProperties().Select(property => JsonNamingPolicy.CamelCase.ConvertName(property.Name))];
+
+    // $.objectTypes[0].columns[1].name, $.objectTypes[0].changeLog.table, $.objectTypes[0].name, $.name;
+    // System.Text.Json writes a name it cannot put after a dot as ['name'].
+    private static readonly Regex JsonPathPattern = new(
+        @"^\$(?:\.objectTypes\[(?<index>\d+)\](?:\.(?<child>columns|relatedTables)\[\d+\]|\.(?<child>changeLog))?)?(?:\.(?<field>[^.\[\]']+)|\['(?<field>[^']*)'\])$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture,
+        TimeSpan.FromSeconds(1));
+
+    /// <summary>
+    /// Turns the serialiser's account of a document it could not read into one an administrator can act on.
+    /// A field the document does not have is named, with the field it was most likely meant to be, and the
+    /// serialiser's own message (which names .NET types) is kept for everything else.
+    /// </summary>
+    private static Fault DescribeJsonFault(string document, JsonException ex)
+    {
+        var lineNumber = ex.LineNumber + 1;
+        var column = ex.BytePositionInLine + 1;
+        var match = ex.Path == null ? Match.Empty : JsonPathPattern.Match(ex.Path);
+
+        int? objectTypeIndex = match.Groups["index"].Success ? int.Parse(match.Groups["index"].Value, CultureInfo.InvariantCulture) : null;
+        var field = match.Groups["field"].Success ? match.Groups["field"].Value : null;
+        var level = !match.Success ? DocumentLevel.Document
+            : match.Groups["child"].Success ? match.Groups["child"].Value.ToLowerInvariant() switch
+            {
+                "columns" => DocumentLevel.Column,
+                "relatedtables" => DocumentLevel.RelatedTable,
+                _ => DocumentLevel.ChangeLog
+            }
+            : objectTypeIndex.HasValue ? DocumentLevel.ObjectType : DocumentLevel.Document;
+
+        var objectTypeName = objectTypeIndex.HasValue ? ReadObjectTypeName(document, objectTypeIndex.Value) : null;
+
+        string message;
+        if (match.Success && field != null && !FieldNames[level].Contains(field, StringComparer.OrdinalIgnoreCase))
+        {
+            var suggestion = ClosestFieldName(field, FieldNames[level]);
+            message = $"{DescribeLevel(level, objectTypeIndex, objectTypeName)} has an unrecognised field '{field}'." +
+                      (suggestion == null ? "" : $" Did you mean '{suggestion}'?") +
+                      " Fields that are not recognised are refused rather than ignored, because ignoring one would leave the Connected System configured differently from how the document reads.";
+        }
+        else
+        {
+            message = $"{SqlConnectorConstants.SettingObjectTypes} could not be read as JSON: {ex.Message}";
+            field = null;
+        }
+
+        var exception = new SqlSchemaConfigurationException(message, ex) { Field = field };
+        return new Fault(new SqlObjectTypesProblem(message, objectTypeIndex, objectTypeName, field, lineNumber, column), exception);
+    }
+
+    private static string DescribeLevel(DocumentLevel level, int? objectTypeIndex, string? objectTypeName)
+    {
+        var objectType = objectTypeName != null ? $"Object Type '{objectTypeName}'" : $"the object type in position {objectTypeIndex + 1}";
+        return level switch
+        {
+            DocumentLevel.ObjectType => char.ToUpperInvariant(objectType[0]) + objectType[1..],
+            DocumentLevel.Column => $"A configured column of {objectType}",
+            DocumentLevel.RelatedTable => $"A related table of {objectType}",
+            DocumentLevel.ChangeLog => $"The change log of {objectType}",
+            _ => $"The {SqlConnectorConstants.SettingObjectTypes} document"
+        };
+    }
+
+    /// <summary>
+    /// The name an Object Type was given, read loosely so it can be quoted in the account of a fault that
+    /// stopped the document being read strictly; null where the document is not JSON at all or gave none.
+    /// </summary>
+    private static string? ReadObjectTypeName(string document, int objectTypeIndex)
+    {
+        try
+        {
+            var objectTypes = JsonNode.Parse(document)?["objectTypes"] as JsonArray;
+            return objectTypes != null && objectTypeIndex < objectTypes.Count && objectTypes[objectTypeIndex] is JsonObject objectType &&
+                   objectType["name"] is JsonValue name && name.TryGetValue<string>(out var value) && !string.IsNullOrWhiteSpace(value)
+                ? value.Trim()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The known field an unrecognised one was most likely meant to be: within two edits of it, ignoring case;
+    /// null where none is that close, because a guess further off would mislead more than it helps.
+    /// </summary>
+    private static string? ClosestFieldName(string field, IEnumerable<string> knownFieldNames) =>
+        knownFieldNames
+            .Select(known => (Name: known, Distance: EditDistance(field.ToLowerInvariant(), known.ToLowerInvariant())))
+            .Where(candidate => candidate.Distance <= 2)
+            .OrderBy(candidate => candidate.Distance)
+            .Select(candidate => candidate.Name)
+            .FirstOrDefault();
+
+    private static int EditDistance(string a, string b)
+    {
+        var previous = new int[b.Length + 1];
+        var current = new int[b.Length + 1];
+        for (var j = 0; j <= b.Length; j++)
+            previous[j] = j;
+
+        for (var i = 1; i <= a.Length; i++)
+        {
+            current[0] = i;
+            for (var j = 1; j <= b.Length; j++)
+                current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+            (previous, current) = (current, previous);
+        }
+
+        return previous[b.Length];
+    }
+
+    private enum DocumentLevel
+    {
+        Document,
+        ObjectType,
+        Column,
+        RelatedTable,
+        ChangeLog
+    }
+
+    #endregion
+
+    private static SqlObjectTypeConfiguration ReadObjectType(SqlObjectTypeDocument? document, int index)
+    {
+        if (document == null)
+            throw new SqlSchemaConfigurationException($"The object type in position {index + 1} of 'objectTypes' is empty.");
+
         // With no name to quote, the position in the list is the only way to point at it.
         if (string.IsNullOrWhiteSpace(document.Name))
-            throw new SqlSchemaConfigurationException($"The object type in position {index + 1} of 'objectTypes' has no 'name'. Every object type needs one, because it is what JIM calls it.");
+            throw new SqlSchemaConfigurationException($"The object type in position {index + 1} of 'objectTypes' has no 'name'. Every object type needs one, because it is what JIM calls it.") { Field = "name" };
 
         var name = document.Name.Trim();
         var hasTable = !string.IsNullOrWhiteSpace(document.Table);
@@ -95,7 +325,7 @@ internal sealed record SqlSchemaConfiguration
 
         if (hasTable == hasSelect)
             throw new SqlSchemaConfigurationException(
-                $"Object Type '{name}' must name exactly one source: either a 'table' (a table or a view) or a 'select' statement, and not both.");
+                $"Object Type '{name}' must name exactly one source: either a 'table' (a table or a view) or a 'select' statement, and not both.") { Field = "table" };
 
         if (hasSelect && !string.IsNullOrWhiteSpace(document.Schema))
             throw new SqlSchemaConfigurationException(
@@ -136,7 +366,7 @@ internal sealed record SqlSchemaConfiguration
     /// configured, so a document that could not work in Change-Log Table mode is refused at save time
     /// rather than on the night the mode is switched on.
     /// </summary>
-    private static SqlChangeLogConfiguration? ReadChangeLog(ChangeLogDocument? document, string objectTypeName, int anchorColumnCount)
+    private static SqlChangeLogConfiguration? ReadChangeLog(SqlChangeLogDocument? document, string objectTypeName, int anchorColumnCount)
     {
         if (document == null)
             return null;
@@ -176,7 +406,7 @@ internal sealed record SqlSchemaConfiguration
     /// <summary>
     /// Turns the customer's own change-type vocabulary into what each value means to JIM.
     /// </summary>
-    private static Dictionary<string, ObjectChangeType> ReadChangeTypes(ChangeLogDocument document, string objectTypeName)
+    private static Dictionary<string, ObjectChangeType> ReadChangeTypes(SqlChangeLogDocument document, string objectTypeName)
     {
         var changeTypes = new Dictionary<string, ObjectChangeType>(StringComparer.OrdinalIgnoreCase);
 
@@ -287,11 +517,11 @@ internal sealed record SqlSchemaConfiguration
                 $"A row added to or removed from '{relatedTable.TableName}' changes the object without touching its own row, so without a watermark column on the related table that change could never be detected.");
     }
 
-    private static List<string> ReadAnchorColumns(ObjectTypeDocument document, string objectTypeName)
+    private static List<string> ReadAnchorColumns(SqlObjectTypeDocument document, string objectTypeName)
     {
         if (document.AnchorColumns == null || document.AnchorColumns.Count == 0)
             throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has no 'anchorColumns'. JIM identifies an object by its anchor, so at least one column must be named.");
+                $"Object Type '{objectTypeName}' has no 'anchorColumns'. JIM identifies an object by its anchor, so at least one column must be named.") { Field = "anchorColumns" };
 
         var anchorColumns = new List<string>(document.AnchorColumns.Count);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -309,7 +539,7 @@ internal sealed record SqlSchemaConfiguration
         return anchorColumns;
     }
 
-    private static List<SqlColumnConfiguration> ReadColumns(ObjectTypeDocument document, string objectTypeName)
+    private static List<SqlColumnConfiguration> ReadColumns(SqlObjectTypeDocument document, string objectTypeName)
     {
         if (document.Columns == null)
             return [];
@@ -334,7 +564,7 @@ internal sealed record SqlSchemaConfiguration
         return columns;
     }
 
-    private static List<SqlRelatedTableConfiguration> ReadRelatedTables(ObjectTypeDocument document, string objectTypeName, int anchorColumnCount)
+    private static List<SqlRelatedTableConfiguration> ReadRelatedTables(SqlObjectTypeDocument document, string objectTypeName, int anchorColumnCount)
     {
         if (document.RelatedTables == null)
             return [];
@@ -385,18 +615,15 @@ internal sealed record SqlSchemaConfiguration
         return relatedTables;
     }
 
-    private static void ValidateReferences(List<SqlObjectTypeConfiguration> objectTypes, HashSet<string> names)
+    private static void ValidateReferences(SqlObjectTypeConfiguration objectType, HashSet<string> names)
     {
-        foreach (var objectType in objectTypes)
-        {
-            foreach (var column in objectType.Columns.Where(column => !names.Contains(column.ReferencesObjectType)))
-                throw new SqlSchemaConfigurationException(
-                    $"Object Type '{objectType.Name}' says column '{column.Name}' references object type '{column.ReferencesObjectType}', which this document does not declare. A reference can only point at an object type JIM also synchronises.");
+        foreach (var column in objectType.Columns.Where(column => !names.Contains(column.ReferencesObjectType)))
+            throw new SqlSchemaConfigurationException(
+                $"Object Type '{objectType.Name}' says column '{column.Name}' references object type '{column.ReferencesObjectType}', which this document does not declare. A reference can only point at an object type JIM also synchronises.") { Field = "columns" };
 
-            foreach (var relatedTable in objectType.RelatedTables.Where(relatedTable => relatedTable.ReferencesObjectType != null && !names.Contains(relatedTable.ReferencesObjectType)))
-                throw new SqlSchemaConfigurationException(
-                    $"Object Type '{objectType.Name}' says related table attribute '{relatedTable.AttributeName}' references object type '{relatedTable.ReferencesObjectType}', which this document does not declare.");
-        }
+        foreach (var relatedTable in objectType.RelatedTables.Where(relatedTable => relatedTable.ReferencesObjectType != null && !names.Contains(relatedTable.ReferencesObjectType)))
+            throw new SqlSchemaConfigurationException(
+                $"Object Type '{objectType.Name}' says related table attribute '{relatedTable.AttributeName}' references object type '{relatedTable.ReferencesObjectType}', which this document does not declare.") { Field = "relatedTables" };
     }
 
     /// <summary>
@@ -408,11 +635,11 @@ internal sealed record SqlSchemaConfiguration
     private static void ValidateIdentifier(string? identifier, string objectTypeName, string fieldName)
     {
         if (string.IsNullOrWhiteSpace(identifier))
-            throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' has no value for '{fieldName}'.");
+            throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' has no value for '{fieldName}'.") { Field = fieldName };
 
         if (identifier.Trim() != identifier)
             throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has '{fieldName}' set to '{identifier}', which starts or ends with whitespace. Database identifiers are used exactly as written, so the spaces would name a different object.");
+                $"Object Type '{objectTypeName}' has '{fieldName}' set to '{identifier}', which starts or ends with whitespace. Database identifiers are used exactly as written, so the spaces would name a different object.") { Field = fieldName };
 
         try
         {
@@ -420,7 +647,7 @@ internal sealed record SqlSchemaConfiguration
         }
         catch (ArgumentException ex)
         {
-            throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' has '{fieldName}' set to a value that cannot name a database object: {ex.Message}", ex);
+            throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' has '{fieldName}' set to a value that cannot name a database object: {ex.Message}", ex) { Field = fieldName };
         }
     }
 
@@ -431,96 +658,36 @@ internal sealed record SqlSchemaConfiguration
     /// </summary>
     private static void ValidateSelectStatement(string statement, string objectTypeName)
     {
+        switch (CheckSelectStatement(statement))
+        {
+            case SelectStatementProblem.NotAQuery:
+                throw new SqlSchemaConfigurationException(
+                    $"Object Type '{objectTypeName}' has a 'select' that does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.") { Field = "select" };
+
+            case SelectStatementProblem.MoreThanOneStatement:
+                throw new SqlSchemaConfigurationException(
+                    $"Object Type '{objectTypeName}' has a 'select' containing a semicolon. It must be a single statement, with no terminator.") { Field = "select" };
+        }
+    }
+
+    /// <summary>
+    /// The one rule for what may be run as an Object Type's source query, shared by the parser and by the
+    /// catalogue's description of a statement so the two can never accept different things.
+    /// </summary>
+    /// <returns>Null where the statement is acceptable.</returns>
+    internal static SelectStatementProblem? CheckSelectStatement(string statement)
+    {
         var trimmed = statement.Trim();
 
         if (!trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase) && !trimmed.StartsWith("WITH", StringComparison.OrdinalIgnoreCase))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has a 'select' that does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.");
+            return SelectStatementProblem.NotAQuery;
 
-        if (trimmed.Contains(';', StringComparison.Ordinal))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has a 'select' containing a semicolon. It must be a single statement, with no terminator.");
+        return trimmed.Contains(';', StringComparison.Ordinal) ? SelectStatementProblem.MoreThanOneStatement : null;
     }
 
-    #region JSON document shape
-
-    /// <summary>
-    /// The document as written. Kept separate from the parsed model so that everything reaching the
-    /// Connector has already been validated, and nothing downstream has to re-check it.
-    /// </summary>
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed class ObjectTypesDocument
+    internal enum SelectStatementProblem
     {
-        public List<ObjectTypeDocument>? ObjectTypes { get; set; }
+        NotAQuery,
+        MoreThanOneStatement
     }
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed class ObjectTypeDocument
-    {
-        public string? Name { get; set; }
-
-        public string? Schema { get; set; }
-
-        public string? Table { get; set; }
-
-        public string? Select { get; set; }
-
-        public List<string?>? AnchorColumns { get; set; }
-
-        public List<ColumnDocument>? Columns { get; set; }
-
-        public List<RelatedTableDocument>? RelatedTables { get; set; }
-
-        public string? WatermarkColumn { get; set; }
-
-        public ChangeLogDocument? ChangeLog { get; set; }
-    }
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed class ChangeLogDocument
-    {
-        public string? Schema { get; set; }
-
-        public string? Table { get; set; }
-
-        public List<string?>? AnchorColumns { get; set; }
-
-        public string? SequenceColumn { get; set; }
-
-        public string? ChangeTypeColumn { get; set; }
-
-        public List<string?>? CreateValues { get; set; }
-
-        public List<string?>? UpdateValues { get; set; }
-
-        public List<string?>? DeleteValues { get; set; }
-    }
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed class ColumnDocument
-    {
-        public string? Name { get; set; }
-
-        public string? ReferencesObjectType { get; set; }
-    }
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed class RelatedTableDocument
-    {
-        public string? AttributeName { get; set; }
-
-        public string? Schema { get; set; }
-
-        public string? Table { get; set; }
-
-        public string? ValueColumn { get; set; }
-
-        public List<string?>? JoinColumns { get; set; }
-
-        public string? ReferencesObjectType { get; set; }
-
-        public string? WatermarkColumn { get; set; }
-    }
-
-    #endregion
 }

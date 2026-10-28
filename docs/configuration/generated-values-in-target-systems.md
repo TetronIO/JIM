@@ -9,6 +9,32 @@ audience: administrator
 
 A [Generated Value](generated-values.md) must be free in every system it is exported to, not only in JIM's own records. JIM checks the target systems it can before choosing a value, and when a target still refuses a value as already in use, it corrects the value rather than leaving the export failing.
 
+```jim-diagram
+archetype: decision
+title: How JIM keeps a generated value free in its target systems
+desc: 'JIM checks each candidate value against its own records and, where the Connector can, probes the target; a value in use is passed over for the next candidate. A free value is exported. If the target still refuses it as already in use, and the refusal cannot be tied to one generated value or Collision Remediation is off, it is an ordinary Value Already in Use export error. If it can be tied, JIM corrects it by drawing the next value and checking it the same way, unless another target has already accepted the value for that person, JIM cannot tell whether one has, or it has already been corrected five times: then the value needs a decision and its export is parked.'
+start: {label: Candidate value}
+questions:
+- {id: free, label: 'Free?', sub: 'JIM''s records, and a probe where it can'}
+- {id: refused, label: 'Refused at export?', sub: as already in use}
+- {id: tied, label: 'Tied to one generated value?', sub: and Collision Remediation on}
+- {id: safe, label: 'Safe to correct?', sub: 'not accepted elsewhere; under five corrections'}
+outcomes:
+- {id: next, label: Passed over, sub: the next candidate is tried}
+- {id: exported, label: Exported, good: true}
+- {id: error, label: Value Already in Use, sub: an ordinary export error}
+- {id: parked, label: Needs a Decision, sub: export parked until you act}
+answers:
+- {from: free, to: next, label: 'no'}
+- {from: free, to: refused, label: 'yes'}
+- {from: refused, to: exported, label: 'no'}
+- {from: refused, to: tied, label: 'yes'}
+- {from: tied, to: error, label: 'no'}
+- {from: tied, to: safe, label: 'yes'}
+- {from: safe, to: parked, label: 'no'}
+- {from: safe, to: free, label: 'yes: draw the next value'}
+```
+
 ## :material-magnify: Checking availability in target systems
 
 JIM's own records of a Connected System hold only the accounts JIM imports. An account outside the import scope (in an OU JIM does not manage, say, or created by hand) is invisible to them, so a value that looks free can already be in use. To catch these, JIM **probes** the target as well: before it chooses a value, it asks the target system directly whether the value is already in use, and if it is, moves on to the next candidate exactly as it would for a value it holds itself.

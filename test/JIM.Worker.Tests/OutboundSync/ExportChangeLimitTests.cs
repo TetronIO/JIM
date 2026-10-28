@@ -303,12 +303,14 @@ public class ExportChangeLimitTests
     /// <summary>
     /// The primary batch loop excludes a withheld type from the database query outright (so it is
     /// never paged), but the deferred pass's own fast-path collection
-    /// (<c>GetRemainingDeferredExportsAsync</c>) is not change-type-aware, so a withheld type's
+    /// (<c>GetRemainingDeferredExportIdsAsync</c>) is not change-type-aware, so a withheld type's
     /// deferred exports can still reach <c>ProcessDeferredExportsAsync</c>. This proves the ledger
-    /// guard there catches them while an allowed type completes normally in the same pass.
+    /// guard there catches them while an allowed type completes normally in the same pass, whether the
+    /// pass takes its exports in one chunk or one at a time.
     /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_DeferredPass_WithholdsWithheldTypeWhileAllowedTypeCompletesAsync()
+    [TestCase(2_000)]
+    [TestCase(1)]
+    public async Task ExecuteExportsAsync_DeferredPass_WithholdsWithheldTypeWhileAllowedTypeCompletesAsync(int deferredChunkSize)
     {
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
@@ -339,7 +341,7 @@ public class ExportChangeLimitTests
             .ToList();
 
         var mockConnector = CreateSucceedingCallsConnector();
-        var options = new ExportExecutionOptions { MaxCreates = 1 };
+        var options = new ExportExecutionOptions { MaxCreates = 1, DeferredChunkSize = deferredChunkSize };
 
         var result = await Jim.ExportExecution.ExecuteExportsAsync(
             targetSystem, mockConnector.Object, SyncRunMode.PreviewAndSync, options, CancellationToken.None);

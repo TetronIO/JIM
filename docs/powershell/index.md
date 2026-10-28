@@ -9,6 +9,35 @@ audience: automation-author
 
 The JIM PowerShell module provides a cross-platform command-line interface for managing and automating JIM operations. It wraps the JIM REST API in idiomatic PowerShell cmdlets with full pipeline support, so identity management workflows can be scripted.
 
+```jim-diagram
+archetype: map
+title: How the main cmdlet groups connect
+desc: "Connect first, with the Connection cmdlets; then the groups build on one another. A Connected System is created from a Connector, and its schema is imported and chosen with the Connected System Schema cmdlets; Synchronisation Rules are bound to its Object Types. Run Profiles run against the Connected System; each run is queued as a Worker Task and recorded as an Activity, whose Execution Items say what happened to each object. Schedules run Run Profiles in steps, and each run of a Schedule is a Schedule Execution. Each group links to its page; the table below lists every group."
+nodes:
+  - { id: connectors, label: Connectors, link: connectors.md, row: 0, col: 1 }
+  - { id: schedules, label: Schedules, link: schedules.md, row: 0, col: 2 }
+  - { id: executions, label: Schedule Executions, link: schedule-executions.md, row: 0, col: 3 }
+  - { id: connection, label: Connection, link: connection.md, row: 1, col: 0 }
+  - { id: cs, label: Connected Systems, link: connected-systems.md, row: 1, col: 1 }
+  - { id: rp, label: Run Profiles, link: run-profiles.md, row: 1, col: 2 }
+  - { id: activities, label: Activities, link: activities.md, row: 1, col: 3 }
+  - { id: schema, label: Connected System Schema, link: connected-system-schema.md, row: 2, col: 1 }
+  - { id: tasks, label: Worker Tasks, link: worker-tasks.md, row: 2, col: 2 }
+  - { id: items, label: Execution Items, link: execution-items.md, row: 2, col: 3 }
+  - { id: rules, label: Synchronisation Rules, link: synchronisation-rules.md, row: 3, col: 1 }
+edges:
+  - { from: connection, to: cs, label: before }
+  - { from: cs, to: connectors, label: created from }
+  - { from: cs, to: schema, label: has a }
+  - { from: rules, to: schema, label: bound to }
+  - { from: rp, to: cs, label: run against }
+  - { from: schedules, to: rp, label: run in steps }
+  - { from: schedules, to: executions, label: run as }
+  - { from: rp, to: tasks, label: queued as }
+  - { from: rp, to: activities, label: recorded as }
+  - { from: activities, to: items, label: hold }
+```
+
 ## :material-clipboard-list-outline: Requirements
 
 - **[PowerShell 7.0 or later](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell)** (cross-platform: Windows, macOS, and Linux)

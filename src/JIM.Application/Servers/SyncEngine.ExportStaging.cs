@@ -1766,6 +1766,38 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// A copy of a change surviving a merge (<see cref="SelectSurvivingDriftChanges"/>), for the Pending Export that
+    /// replaces the one holding it. It takes a new id, because the original's row is deleted with its Pending Export,
+    /// and keeps its place in the export lifecycle (#2039 Phase 0): one already sent stays awaiting confirmation with
+    /// its attempt count, and a held change stays held, or the next import would retry a value the target refuses
+    /// until the Initial Password is delivered.
+    /// </summary>
+    internal static PendingExportAttributeValueChange CarryOverSurvivingChange(PendingExportAttributeValueChange change) => new()
+    {
+        Id = Guid.NewGuid(),
+        AttributeId = change.AttributeId,
+        Attribute = change.Attribute,
+        StringValue = change.StringValue,
+        DateTimeValue = change.DateTimeValue,
+        IntValue = change.IntValue,
+        LongValue = change.LongValue,
+        DecimalValue = change.DecimalValue,
+        ByteValue = change.ByteValue,
+        GuidValue = change.GuidValue,
+        BoolValue = change.BoolValue,
+        UnresolvedReferenceValue = change.UnresolvedReferenceValue,
+        ResolvedReferenceCsoId = change.ResolvedReferenceCsoId,
+        ChangeType = change.ChangeType,
+        SyncRuleId = change.SyncRuleId,
+        SyncRuleName = change.SyncRuleName,
+        Status = change.Status,
+        ExportAttemptCount = change.ExportAttemptCount,
+        LastExportedAt = change.LastExportedAt,
+        LastImportedValue = change.LastImportedValue,
+        AwaitsInitialPassword = change.AwaitsInitialPassword
+    };
+
+    /// <summary>
     /// Selects the changes on an existing (stale, typically drift-staged) Pending Export that survive a merge
     /// with a newly evaluated set of export changes. Export evaluation always wins on a collision, because it
     /// derives from the latest Metaverse Object state.

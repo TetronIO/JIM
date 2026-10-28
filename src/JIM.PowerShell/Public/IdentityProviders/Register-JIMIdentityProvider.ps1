@@ -13,29 +13,33 @@ function Register-JIMIdentityProvider {
         provider decides who someone is; what they may do is decided by their roles in JIM.
 
         For AD FS it creates an Application Group holding the portal (a Server application, with a client secret), the
-        PowerShell module (a Native application, with loopback redirect URIs for ports 8400 to 8409) and JIM's API (a
-        Web API open to everyone, whose one claim rule issues each person's objectGUID as oid with their name and
-        email). Only JIM's two clients may ask for the API.
+        PowerShell module (a Native application, with loopback redirect URIs for ports 8400 to 8409, and each -Url's
+        /api/reference, for the API reference's Try It) and JIM's API (a Web API open to everyone, whose one claim rule
+        issues each person's objectGUID as oid with their name and email). Only JIM's two clients may ask for the API.
+        Try It also needs CORS on for JIM's address, a farm-wide setting this command leaves to you; the AD FS SSO guide
+        gives the commands.
 
         AD FS is configured through the ADFS PowerShell module, which only an AD FS server has. Run this on the
         federation server, or pass -Session with a PowerShell session to it.
 
         For Keycloak it creates, in the realm -Authority names, the portal's confidential client and the PowerShell
-        module's public client (with loopback redirect URIs for ports 8400 to 8409), both using PKCE, and the jim-api
+        module's public client (with loopback redirect URIs for ports 8400 to 8409, and each -Url's /api/reference with
+        its origin as a web origin, for the API reference's Try It), both using PKCE, and the jim-api
         client scope, which puts the portal's client in an access token's audience. Only JIM's two clients may ask for
         jim-api. Keycloak is configured through its admin REST API, from any computer that can reach it, with an
         account that administers the realm.
 
         This command does not connect to JIM, so Connect-JIM is not needed. The client secret is returned, as a secure
-        string, only when this run created or replaced it; if it is lost, run again with -ResetClientSecret.
+        string, only when this run created, replaced or set it; if it is lost, run again with -ResetClientSecret.
 
     .PARAMETER Provider
         The identity provider to register JIM with.
 
     .PARAMETER Url
         JIM's address as people reach it, such as https://jim.example.com, with the port if it is not 443. The portal's
-        sign-in and sign-out redirect URIs are made from it. For Keycloak, an http address is accepted for JIM on this
-        computer only, such as http://localhost:5200.
+        sign-in and sign-out redirect URIs are made from it. Give more than one when people reach JIM at more than one
+        address. For Keycloak, an http address is accepted for JIM on this computer only, such as
+        http://localhost:5200.
 
     .PARAMETER Name
         The name of the AD FS Application Group, which is also its identifier. The applications in it are named after
@@ -71,12 +75,17 @@ function Register-JIMIdentityProvider {
         Replaces the portal's client secret, and returns the new one. JIM cannot sign anyone in until JIM_SSO_SECRET
         is given the new secret.
 
+    .PARAMETER ClientSecret
+        For Keycloak, the portal's client secret, in place of one Keycloak makes: the client is created with it, or
+        given it if its secret differs. Meant for test and development realms, whose secret is known in advance;
+        elsewhere, let Keycloak make one.
+
     .OUTPUTS
         JIM.IdentityProviderRegistration
         Provider (string): The identity provider, ADFS or Keycloak.
         Authority (string): The value for JIM_SSO_AUTHORITY.
         ClientId (string): The portal's client identifier, the value for JIM_SSO_CLIENT_ID.
-        ClientSecret (securestring): The portal's client secret, the value for JIM_SSO_SECRET. Empty unless this run created or replaced it.
+        ClientSecret (securestring): The portal's client secret, the value for JIM_SSO_SECRET. Empty unless this run created, replaced or set it.
         PublicClientId (string): The PowerShell module's client identifier, the value for JIM_SSO_PUBLIC_CLIENT_ID.
         ApiScope (string): The API's identifier, the value for JIM_SSO_API_SCOPE.
         ClaimType (string): The claim JIM identifies people by, the value for JIM_SSO_CLAIM_TYPE.
@@ -119,7 +128,7 @@ function Register-JIMIdentityProvider {
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [string]$Url,
+        [string[]]$Url,
 
         [Parameter(ParameterSetName = 'ADFS')]
         [ValidateNotNullOrEmpty()]
@@ -154,7 +163,11 @@ function Register-JIMIdentityProvider {
         [ValidateNotNullOrEmpty()]
         [string]$PublicClientId = 'jim-powershell',
 
-        [switch]$ResetClientSecret
+        [switch]$ResetClientSecret,
+
+        [Parameter(ParameterSetName = 'Keycloak')]
+        [Parameter(ParameterSetName = 'KeycloakServiceAccount')]
+        [securestring]$ClientSecret
     )
 
     $keycloakParameters = $PSCmdlet.ParameterSetName -ne 'ADFS'
@@ -162,15 +175,20 @@ function Register-JIMIdentityProvider {
         throw 'Keycloak needs -Authority, the realm JIM signs people in from, and -Credential or -ClientCredential to configure it with.'
     }
     if ($Provider -eq 'ADFS' -and $keycloakParameters) {
-        throw '-Authority, -Credential, -ClientCredential, -AdminRealm, -ClientId and -PublicClientId are for Keycloak. AD FS takes -Session, or runs on the federation server.'
+        throw '-Authority, -Credential, -ClientCredential, -AdminRealm, -ClientId, -PublicClientId and -ClientSecret are for Keycloak. AD FS takes -Session, or runs on the federation server.'
+    }
+    if ($ClientSecret -and $ResetClientSecret) {
+        throw '-ClientSecret gives the portal the secret it names, and -ResetClientSecret has Keycloak make a new one; use one of them.'
     }
 
     # JIM on plain HTTP is only for trying it out on this computer, and AD FS refuses even that.
-    $uri = $null
     $allowsLoopbackHttp = $Provider -eq 'Keycloak'
-    if (-not [uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$uri) -or
-        -not ($uri.Scheme -eq 'https' -or ($allowsLoopbackHttp -and $uri.Scheme -eq 'http' -and $uri.IsLoopback))) {
-        throw "The JIM URL must be an absolute https address, such as https://jim.example.com, not '$Url'."
+    foreach ($address in $Url) {
+        $uri = $null
+        if (-not [uri]::TryCreate($address, [UriKind]::Absolute, [ref]$uri) -or
+            -not ($uri.Scheme -eq 'https' -or ($allowsLoopbackHttp -and $uri.Scheme -eq 'http' -and $uri.IsLoopback))) {
+            throw "The JIM URL must be an absolute https address, such as https://jim.example.com, not '$address'."
+        }
     }
 
     if ($Provider -eq 'Keycloak') {
@@ -181,9 +199,11 @@ function Register-JIMIdentityProvider {
         }
         $connection.Token = Get-JIMKeycloakAdminToken -ServerUrl $keycloak.ServerUrl -AdminRealm $AdminRealm `
             -Credential $Credential -ClientCredential $ClientCredential
-        $current = Get-JIMKeycloakRegistrationState -Connection $connection
+        # The portal's secret is read only to compare it with one given.
+        $given = if ($ClientSecret) { @{ ClientSecret = $ClientSecret } } else { @{} }
+        $current = Get-JIMKeycloakRegistrationState -Connection $connection -SecretOf $(if ($ClientSecret) { $ClientId })
         $plan = Get-JIMKeycloakRegistrationPlan -Url $Url -ClientId $ClientId -PublicClientId $PublicClientId -Current $current `
-            -ResetClientSecret:$ResetClientSecret
+            -ResetClientSecret:$ResetClientSecret @given
 
         $made = Invoke-JIMRegistrationPlan -Plan $plan -Cmdlet $PSCmdlet -Apply { param($change) Invoke-JIMKeycloakRegistrationChange -Connection $connection -Change $change }
         if (-not $made) { return }

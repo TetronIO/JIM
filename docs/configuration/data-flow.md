@@ -9,6 +9,33 @@ audience: administrator
 
 Attribute Flows are configured one Synchronisation Rule at a time, which is the right place to change them and the wrong place to understand them. Answering "where does this person's job title actually come from?" means opening every inbound rule for that object type and reading its mappings.
 
+```jim-diagram
+archetype: comparison
+title: Inbound and outbound flows compared
+desc: 'An inbound flow reads one or more Connected System attributes, or an expression, and writes a single Metaverse Attribute; its arrow points right, and Priority and Null is a value apply to it. An outbound flow reads one or more Metaverse Attributes, or an expression, and writes a single Connected System attribute; its arrow points left, and Enforce State applies. Either way, the Connected System band is on the left and the Metaverse band on the right.'
+columns:
+- {label: Inbound, sub: into the Metaverse}
+- {label: Outbound, sub: out of the Metaverse}
+rows:
+- label: Reads
+  cells:
+  - {text: one or more Connected System attributes, sub: or an expression}
+  - {text: one or more Metaverse Attributes, sub: or an expression}
+- label: Writes
+  cells:
+  - {text: a single Metaverse Attribute}
+  - {text: a single Connected System attribute}
+- label: Arrow
+  cells:
+  - {text: '→ points right'}
+  - {text: '← points left'}
+- label: Columns that apply
+  cells:
+  - {text: Priority and Null is a value}
+  - {text: Enforce State}
+footer: 'The Connected System band is on the left and the Metaverse band on the right, whichever way the value travels'
+```
+
 The **Data Flow** view answers it in one place. It lists every attribute data flow configured across all Connected Systems, in both directions, and is read-only by design: rows link to the surface that owns the change rather than editing in place.
 
 Find it at **Administration → Schema → Data Flow**.

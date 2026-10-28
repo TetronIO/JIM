@@ -9,6 +9,21 @@ audience: operator
 
 **Administration > Operations** is where an administrator finds out what JIM is doing, what it has done, what it will do next, and whether the services that do it are alive. It is one page with four tabs and a Service Health strip above them.
 
+```jim-diagram
+archetype: anatomy
+title: What the Operations page holds
+desc: 'Administration > Operations has a Service Health strip, with one card each for Worker · Sync, Worker · Passwords and the Scheduler, above four tabs. Activity shows the work Queued, In Progress and Completed; Schedules shows each Schedule with its last run; Passwords shows the Password Synchronisation queue; and Generated Values shows generated values held for a decision and renames waiting for their export.'
+subject:
+  kind: object
+  label: Operations
+  parts:
+  - {label: Service Health strip, detail: 'Worker · Sync, Worker · Passwords, Scheduler'}
+  - {label: Activity tab, detail: 'Queued, In Progress, Completed'}
+  - {label: Schedules tab, detail: each with its last run}
+  - {label: Passwords tab, detail: the Password Synchronisation queue}
+  - {label: Generated Values tab, detail: 'values held for a decision, waiting renames'}
+```
+
 ## :material-view-list-outline: The tabs
 
 - **Activity**<br /> What the Worker has queued, what it is running and what it has finished, on one page. See [The Activity tab](#the-activity-tab).
@@ -18,13 +33,13 @@ audience: operator
 
 ## :material-timeline-clock-outline: The Activity tab
 
-The Activity tab reads in time order, with the latest at the top: **Queued** (later), then **In Progress** (now), then **Completed** (earlier). The three sections share their columns, so Connected System, Run Profile and Initiated By line up down the page.
+The Activity tab reads in time order, with the latest at the top: **Queued**, then **In Progress**, then **Completed**. The three sections share their columns, so Connected System, Run Profile and Initiated By line up down the page. A section holding work opens with a heading that carries its count and a chevron, which folds the rows away under the heading and brings them back; a section holding nothing is a single line saying so, with no table beneath it.
 
 - **Queued**<br /> Work waiting for the Worker: Run Profile executions and the other background tasks, and the steps of any Schedule Execution still to come, grouped under a header that names the Schedule, draws its steps as a rail, and carries **View execution** and the option to cancel it. The next run is the last row, directly above In Progress; **Runs** gives each row's place ("Next", "2nd", "3rd"), and the tasks of a parallel Schedule step share one. **Est. Start** says when each is expected to start, from the median of the last five successful runs of each Run Profile ahead of it. It is left blank where there is nothing to go on, such as a Run Profile with no successful run yet, and so is every estimate after it. The section shows as many rows as fit the window while In Progress stays in view, and never fewer than three; **Show more** reveals the rest.
 - **In Progress**<br /> Everything the Worker is running now, each with its run's steps and the running step's progress (see [Live progress](activity-progress.md#the-runs-steps-on-the-activity-tab)). When a parallel Schedule step is running, its tasks appear together under the Schedule Execution's header. **Est. Finish** comes from the same median, and is never earlier than the running step needs.
 - **Completed**<br /> The [Activities](activities.md) record of what the Worker has finished, newest first, with a side panel for each one. A run moves here from In Progress as soon as it ends.
 
-The **Queued**, **In Progress** and **Completed** chips above the sections choose which are shown; all three are shown by default. The filters beneath the chips apply to every section shown: **Connected System**, **Run Profile**, **Schedule**, **Initiated By** and **Scheduled only**. **Result** and **Has child activities** apply to Completed alone, since queued and running work has no result yet. The chips, the filters and Completed's search are all kept in the page's address, so a filtered view can be bookmarked or shared and survives a refresh.
+**Filters** opens the filter row. **Connected System**, **Run Profile**, **Schedule** and **Scheduled only** apply to every section; **Result** and **Has child activities** apply to Completed alone, since queued and running work has no result yet. Each filter in use shows as a chip beside the button, whether or not the row is open, and closing a chip puts that one filter back; **Clear** puts them all back. To find work by who started it, use Completed's search box, which searches the target and the initiator. Which sections are folded, the filters and Completed's search are all kept in the page's address, so a filtered view can be bookmarked or shared and survives a refresh.
 
 **Queue a Run Profile** adds a Run Profile execution to the end of the queue: choose the Connected System and the Run Profile, then **Queue**. If nothing else is queued or running, it starts straight away.
 
@@ -32,7 +47,7 @@ The **Queued**, **In Progress** and **Completed** chips above the sections choos
 
 JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service), and the **Scheduler**, which starts Schedules when they fall due. Each service writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it, so a Worker that has stopped shows as stopped rather than looking like a Worker with nothing to do. The container health check alone is invisible from the portal.
 
-The strip is a panel headed **Service Health**, with a one-line summary beside the heading ("All services healthy", or "1 service unhealthy, 1 degraded", worst first) and, on the right, whether the panel is **Updated live**: whether the portal is receiving real-time change notifications from the database. While it is reconnecting the portal falls back to polling; pages still update, more slowly. That indicator is about the portal's own connection, not a background service. The chevron at the end of the header collapses the panel to that one line, keeping the summary and the live indicator in view, and the portal remembers the choice.
+The strip is a panel headed **Service Health**, with a one-line summary beside the heading ("All services healthy", or "1 service unhealthy, 1 degraded", worst first) and, on the right, whether the panel is **Updated live**: whether the portal is receiving real-time change notifications from the database. While it is reconnecting the portal falls back to polling; pages still update, more slowly. That indicator is about the portal's own connection, not a background service. The panel opens collapsed to that one line, keeping the summary and the live indicator in view; the chevron at the end of the header opens the cards, and the portal remembers the choice.
 
 Below the header is one card per service, all built the same way so the same fact is in the same place on every card:
 

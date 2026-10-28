@@ -9,9 +9,39 @@ audience: administrator
 
 Each entry is titled by what you see on a run, an Activity or a connection test. For a run that ends with a warning or an error whatever the Connector, see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md).
 
+```jim-diagram
+archetype: decision
+title: Where a SQL Connected System usually goes wrong
+desc: "Work down four checks. Does the connection test pass? If it fails on the certificate (SQL Server), trust the certificate from the card the test shows. If it fails otherwise, check the host, port, database name, service name or SID, and password: the driver's message says which. If it passes, does the schema import see every table? If not, grant the account SELECT on the table, or correct its name or schema. If it does, are deleted rows still in JIM after a Delta Import? If so, Watermark Column mode cannot see deletions: use a change-log table or schedule a Full Import. If not, does an export report that no row was written? If so, check the table's triggers and the account's grants. If not, collect the Activity, the worker's log and the Object Types document, and ask for help."
+questions:
+  - { id: connect, label: "Connection test passes?" }
+  - { id: schema, label: "Schema import sees every table?" }
+  - { id: deletes, label: "Deleted rows still in JIM?", sub: after a Delta Import }
+  - { id: export, label: "Export writes no row?", sub: "\"No row was written ...\"" }
+outcomes:
+  - { id: cert, label: Trust the certificate, sub: from the card the test shows }
+  - { id: details, label: "Check host, name, password", sub: "the driver's message says which" }
+  - { id: grant, label: "Grant `SELECT` on it", sub: or correct its name or schema }
+  - { id: changelog, label: Use a change-log table, sub: or schedule a Full Import }
+  - { id: triggers, label: Check triggers and grants, sub: on the table }
+  - { id: stuck, label: Still stuck, sub: "collect the Activity, log and document" }
+answers:
+  - { from: connect, to: cert, label: "no, the certificate" }
+  - { from: connect, to: details, label: "no, otherwise" }
+  - { from: connect, to: schema, label: "yes" }
+  - { from: schema, to: grant, label: "no" }
+  - { from: schema, to: deletes, label: "yes" }
+  - { from: deletes, to: changelog, label: "yes" }
+  - { from: deletes, to: export, label: "no" }
+  - { from: export, to: triggers, label: "yes" }
+  - { from: export, to: stuck, label: "no" }
+```
+
 ## :material-lan-disconnect: "Unable to connect. Message: ..."
 
 The database driver's own message follows. A wrong host or blocked port times out after the Connection Timeout; a wrong database name, service name or SID is rejected immediately in the database's own words; a wrong password is an authentication failure. On Oracle, check you have chosen the right form (service name or SID) as well as the right value.
+
+On Oracle with Native Network Encryption, `ORA-12660` (encryption or crypto-checksumming parameters incompatible) or `ORA-12650` (no common encryption or data integrity algorithm) means the server will not encrypt the way JIM requires. Check its `sqlnet.ora` against [What an Oracle server needs for Native Network Encryption](jim-sql-connector-security.md#what-an-oracle-server-needs-for-native-network-encryption). The driver reports both as `ORA-50201` ("failed to parse connect string"), which JIM shows after the cause; it does not mean the host or service name is wrong.
 
 ## :material-certificate-outline: The connection test fails on the certificate (SQL Server)
 

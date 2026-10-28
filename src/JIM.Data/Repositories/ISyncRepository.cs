@@ -1033,6 +1033,15 @@ public interface ISyncRepository
     Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Writes what reference resolution changed, and nothing else: each Pending Export's
+    /// HasUnresolvedReferences, and each resolved change's StringValue, UnresolvedReferenceValue and
+    /// ResolvedReferenceCsoId. Lets the deferred export pass save a chunk's resolutions without
+    /// rewriting every column of every change it carries.
+    /// </summary>
+    Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges);
+
+    /// <summary>
     /// Deletes Pending Exports by their associated CSO IDs.
     /// Returns the count of deleted Pending Exports.
     /// Used during obsolete CSO processing to clean up orphaned exports, and by the MVO deletion
@@ -1312,10 +1321,9 @@ public interface ISyncRepository
     /// <summary>
     /// Narrows a set of Connected System Object ids to those whose Pending Export holds a change written with an
     /// interim value until an Initial Password is delivered (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>,
-    /// still <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039). Drift Detection skips
-    /// those objects entirely, because a correction staged for any of their attributes
-    /// would replace the Pending Export holding the change, and the synchronisation preview skips them too so it
-    /// proposes no correction the run will not make. Answered from a partial index, so it costs nothing where no change
+    /// still <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039). Drift Detection
+    /// reads those objects' Pending Exports, so its correction neither restates the held change nor drops it when it
+    /// replaces the Pending Export holding it (#2501), and the synchronisation preview proposes the same corrections. Answered from a partial index, so it costs nothing where no change
     /// carries the flag.
     /// </summary>
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
@@ -1640,6 +1648,14 @@ public interface ISyncRepository
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
+    /// What references to the given Metaverse Objects are written as in a Connected System: per
+    /// Metaverse Object joined to an object there, that object's id and anchor. Summary-tier; used by
+    /// export execution to resolve deferred references without materialising the referenced objects.
+    /// </summary>
+    Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId);
+
+    /// <summary>
     /// Gets a single Connected System Object Type attribute by ID.
     /// Used during export to determine attribute data types.
     /// </summary>
@@ -1690,14 +1706,22 @@ public interface ISyncRepository
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null);
 
     /// <summary>
-    /// Collects all remaining executable exports with unresolved references (deferred) strictly
-    /// after the given keyset cursor, in a single call. Used by the export batch-collection loop
-    /// to fast-path once a batch is discovered to be made up entirely of deferred exports, instead
-    /// of continuing to page through the remainder 100 rows at a time purely to build the deferred
-    /// list (issue #985). Same ordering and filtering semantics as
+    /// Collects the ids of all remaining executable exports with unresolved references (deferred)
+    /// strictly after the given keyset cursor, in a single call. Used by the export batch-collection
+    /// loop to fast-path once a batch is discovered to be made up entirely of deferred exports,
+    /// instead of continuing to page through the remainder 100 rows at a time purely to build the
+    /// deferred list (issue #985). Ids only: the deferred pass loads them a chunk at a time with
+    /// <see cref="GetDeferredExportsByIdsAsync"/>. Same ordering and filtering semantics as
     /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports.
     /// </summary>
-    Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+    Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Loads one chunk of the deferred export pass: the given Pending Exports, untracked, in
+    /// (CreatedAt, Id) order, with the graph reference resolution and the Connector read. An id with
+    /// no row is left out.
+    /// </summary>
+    Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
 
     /// <summary>
     /// Returns whether any executable exports WITHOUT unresolved references exist strictly after

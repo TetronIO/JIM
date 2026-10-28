@@ -9,6 +9,18 @@ audience: administrator
 
 A Factory Reset returns JIM to the state of a fresh installation: every Connected System, Synchronisation Rule, Metaverse Object and Activity goes, and the built-in configuration comes back as it shipped. Use it to clear a test or demonstration system, such as one filled with [Example Data](../configuration/example-data.md), or to hand a system over clean. It cannot be undone, so never run it on a system you depend on without a backup.
 
+```jim-diagram
+archetype: flow
+title: What a Factory Reset does, in order
+desc: "A Factory Reset is refused while any Activity is in progress. Otherwise JIM wipes the data in a single database transaction, so a failure removes nothing. It then restores the built-in configuration as it shipped, records a Factory reset Activity naming who ran it and how much it removed, and signs everyone out, including you. Only a backup taken beforehand can undo it."
+steps:
+- {id: check, label: 'Nothing in progress?', sub: no running Activity, note: 'otherwise refused'}
+- {id: wipe, label: Wipe, sub: one database transaction, note: 'a failure removes nothing'}
+- {id: restore, label: Built-ins restored, sub: as shipped}
+- {id: record, label: Factory reset Activity, sub: 'who ran it, how much'}
+- {id: signout, label: Everyone signed out, sub: you included}
+```
+
 ## :material-delete-sweep-outline: What is removed and what survives
 
 | Removed | Survives |

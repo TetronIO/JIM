@@ -12,6 +12,31 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 
 **Capabilities:** Full Import, Delta Import, Export, Probe
 
+```jim-diagram
+archetype: decision
+title: How JIM tells which directory it has reached
+desc: "During schema discovery JIM reads the directory's Root DSE and asks up to three questions. If the Root DSE advertises the Active Directory capability in supportedCapabilities, the directory is Samba AD when its vendor name says Samba, and Active Directory otherwise; an AD LDS instance lands here too. If not, a vendor name or Root DSE class naming OpenLDAP makes it OpenLDAP. If not, a vendor name of 389 Project, or a vendor version beginning 389-Directory, makes it 389 Directory Server. Anything else is a generic directory. The type decides how JIM behaves: Active Directory and Samba AD Delta Imports track update sequence numbers (USNs), OpenLDAP's read cn=accesslog, and 389 Directory Server's and generic directories' read the changelog."
+start: { label: Root DSE }
+questions:
+  - { id: ad, label: "Active Directory capability?", sub: "in `supportedCapabilities`" }
+  - { id: openldap, label: "OpenLDAP?", sub: "vendor name, or the Root DSE's class" }
+  - { id: dirsrv, label: "389 Directory Server?", sub: "vendor `389 Project`, or version `389-Directory`" }
+outcomes:
+  - { id: samba, label: Samba AD, sub: Delta Import tracks USNs }
+  - { id: msad, label: Active Directory, sub: "Delta Import tracks USNs; AD LDS too" }
+  - { id: oldap, label: OpenLDAP, sub: "Delta Import reads `cn=accesslog`" }
+  - { id: ds389, label: 389 Directory Server, sub: Delta Import reads the changelog }
+  - { id: generic, label: Generic, sub: Delta Import reads the changelog }
+answers:
+  - { from: ad, to: samba, label: "yes, Samba vendor" }
+  - { from: ad, to: msad, label: "yes" }
+  - { from: ad, to: openldap, label: "no" }
+  - { from: openldap, to: oldap, label: "yes" }
+  - { from: openldap, to: dirsrv, label: "no" }
+  - { from: dirsrv, to: ds389, label: "yes" }
+  - { from: dirsrv, to: generic, label: "no" }
+```
+
 ## :material-server-outline: Supported Directories
 
 | Directory | Notes |
@@ -20,7 +45,7 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 | **Active Directory Lightweight Directory Services (AD LDS)** | Untested. JIM treats an AD LDS instance as Active Directory. Use Full Import and export; do not rely on Delta Import, password setting or domain controller discovery, which are built for a domain and have not been tried against an instance |
 | **OpenLDAP** | Full support including parallel import, accesslog-based delta import, and RFC 4512 schema discovery |
 | **Samba AD** | Full support with Active Directory compatibility |
-| **389 Directory Server** | Full support, verified against 389 Directory Server 3.1 by JIM's integration lab: schema discovery, Full Import, export, changelog Delta Import (deletions and renames included), password setting over LDAPS, and password policy discovery. Detected from the root DSE vendor name "389 Project", or a vendor version beginning "389-Directory". Identifies objects by `entryUUID`, imports in parallel with paged results, reads the Retro Changelog plug-in's changelog for Delta Import (see [Import](#import)) and its password policy from `cn=config` (see [Password policy discovery](jim-ldap-connector-passwords.md#password-policy-discovery)); the access to grant is under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server) |
+| **389 Directory Server** | Full support, tested against 389 Directory Server 3.1: schema discovery, Full Import, export, changelog Delta Import (deletions and renames included), password setting over LDAPS, and password policy discovery. Detected from the root DSE vendor name "389 Project", or a vendor version beginning "389-Directory". Identifies objects by `entryUUID`, imports in parallel with paged results, reads the Retro Changelog plug-in's changelog for Delta Import (see [Import](#import)) and its password policy from `cn=config` (see [Password policy discovery](jim-ldap-connector-passwords.md#password-policy-discovery)); the access to grant is under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server) |
 | **Other RFC 4512-compliant directories** | Supported via generic LDAP mode with automatic directory type detection |
 
 JIM automatically detects the directory type during schema discovery by inspecting the Root DSE and adjusts its behaviour accordingly. No manual directory type configuration is required.

@@ -9,6 +9,22 @@ audience: administrator
 
 Partitions and containers are chosen on the Connected System's **Scope** tab, which appears only where the Connector has them: the tab is where you choose what JIM manages in the system, whatever shape that takes.
 
+```jim-diagram
+archetype: anatomy
+title: A partition and a container in one Distinguished Name
+desc: "In OU=Users,DC=company,DC=local, DC=company,DC=local is the partition, a naming context the directory defines, and OU=Users is a container within it, an organisational unit; containers can be nested arbitrarily deep. Partitions exist on LDAP-style Connectors only; containers on most Connectors that expose hierarchy. What you select is what JIM manages, for import and export alike, and deselecting a partition or container makes its objects obsolete at the next Full Import."
+subject:
+  kind: value
+  parts:
+    - { text: "OU=Users,", callout: "Container: an OU within it" }
+    - { text: "DC=company,DC=local", strong: true, callout: "Partition: a naming context" }
+properties:
+  - { name: Partitions, value: LDAP-style Connectors only }
+  - { name: Containers, value: nested arbitrarily deep }
+  - { name: Selected, value: managed for import and export }
+  - { name: Deselected, value: its objects obsoleted by a Full Import }
+```
+
 A **partition** is a top-level logical division of a Connector Space that mirrors a boundary defined by the external system. Partitions exist in JIM primarily to service LDAP-style directories and their naming contexts (NCs): the discrete directory trees that an LDAP server hosts. The separate domain partitions within an Active Directory forest, or the distinct naming contexts exposed by an OpenLDAP server, each surface as a partition in JIM.
 
 Most Connected Systems do not support partitions. A flat file, a SQL table, or a SCIM endpoint has no concept of multiple naming contexts, so its Connector Space has no partitions.

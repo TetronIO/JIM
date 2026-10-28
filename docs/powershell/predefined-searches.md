@@ -9,6 +9,19 @@ audience: automation-author
 
 Cmdlets for administering Predefined Searches. Predefined Searches are named, reusable searches that drive end-user list views in the portal (for example, People, Service Principals, Security Groups) and the fast `Search-JIMMetaverseObject` list API. Administrators can disable a search to hide it from end users without deleting it.
 
+```jim-diagram
+archetype: lifecycle
+title: Disabling and enabling a Predefined Search
+desc: 'A Predefined Search is enabled or disabled. Set-JIMPredefinedSearch -IsEnabled $false disables it, hiding it from end users, the portal sidebar, the end-user search API and Search-JIMMetaverseObject, without deleting it; -IsEnabled $true enables it again. Leaving -IsEnabled out leaves its state as it is. Either way, administrators still see it in the admin UI, and Get-JIMPredefinedSearch returns it.'
+container: {label: Predefined Search, note: '`Set-JIMPredefinedSearch` moves it; `Get-JIMPredefinedSearch` returns it in either state'}
+states:
+- {id: enabled, label: Enabled, sub: shown to end users and in the sidebar}
+- {id: disabled, label: Disabled, sub: 'hidden from end users; admins still see it'}
+transitions:
+- {from: enabled, to: disabled, label: '`-IsEnabled $false`'}
+- {from: disabled, to: enabled, label: '`-IsEnabled $true`'}
+```
+
 !!! info
     Disabled searches are hidden from the portal, the end-user search API, and the sidebar navigation. They remain visible in the admin UI and to these cmdlets so they can be re-enabled at any time.
 

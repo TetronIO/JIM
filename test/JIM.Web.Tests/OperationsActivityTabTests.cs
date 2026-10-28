@@ -26,9 +26,9 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Covers the Operations page's Activity tab (#2549) as a whole: which of its three sections are shown, read from the
-/// URL so a filtered view can be bookmarked, and the filters that only mean something for finished work being switched
-/// off while Completed is hidden.
+/// Covers the Operations page's Activity tab (#2549) as a whole: which of its three sections are unfolded, read from
+/// the URL so a view can be bookmarked; the filter row behind its button, with the chips that say what narrows the
+/// view while the row is closed; and every change written back to the URL.
 /// </summary>
 [TestFixture]
 public class OperationsActivityTabTests : JimComponentTestContext
@@ -94,21 +94,28 @@ public class OperationsActivityTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsActivityTab_SectionsInTheUrl_ShowsOnlyThose()
+    public void OperationsActivityTab_SectionsInTheUrl_ExpandsOnlyThose()
     {
+        // Every section stays on the page; the URL says which are unfolded. A heading over a fold still says what
+        // the section holds and brings its rows back.
         _navigation.NavigateTo("/admin/operations?t=activity&s=running");
 
         var cut = Render<OperationsActivityTab>();
 
         cut.WaitForAssertion(() =>
         {
-            var sections = cut.FindAll("section[data-testid]").Select(s => s.GetAttribute("data-testid")).ToList();
-            Assert.That(sections, Is.EqualTo(new[] { "activity-in-progress" }));
+            var collapsed = cut.FindAll("section[data-testid]").ToDictionary(s => s.GetAttribute("data-testid")!, s => s.GetAttribute("data-collapsed"));
+            Assert.That(collapsed, Is.EqualTo(new Dictionary<string, string?>
+            {
+                ["activity-queued"] = "true",
+                ["activity-in-progress"] = "false",
+                ["activity-completed"] = "true"
+            }));
         });
     }
 
     [Test]
-    public void OperationsActivityTab_NothingChosen_SaysHowToGetSomethingBack()
+    public void OperationsActivityTab_EmptyUrlValue_FoldsEverySectionAndKeepsTheHeadings()
     {
         _navigation.NavigateTo("/admin/operations?t=activity&s=");
 
@@ -118,48 +125,46 @@ public class OperationsActivityTabTests : JimComponentTestContext
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(cut.FindAll("section[data-testid]"), Is.Empty);
-                Assert.That(cut.Markup, Does.Contain("Choose Queued, In Progress or Completed"));
+                Assert.That(cut.FindAll("section[data-testid]").Select(s => s.GetAttribute("data-collapsed")), Is.All.EqualTo("true"));
+                Assert.That(cut.Markup, Does.Contain("Completed"), "the headings are how the rows come back");
+                Assert.That(cut.Markup, Does.Not.Contain("Nothing to show"));
             }
         });
     }
 
     [Test]
-    public void OperationsActivityTab_CompletedHidden_DisablesTheFiltersOnlyCompletedUses()
+    public void OperationsActivityTab_FiltersInTheUrl_AppliesThemOnArrivalAndSaysSoWithoutOpeningTheRow()
     {
-        _navigation.NavigateTo("/admin/operations?t=activity&s=queued,running");
-
-        var cut = Render<OperationsActivityTab>();
-
-        cut.WaitForAssertion(() =>
-        {
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(cut.FindComponent<MudSelect<ActivityStatus>>().Instance.Disabled, Is.True, "Result means nothing for unfinished work");
-                Assert.That(cut.FindComponents<MudCheckBox<bool>>().Single(c => c.Instance.Label == "Has child activities").Instance.Disabled, Is.True);
-                Assert.That(cut.FindComponents<MudCheckBox<bool>>().Single(c => c.Instance.Label == "Scheduled only").Instance.Disabled, Is.False,
-                    "Scheduled only applies to queued and running work too");
-            }
-        });
-    }
-
-    [Test]
-    public void OperationsActivityTab_FiltersInTheUrl_AppliesThemOnArrival()
-    {
-        _navigation.NavigateTo("/admin/operations?t=activity&scheduled=1&result=Cancelled&by=Infrastructure");
+        // A bookmarked filtered view arrives with its filter row closed: the chips beside the Filters button say
+        // what narrows it, so the row is for changing it, not for reading it.
+        _navigation.NavigateTo("/admin/operations?t=activity&scheduled=1&result=Cancelled");
 
         var cut = Render<OperationsActivityTab>();
 
         cut.WaitForAssertion(() =>
         {
             var applied = cut.FindComponent<OperationsQueueSections>().Instance.Filters;
+            var chips = cut.FindAll("[data-testid='active-filter']").Select(c => c.TextContent.Trim()).ToList();
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(applied.ScheduledOnly, Is.True);
                 Assert.That(applied.Results, Is.EqualTo(new[] { ActivityStatus.Cancelled }));
-                Assert.That(applied.InitiatedBy, Is.EqualTo("Infrastructure"));
+                Assert.That(cut.HasComponent<MudSelect<ActivityStatus>>(), Is.False, "the filter row stays closed");
+                Assert.That(chips, Is.EqualTo(new[] { "Result: Cancelled", "Scheduled only" }));
             }
         });
+    }
+
+    [Test]
+    public async Task OperationsActivityTab_FiltersButton_OpensTheFilterRowAsync()
+    {
+        _navigation.NavigateTo("/admin/operations?t=activity");
+        var cut = Render<OperationsActivityTab>();
+        Assert.That(cut.HasComponent<MudSelect<ActivityStatus>>(), Is.False, "closed until asked for");
+
+        await cut.InvokeAsync(() => cut.Find("[data-testid='toggle-filters']").Click());
+
+        cut.WaitForAssertion(() => Assert.That(cut.HasComponent<MudSelect<ActivityStatus>>(), Is.True));
     }
 
     [Test]
@@ -167,6 +172,7 @@ public class OperationsActivityTabTests : JimComponentTestContext
     {
         _navigation.NavigateTo("/admin/operations?t=activity");
         var cut = Render<OperationsActivityTab>();
+        await cut.InvokeAsync(() => cut.Find("[data-testid='toggle-filters']").Click());
         var scheduledOnly = cut.FindComponents<MudCheckBox<bool>>().Single(c => c.Instance.Label == "Scheduled only");
 
         await cut.InvokeAsync(() => scheduledOnly.Instance.ValueChanged.InvokeAsync(true));
@@ -185,17 +191,64 @@ public class OperationsActivityTabTests : JimComponentTestContext
     }
 
     [Test]
-    public async Task OperationsActivityTab_SectionToggled_WritesOnlyTheSectionsParameterAsync()
+    public async Task OperationsActivityTab_FilterChipClosed_PutsThatFilterBackAndKeepsTheRestAsync()
+    {
+        _navigation.NavigateTo("/admin/operations?t=activity&scheduled=1&result=Cancelled");
+        var cut = Render<OperationsActivityTab>();
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='active-filter']"), Has.Count.EqualTo(2)));
+        var resultChip = cut.FindComponents<MudChip<string>>().Single(c => c.Markup.Contains("Result:", StringComparison.Ordinal));
+
+        await cut.InvokeAsync(() => resultChip.Instance.OnClose.InvokeAsync(resultChip.Instance));
+
+        var update = JSInterop.Invocations
+            .Where(i => i.Identifier == "jimInterop.updateQueryString")
+            .Select(i => (IReadOnlyDictionary<string, string[]?>)i.Arguments[0]!)
+            .Last(p => p.ContainsKey("result"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(update["result"], Is.Null);
+            Assert.That(update["scheduled"], Is.EqualTo(new[] { "1" }));
+            Assert.That(cut.FindAll("[data-testid='active-filter']").Select(c => c.TextContent.Trim()), Is.EqualTo(new[] { "Scheduled only" }));
+        }
+    }
+
+    [Test]
+    public async Task OperationsActivityTab_ClearClicked_PutsEveryFilterBackAsync()
+    {
+        _navigation.NavigateTo("/admin/operations?t=activity&scheduled=1&result=Cancelled");
+        var cut = Render<OperationsActivityTab>();
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='clear-filters']"), Has.Count.EqualTo(1)));
+
+        await cut.InvokeAsync(() => cut.Find("[data-testid='clear-filters']").Click());
+
+        var update = JSInterop.Invocations
+            .Where(i => i.Identifier == "jimInterop.updateQueryString")
+            .Select(i => (IReadOnlyDictionary<string, string[]?>)i.Arguments[0]!)
+            .Last(p => p.ContainsKey("result"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(update.Keys, Is.EquivalentTo(OperationsActivityFilters.QueryParameterNames));
+            Assert.That(update.Values, Is.All.Null);
+            Assert.That(cut.FindAll("[data-testid='active-filter']"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task OperationsActivityTab_SectionFolded_WritesOnlyTheSectionsParameterAsync()
     {
         _navigation.NavigateTo("/admin/operations?t=activity");
         var cut = Render<OperationsActivityTab>();
-        var chips = cut.FindComponent<MudChipSet<ActivitySection>>();
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='activity-completed'] [aria-expanded]"), Has.Count.EqualTo(1)));
 
-        await cut.InvokeAsync(() => chips.Instance.SelectedValuesChanged.InvokeAsync([ActivitySection.Queued]));
+        await cut.InvokeAsync(() => cut.Find("[data-testid='activity-completed'] [aria-expanded]").Click());
 
         var update = (IReadOnlyDictionary<string, string[]?>)JSInterop.Invocations
             .Last(i => i.Identifier == "jimInterop.updateQueryString").Arguments[0]!;
-        Assert.That(update, Is.EqualTo(new Dictionary<string, string[]?> { ["s"] = ["queued"] }));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(update, Is.EqualTo(new Dictionary<string, string[]?> { ["s"] = ["queued,running"] }));
+            Assert.That(cut.Find("[data-testid='activity-completed']").GetAttribute("data-collapsed"), Is.EqualTo("true"));
+        }
     }
 
     private sealed class FakeJimApplicationFactory(JimApplication jimApplication) : IJimApplicationFactory

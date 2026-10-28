@@ -9,6 +9,26 @@ audience: administrator
 
 On an RFC 4512 directory (OpenLDAP, 389 Directory Server), an auxiliary object class attaches to an individual entry rather than to a structural class in the schema. `inetOrgPerson` plus `posixAccount` is near-universal in OpenLDAP estates, and nothing in the schema says the two go together: it is a fact about each entry.
 
+```jim-diagram
+archetype: anatomy
+title: What an Object Type with a merged auxiliary class is made of
+desc: "An Object Type such as inetOrgPerson is made of its own structural class plus each auxiliary class you merge into it, such as posixAccount. The merged class's attributes join the Object Type's attribute table at the next Refresh Schema, showing the class's name in the Class column. Its required (MUST) attributes are listed as Optional, and are enforced only when the class is added to an entry. JIM composes objectClass itself on export, adding a merged class only where the entry's flows write its attributes, so objectClass is never an Attribute Flow target. A class is suggested by a DIT Content Rule or by being seen in use on entries, but only what you enable is merged; Discover classes in use reads a quick sample or does a full scan. Active Directory needs none of this: it resolves its own auxiliary classes into each structural class."
+subject:
+  kind: object
+  label: "Object Type `inetOrgPerson`"
+  parts:
+    - { label: "`inetOrgPerson`", detail: its own structural class }
+    - { label: "`posixAccount`", detail: an auxiliary class you merged }
+    - { label: "`posixAccount` attributes", detail: "join the table at the next Refresh Schema" }
+    - { label: "`posixAccount` MUSTs", detail: "listed Optional; enforced when the class is added" }
+    - { label: "`objectClass`", detail: "composed by JIM; never a flow target" }
+properties:
+  - { name: Merged, value: only what you enable }
+  - { name: Suggested by, value: "rules, or use" }
+  - { name: Discovery, value: sample or full scan }
+  - { name: Active Directory, value: resolves its own }
+```
+
 JIM therefore asks you which auxiliary classes an Object Type should carry, and offers everything it can find out as a suggestion rather than acting on it.
 
 This section applies only to directories that publish an RFC 4512 subschema subentry. **Active Directory resolves its own auxiliary classes into each structural class**, so its Object Types already carry those attributes and none of the controls below appear.

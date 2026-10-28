@@ -13,8 +13,9 @@ namespace JIM.Web.Models.Api;
 public class ServerCertificateResponse
 {
     /// <summary>
-    /// The certificate the server presented and which check it fails, judged with the JIM certificate store taken
-    /// into account.
+    /// The certificate the server presented and which check it fails, judged as the connection will be: with the JIM
+    /// certificate store taken into account, counting only a root trusted there where the connection needs one
+    /// (<c>TrustAnchorMustBeRoot</c>).
     /// </summary>
     public ServerCertificateDiagnostic Certificate { get; set; } = null!;
 

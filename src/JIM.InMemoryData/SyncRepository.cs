@@ -2118,6 +2118,16 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    // The changes and exports handed over are the stored instances, so they already hold what resolution wrote. Virtual
+    // for test-support subclasses that snapshot persisted state (see GetPendingExportsByIdsAsync).
+    public virtual Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+    {
+        foreach (var pe in pendingExports)
+            _pendingExports[pe.Id] = pe;
+        return Task.CompletedTask;
+    }
+
     public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
     {
         var deleted = 0;
@@ -3099,6 +3109,25 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+    {
+        var result = new Dictionary<Guid, ReferenceAnchorSummary>();
+        foreach (var mvoId in metaverseObjectIds)
+        {
+            if (!_csosByMvo.TryGetValue(mvoId, out var csoIds))
+                continue;
+
+            var cso = csoIds
+                .Select(csoId => _csos.TryGetValue(csoId, out var candidate) ? candidate : null)
+                .FirstOrDefault(candidate => candidate != null && candidate.ConnectedSystemId == connectedSystemId);
+            if (cso != null)
+                result[mvoId] = ReferenceAnchorSummary.Of(cso);
+        }
+
+        return Task.FromResult(result);
+    }
+
     public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
     {
         ConnectedSystemObjectTypeAttribute? result = null;
@@ -3191,12 +3220,12 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Collects all remaining executable exports with unresolved references (deferred) strictly
-    /// after the given keyset cursor, in a single call, mirroring the Postgres implementation.
-    /// Used to fast-path the export batch-collection loop once a batch is discovered to be made
-    /// up entirely of deferred exports (issue #985).
+    /// Collects the ids of all remaining executable exports with unresolved references (deferred)
+    /// strictly after the given keyset cursor, mirroring the Postgres implementation. Used to
+    /// fast-path the export batch-collection loop once a batch is discovered to be made up entirely
+    /// of deferred exports (issue #985).
     /// </summary>
-    public virtual Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    public virtual Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
     {
         var query = GetExecutableExportsForSystem(connectedSystemId)
             .Where(pe => pe.HasUnresolvedReferences);
@@ -3210,6 +3239,22 @@ public class SyncRepository : ISyncRepository
         }
 
         var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .Select(pe => pe.Id)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Loads one chunk of the deferred export pass by id, in (CreatedAt, Id) order. Virtual so a test can see the chunks
+    /// the pass takes.
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+    {
+        var result = pendingExportIds
+            .Where(_pendingExports.ContainsKey)
+            .Select(id => _pendingExports[id])
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
             .ToList();

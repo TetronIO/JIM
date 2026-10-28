@@ -2914,32 +2914,7 @@ public class ExportEvaluationServer
                 // change on purpose). The rebuilt Pending Export is reconciled while any change awaits
                 // confirmation, whatever its own status (see SyncEngine.ReconcileCsoAgainstPendingExport).
                 var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges)
-                    .Select(avc => new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        AttributeId = avc.AttributeId,
-                        Attribute = avc.Attribute,
-                        StringValue = avc.StringValue,
-                        DateTimeValue = avc.DateTimeValue,
-                        IntValue = avc.IntValue,
-                        LongValue = avc.LongValue,
-                        DecimalValue = avc.DecimalValue,
-                        ByteValue = avc.ByteValue,
-                        GuidValue = avc.GuidValue,
-                        BoolValue = avc.BoolValue,
-                        UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
-                        ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId,
-                        ChangeType = avc.ChangeType,
-                        SyncRuleId = avc.SyncRuleId,
-                        SyncRuleName = avc.SyncRuleName,
-                        Status = avc.Status,
-                        ExportAttemptCount = avc.ExportAttemptCount,
-                        LastExportedAt = avc.LastExportedAt,
-                        LastImportedValue = avc.LastImportedValue,
-                        // A held change stays held through the rebuild (#2039); dropping the flag would have the next
-                        // import retry a value the target refuses until the Initial Password is delivered.
-                        AwaitsInitialPassword = avc.AwaitsInitialPassword
-                    })
+                    .Select(SyncEngine.CarryOverSurvivingChange)
                     .ToList();
 
                 var mergedChanges = new List<PendingExportAttributeValueChange>(attributeChanges);

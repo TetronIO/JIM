@@ -1053,10 +1053,10 @@ try {
         # assignment by the directory's own synchronisation, then exported. One object is enough.
         Write-TestSection "Test 6b: Export mode drift is corrected back to the assignment"
         if ($exportedValues.Count -gt 0) {
-            # Until an account's Initial Password is delivered, Drift Detection skips it (its userAccountControl change
-            # is held; see Wait-ForInitialPasswordDelivery), so the drift below would go unchecked. Delivery runs in the
-            # background, about 1,000 accounts in two minutes on the Active Directory lab, and this test used to pass
-            # only because the steps before it were slower than that.
+            # Drift Detection corrects an account while its Initial Password is still owed (#2501), so this wait is not
+            # what lets the drift below be found. It is kept so the test checks drift correction alone, on an account
+            # that has settled, rather than racing its enablement by the delivery (about 1,000 accounts in two minutes on
+            # the Active Directory lab). Correcting drift during the hold is covered by DriftCorrectionWorkflowTests.
             Wait-ForInitialPasswordDelivery -ConnectedSystemId $config.LDAPSystemId -ConnectedSystemName $DirectoryConfig.ConnectedSystemName
             $driftTarget = $exportedValues[0]
             $driftAccountName = ($population | Where-Object { $_.id -eq $driftTarget.MvoId } | Select-Object -First 1).attributes.'Account Name'

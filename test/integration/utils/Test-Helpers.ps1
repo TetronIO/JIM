@@ -2983,6 +2983,42 @@ function Write-Spinner {
     Write-Host "`r  $spinner $Message".PadRight(80) -NoNewline -ForegroundColor Yellow
 }
 
+function Get-WorkerMemoryWarningPattern {
+    <#
+    .SYNOPSIS
+        The regular expression for the line the Worker's memory guard adds to an Activity's warning when memory was
+        low while it ran. Keep in step with WorkerMemoryOutcome.WarningText (src/JIM.Worker).
+    #>
+    return '^Memory was low while this ran: '
+}
+
+function Write-WorkerMemoryWarning {
+    <#
+    .SYNOPSIS
+        Reports that memory was low while an Activity ran, and records it for the run summary.
+
+    .DESCRIPTION
+        The runner sets JIM_MEMORY_WARNINGS_PATH to a results file and repeats what is recorded there beside its pass
+        or fail line, so a pass the host was barely able to give is not mistaken for a comfortable one. Without the
+        variable (a scenario run on its own) the warning is only written to the console.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Warning
+    )
+
+    Write-Host "  ⚠ $Name ran short of memory (ActivityId: $ActivityId): $Warning" -ForegroundColor Yellow
+    if ($env:JIM_MEMORY_WARNINGS_PATH) {
+        Add-Content -Path $env:JIM_MEMORY_WARNINGS_PATH -Value "${Name}: $Warning" -Encoding UTF8
+    }
+}
+
 function Get-UniquenessProbeWarningPattern {
     <#
     .SYNOPSIS
@@ -3086,6 +3122,28 @@ function Assert-ActivitySuccess {
     }
 
     $status = $activity.status
+
+    # The Worker's memory guard warns when the host is short of memory while a run is in progress. That is a fact
+    # about the host, not about whether the run was right, and at the Scale templates a host sits close enough to the
+    # guard's line that a gigabyte of unrelated activity decides it. Report it (here and in the run summary) and judge
+    # the Activity on everything else it says.
+    if ($status -eq 'CompleteWithWarning' -and $activity.warningMessage) {
+        $warningLines = @("$($activity.warningMessage)" -split "\r?\n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $memoryLines = @($warningLines | Where-Object { $_.Trim() -match (Get-WorkerMemoryWarningPattern) })
+        if ($memoryLines.Count -gt 0) {
+            Write-WorkerMemoryWarning -Name $Name -ActivityId $ActivityId -Warning $memoryLines[0].Trim()
+            $otherLines = @($warningLines | Where-Object { $_.Trim() -notmatch (Get-WorkerMemoryWarningPattern) })
+            $activity.warningMessage = $otherLines -join "`n"
+
+            if ($otherLines.Count -eq 0) {
+                # An object error also makes an Activity Complete with warning, so only a run with none is complete.
+                $stats = Get-JIMActivityStats -ActivityId $ActivityId -ErrorAction SilentlyContinue
+                if ($stats -and $stats.totalObjectErrors -eq 0) {
+                    $status = 'Complete'
+                }
+            }
+        }
+    }
 
     # A warning accepted only for the shape the caller names: every line of the Activity's own warning message
     # matches, and no object failed (an item error would also make the status CompleteWithWarning).
@@ -5779,8 +5837,7 @@ function Remove-ContainerWithMissingNetwork {
 # ─────────────────────────────────────────────────────────────────────────────
 # Initial Password delivery (#2039, #2064). Shared by the scenarios that provision accounts with an Initial Password:
 # on real Active Directory each is created disabled and enabled by the delivery, and until its password is delivered
-# JIM holds its userAccountControl change and Drift Detection skips the account, so a step that expects the accounts
-# settled must wait for this first.
+# JIM holds its userAccountControl change, so a step that expects the accounts settled must wait for this first.
 # ─────────────────────────────────────────────────────────────────────────────
 function Wait-ForInitialPasswordDelivery {
     <#

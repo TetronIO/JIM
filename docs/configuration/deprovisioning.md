@@ -9,6 +9,25 @@ audience: administrator
 
 Provisioning's counterpart: each export rule's **Deprovisioning Action** determines what happens to the object in the Connected System when its Metaverse Object leaves the rule's scope or is deleted (for example, when a leaver's Metaverse Object is removed by a [deletion rule](../concepts/jml-lifecycle.md#deletion-rules)):
 
+```jim-diagram
+archetype: decision
+title: What happens when a Metaverse Object leaves an export rule's scope
+desc: 'When a Metaverse Object leaves an export rule''s scope or is deleted, it matters first whether a Create was ever sent for its Connected System Object. If not, JIM cancels the provisioning: the unsent Create Pending Export and the Connected System Object are removed, and nothing is exported. If it was, the Deprovisioning Action decides, and Delete wins when several export rules cover the object. Disconnect, the default, breaks the join and leaves the object in place in the Connected System; Delete queues a delete that removes it on the next export run.'
+start: {label: Leaves scope or is deleted}
+questions:
+- {id: sent, label: 'Create sent?', sub: confirmed or not}
+- {id: action, label: Deprovisioning Action, sub: Delete wins across export rules}
+outcomes:
+- {id: cancelled, label: Provisioning cancelled, sub: unsent Create and object removed}
+- {id: disconnected, label: Disconnected, sub: join broken; object left in place}
+- {id: deleted, label: Delete queued, sub: removed on the next export run}
+answers:
+- {from: sent, to: cancelled, label: 'no: Pending Provisioning'}
+- {from: sent, to: action, label: 'yes'}
+- {from: action, to: disconnected, label: Disconnect (default)}
+- {from: action, to: deleted, label: Delete}
+```
+
 - **Disconnect** (default): JIM breaks the join and leaves the object in place in the Connected System. Nothing is exported: a change queued for the object while it was in scope, and not yet exported, is withdrawn by the next export run rather than written to an object JIM no longer manages.
 - **Delete**: JIM queues a delete so the object is removed from the Connected System on the next export run.
 

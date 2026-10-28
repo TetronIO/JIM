@@ -46,21 +46,21 @@ JIM is deployed as a set of containers, on Docker or Podman, each with a distinc
 
 <p class="jim-diagram-caption">JIM's deployable containers. PostgreSQL doubles as the task queue: the Scheduler queues work and the Worker polls it, so the services coordinate through the database rather than calling each other.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
-### JIM.Web
+### Web Application
 
-The web application provides both the **administrative user interface** (built with Blazor Server and MudBlazor) and the **REST API** (at `/api/`). Administrators use the UI to configure Connected Systems, define Synchronisation Rules, monitor operations, and browse identity data. The API enables automation and integration with external tools. It also serves the SCIM endpoint (at `/scim/`) that identity providers push Users and Groups to, for each Connected System using the [JIM SCIM 2.0 Service Provider Connector](../connectors/jim-scim-service-provider-connector.md). JIM keeps what they push, and the Worker imports it on the Connected System's Schedule.
+The web application (`jim.web`) provides both the **administrative user interface**, the portal, and the **REST API** (at `/api/`). Administrators use the UI to configure Connected Systems, define Synchronisation Rules, monitor operations, and browse identity data. The API enables automation and integration with external tools. It also serves the SCIM endpoint (at `/scim/`) that identity providers push Users and Groups to, for each Connected System using the [JIM SCIM 2.0 Service Provider Connector](../connectors/jim-scim-service-provider-connector.md). JIM keeps what they push, and the Worker imports it on the Connected System's Schedule.
 
-### JIM.Worker
+### Worker Service
 
-The background processor that executes all identity operations: imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging. The Worker also hosts the [Password Delivery Service](password-synchronisation.md#the-password-delivery-service), which delivers queued password changes to Connected Systems on its own clock, and writes a heartbeat that the portal's [Service Health](../configuration/operations.md#service-health) panel reads.
+The Worker Service (`jim.worker`) is the background processor that executes all identity operations: imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging. The Worker also hosts the [Password Delivery Service](password-synchronisation.md#the-password-delivery-service), which delivers queued password changes to Connected Systems on its own clock, and writes a heartbeat that the portal's [Service Health](../configuration/operations.md#service-health) panel reads.
 
 --8<-- "assets/diagrams/worker-components.svg"
 
 <p class="jim-diagram-caption">Inside the Worker Service: the host dispatches import, synchronise and export processors, and the Sync Engine makes the synchronisation decisions. The host polls the task queue in PostgreSQL, where the whole service reads and writes staged and Metaverse data; the Connectors carry data to and from Connected Systems.<span class="jimdg-caption-motion"> Moving dots trace data arriving through, and leaving via, the Connectors.</span></p>
 
-### JIM.Scheduler
+### Scheduler Service
 
-A lightweight scheduling service that triggers operations on a cron or interval basis. Schedules can include multiple steps (e.g., import from HR, synchronise, export to Active Directory) that execute in sequence. The Scheduler submits work to the Worker for processing.
+The Scheduler Service (`jim.scheduler`) is a lightweight scheduling service that triggers operations on a cron or interval basis. Schedules can include multiple steps (e.g., import from HR, synchronise, export to Active Directory) that execute in sequence. The Scheduler submits work to the Worker for processing.
 
 ### JIM.PowerShell
 
@@ -79,7 +79,10 @@ This is what makes JIM feel live rather than polled:
 - The **Scheduler** advances a Schedule to its next step as soon as the current step's tasks finish, instead of waiting up to 30 seconds for its next polling cycle.
 - The **web application** pushes the same events to the browser, so the Operations page and a running Activity's progress update as work happens.
 
-Polling remains as the safety net throughout. If the notification channel is unavailable, every affected surface falls back to polling automatically and nothing stops working; notifications are treated as hints that something is worth re-reading, never as the source of truth. A SignalR hub at `/hubs/notifications` broadcasts the same events for non-Blazor consumers.
+Polling remains as the safety net throughout. If the notification channel is unavailable, every affected surface falls back to polling automatically and nothing stops working; notifications are treated as hints that something is worth re-reading, never as the source of truth.
+
+<!-- conformance: allow LANG-10 "the hub speaks SignalR, so a client connecting to it needs a SignalR client" -->
+A SignalR hub at `/hubs/notifications` broadcasts the same events to your own dashboards and tooling.
 
 ## :material-layers-triple-outline: Layered Architecture
 
@@ -95,8 +98,8 @@ JIM is deployed as containers, on Docker or Podman, and is designed to work in *
 
 A typical deployment consists of:
 
-- **JIM.Web** container (UI and API)
-- **JIM.Worker** container (background processing)
-- **JIM.Scheduler** container (scheduled operations)
+- **Web Application** container, `jim.web` (portal and API)
+- **Worker Service** container, `jim.worker` (background processing)
+- **Scheduler Service** container, `jim.scheduler` (scheduled operations)
 - **PostgreSQL** container (database)
 - An **OIDC identity provider** for authentication (e.g., Keycloak, or any OIDC-compliant provider)

@@ -628,35 +628,76 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
 }
 
 /* ─── Operations Activity tab (#2549) ───
-   Queued, In progress and Completed share one page, in time order, later at the top. Each section opens with a
-   header naming it and the time it covers; Queued and In progress are plain tables whose columns take the same widths
-   as Completed's grid (ActivityTableColumns), so a column can be followed down the page. */
+   Queued, In progress and Completed share one page, in time order, later at the top. A section holding rows opens
+   with a heading (a chevron that folds its rows, its icon, its name and its count); an empty section is a single
+   line saying why. Queued and In progress are plain tables whose columns take the same widths as Completed's grid
+   (ActivityTableColumns), so a column can be followed down the page. */
 .jim-activity-section-header {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.5rem 0.75rem;
-    margin-bottom: 0.75rem;
+    min-height: 48px;
+    margin-bottom: 0.5rem;
 }
 
-/* The time a section covers, as a small uppercase label in that section's colour. */
-.jim-activity-section-when {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+/* An empty section: one quiet line with a hairline under it, so two empty sections read as a short ledger rather
+   than as two headings over two boxes. The title keeps its heading size for the page's outline. */
+.jim-activity-ledger-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    min-height: 40px;
+    padding: 0 0.25rem;
+    border-bottom: 1px solid var(--mud-palette-table-lines, var(--mud-palette-lines-default));
 }
 
-.jim-activity-section-when--later {
+.jim-activity-ledger-message {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* The chevron that folds a section: points down while the section is open, right while it is folded, as the
+   Service Health strip's does. */
+.jim-activity-collapse-toggle .mud-icon-root {
+    transition: transform 0.2s;
+    transform: rotate(-90deg);
+}
+
+.jim-activity-collapse-toggle--open .mud-icon-root {
+    transform: rotate(0deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jim-activity-collapse-toggle .mud-icon-root {
+        transition: none;
+    }
+}
+
+/* A finished run's result: a status dot (the .jim-status-dot vocabulary, further down) in the result's colour and
+   the result in words. A plain Complete carries no colour on its words, so the warnings and errors are what stand
+   out down a column of results. */
+.jim-activity-result {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.jim-activity-result--warn {
     color: var(--jim-chip-text-warning, var(--mud-palette-warning));
+    font-weight: 600;
 }
 
-.jim-activity-section-when--now {
-    color: var(--jim-chip-text-info, var(--mud-palette-info));
+.jim-activity-result--err {
+    color: var(--jim-chip-text-error, var(--mud-palette-error));
+    font-weight: 600;
 }
 
-.jim-activity-section-when--earlier {
-    color: var(--jim-chip-text-success, var(--mud-palette-success));
+/* A run that changed nothing says so in words, low-lit, rather than wearing a chip with a zero on it. */
+.jim-activity-no-changes {
+    color: var(--mud-palette-text-secondary);
+    opacity: 0.7;
 }
 
 /* In progress's marker: a dot with a soft halo while the worker is busy, a plain muted dot while it is idle. */
@@ -1646,6 +1687,21 @@ a.jim-system-rule-chip-part:focus-visible {
     border-radius: var(--jim-container-radius);
     overflow-x: auto;
     white-space: pre;
+}
+
+/* A Connected System Text setting holds a document the administrator writes by hand (JSON, typically),
+   so its text area is monospaced like the code it contains. */
+.jim-setting-text textarea {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+/* A Connector setting's example, beneath its field. Long examples scroll within the block rather than
+   pushing the rest of the form a screen further down. */
+.jim-setting-example .jim-code-block {
+    max-height: 360px;
+    overflow-y: auto;
 }
 
 /* Shell syntax-highlighting tokens (bash / PowerShell), emitted by Helpers.HighlightShell.
@@ -4114,6 +4170,30 @@ html[lang] .jim-kv-table td:first-child {
     margin-top: 4px;
 }
 
+/* On a connection that accepts only a root (Oracle Database over TCPS), the root is the one row on offer and the rest of
+   the chain is there to read: the offered row takes the primary colour, and the others are drawn dashed and quiet, like
+   the gap above, so neither reads as a choice. */
+.jim-certificate-chain-row-offered {
+    border-color: var(--mud-palette-primary);
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+    background-color: rgba(var(--mud-palette-primary-rgb), 0.08);
+}
+
+.jim-certificate-chain-row-reference {
+    border-style: dashed;
+}
+
+.jim-certificate-chain-row-reference .jim-certificate-chain-name {
+    font-weight: 400;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-certificate-chain-caption {
+    margin-top: 6px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+}
+
 /* A certificate JIM could not find is drawn as a gap in the chain rather than as one of its links. */
 .jim-certificate-chain-row-missing {
     border-style: dashed;
@@ -5819,6 +5899,17 @@ html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-ch
 .jim-virtualised-list-placeholder-toolbar {
     height: 64px;
     border-bottom: 1px solid var(--mud-palette-table-lines);
+}
+
+/* The toolbar drawn above the grid's paper rather than inside it (ToolBarAboveGrid): the same row, laid out the
+   same way, standing as the section's heading. The spacer inside needs a flex parent to push against. */
+.jim-virtualised-list-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    min-height: 48px;
+    margin-bottom: 0.5rem;
 }
 
 /* A slow search, sort or refresh: the rows on screen belong to the match set being replaced, so they fade and stop
