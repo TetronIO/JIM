@@ -42,7 +42,7 @@ Get-JIMFileSystemItem -Roots
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Path` | `string` | No (List) |  | The directory to list. Omit it to list the allowed root directories. |
+| `Path` | `string` | No (List) |  | The directory to list. Omit it to list the first allowed root directory; use `-Roots` to list the roots themselves. |
 | `Roots` | `switch` | Yes (Roots) |  | Returns the allowed root directory paths instead of listing a directory. |
 
 ### Output
@@ -66,7 +66,7 @@ Listing returns the directory's contents; `-Roots` returns each allowed root dir
 
 ### Examples
 
-```powershell title="List the allowed root directories"
+```powershell title="List the first allowed root directory"
 Get-JIMFileSystemItem
 ```
 
