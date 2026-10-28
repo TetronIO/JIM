@@ -300,10 +300,13 @@ window.jimVirtualList = {
 // and go under a reader. Positions are measured from the top of the document, not the viewport: the question is how
 // the page lays out on arrival, whatever the reader has scrolled to since.
 window.jimQueueRows = {
+    // Keyed by the tbody's id rather than the element: the element is gone by the time .NET asks for its listener
+    // to be released (the render that removed it is what prompts the release), and an id still names the entry.
     _observed: new Map(),
-    observe: function (element, dotNetRef, debounceMs) {
+    observe: function (elementId, dotNetRef, debounceMs) {
+        var element = document.getElementById(elementId);
         if (!element) return;
-        window.jimQueueRows.stop(element);
+        window.jimQueueRows.stop(elementId);
 
         var report = function () {
             var rows = element.querySelectorAll('tr.jim-activity-row');
@@ -318,16 +321,16 @@ window.jimQueueRows = {
         };
 
         window.addEventListener('resize', entry.handler, { passive: true });
-        window.jimQueueRows._observed.set(element, entry);
+        window.jimQueueRows._observed.set(elementId, entry);
         report();
     },
-    stop: function (element) {
-        var entry = window.jimQueueRows._observed.get(element);
+    stop: function (elementId) {
+        var entry = window.jimQueueRows._observed.get(elementId);
         if (!entry) return;
 
         if (entry.timer) window.clearTimeout(entry.timer);
         window.removeEventListener('resize', entry.handler);
-        window.jimQueueRows._observed.delete(element);
+        window.jimQueueRows._observed.delete(elementId);
     }
 };
 

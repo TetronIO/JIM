@@ -22,26 +22,35 @@
 @* The Activity tab's Queued and In progress sections (#2549). Both come from one read of the worker queue, so they
    share this component, its refresh and its notification subscription; Completed is a separate read and component. *@
 
-@if (ShowQueued)
-{
-    @* ─── Queued ─── *@
-    <section aria-labelledby="activity-queued-heading" data-testid="activity-queued">
+@* Each section is one of two shapes. Empty, it is a single line: its icon, its name and why it is empty, with no
+   chevron (there is nothing to fold) and no paper (a bordered box around one sentence is the busiest way to say
+   nothing is happening). Holding rows, it is a heading with a chevron and the count, over a table that folds under
+   the heading when the section is collapsed. The table stays mounted while folded: the Queued table's rows are
+   measured against the window, and a table rebuilt on every expand would be measured over again. The tab owns
+   which sections are expanded, because it keeps that choice in the URL; a chevron only asks it to toggle. *@
+
+@* ─── Queued ─── *@
+<section aria-labelledby="activity-queued-heading" data-testid="activity-queued"
+         data-empty="@(_queuedRows.Count == 0 ? "true" : "false")" data-collapsed="@(QueuedExpanded ? "false" : "true")">
+    @if (_queuedRows.Count == 0)
+    {
+        <div class="jim-activity-ledger-row">
+            <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Warning" />
+            <MudText Typo="Typo.h6" id="activity-queued-heading" Class="jim-activity-ledger-title">Queued</MudText>
+            <span class="jim-activity-ledger-message">@(Filters.IsActive ? "Nothing queued matches the filters." : "Nothing is queued.")</span>
+        </div>
+    }
+    else
+    {
         <div class="jim-activity-section-header">
+            @SectionToggle(ActivitySection.Queued, QueuedExpanded, "Queued", QueuedBodyId)
             <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Warning" />
             <MudText Typo="Typo.h6" id="activity-queued-heading">Queued</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@_queuedCount</MudText>
-            <span class="jim-activity-section-when jim-activity-section-when--later">Later</span>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="activity-queued-count">@_queuedCount</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Next run at the bottom, nearest In Progress</MudText>
         </div>
-
-        @if (_queuedRows.Count == 0)
-        {
-            <MudPaper Outlined="true" Class="pa-4">
-                <MudText Class="mud-text-secondary">@(Filters.IsActive ? "Nothing queued matches the filters." : "Nothing is queued.")</MudText>
-            </MudPaper>
-        }
-        else
-        {
-            <MudPaper Outlined="true" Class="jim-activity-table-paper">
+        <MudCollapse Expanded="@QueuedExpanded">
+            <MudPaper Outlined="true" Class="jim-activity-table-paper" id="@QueuedBodyId">
                 <MudSimpleTable Hover="true" Elevation="0" Class="jim-activity-table">
                     <colgroup>
                         <col style="@ActivityTableColumns.State" />
@@ -72,7 +81,7 @@
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody @ref="_queuedBody">
+                    <tbody id="@QueuedRowsId">
                         @if (_hiddenQueuedCount > 0 || _showAllQueued)
                         {
                             <tr class="jim-activity-more-row">
@@ -135,30 +144,31 @@
                     </tbody>
                 </MudSimpleTable>
             </MudPaper>
-        }
-    </section>
-}
+        </MudCollapse>
+    }
+</section>
 
-@if (ShowInProgress)
-{
-    @* ─── In progress ─── *@
-    <section aria-labelledby="activity-running-heading" data-testid="activity-in-progress">
-        <div class="jim-activity-section-header">
-            <span class="jim-activity-now-dot @(_runningRows.Count > 0 ? "" : "jim-activity-now-dot--idle")" aria-hidden="true"></span>
-            <MudText Typo="Typo.h6" id="activity-running-heading">In Progress</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@_runningCount</MudText>
-            <span class="jim-activity-section-when jim-activity-section-when--now">Now</span>
+@* ─── In progress ─── *@
+<section aria-labelledby="activity-running-heading" data-testid="activity-in-progress"
+         data-empty="@(_runningRows.Count == 0 ? "true" : "false")" data-collapsed="@(InProgressExpanded ? "false" : "true")">
+    @if (_runningRows.Count == 0)
+    {
+        <div class="jim-activity-ledger-row">
+            <span class="jim-activity-now-dot jim-activity-now-dot--idle" aria-hidden="true"></span>
+            <MudText Typo="Typo.h6" id="activity-running-heading" Class="jim-activity-ledger-title">In Progress</MudText>
+            <span class="jim-activity-ledger-message">@(Filters.IsActive ? "Nothing running matches the filters." : "Nothing is running; the worker is idle.")</span>
         </div>
-
-        @if (_runningRows.Count == 0)
-        {
-            <MudPaper Outlined="true" Class="pa-4">
-                <MudText Class="mud-text-secondary">@(Filters.IsActive ? "Nothing running matches the filters." : "Nothing is running; the worker is idle.")</MudText>
-            </MudPaper>
-        }
-        else
-        {
-            <MudPaper Outlined="true" Class="jim-activity-table-paper">
+    }
+    else
+    {
+        <div class="jim-activity-section-header">
+            @SectionToggle(ActivitySection.InProgress, InProgressExpanded, "In Progress", RunningBodyId)
+            <span class="jim-activity-now-dot" aria-hidden="true"></span>
+            <MudText Typo="Typo.h6" id="activity-running-heading">In Progress</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="activity-in-progress-count">@_runningCount</MudText>
+        </div>
+        <MudCollapse Expanded="@InProgressExpanded">
+            <MudPaper Outlined="true" Class="jim-activity-table-paper" id="@RunningBodyId">
                 <MudSimpleTable Hover="true" Elevation="0" Class="jim-activity-table">
                     <colgroup>
                         <col style="@ActivityTableColumns.State" />
@@ -259,28 +269,42 @@
                     </tbody>
                 </MudSimpleTable>
             </MudPaper>
-        }
-    </section>
-}
+        </MudCollapse>
+    }
+</section>
 
 @code {
+    /// <summary>The chevron that asks the tab to fold or unfold a section; the tab answers through the Expanded parameters.</summary>
+    private RenderFragment SectionToggle(ActivitySection section, bool expanded, string name, string controlsId) =>
+        @<MudTooltip Text="@(expanded ? $"Collapse {name}" : $"Expand {name}")" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
+                           Class="@($"jim-activity-collapse-toggle{(expanded ? " jim-activity-collapse-toggle--open" : string.Empty)}")"
+                           aria-label="@(expanded ? $"Collapse {name}" : $"Expand {name}")"
+                           aria-expanded="@(expanded ? "true" : "false")" aria-controls="@controlsId"
+                           OnClick="@(() => ToggleRequested.InvokeAsync(section))" />
+        </MudTooltip>;
+
+    private const string QueuedBodyId = "activity-queued-body";
+    private const string QueuedRowsId = "activity-queued-rows";
+    private const string RunningBodyId = "activity-running-body";
+
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
-    /// <summary>Whether the Queued section is shown.</summary>
-    [Parameter] public bool ShowQueued { get; set; } = true;
+    /// <summary>Whether the Queued section's table is unfolded under its heading.</summary>
+    [Parameter] public bool QueuedExpanded { get; set; } = true;
 
-    /// <summary>Whether the In progress section is shown.</summary>
-    [Parameter] public bool ShowInProgress { get; set; } = true;
+    /// <summary>Whether the In progress section's table is unfolded under its heading.</summary>
+    [Parameter] public bool InProgressExpanded { get; set; } = true;
+
+    /// <summary>Raised when a section's chevron is clicked; the tab flips that section and writes the choice to the URL.</summary>
+    [Parameter] public EventCallback<ActivitySection> ToggleRequested { get; set; }
 
     /// <summary>The tab's filters; Queued and In progress apply every one but Result and Has child activities.</summary>
     [Parameter] public OperationsActivityFilters Filters { get; set; } = OperationsActivityFilters.None;
 
     /// <summary>Looks a Schedule's name up by id, for the Schedule filter.</summary>
     [Parameter] public Func<Guid, string?> ScheduleName { get; set; } = _ => null;
-
-    /// <summary>Raised with the number of queued and running tasks matching the filters, whenever either changes.</summary>
-    [Parameter] public EventCallback<(int Queued, int Running)> CountsChanged { get; set; }
 
     // The space In progress needs below Queued to stay in view: its heading, its table's header and one running row.
     private const double InProgressReserve = 190;
@@ -298,12 +322,10 @@
     private List<QueueDisplayRow> _runningRows = [];
     private int _queuedCount;
     private int _runningCount;
-    private (int Queued, int Running)? _reportedCounts;
     private int _hiddenQueuedCount;
     private bool _showAllQueued;
     private int _queuedRowBudget = QueueRowBudget.ProvisionalRows;
 
-    private ElementReference _queuedBody;
     private bool _observingQueue;
     private DotNetObjectReference<OperationsQueueSections>? _selfReference;
     private OperationsActivityFilters? _appliedFilters;
@@ -383,23 +405,44 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Every render, not just the first: the first happens while the queue read is still in flight, and every
-        // later change to the counts arrives through a render too. Unchanged counts are not reported again.
-        await ReportCountsAsync();
-
-        // The Queued table exists only while something is queued, so observation starts the first time it does.
-        if (!_observingQueue && ShowQueued && _queuedRows.Count > 0)
+        // The Queued table exists only while something is queued (folded or not), so its rows are measured from the
+        // render that draws it, and the listener is released by the render that removes it; a table drawn again
+        // later is a new element and is measured afresh. Observation is keyed by the element's id rather than a
+        // reference to it, so the release reaches the listener after the element has gone.
+        var tableDrawn = _queuedRows.Count > 0;
+        if (tableDrawn && !_observingQueue)
         {
             _selfReference ??= DotNetObjectReference.Create(this);
             try
             {
-                await JS.InvokeVoidAsync("jimQueueRows.observe", _queuedBody, _selfReference, 150);
+                await JS.InvokeVoidAsync("jimQueueRows.observe", QueuedRowsId, _selfReference, 150);
                 _observingQueue = true;
             }
             catch (InvalidOperationException)
             {
                 // Prerendering: JS interop is not available yet, and the provisional budget stands until it is.
             }
+        }
+        else if (!tableDrawn && _observingQueue)
+        {
+            await StopObservingQueueAsync();
+        }
+    }
+
+    private async Task StopObservingQueueAsync()
+    {
+        _observingQueue = false;
+        try
+        {
+            await JS.InvokeVoidAsync("jimQueueRows.stop", QueuedRowsId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has already gone; the listener went with the page.
+        }
+        catch (InvalidOperationException)
+        {
+            // Prerendering; nothing was attached.
         }
     }
 
@@ -588,16 +631,6 @@
         (_visibleQueuedRows, _hiddenQueuedCount) = QueueDisplayRow.Limit(_queuedRows, _queuedRowBudget);
     }
 
-    private async Task ReportCountsAsync()
-    {
-        var counts = (_queuedCount, _runningCount);
-        if (!CountsChanged.HasDelegate || _reportedCounts == counts)
-            return;
-
-        _reportedCounts = counts;
-        await CountsChanged.InvokeAsync(counts);
-    }
-
     private ScheduleExecutionProgress? ProgressFor(Guid? scheduleExecutionId) =>
         scheduleExecutionId is { } id ? _scheduleProgress.GetValueOrDefault(id) : null;
 
@@ -678,20 +711,7 @@
         await _pollingCancellationTokenSource.CancelAsync();
 
         if (_observingQueue)
-        {
-            try
-            {
-                await JS.InvokeVoidAsync("jimQueueRows.stop", _queuedBody);
-            }
-            catch (JSDisconnectedException)
-            {
-                // The circuit has already gone; the listener went with the page.
-            }
-            catch (InvalidOperationException)
-            {
-                // Disposed during prerendering; nothing was attached.
-            }
-        }
+            await StopObservingQueueAsync();
 
         _selfReference?.Dispose();
     }

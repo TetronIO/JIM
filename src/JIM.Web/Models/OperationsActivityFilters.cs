@@ -4,6 +4,7 @@
 using System.Web;
 using JIM.Models.Activities;
 using JIM.Models.Tasking.DTOs;
+using JIM.Utilities;
 
 namespace JIM.Web.Models;
 
@@ -12,9 +13,10 @@ namespace JIM.Web.Models;
 /// </summary>
 /// <remarks>
 /// Completed is filtered by the database; Queued and In progress are already in memory and are filtered by
-/// <see cref="Matches"/>, which compares the same way the database does (names without regard to case, the initiator
-/// by a partial match), so a filter means the same thing in every section. Result applies to Completed alone: queued
-/// and running work has no result yet.
+/// <see cref="Matches"/>, which compares the same way the database does (names without regard to case), so a filter
+/// means the same thing in every section. Result applies to Completed alone: queued and running work has no result
+/// yet. Who started the work is not a filter: Completed's search box searches the initiator, and the two sections
+/// above it hold too few rows to need narrowing by name.
 /// </remarks>
 public sealed record OperationsActivityFilters
 {
@@ -25,7 +27,6 @@ public sealed record OperationsActivityFilters
     private const string RunProfileParameter = "profile";
     private const string ScheduleParameter = "schedule";
     private const string ResultParameter = "result";
-    private const string InitiatedByParameter = "by";
     private const string HasChildActivitiesParameter = "children";
     private const string ScheduledOnlyParameter = "scheduled";
     private const string FlagValue = "1";
@@ -33,8 +34,8 @@ public sealed record OperationsActivityFilters
     /// <summary>The URL parameters the filters are written to, so a filtered view can be bookmarked and shared.</summary>
     public static IReadOnlyCollection<string> QueryParameterNames { get; } =
     [
-        ConnectedSystemParameter, RunProfileParameter, ScheduleParameter, ResultParameter, InitiatedByParameter,
-        HasChildActivitiesParameter, ScheduledOnlyParameter
+        ConnectedSystemParameter, RunProfileParameter, ScheduleParameter, ResultParameter, HasChildActivitiesParameter,
+        ScheduledOnlyParameter
     ];
 
     private static readonly ActivityStatus[] FinishedStatuses =
@@ -58,9 +59,6 @@ public sealed record OperationsActivityFilters
     /// <summary>The results to show in Completed; empty for every finished result.</summary>
     public IReadOnlyCollection<ActivityStatus> Results { get; init; } = [];
 
-    /// <summary>A partial, case-insensitive match on the initiator's name; blank for all.</summary>
-    public string? InitiatedBy { get; init; }
-
     /// <summary>Only executions that have child Activities (Completed only).</summary>
     public bool HasChildActivities { get; init; }
 
@@ -69,7 +67,46 @@ public sealed record OperationsActivityFilters
 
     /// <summary>Whether any filter is narrowed from its default.</summary>
     public bool IsActive => ConnectedSystems.Count > 0 || RunProfiles.Count > 0 || Schedules.Count > 0 || Results.Count > 0
-        || !string.IsNullOrWhiteSpace(InitiatedBy) || HasChildActivities || ScheduledOnly;
+        || HasChildActivities || ScheduledOnly;
+
+    /// <summary>
+    /// One chip per narrowed filter, in the filter row's order, each naming the filter and its values, so a view
+    /// filtered with the row closed still says what narrows it.
+    /// </summary>
+    /// <param name="scheduleName">Looks a Schedule's name up by id, for the Schedule chip.</param>
+    public IReadOnlyList<ActiveFilterChip> ActiveChips(Func<Guid, string?> scheduleName)
+    {
+        var chips = new List<ActiveFilterChip>();
+        if (ConnectedSystems.Count > 0)
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.ConnectedSystems, $"Connected System: {string.Join(", ", ConnectedSystems)}"));
+        if (RunProfiles.Count > 0)
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.RunProfiles, $"Run Profile: {string.Join(", ", RunProfiles)}"));
+        if (Schedules.Count > 0)
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.Schedules, $"Schedule: {string.Join(", ", Schedules.Select(id => scheduleName(id) ?? "Unknown Schedule"))}"));
+        if (Results.Count > 0)
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.Results, $"Result: {string.Join(", ", Results.Select(r => r.ToString().SplitOnCapitalLetters()))}"));
+        if (HasChildActivities)
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.HasChildActivities, "Has child activities"));
+        if (ScheduledOnly)
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.ScheduledOnly, "Scheduled only"));
+        return chips;
+    }
+
+    /// <summary>These filters with one of them back at its default: what closing that filter's chip does.</summary>
+    public OperationsActivityFilters Without(ActivityFilterKind kind)
+    {
+        var without = kind switch
+        {
+            ActivityFilterKind.ConnectedSystems => this with { ConnectedSystems = [] },
+            ActivityFilterKind.RunProfiles => this with { RunProfiles = [] },
+            ActivityFilterKind.Schedules => this with { Schedules = [] },
+            ActivityFilterKind.Results => this with { Results = [] },
+            ActivityFilterKind.HasChildActivities => this with { HasChildActivities = false },
+            ActivityFilterKind.ScheduledOnly => this with { ScheduledOnly = false },
+            _ => this
+        };
+        return without.IsActive ? without : None;
+    }
 
     /// <summary>Whether a queued or running task passes the filters that apply to it.</summary>
     /// <param name="task">The task.</param>
@@ -86,10 +123,6 @@ public sealed record OperationsActivityFilters
             return false;
 
         if (Schedules.Count > 0 && !ContainsIgnoringCase(Schedules.Select(scheduleName).OfType<string>(), task.ScheduleExecutionName))
-            return false;
-
-        if (!string.IsNullOrWhiteSpace(InitiatedBy)
-            && task.InitiatedByName?.Contains(InitiatedBy.Trim(), StringComparison.OrdinalIgnoreCase) != true)
             return false;
 
         return true;
@@ -122,7 +155,6 @@ public sealed record OperationsActivityFilters
                 .OfType<ActivityStatus>()
                 .Where(FinishedStatuses.Contains)
                 .ToList(),
-            InitiatedBy = parameters[InitiatedByParameter],
             HasChildActivities = parameters[HasChildActivitiesParameter] == FlagValue,
             ScheduledOnly = parameters[ScheduledOnlyParameter] == FlagValue
         };
@@ -140,7 +172,6 @@ public sealed record OperationsActivityFilters
         [RunProfileParameter] = ListOrNull(RunProfiles),
         [ScheduleParameter] = ListOrNull(Schedules.Select(id => id.ToString())),
         [ResultParameter] = ListOrNull(Results.Select(r => r.ToString())),
-        [InitiatedByParameter] = string.IsNullOrWhiteSpace(InitiatedBy) ? null : [InitiatedBy.Trim()],
         [HasChildActivitiesParameter] = HasChildActivities ? [FlagValue] : null,
         [ScheduledOnlyParameter] = ScheduledOnly ? [FlagValue] : null
     };

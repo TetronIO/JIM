@@ -4,8 +4,8 @@
 namespace JIM.Web.Models;
 
 /// <summary>
-/// Which of the Activity tab's sections are shown (#2549), and how that choice is written to the URL so a filtered
-/// view can be bookmarked and survives a refresh.
+/// Which of the Activity tab's sections are expanded (#2549), and how that choice is written to the URL so a view can
+/// be bookmarked and survives a refresh. A collapsed section keeps its heading; only its rows fold away.
 /// </summary>
 public sealed record ActivitySectionState(bool Queued, bool InProgress, bool Completed)
 {
@@ -13,14 +13,11 @@ public sealed record ActivitySectionState(bool Queued, bool InProgress, bool Com
     private const string InProgressWord = "running";
     private const string CompletedWord = "completed";
 
-    /// <summary>Every section shown: the default.</summary>
+    /// <summary>Every section expanded: the default.</summary>
     public static ActivitySectionState All { get; } = new(true, true, true);
 
-    /// <summary>Whether every section has been turned off.</summary>
-    public bool NothingSelected => !Queued && !InProgress && !Completed;
-
     /// <summary>
-    /// Reads the URL value: a comma-separated list of the sections shown. Absent means every section; empty means
+    /// Reads the URL value: a comma-separated list of the sections expanded. Absent means every section; empty means
     /// none. Case and unknown words are tolerated, since the value is typed by hand as often as written by the page.
     /// </summary>
     public static ActivitySectionState Parse(string? value)
@@ -36,7 +33,7 @@ public sealed record ActivitySectionState(bool Queued, bool InProgress, bool Com
         return new ActivitySectionState(words.Contains(QueuedWord), words.Contains(InProgressWord), words.Contains(CompletedWord));
     }
 
-    /// <summary>The URL value for this state, or null when every section is shown so the default URL stays clean.</summary>
+    /// <summary>The URL value for this state, or null when every section is expanded so the default URL stays clean.</summary>
     public string? ToQueryValue()
     {
         if (this == All)
@@ -47,16 +44,6 @@ public sealed record ActivitySectionState(bool Queued, bool InProgress, bool Com
         if (InProgress) words.Add(InProgressWord);
         if (Completed) words.Add(CompletedWord);
         return string.Join(',', words);
-    }
-
-    /// <summary>The sections shown, in the order the page shows them.</summary>
-    public IReadOnlyCollection<ActivitySection> Selected()
-    {
-        var selected = new List<ActivitySection>();
-        if (Queued) selected.Add(ActivitySection.Queued);
-        if (InProgress) selected.Add(ActivitySection.InProgress);
-        if (Completed) selected.Add(ActivitySection.Completed);
-        return selected;
     }
 
     /// <summary>This state with one section switched.</summary>

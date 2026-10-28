@@ -27,7 +27,7 @@ namespace JIM.Web.Tests;
 /// What these pin is what an administrator depends on: running work and waiting work land in their own sections, the
 /// next run sits nearest In progress, parallel runs are shown together under their Schedule Execution, a Schedule
 /// Execution keeps the actions it is the only home for, the sections follow the queue live without rebuilding a row
-/// under the reader's cursor, and the filters and toggles above the tab reach these sections.
+/// under the reader's cursor, the filters above the tab reach these sections, and an empty section is one line.
 /// </summary>
 [TestFixture]
 public class OperationsQueueSectionsTests : JimComponentTestContext
@@ -302,6 +302,8 @@ public class OperationsQueueSectionsTests : JimComponentTestContext
                 Assert.That(SectionText(cut, "activity-queued"), Does.Contain("Nothing is queued."));
                 Assert.That(SectionText(cut, "activity-in-progress"), Does.Contain("the worker is idle"));
                 Assert.That(cut.FindAll("table"), Is.Empty);
+                Assert.That(cut.Find("[data-testid='activity-queued']").GetAttribute("data-empty"), Is.EqualTo("true"));
+                Assert.That(cut.FindAll("[aria-expanded]"), Is.Empty, "an empty section is one line, with nothing to fold");
             }
         });
     }
@@ -327,49 +329,105 @@ public class OperationsQueueSectionsTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsQueueSections_SectionTurnedOff_IsNotDrawn()
+    public void OperationsQueueSections_SectionCollapsed_KeepsItsHeadingAndFoldsItsTable()
     {
+        // A collapsed section is still on the page: its heading, with the count, says what it holds, and the chevron
+        // brings the rows back. Only the table folds, and it stays mounted while folded so nothing is rebuilt.
         ArrangeQueue([Task("HR System", status: WorkerTaskStatus.Processing), Task("LDAP Directory")]);
 
-        var cut = Render<OperationsQueueSections>(p => p.Add(c => c.ShowQueued, false));
+        var cut = Render<OperationsQueueSections>(p => p.Add(c => c.QueuedExpanded, false));
 
         cut.WaitForAssertion(() =>
         {
+            var queued = cut.Find("[data-testid='activity-queued']");
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(cut.FindAll("[data-testid='activity-queued']"), Is.Empty);
+                Assert.That(queued.GetAttribute("data-collapsed"), Is.EqualTo("true"));
+                Assert.That(queued.TextContent, Does.Contain("Queued"), "the heading stays");
+                Assert.That(queued.QuerySelector("[aria-expanded]")?.GetAttribute("aria-expanded"), Is.EqualTo("false"));
+                Assert.That(queued.QuerySelectorAll("tr.jim-activity-row"), Has.Count.EqualTo(1), "the table is folded, not removed");
+                Assert.That(cut.FindComponents<MudBlazor.MudCollapse>().Single(c => c.Instance.Expanded == false).FindAll("tr.jim-activity-row"), Has.Count.EqualTo(1));
                 Assert.That(SectionText(cut, "activity-in-progress"), Does.Contain("HR System"));
             }
         });
     }
 
     [Test]
-    public void OperationsQueueSections_Loaded_ReportsHowManyAreQueuedAndRunning()
+    public async Task OperationsQueueSections_ChevronClicked_AsksTheTabToToggleThatSectionAsync()
     {
-        ArrangeQueue([Task("HR System", status: WorkerTaskStatus.Processing), Task("LDAP Directory"), Task("AD")]);
-        (int Queued, int Running)? reported = null;
+        // The tab owns which sections are expanded, because it writes the choice to the URL; the section only asks.
+        ArrangeQueue([Task("LDAP Directory")]);
+        ActivitySection? toggled = null;
 
-        Render<OperationsQueueSections>(p => p.Add(c => c.CountsChanged, counts => reported = counts));
+        var cut = Render<OperationsQueueSections>(p => p.Add(c => c.ToggleRequested, section => toggled = section));
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='activity-queued'] [aria-expanded]"), Has.Count.EqualTo(1)));
 
-        Assert.That(reported, Is.EqualTo((2, 1)));
+        await cut.InvokeAsync(() => cut.Find("[data-testid='activity-queued'] [aria-expanded]").Click());
+
+        Assert.That(toggled, Is.EqualTo(ActivitySection.Queued));
     }
 
     [Test]
-    public async Task OperationsQueueSections_QueueReadTakesTime_StillReportsTheCountsOnceLoadedAsync()
+    public void OperationsQueueSections_Loaded_CountsEachSectionInItsHeading()
     {
-        // The first render happens while the queue read is still in flight; counts reported then are zeros, and the
-        // toggles above the tab would keep saying "Queued 0" beside a section holding work.
+        ArrangeQueue([Task("HR System", status: WorkerTaskStatus.Processing), Task("LDAP Directory"), Task("AD")]);
+
+        var cut = Render<OperationsQueueSections>();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Find("[data-testid='activity-queued-count']").TextContent.Trim(), Is.EqualTo("2"));
+                Assert.That(cut.Find("[data-testid='activity-in-progress-count']").TextContent.Trim(), Is.EqualTo("1"));
+            }
+        });
+    }
+
+    [Test]
+    public async Task OperationsQueueSections_QueueReadTakesTime_StillCountsOnceLoadedAsync()
+    {
+        // The first render happens while the queue read is still in flight, as two empty sections; the counts arrive
+        // with the rows.
         _taskingRepository.Setup(r => r.GetWorkerTaskHeadersAsync()).Returns(async () =>
         {
             await System.Threading.Tasks.Task.Delay(100);
             return [Task("HR System", status: WorkerTaskStatus.Processing), Task("LDAP Directory"), Task("AD")];
         });
-        (int Queued, int Running)? reported = null;
 
-        Render<OperationsQueueSections>(p => p.Add(c => c.CountsChanged, counts => reported = counts));
-        await WaitUntilAsync(() => reported == (2, 1));
+        var cut = Render<OperationsQueueSections>();
+        await WaitUntilAsync(() => cut.FindAll("[data-testid='activity-queued-count']").Count == 1);
 
-        Assert.That(reported, Is.EqualTo((2, 1)));
+        cut.WaitForAssertion(() => Assert.That(cut.Find("[data-testid='activity-queued-count']").TextContent.Trim(), Is.EqualTo("2")));
+    }
+
+    [Test]
+    public async Task OperationsQueueSections_QueueEmptiesAndRefills_MeasuresTheNewRowsAgainAsync()
+    {
+        // Queued's rows are measured against the window (jimQueueRows) to decide how many fit. The table goes when
+        // the queue empties and comes back when work arrives; the new table must be measured too, or the section
+        // stays at its provisional row budget for the rest of the page's life.
+        var waiting = Task("LDAP Directory");
+        var queue = new List<WorkerTaskHeader> { waiting };
+        ArrangeQueue(queue);
+
+        var cut = Render<OperationsQueueSections>();
+        await WaitUntilAsync(() => JSInterop.Invocations.Count(i => i.Identifier == "jimQueueRows.observe") == 1);
+
+        queue.Clear();
+        _notifications.RaiseWorkerTaskChanged(new WorkerTaskChangeNotification());
+        await WaitUntilAsync(() => SectionText(cut, "activity-queued").Contains("Nothing is queued.", StringComparison.Ordinal));
+        await WaitUntilAsync(() => JSInterop.Invocations.Any(i => i.Identifier == "jimQueueRows.stop"));
+
+        queue.Add(Task("AD"));
+        _notifications.RaiseWorkerTaskChanged(new WorkerTaskChangeNotification());
+        await WaitUntilAsync(() => JSInterop.Invocations.Count(i => i.Identifier == "jimQueueRows.observe") == 2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(JSInterop.Invocations.Count(i => i.Identifier == "jimQueueRows.stop"), Is.EqualTo(1), "the vanished table's listener is released");
+            Assert.That(JSInterop.Invocations.Count(i => i.Identifier == "jimQueueRows.observe"), Is.EqualTo(2), "the new table is measured");
+        }
     }
 
     private sealed class FakeJimApplicationFactory(JimApplication jimApplication) : IJimApplicationFactory

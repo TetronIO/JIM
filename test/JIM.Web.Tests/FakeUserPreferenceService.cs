@@ -62,7 +62,13 @@ public sealed class FakeUserPreferenceService : IUserPreferenceService
         return Task.CompletedTask;
     }
 
-    public Task<bool?> GetTableDenseAsync() => Task.FromResult<bool?>(null);
+    /// <summary>
+    /// What <see cref="GetTableDenseAsync"/> returns. A test that needs the read to stay pending (to see what a
+    /// component shows before the preference arrives) assigns an incomplete task here before rendering.
+    /// </summary>
+    public Task<bool?> TableDenseRead { get; set; } = Task.FromResult<bool?>(null);
+
+    public Task<bool?> GetTableDenseAsync() => TableDenseRead;
 
     public Task SetTableDenseAsync(bool isDense) => Task.CompletedTask;
 

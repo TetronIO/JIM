@@ -3442,10 +3442,10 @@ public class ExportExecutionTests
             return base.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
         }
 
-        public override Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        public override Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         {
             Interlocked.Increment(ref RemainingDeferredCalls);
-            return base.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
+            return base.GetRemainingDeferredExportIdsAsync(connectedSystemId, afterCreatedAt, afterId);
         }
 
         public override Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
@@ -3490,6 +3490,17 @@ public class ExportExecutionTests
                     _persistedState[pe.Id] = ClonePendingExport(pe);
             }
             return base.UpdatePendingExportsAsync(list);
+        }
+
+        public override Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+            IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+        {
+            lock (_persistLock)
+            {
+                foreach (var pe in pendingExports)
+                    _persistedState[pe.Id] = ClonePendingExport(pe);
+            }
+            return base.PersistResolvedReferencesAsync(pendingExports, resolvedChanges);
         }
 
         public override Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
@@ -3680,7 +3691,7 @@ public class ExportExecutionTests
             $"{countingRepo.BatchLoadCalls} page loads for {exportCount} deferred exports at batch size {batchSize}. " +
             "See issue #985 (c).");
         Assert.That(countingRepo.RemainingDeferredCalls, Is.EqualTo(1),
-            "Expected exactly one bulk GetRemainingDeferredExportsAsync call to collect the deferred tail.");
+            "Expected exactly one bulk GetRemainingDeferredExportIdsAsync call to collect the deferred tail.");
         Assert.That(countingRepo.ExecutableProbeCalls, Is.EqualTo(1),
             "Expected exactly one executable-exports existence probe before the fast path fired.");
     }
@@ -3753,7 +3764,7 @@ public class ExportExecutionTests
         Assert.That(countingRepo.BatchLoadCalls, Is.EqualTo(2),
             $"Expected exactly 2 page loads (mixed page 1, all-deferred page 2); got {countingRepo.BatchLoadCalls}.");
         Assert.That(countingRepo.RemainingDeferredCalls, Is.EqualTo(1),
-            "Expected exactly one bulk GetRemainingDeferredExportsAsync call once page 2 was found to be entirely deferred.");
+            "Expected exactly one bulk GetRemainingDeferredExportIdsAsync call once page 2 was found to be entirely deferred.");
         Assert.That(countingRepo.ExecutableProbeCalls, Is.EqualTo(1),
             "Expected exactly one executable-exports existence probe (for the all-deferred page 2; " +
             "the mixed page 1 must not probe).");
@@ -3835,10 +3846,12 @@ public class ExportExecutionTests
     /// batch re-loads the stale unresolved rows and sends raw Metaverse Object identifiers to
     /// the target directory ("member: value #0 invalid per syntax" against OpenLDAP; observed
     /// 2026-07-13 when the Max Export Parallelism default first exceeded 1). The sequential path
-    /// masks this by passing the in-memory objects straight to the connector.
+    /// masks this by passing the in-memory objects straight to the connector. Run with the whole pass in one chunk
+    /// and in chunks smaller than it, since each chunk is resolved and saved only as the batches reach it.
     /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_ParallelDeferredExports_ConnectorReceivesResolvedReferencesAsync()
+    [TestCase(2_000)]
+    [TestCase(4)]
+    public async Task ExecuteExportsAsync_ParallelDeferredExports_ConnectorReceivesResolvedReferencesAsync(int deferredChunkSize)
     {
         // Arrange: an application wired to a persistence-isolating repository, so per-batch
         // re-loads behave like a real fresh DbContext (persisted state only).
@@ -3921,7 +3934,7 @@ public class ExportExecutionTests
         }
 
         var primaryConnector = CreateRecordingConnector();
-        var options = new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 };
+        var options = new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2, DeferredChunkSize = deferredChunkSize };
 
         // Act
         var result = await jim.ExportExecution.ExecuteExportsAsync(
@@ -3947,6 +3960,137 @@ public class ExportExecutionTests
             "before parallel deferred batches re-load their exports from fresh contexts. Received: " +
             string.Join("; ", unresolvedReceived.Select(v => $"PE {v.PeId}: StringValue='{v.StringValue}', Unresolved='{v.UnresolvedReferenceValue}'")));
         Assert.That(result.FailedCount, Is.EqualTo(0), "No deferred export should fail in this scenario.");
+    }
+
+    /// <summary>
+    /// Records each chunk the deferred pass loads, into a log the test's progress callback writes to as well, so the
+    /// order of loads and progress reports can be read back.
+    /// </summary>
+    private sealed class DeferredChunkRecordingSyncRepository(List<string> events) : SyncRepository
+    {
+        public List<int> ChunkSizes { get; } = [];
+
+        public override Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+        {
+            ChunkSizes.Add(pendingExportIds.Count);
+            events.Add($"load:{pendingExportIds.Count}");
+            return base.GetDeferredExportsByIdsAsync(pendingExportIds);
+        }
+    }
+
+    /// <summary>
+    /// At 790k objects the deferred pass loaded all 39,907 deferred exports, fetched every object they referenced and
+    /// saved every resolution before writing anything, and the Activity sat at 0% for about six minutes. The pass must
+    /// work through the deferred exports a chunk at a time: each chunk loaded only once the one before it has been
+    /// handed out, and the pass's own progress moving from the first chunk, rising to its total and never falling back.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(2)]
+    public async Task ExecuteExportsAsync_DeferredExportsInChunks_LoadsEachChunkAsItIsReachedAndReportsPassProgressAsync(int maxParallelism)
+    {
+        // Arrange
+        var events = new List<string>();
+        var recordingRepo = new DeferredChunkRecordingSyncRepository(events);
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: recordingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        const int deferredCount = 5;
+        var anchors = new Dictionary<Guid, Guid>();
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        for (var i = 0; i < deferredCount; i++)
+        {
+            var mvoId = Guid.NewGuid();
+            var anchor = Guid.NewGuid();
+            recordingRepo.SeedMetaverseObject(new MetaverseObject { Id = mvoId });
+            recordingRepo.SeedConnectedSystemObject(new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                MetaverseObjectId = mvoId,
+                AttributeValues = [new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = anchor }]
+            });
+
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType, baseTime.AddMilliseconds(i), hasUnresolvedReferences: true);
+            pe.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(),
+                PendingExportId = pe.Id,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                AttributeId = managerAttr.Id,
+                Attribute = managerAttr,
+                UnresolvedReferenceValue = mvoId.ToString(),
+                Status = PendingExportAttributeChangeStatus.Pending
+            });
+            recordingRepo.SeedPendingExport(pe);
+            anchors[pe.Id] = anchor;
+        }
+
+        var sentManagerValues = new System.Collections.Concurrent.ConcurrentDictionary<Guid, string?>();
+        Mock<IConnector> CreateRecordingConnector()
+        {
+            var mock = new Mock<IConnector>();
+            mock.Setup(c => c.Name).Returns("Recording Test Connector");
+            mock.As<IConnectorExportUsingCalls>()
+                .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                {
+                    foreach (var pe in exports)
+                        sentManagerValues[pe.Id] = pe.AttributeValueChanges.Single(a => a.AttributeId == managerAttr.Id).StringValue;
+                    return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+                });
+            return mock;
+        }
+
+        var passProgress = new List<int>();
+        Task ProgressCallback(ExportProgressInfo info)
+        {
+            lock (events)
+            {
+                if (info.PassTotal.HasValue)
+                {
+                    Assert.That(info.PassTotal, Is.EqualTo(deferredCount), "the pass counts its own work: every deferred export");
+                    passProgress.Add(info.PassProcessed ?? 0);
+                    events.Add($"progress:{info.PassProcessed}");
+                }
+            }
+            return Task.CompletedTask;
+        }
+
+        var options = new ExportExecutionOptions { BatchSize = 2, MaxParallelism = maxParallelism, DeferredChunkSize = 2 };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            CreateRecordingConnector().Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            ProgressCallback,
+            connectorFactory: () => CreateRecordingConnector().Object,
+            repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(recordingRepo));
+
+        // Assert
+        var lastLoad = events.FindLastIndex(e => e.StartsWith("load:", StringComparison.Ordinal));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(deferredCount));
+            Assert.That(sentManagerValues, Has.Count.EqualTo(deferredCount));
+            foreach (var (peId, anchor) in anchors)
+                Assert.That(sentManagerValues[peId], Is.EqualTo(anchor.ToString()), "every chunk's references are resolved before they are written");
+
+            Assert.That(recordingRepo.ChunkSizes, Is.EqualTo(new[] { 2, 2, 1 }), "the pass loads its exports a chunk at a time");
+            Assert.That(events.Take(lastLoad).Any(e => e.StartsWith("progress:", StringComparison.Ordinal) && e != "progress:0"), Is.True,
+                $"the pass's progress must move before its last chunk is loaded. Events: {string.Join(", ", events)}");
+            Assert.That(passProgress, Is.Ordered, "the pass's progress never falls back");
+            Assert.That(passProgress[^1], Is.EqualTo(deferredCount), "the pass finishes at its own total");
+        }
     }
 
     /// <summary>
