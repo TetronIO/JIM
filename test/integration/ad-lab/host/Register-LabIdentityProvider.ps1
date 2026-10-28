@@ -11,10 +11,12 @@
     way customers register it: Register-JIMIdentityProvider -Provider ADFS. The runner calls this over SSH after the
     AD FS server has been reverted to its baseline (which holds no registration) and answers. It:
 
-      1. refuses, before anything changes on AD FS, unless the JIM PowerShell module deployed beside it (module\JIM,
-         from Install-LabScripts.ps1) is exactly the commit under test: its digest (Get-LabModuleDigest) must be the
-         -ModuleDigest the runner computed over its checkout. A copy from another commit would test a registration
-         command that is not the one being released;
+      1. refuses, before anything changes on AD FS, unless a copy of the JIM PowerShell module deployed beside it is
+         exactly the commit under test. Install-LabScripts.ps1 keeps each version under its digest
+         (Get-LabModuleDigest), so this takes module\<ModuleDigest>\JIM, the digest the runner computed over its
+         checkout, and checks the copy's content gives that digest. A run lasting hours so still finds its commit's
+         module after the hourly update deploys a newer main beside it. A copy from another commit would test a
+         registration command that is not the one being released;
       2. opens a PowerShell Direct session to the AD FS server as the domain Administrator, and runs that module's
          Register-JIMIdentityProvider in this host's PowerShell 7 with -Session, so the AD FS cmdlets run in the
          guest's Windows PowerShell, then turns CORS on for -Url, as the AD FS SSO guide tells administrators to, so
@@ -69,13 +71,13 @@ function Find-LabFile {
 
 $labModule = Find-LabFile @((Join-Path $PSScriptRoot 'guest/LabDomainController.psm1'), (Join-Path $PSScriptRoot '../guest/LabDomainController.psm1'))
 $federationModule = Find-LabFile @((Join-Path $PSScriptRoot 'guest/LabFederationServer.psm1'), (Join-Path $PSScriptRoot '../guest/LabFederationServer.psm1'))
-$jimModule = Find-LabFile @((Join-Path $PSScriptRoot 'module/JIM'), (Join-Path $PSScriptRoot '../../../../src/JIM.PowerShell'))
+$jimModule = Find-LabFile @((Join-Path $PSScriptRoot "module/$ModuleDigest/JIM"),(Join-Path $PSScriptRoot '../../../../src/JIM.PowerShell'))
 if (-not $labModule -or -not $federationModule) {
     [Console]::Error.WriteLine('Cannot find guest/LabDomainController.psm1 and guest/LabFederationServer.psm1 beside or above this script; see the layout notes in README.md.')
     exit 1
 }
 if (-not $jimModule) {
-    [Console]::Error.WriteLine("Cannot find the JIM PowerShell module (module\JIM beside this script). Run Install-LabScripts.ps1 from a checkout of the commit under test.")
+    [Console]::Error.WriteLine("This host has no copy of the JIM PowerShell module of the commit under test (module\$ModuleDigest\JIM beside this script). The hourly update deploys main's within the hour; for another commit, run Install-LabScripts.ps1 from a checkout of it.")
     exit 1
 }
 Import-Module $labModule -Force
