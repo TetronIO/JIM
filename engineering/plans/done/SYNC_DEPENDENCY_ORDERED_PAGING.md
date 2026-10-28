@@ -1,6 +1,7 @@
 # Dependency-Ordered Synchronisation Paging
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** The step's remaining-time estimate was not measured at scale: with Object Types in dependency order, Scale750k40kGroups no longer runs the step at all.
 - **Issue:** [#2492](https://github.com/TetronIO/JIM/issues/2492)
 - **Last Updated:** 2026-10-28
 
@@ -90,14 +91,14 @@ Cross-page step: only intra-type references (nested groups, managers), value-bud
 
 ## Implementation Phases
 
-### Phase 1: Type ordering and per-type paging
+### Phase 1: Type ordering and per-type paging ✅
 
 - `SyncTypeOrder` (JIM.Models result type plus a pure ordering function in JIM.Application or the worker) computing the order from Synchronisation Rules and schema. Unit tests: no references; one-way reference with declared target; undeclared target; self-reference; two-type cycle; deterministic tie-break.
 - Repository: per-type keyset page method plus migration adding `(ConnectedSystemId, TypeId, Id)` and dropping the superseded index. `RequiresPostgres` test proving keyset correctness across types and with mid-run inserts.
 - `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor` page by type in order; the final mid-run sweep; run-start log line.
 - Worker tests: a group page processed after its members resolves members in the main loop and adds nothing to `_unresolvedCrossPageReferences`; a self-referencing type still defers and still resolves.
 
-### Phase 2: Efficient cross-page step
+### Phase 2: Efficient cross-page step ✅
 
 - Raw-SQL reference-only reload (Summary-tier DTO), replacing `GetConnectedSystemObjectsForReferenceResolutionAsync` on this path, with a `RequiresPostgres` round-trip test.
 - Bulk Pending Export merge for the step, sharing the per-object merge rules so behaviour is identical (Scenario 008's Pending Provisioning case must still rebuild a Create, not stage an Update). Tests cover Create, exported Create and pending Update merges.
@@ -105,17 +106,19 @@ Cross-page step: only intra-type references (nested groups, managers), value-bud
 
 **As delivered:** the step's cost turned out to be per-object round trips in export re-evaluation, not the reload. The step now queues the merge deletes and runs them as one statement (a Pending Export batch scope in the Sync repository: reads hide queued rows, and an insert for the same object executes its queued delete first, so every merge decision is unchanged), prefetches the batch's Pending Exports in one query, and memoises the target objects the change snapshot resolves per page. Scenario 032 Medium: 14.4 ms to 3.9 ms per reference value (11.1 s to 2.8 s), 3.7x against the 5x criterion. Of the remaining 2.7 s, export evaluation is 1.4 s and the reload 0.4 s, so the raw-SQL reference-only reload was dropped: it could save at most about 0.3 s, and a reference attribute's flow expression may read the object's other attributes, which a reference-only reload would silently withhold.
 
-### Phase 3: Progress by reference values
+### Phase 3: Progress by reference values ✅
 
 - Step progress counts reference values; Activity page shows the object count in the step label. bUnit/logic tests only where display logic changes.
 
-### Phase 4: Scale verification
+### Phase 4: Scale verification ✅
 
 - Re-run Scale750k40kGroups: the cross-page step should report 0 objects (no nested groups in the scenario), and total Full Synchronisation time should drop by roughly the step's 29 minutes, offset by any change in main-loop group-page cost.
 - Add or extend a scenario with manager references and nested groups at medium scale to measure the Phase 2 step, since today's scale scenarios exercise no intra-type references.
 - Full integration suite green; peak worker memory no worse than baseline.
 
-**As found (first scale run, 2026-10-25):** the run saved only about 3 minutes, not 25, and peak Worker memory rose from 26.2 GB to 31.1 GB. Group pages climbed from about 4 s to 85 s as the run went on. Span breakdowns (added for this: a slow span now logs its descendants' totals by path) traced the climb to the join lookup: with statistics gathered while the type held few objects, the planner drove the match from the `MetaverseObjects` type index and read every object of the type for each value. The lookup now checks each candidate's type through a correlated subquery on its own row, which keeps the plan on the attribute value index whatever the statistics say. Preparing the lookup once per connection was tried and reverted: the generic plan cached on near-empty tables was reused as they grew and made joins slower (12 s to 31.6 s on Scenario 008 Large). The remaining group-page cost is proportional to membership and sits in EF Core's change tracker (page load, join match load, tracker attach after the bulk write); that is [#2598](https://github.com/TetronIO/JIM/issues/2598), planned in [`SYNC_HOT_PATH_OFF_EF_TRACKER.md`](../SYNC_HOT_PATH_OFF_EF_TRACKER.md). Awaiting a second scale run to confirm group pages no longer climb.
+**As found (first scale run, 2026-10-25):** the run saved only about 3 minutes, not 25, and peak Worker memory rose from 26.2 GB to 31.1 GB. Group pages climbed from about 4 s to 85 s as the run went on. Span breakdowns (added for this: a slow span now logs its descendants' totals by path) traced the climb to the join lookup: with statistics gathered while the type held few objects, the planner drove the match from the `MetaverseObjects` type index and read every object of the type for each value. The lookup now checks each candidate's type through a correlated subquery on its own row, which keeps the plan on the attribute value index whatever the statistics say. Preparing the lookup once per connection was tried and reverted: the generic plan cached on near-empty tables was reused as they grew and made joins slower (12 s to 31.6 s on Scenario 008 Large). The remaining group-page cost is proportional to membership and sits in EF Core's change tracker (page load, join match load, tracker attach after the bulk write); that is [#2598](https://github.com/TetronIO/JIM/issues/2598), planned in [`SYNC_HOT_PATH_OFF_EF_TRACKER.md`](../SYNC_HOT_PATH_OFF_EF_TRACKER.md).
+
+**As verified (second scale run, 2026-10-28):** the cross-page step was skipped in all three Full Synchronisations. The first Full Synchronisation took 52 minutes, against about 85 before this work (56 minutes of main loop plus the 29-minute step). Group pages took 3 to 11 s each with no upward trend, apart from three outliers of 148 to 266 s, which are the EF Core tracker attach after the Metaverse Object bulk write (80% of each), carried forward to #2598. Peak Worker memory was 25.9 GiB, against 26.2 GiB before. All seven steps passed.
 
 ## Success Criteria
 
