@@ -95,6 +95,21 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
         }
     }
 
+    It 'Redirects the portal to each of JIM''s addresses' {
+        InModuleScope JIM {
+            $current = [PSCustomObject]@{
+                HostName = 'adfs.example.com'; Identifier = 'http://adfs.example.com/adfs/services/trust'; GroupExists = $false
+                ServerApplications = @(); NativeApplications = @(); WebApiApplications = @(); Permissions = @()
+            }
+
+            $plan = Get-JIMAdfsRegistrationPlan -Url 'https://jim.example.com', 'https://jim2.example.com/' -Name 'JIM Identity Management' -Current $current
+
+            ($plan.Changes | Where-Object Action -eq 'NewServerApplication').Arguments.RedirectUri | Should -Be @(
+                'https://jim.example.com/signin-oidc', 'https://jim.example.com/signout-callback-oidc'
+                'https://jim2.example.com/signin-oidc', 'https://jim2.example.com/signout-callback-oidc')
+        }
+    }
+
     It 'Gives the portal and the PowerShell module only the scopes each needs' {
         InModuleScope JIM {
             $current = [PSCustomObject]@{

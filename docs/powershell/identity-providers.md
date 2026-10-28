@@ -37,20 +37,22 @@ For Keycloak, it creates two clients and a client scope in the realm `-Authority
 
 Both clients also get Keycloak's `basic`, `profile` and `email` scopes as default scopes, so tokens carry `sub`, the person's name and email. It uses Keycloak's admin REST API, so it runs from any computer that can reach Keycloak. Sign in with `-Credential` as a Keycloak administrator, or with `-ClientCredential` as a client's service account, for running it unattended. The account needs the `realm-admin` role in JIM's realm, or the master realm's `admin` role.
 
-The client secret is returned only when the run created or replaced it, as a secure string, so it never appears on screen. AD FS shows a secret once: keep it then, or run again with `-ResetClientSecret` for a new one.
+When people reach JIM at more than one address, give each to `-Url`, and the portal gets redirect URIs for each.
+
+The client secret is returned only when the run created, replaced or set it, as a secure string, so it never appears on screen. AD FS shows a secret once: keep it then, or run again with `-ResetClientSecret` for a new one. For a Keycloak test or development realm whose secret is known in advance, `-ClientSecret` gives the portal that secret instead of one Keycloak makes, and sets it again if it changes.
 
 <!-- BEGIN GENERATED: Register-JIMIdentityProvider -->
 ### Syntax
 
 ```powershell
 # ADFS (default)
-Register-JIMIdentityProvider -Provider <string> -Url <string> [-Name <string>] [-Session <PSSession>] [-ResetClientSecret] [-WhatIf] [-Confirm]
+Register-JIMIdentityProvider -Provider <string> -Url <string[]> [-Name <string>] [-Session <PSSession>] [-ResetClientSecret] [-WhatIf] [-Confirm]
 
 # KeycloakServiceAccount
-Register-JIMIdentityProvider -Provider <string> -Url <string> -Authority <string> -ClientCredential <PSCredential> [-AdminRealm <string>] [-ClientId <string>] [-PublicClientId <string>] [-ResetClientSecret] [-WhatIf] [-Confirm]
+Register-JIMIdentityProvider -Provider <string> -Url <string[]> -Authority <string> -ClientCredential <PSCredential> [-AdminRealm <string>] [-ClientId <string>] [-PublicClientId <string>] [-ResetClientSecret] [-ClientSecret <SecureString>] [-WhatIf] [-Confirm]
 
 # Keycloak
-Register-JIMIdentityProvider -Provider <string> -Url <string> -Authority <string> -Credential <PSCredential> [-AdminRealm <string>] [-ClientId <string>] [-PublicClientId <string>] [-ResetClientSecret] [-WhatIf] [-Confirm]
+Register-JIMIdentityProvider -Provider <string> -Url <string[]> -Authority <string> -Credential <PSCredential> [-AdminRealm <string>] [-ClientId <string>] [-PublicClientId <string>] [-ResetClientSecret] [-ClientSecret <SecureString>] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -58,7 +60,7 @@ Register-JIMIdentityProvider -Provider <string> -Url <string> -Authority <string
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Provider` | `string` | Yes |  | The identity provider to register JIM with. One of `ADFS` or `Keycloak`. |
-| `Url` | `string` | Yes |  | JIM's address as people reach it, such as https://jim.example.com, with the port if it is not 443. The portal's sign-in and sign-out redirect URIs are made from it. For Keycloak, an http address is accepted for JIM on this computer only, such as http://localhost:5200. |
+| `Url` | `string[]` | Yes |  | JIM's address as people reach it, such as https://jim.example.com, with the port if it is not 443. The portal's sign-in and sign-out redirect URIs are made from it. Give more than one when people reach JIM at more than one address. For Keycloak, an http address is accepted for JIM on this computer only, such as http://localhost:5200. |
 | `Name` | `string` | No (ADFS) | `'JIM Identity Management'` | The name of the AD FS Application Group, which is also its identifier. The applications in it are named after it, with " - Portal", " - PowerShell" and " - API". |
 | `Session` | `PSSession` | No (ADFS) |  | A PowerShell session to the AD FS server, from New-PSSession. When omitted, the command runs on this computer, which must be an AD FS server. The session is left open. |
 | `Authority` | `string` | Yes (KeycloakServiceAccount, Keycloak) |  | The Keycloak realm JIM signs people in from, such as https://sso.example.com/realms/jim. It is also the value for JIM_SSO_AUTHORITY. The realm must exist. |
@@ -68,6 +70,7 @@ Register-JIMIdentityProvider -Provider <string> -Url <string> -Authority <string
 | `ClientId` | `string` | No (KeycloakServiceAccount, Keycloak) | `'jim'` | The client ID of the portal's Keycloak client, the value for JIM_SSO_CLIENT_ID. |
 | `PublicClientId` | `string` | No (KeycloakServiceAccount, Keycloak) | `'jim-powershell'` | The client ID of the PowerShell module's Keycloak client, the value for JIM_SSO_PUBLIC_CLIENT_ID. |
 | `ResetClientSecret` | `switch` | No |  | Replaces the portal's client secret, and returns the new one. JIM cannot sign anyone in until JIM_SSO_SECRET is given the new secret. |
+| `ClientSecret` | `SecureString` | No (KeycloakServiceAccount, Keycloak) |  | For Keycloak, the portal's client secret, in place of one Keycloak makes: the client is created with it, or given it if its secret differs. Meant for test and development realms, whose secret is known in advance; elsewhere, let Keycloak make one. |
 
 ### Output
 
@@ -78,7 +81,7 @@ With `-WhatIf`, nothing is returned.
 | `Provider` | `string` | The identity provider, ADFS or Keycloak. |
 | `Authority` | `string` | The value for JIM_SSO_AUTHORITY. |
 | `ClientId` | `string` | The portal's client identifier, the value for JIM_SSO_CLIENT_ID. |
-| `ClientSecret` | `securestring` | The portal's client secret, the value for JIM_SSO_SECRET. Empty unless this run created or replaced it. |
+| `ClientSecret` | `securestring` | The portal's client secret, the value for JIM_SSO_SECRET. Empty unless this run created, replaced or set it. |
 | `PublicClientId` | `string` | The PowerShell module's client identifier, the value for JIM_SSO_PUBLIC_CLIENT_ID. |
 | `ApiScope` | `string` | The API's identifier, the value for JIM_SSO_API_SCOPE. |
 | `ClaimType` | `string` | The claim JIM identifies people by, the value for JIM_SSO_CLAIM_TYPE. |
@@ -102,6 +105,11 @@ Remove-PSSession -Session $session
 ```powershell title="Register JIM in a Keycloak realm"
 $registration = Register-JIMIdentityProvider -Provider Keycloak -Url 'https://jim.example.com' -Authority 'https://sso.example.com/realms/jim' -Credential (Get-Credential)
 $registration | Select-Object Authority, ClientId, PublicClientId, ApiScope
+```
+
+```powershell title="Register JIM at two addresses in a Keycloak test realm, with a known secret"
+$secret = Read-Host -AsSecureString 'Client secret'
+Register-JIMIdentityProvider -Provider Keycloak -Url 'http://localhost:5200', 'https://localhost:7000' -Authority 'http://localhost:8181/realms/jim' -Credential (Get-Credential) -ClientId 'jim-web' -ClientSecret $secret
 ```
 
 ```powershell title="Check a Keycloak realm for drift, as a service account"

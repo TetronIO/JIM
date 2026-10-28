@@ -153,9 +153,15 @@ function Get-JIMKeycloakRegistrationState {
     <#
     .SYNOPSIS
         Reads what the realm holds that JIM's registration depends on: its clients, client scopes and default scopes.
+
+    .PARAMETER SecretOf
+        The client whose secret to read too, for comparing with one given. No other client's secret is read.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][hashtable]$Connection)
+    param(
+        [Parameter(Mandatory)][hashtable]$Connection,
+        [string]$SecretOf
+    )
 
     $clients = [System.Collections.Generic.List[object]]::new()
     # Keycloak returns every client when asked without first and max.
@@ -181,6 +187,9 @@ function Get-JIMKeycloakRegistrationState {
             Pkce                      = [string]$attributes.'pkce.code.challenge.method'
             DefaultClientScopes       = @($defaults)
             OptionalClientScopes      = @($optionals)
+            Secret                    = if ($SecretOf -and $client.clientId -ceq $SecretOf) {
+                [string](Invoke-JIMKeycloakAdminApi -Connection $Connection -Path "/clients/$($client.id)/client-secret").value
+            }
         })
     }
 
@@ -219,7 +228,7 @@ function Get-JIMKeycloakRegistrationPlan {
         Works out what has to change in the realm for JIM's registration to be as it should be.
 
     .PARAMETER Url
-        JIM's address, as people reach it.
+        JIM's addresses, as people reach it.
 
     .PARAMETER ClientId
         The portal's client, JIM_SSO_CLIENT_ID.
@@ -228,24 +237,29 @@ function Get-JIMKeycloakRegistrationPlan {
         The PowerShell module's client, JIM_SSO_PUBLIC_CLIENT_ID.
 
     .PARAMETER Current
-        What the realm holds, as Get-JIMKeycloakRegistrationState reads it.
+        What the realm holds, as Get-JIMKeycloakRegistrationState reads it, with the portal's secret when -ClientSecret
+        is given.
 
     .PARAMETER ResetClientSecret
         Plan a new client secret for the portal even if it has one.
+
+    .PARAMETER ClientSecret
+        The portal's client secret, in place of one Keycloak makes.
 
     .OUTPUTS
         The client identifiers and API scope, and the changes in the order they must be made.
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string[]]$Url,
         [Parameter(Mandatory)][string]$ClientId,
         [Parameter(Mandatory)][string]$PublicClientId,
         [Parameter(Mandatory)][object]$Current,
-        [switch]$ResetClientSecret
+        [switch]$ResetClientSecret,
+        [securestring]$ClientSecret
     )
 
-    $baseUrl = $Url.TrimEnd('/')
+    $baseUrls = @($Url | ForEach-Object { $_.TrimEnd('/') })
     $apiScope = $script:JIMKeycloakApiScope
     $changes = [System.Collections.Generic.List[object]]::new()
     $available = @($Current.ClientScopes.Name)
@@ -291,7 +305,8 @@ function Get-JIMKeycloakRegistrationPlan {
             Properties = [ordered]@{
                 enabled = $true; publicClient = $false; standardFlowEnabled = $true; implicitFlowEnabled = $false
                 directAccessGrantsEnabled = $false; serviceAccountsEnabled = $false
-                redirectUris = @("$baseUrl/signin-oidc"); PostLogoutRedirectUris = @("$baseUrl/signout-callback-oidc"); Pkce = 'S256'
+                redirectUris = @($baseUrls | ForEach-Object { "$_/signin-oidc" })
+                PostLogoutRedirectUris = @($baseUrls | ForEach-Object { "$_/signout-callback-oidc" }); Pkce = 'S256'
             }
         },
         @{
@@ -310,9 +325,12 @@ function Get-JIMKeycloakRegistrationPlan {
         $client = $Current.Clients | Where-Object ClientId -ceq $entry.ClientId | Select-Object -First 1
         $properties = $entry.Properties
         if (-not $client) {
-            $description = if ($properties.publicClient) { "Add $($entry.Label) as a public client" } else { "Add $($entry.Label) as a confidential client, with a new client secret" }
-            $changes.Add((New-JIMKeycloakChange -Action 'NewClient' -Target $entry.ClientId -Description $description `
-                -Arguments @{ ClientId = $entry.ClientId; Name = $entry.Name; Properties = $properties }))
+            $description = if ($properties.publicClient) { "Add $($entry.Label) as a public client" }
+                elseif ($ClientSecret) { "Add $($entry.Label) as a confidential client, with the client secret given" }
+                else { "Add $($entry.Label) as a confidential client, with a new client secret" }
+            $arguments = @{ ClientId = $entry.ClientId; Name = $entry.Name; Properties = $properties }
+            if ($ClientSecret -and -not $properties.publicClient) { $arguments.Secret = $ClientSecret }
+            $changes.Add((New-JIMKeycloakChange -Action 'NewClient' -Target $entry.ClientId -Description $description -Arguments $arguments))
             $currentDefaults = @()
             $currentOptionals = @()
         }
@@ -333,6 +351,11 @@ function Get-JIMKeycloakRegistrationPlan {
             if ($ResetClientSecret -and -not $properties.publicClient) {
                 $changes.Add((New-JIMKeycloakChange -Action 'ResetClientSecret' -Target $entry.ClientId -Description 'Replace the client secret' `
                     -Arguments @{ ClientId = $entry.ClientId }))
+            }
+            if ($ClientSecret -and -not $properties.publicClient -and
+                $client.Secret -cne [System.Net.NetworkCredential]::new('', $ClientSecret).Password) {
+                $changes.Add((New-JIMKeycloakChange -Action 'SetClientSecret' -Target $entry.ClientId -Description 'Set the client secret to the one given' `
+                    -Arguments @{ ClientId = $entry.ClientId; Secret = $ClientSecret }))
             }
             $currentDefaults = @($client.DefaultClientScopes)
             $currentOptionals = @($client.OptionalClientScopes)
@@ -470,8 +493,11 @@ function Invoke-JIMKeycloakRegistrationChange {
                 clientAuthenticatorType = 'client-secret'; attributes = [PSCustomObject]@{}
             }
             Set-JIMKeycloakClientProperty -Representation $representation -Properties $arguments.Properties
+            if ($arguments.Secret) {
+                $representation | Add-Member -NotePropertyName secret -NotePropertyValue ([System.Net.NetworkCredential]::new('', $arguments.Secret).Password)
+            }
             $null = Invoke-JIMKeycloakAdminApi -Connection $Connection -Method Post -Path '/clients' -Body $representation
-            # Keycloak makes a confidential client's secret itself.
+            # Keycloak makes a confidential client's secret itself, unless it is given one.
             if (-not $arguments.Properties.publicClient) {
                 $uuid = Get-JIMKeycloakClientUuid -Connection $Connection -ClientId $arguments.ClientId
                 [string](Invoke-JIMKeycloakAdminApi -Connection $Connection -Path "/clients/$uuid/client-secret").value
@@ -487,6 +513,14 @@ function Invoke-JIMKeycloakRegistrationChange {
         'ResetClientSecret' {
             $uuid = Get-JIMKeycloakClientUuid -Connection $Connection -ClientId $arguments.ClientId
             [string](Invoke-JIMKeycloakAdminApi -Connection $Connection -Method Post -Path "/clients/$uuid/client-secret").value
+        }
+        'SetClientSecret' {
+            $uuid = Get-JIMKeycloakClientUuid -Connection $Connection -ClientId $arguments.ClientId
+            $representation = Invoke-JIMKeycloakAdminApi -Connection $Connection -Path "/clients/$uuid"
+            $secret = [System.Net.NetworkCredential]::new('', $arguments.Secret).Password
+            $representation | Add-Member -NotePropertyName secret -NotePropertyValue $secret -Force
+            $null = Invoke-JIMKeycloakAdminApi -Connection $Connection -Method Put -Path "/clients/$uuid" -Body $representation
+            $secret
         }
         { $_ -in 'AddClientScope', 'RemoveClientScope' } {
             $uuid = Get-JIMKeycloakClientUuid -Connection $Connection -ClientId $arguments.ClientId
