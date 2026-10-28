@@ -219,7 +219,7 @@ jim.scheduler  | Cannot load library libgssapi_krb5.so.2
 jim.scheduler  | Error: libgssapi_krb5.so.2: cannot open shared object file: No such file or directory
 ```
 
-**What it means.** The PostgreSQL client library (Npgsql) probes for the GSS/Kerberos authentication library on startup to advertise that capability to the server. The scheduler image deliberately does not include it.
+**What it means.** JIM's PostgreSQL client library probes for the GSS/Kerberos authentication library on startup to advertise that capability to the server. The scheduler image deliberately does not include it.
 
 **Why it is safe.** The scheduler authenticates to PostgreSQL using password credentials and does not talk to any LDAP or Kerberos-backed service. The missing library is never used.
 

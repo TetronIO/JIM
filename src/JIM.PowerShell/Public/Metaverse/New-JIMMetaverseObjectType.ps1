@@ -31,7 +31,8 @@ function New-JIMMetaverseObjectType {
         The plural name of the new Object Type, such as Devices. It must be unique.
 
     .PARAMETER Icon
-        The name of the MudBlazor icon the portal shows for the Object Type, such as Devices.
+        The name of the Material Design icon the portal shows for the Object Type, such as Devices or AccountCircle. A name
+        JIM does not recognise shows a default icon.
 
     .PARAMETER AttributeIds
         The IDs of existing Metaverse Attributes to bind to the new Object Type. Attributes can also be bound later,

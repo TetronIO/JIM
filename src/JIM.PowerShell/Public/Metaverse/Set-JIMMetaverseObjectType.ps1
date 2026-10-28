@@ -42,8 +42,8 @@ function Set-JIMMetaverseObjectType {
         plural name.
 
     .PARAMETER Icon
-        The name of the MudBlazor icon the portal shows for the Object Type, such as Devices. $null or '' clears it.
-        A built-in Object Type keeps its icon.
+        The name of the Material Design icon the portal shows for the Object Type, such as Devices or AccountCircle. A name
+        JIM does not recognise shows a default icon. $null or '' clears it. A built-in Object Type keeps its icon.
 
     .PARAMETER DeletionRule
         When JIM deletes this type's Metaverse Objects on its own. With Manual, it never does. With

@@ -91,4 +91,3 @@ To install it without the internet, see [PowerShell Module](../administration/de
 
 - [Your First Synchronisation](first-synchronisation.md) synchronises 25 people from one file to another, in the portal or with PowerShell.
 - The [Deployment Guide](../administration/deployment.md) covers a production installation, upgrades and monitoring.
-- Contributing to JIM? The contributor guides in the repository's [engineering documentation](https://github.com/TetronIO/JIM/tree/main/engineering) set up a development environment, with GitHub Codespaces or a local devcontainer.

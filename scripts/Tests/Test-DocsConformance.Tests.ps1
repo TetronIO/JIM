@@ -33,7 +33,7 @@ BeforeAll {
                 'STR-6' = 'Ratchet'; 'STR-7' = 'Warn'; 'STR-8' = 'Warn'; 'MNT-3' = 'Block'
                 'A11Y-1' = 'Block'; 'A11Y-2' = 'Block'; 'TYP-1' = 'Block'; 'TUT-2' = 'Block'; 'PRI-1' = 'Block'
                 'LANG-1' = 'Block'; 'LANG-2' = 'Block'; 'LANG-3' = 'Block'; 'LANG-4' = 'Block'
-                'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'TERM-1' = 'Block'
+                'LANG-5' = 'Block'; 'LANG-6' = 'Block'; 'LANG-7' = 'Block'; 'LANG-8' = 'Block'; 'LANG-10' = 'Block'; 'TERM-1' = 'Block'
                 # STY-3 warns here so every other rule's fixtures can use plain H2s; its own tests block.
                 'STY-1' = 'Block'; 'STY-3' = 'Warn'
                 # VIS-1 warns here so every other rule's fixtures need no diagram; its own tests block.
@@ -68,6 +68,7 @@ BeforeAll {
             TimeRelativePatterns = $script:ShippedConfig.TimeRelativePatterns
             FuturePatterns      = $script:ShippedConfig.FuturePatterns
             MinimiserPatterns   = $script:ShippedConfig.MinimiserPatterns
+            InternalTermPatterns = $script:ShippedConfig.InternalTermPatterns
         }
     }
 
@@ -1111,6 +1112,63 @@ Describe 'Test-DocsConformance: VIS-1 every page has a diagram' {
         $f = New-VisualFixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
         $r = Invoke-Conformance -Fixture $f
         $r.Output | Should -Not -Match 'VIS-1|EXC-1'
+        $r.ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Test-DocsConformance: LANG-10 no names of what JIM is built with' {
+    It 'fails a framework name in running text' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "The portal is built with Blazor Server.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'Blazor'"
+    }
+
+    It 'fails a project name, but not the container name a reader types' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "Every response JIM.Web sends carries these headers, and jim.web serves them.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'JIM.Web'"
+        $r.Output | Should -Not -MatchExactly "'jim.web'"
+    }
+
+    It 'fails a name of JIM''s development infrastructure' {
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body "The recipe is what JIM's integration lab runs.`n") }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'integration lab'"
+    }
+
+    It 'fails a name in a diagram spec, whose labels the reader sees' {
+        $body = "Every response carries these headers.`n`n``````jim-diagram`narchetype: flow`ntitle: Headers`ndesc: Headers.`nin: { label: JIM.Web response }`n``````n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'JIM.Web'"
+    }
+
+    It 'fails a name in the text of an SVG diagram the page includes' {
+        $svg = '<svg class="jim-diagram"><title>Layers</title><desc>The portal, built with Blazor.</desc><text>JIM.Web</text></svg>'
+        $body = "The layers.`n`n--8<-- `"assets/diagrams/layers.svg`"`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body); 'assets/diagrams/layers.svg' = $svg }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*'Blazor'"
+        $r.Output | Should -Match "LANG-10.*'JIM.Web'"
+    }
+
+    It 'passes a name in code, which the reader types' {
+        $body = "Set ``ASPNETCORE_Kestrel__Certificates__Default__Path`` to the certificate.`n`n``````yaml`n- ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/jim.pem`n``````n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
+        $r.ExitCode | Should -Be 0
+        $r.Output | Should -Not -Match 'LANG-10'
+    }
+
+    It 'passes a name a marker excuses, with its reason' {
+        $body = "<!-- conformance: allow LANG-10 `"the log line names it`" -->`nThe message comes from Npgsql.`n"
+        $f = New-Fixture -Pages @{ 'cs.md' = (New-Page -Body $body) }
+        $r = Invoke-Conformance -Fixture $f
         $r.ExitCode | Should -Be 0
     }
 }

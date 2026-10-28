@@ -43,6 +43,8 @@
         'LANG-6' = 'Block'
         'LANG-7' = 'Ratchet'
         'LANG-8' = 'Block'
+        # No names of what JIM is built with: it shipped clean, so it blocks (VOI-6).
+        'LANG-10' = 'Block'
         'TERM-1' = 'Block'
         # No emoji: icons come from Material Design Icons, which the theme ships (STY-1, STY-3).
         'STY-1'  = 'Block'
@@ -206,4 +208,14 @@
     FuturePatterns          = @('\bcoming soon\b', '\b(?:is|are) planned\b', '(?<!(?:is|are) )\bplanned for\b', '\bfuture (?:releases?|versions?|updates?)\b',
         '\bwill be (?:added|introduced|supported|available|provided|extended)\b')
     MinimiserPatterns       = @('\bsimply\b', '\bstraightforward\b', '\bobviously\b', '\bof course\b')
+
+    # LANG-10 (regular expressions, any case unless a pattern turns it off with (?-i)). The frameworks and
+    # libraries JIM is built with, its own project names, and its development infrastructure. Not .NET on
+    # its own: a ".NET regular expression" or ".NET date format" names the syntax a reader writes. Not the
+    # jim.web, jim.worker and jim.scheduler containers, which a reader deploys, hence the case-sensitive
+    # project names.
+    InternalTermPatterns    = @('\b(?:Mud)?Blazor\b', '\bSignalR\b', '\bKestrel\b', '\b(?:ASP|ADO)\.NET\b', '\bNpgsql\b',
+        '\bEF Core\b', '\bEntity Framework\b', '\.NET (?:runtime|culture)\b',
+        '(?-i:\bJIM\.(?:Web|Worker|Scheduler|Application|Models|Data|PostgresData|Connectors|Utilities)\b)',
+        '\bdevcontainers?\b', '\bCodespaces\b', '\bintegration (?:lab|test harness)\b')
 }

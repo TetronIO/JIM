@@ -38,7 +38,7 @@ footer: "Exempt: the health endpoints and the infrastructure API key. Never limi
 
 ## :material-speedometer: What is limited
 
-The REST API (paths under `/api/`) and the SCIM 2.0 Service Provider endpoint (paths under `/scim/`) are throttled. The Blazor web UI, the SignalR/Blazor Server connection, and static assets are never rate limited.
+The REST API (paths under `/api/`) and the SCIM 2.0 Service Provider endpoint (paths under `/scim/`) are throttled. The portal, the live connection it keeps open to the browser, and static assets are never rate limited.
 
 `/api/v1/health` (and its `/ready`, `/live`, `/version` sub-routes) is exempt: load balancer and orchestrator health probes must never be throttled, and the endpoint is cheap and carries no data.
 

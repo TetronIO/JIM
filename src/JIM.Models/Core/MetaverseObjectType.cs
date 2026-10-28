@@ -66,10 +66,13 @@ public class MetaverseObjectType : IAuditable
     public bool BuiltIn { get; set; }
 
     /// <summary>
-    /// The MudBlazor icon name for this object type (e.g., "Person", "Groups").
-    /// Stored as the icon field name without the <c>Icons.Material.Filled.</c> prefix.
-    /// Null means no icon is configured.
+    /// The name of the Material Design icon the portal shows for the Object Type, such as Person or Groups; null when
+    /// none is set.
     /// </summary>
+    /// <remarks>
+    /// Stored as the MudBlazor icon field name without the <c>Icons.Material.Filled.</c> prefix, and resolved by
+    /// <c>Helpers.ResolveObjectTypeIcon</c>, which falls back to a default icon for a name it does not know.
+    /// </remarks>
     public string? Icon { get; set; }
     public List<ExampleDataTemplateAttribute> ExampleDataTemplateAttributes { get; set; } = null!;
     public List<PredefinedSearch> PredefinedSearches { get; set; } = null!;

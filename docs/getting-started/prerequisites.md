@@ -100,7 +100,3 @@ JIM uses PostgreSQL as its database. You have two options:
 
 - **Bundled PostgreSQL:** A PostgreSQL container is included with JIM, on Docker or Podman, for simple deployments. No additional setup is required.
 - **External PostgreSQL:** Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable. Port 5432 is assumed; where your server listens elsewhere, append the port to the hostname (`db.example.org:5433`). Create JIM's user and its database on the server first, as [Before You Install](../administration/deployment.md#before-you-install) shows.
-
-## :material-puzzle-outline: Building on JIM
-
-Contributing to JIM needs none of the above: the development environment brings its own database and identity provider. The contributor guides in the repository's [engineering documentation](https://github.com/TetronIO/JIM/tree/main/engineering) set it up.

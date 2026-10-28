@@ -20,11 +20,12 @@ public enum SearchGroupType
 
 /// <summary>
 /// A criterion's comparison operator: the one vocabulary shared by Synchronisation Rule scoping, Predefined Searches
-/// and Example Data dependencies. Which operators apply to which data type, and where each may be offered, is decided
-/// by <c>SearchComparisonOperators</c> in JIM.Utilities, never here.
+/// and Example Data dependencies.
 /// </summary>
 /// <remarks>
-/// The ordinals are stored, so members are only ever appended. The names are the REST API's and PowerShell's.
+/// Which operators apply to which data type, and where each may be offered, is decided by
+/// <c>SearchComparisonOperators</c> in JIM.Utilities, never here. The ordinals are stored, so members are only ever
+/// appended. The names are the REST API's and PowerShell's.
 /// </remarks>
 public enum SearchComparisonType
 {

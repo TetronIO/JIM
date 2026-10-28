@@ -45,7 +45,7 @@ Turning a Preview feature on or off is recorded in its [Configuration Change His
 
 ## :material-hammer-wrench: In development features
 
-Some feature flags exist purely for JIM's own development and its integration test harness, and are never shown to administrators: their Service Settings row never appears in a production deployment, whatever category you filter to. If you see a reference to an "in development" flag in JIM's release notes or issue tracker, it is not something you can or need to turn on yourself; it becomes a Preview feature, or ships outright, when it is ready.
+Some feature flags exist purely for JIM's own development and testing, and are never shown to administrators: their Service Settings row never appears in a production deployment, whatever category you filter to. If you see a reference to an "in development" flag in JIM's release notes or issue tracker, it is not something you can or need to turn on yourself; it becomes a Preview feature, or ships outright, when it is ready.
 
 ## :material-book-open-variant-outline: See also
 

@@ -82,7 +82,7 @@ Alongside JIM's built-in `User` and `Group` types, administrators can create the
 
 - **Naming**<br /> Names and plural names are unique and compared case-insensitively; the portal validates both as you type. Names are shown exactly as you entered them.
 - **Create with attributes**<br /> When creating a type you can optionally bind existing attributes to it there and then, or add them later from the type's **Attributes** tab.
-- **Icon**<br /> An optional MudBlazor icon name (for example `Devices`) gives the type a recognisable glyph throughout the portal.
+- **Icon**<br /> An optional icon gives the type a recognisable glyph throughout the portal: the name of a [Material Design icon](https://fonts.google.com/icons?icon.set=Material+Icons) as one word with each word capitalised, such as `Devices` or `AccountCircle`. A name JIM does not recognise shows a default icon instead.
 - **Rename and re-icon**<br /> Edit a custom type's name, plural name and icon from the Edit action on its row in the Object Types tab, or from the Edit button on its detail page.
 - **Built-in protection**<br /> The `User` and `Group` types cannot be renamed, re-iconed or deleted; their deletion rules remain editable.
 

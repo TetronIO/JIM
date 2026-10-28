@@ -15,7 +15,7 @@ public class CreateExampleDataSetRequest
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// The .NET Culture, i.e. "en-GB", the values are in.
+    /// The culture code the values are in, for example "en-GB".
     /// </summary>
     [Required]
     [StringLength(10)]

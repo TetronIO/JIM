@@ -69,7 +69,7 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 | `Name` | `string` | The name of the Example Data Set, for example "Firstnames Female". |
 | `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Example Data Set was created, in UTC. |
-| `Culture` | `string` | The .NET culture code the values are in, for example "en-GB". |
+| `Culture` | `string` | The culture code the values are in, for example "en-GB". |
 | `ValueCount` | `int` | How many values the Example Data Set holds. |
 
 **With `-Id`**:
@@ -78,7 +78,7 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the Example Data Set. |
 | `Name` | `string` | The name of the Example Data Set, for example "Firstnames Female". |
-| `Culture` | `string` | The .NET culture code the values are in, for example "en-GB". |
+| `Culture` | `string` | The culture code the values are in, for example "en-GB". |
 | `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Example Data Set was created (UTC). |
 | `CreatedByName` | `string` | The display name of the principal that created the Example Data Set. |
@@ -123,7 +123,7 @@ New-JIMExampleDataSet [-Name] <string> -Culture <string> [-Values <string[]>] [-
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Name` | `string` | Yes |  | The name for the Example Data Set. Can be given by position, as the first argument. |
-| `Culture` | `string` | Yes |  | The .NET culture the values are in, for example "en-GB". |
+| `Culture` | `string` | Yes |  | The culture code the values are in, for example "en-GB". |
 | `Values` | `string[]` | No |  | The values that make up the Example Data Set. |
 | `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the created Example Data Set. |
@@ -160,7 +160,7 @@ Set-JIMExampleDataSet -Id <int> [-Name <string>] [-Culture <string>] [-Values <s
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes |  | The Example Data Set to update. Accepts pipeline input by property name. |
 | `Name` | `string` | No |  | The new name. |
-| `Culture` | `string` | No |  | The .NET culture the values are in, for example "en-GB". |
+| `Culture` | `string` | No |  | The culture code the values are in, for example "en-GB". |
 | `Values` | `string[]` | No |  | The values, replacing all of the Example Data Set's current ones. |
 | `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the updated Example Data Set. |

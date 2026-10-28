@@ -148,6 +148,8 @@ These rules decide how the sentences read. They are the house voice that `docs/C
 
 **VOI-5. Prefer prose and diagrams to screenshots.** The site has none by design, and adding one costs more than it looks: it is invalidated by any change to the control it shows, it cannot be searched, it is invisible to a screen reader unless the alt text repeats it, and it is the thing nobody remembers to update. Name the control and say what it does instead. A diagram is different: it is the right answer where the shape of something is the point, and every page has one ([Visuals](#visuals)). Make its `<desc>` carry the same information as the picture rather than describing the picture.
 
+**VOI-6. Name what the reader works with, never what JIM is built with.** No framework or library JIM is built on (the portal's UI framework, its web server, its database driver or object mapper), and none of JIM's own project names (`JIM.Web`, `JIM.Application`). They tell an administrator nothing they act on, and they date the page the day the stack changes. Say what the thing is to the reader: the portal, the REST API, the web container (`jim.web`), JIM's database. A technology stays where the reader works with it directly: PostgreSQL, which they run and back up; Docker and Podman, which they deploy on; WebSockets, which a proxy must pass; a name they type or configure (the `ASPNETCORE_*` variables); a name they will see in a log or connect a client to; a syntax JIM accepts, such as ".NET regular expressions"; and a third-party licence notice. The rule covers everything the reader sees: running text, a diagram's labels and description, an included SVG, and the API and PowerShell references, whose text comes from the XML comments and cmdlet help in the source. The mechanical half is LANG-10.
+
 **SAFE-1. Answer "is anything lost?" before the reader has to ask.** Any operation that sounds destructive, and every refusal, states what survives it in the same paragraph. "Nothing is discarded when JIM refuses: queued password changes wait, and accounts stay owed their first password" is the shape. An administrator reading about a feature that stops, refuses, expires, cancels or deletes is deciding whether to trust it with production; a page that leaves that unanswered gets read defensively, and the feature gets left switched off.
 
 **SAFE-2. Name a failure and its remedy in the same breath.** A page that says something can fail, park, expire or be refused says what the reader does about it, or links to where that is. A symptom with no remedy is a support ticket that has not been raised yet.
@@ -169,6 +171,7 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 | **LANG-7** | Ratchet | No minimisers ("simply", "just", "easy"). What is simple to the writer is the reader's problem. | "Simply", "straightforward", "obviously", "of course". |
 | **LANG-8** | Block | No GitHub issue or pull request numbers on a public page (VOI-4). | `#` followed by digits in running text, and links to GitHub issues, pull requests and discussions. |
 | **LANG-9** | Review | No names of competing identity products; use generic terms ("traditional ILM solutions"). Industry standards (SCIM, LDAP, OIDC) are fine. | Not checked: a check would have to list the very names this rule keeps out of the repository. |
+| **LANG-10** | Block | No names of what JIM is built with, nor of its development infrastructure (VOI-4, VOI-6). | The frameworks, libraries and project names in `InternalTermPatterns` in `docs/.conformance/config.psd1`, with the devcontainer, Codespaces and the integration lab, in running text, in a `jim-diagram` spec, in the text of an SVG a page includes, and (from `build-and-test`, which has the document) in every summary and description the OpenAPI document publishes. Code is left out, since it is what the reader types; a genuine exception takes an allow marker giving its reason. |
 
 **The product vocabulary.** The glossary (`reference/glossary.md`) is the one place each product noun is named and defined: its entry gives the canonical form and the anchor to link to. `docs/.conformance/vocabulary.psd1` adds only what the glossary cannot hold: each term's home page (HOME-1), whether it is held to Title Case (every multi-word name, and "Metaverse"; not the single words that are also ordinary English, such as "Activity", "Export" and "Schedule"), and the variants a page must not use. TERM-1 checks the two against each other both ways. The portal's term hints are checked against the glossary too (`GlossaryTermConsistencyTests`), so the portal, the glossary and the pages use one set of names. A new product noun needs a glossary entry and a vocabulary entry in the same pull request.
 
@@ -294,6 +297,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | VOI-3 | Hedge only where JIM is uncertain | Review | |
 | VOI-4 | JIM's own workings stay out | Review | |
 | VOI-5 | Prose and diagrams, not screenshots | Review | |
+| VOI-6 | What the reader works with, never what JIM is built with | Review (judgement); Block through LANG-10 (the named terms) | |
 | SAFE-1 | Says what survives | Review | |
 | SAFE-2 | Names the remedy with the failure | Review | |
 | HOME-1 | One home per fact | Review | |
@@ -306,6 +310,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | LANG-7 | No minimisers | Ratchet ("simply" and its kind); Review ("just", "easy") | `Test-DocsConformance.ps1` |
 | LANG-8 | No issue or pull request numbers | Block | `Test-DocsConformance.ps1` |
 | LANG-9 | No competing products named | Review | |
+| LANG-10 | No names of what JIM is built with | Block | `Test-DocsConformance.ps1` (pages, diagrams, included SVGs); `Test-DocsCoverage.ps1 -OpenApiPath` (the API reference) |
 | MNT-1 | Integrate, don't append | Review | |
 | MNT-2 | Find what is now wrong first | Review | |
 | MNT-3 | An over-budget page cannot grow | Block | `Test-DocsConformance.ps1` |
