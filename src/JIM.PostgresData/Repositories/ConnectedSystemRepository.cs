@@ -2204,56 +2204,44 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         if (entity == null)
             return null;
 
-        // Step 2: Get per-attribute value counts for this CSO
+        // Step 2: Get per-attribute value counts and pluralities for this CSO, in one pass over its values
         Dictionary<string, int> totalCounts;
+        List<int> singleValuedAttributeIds;
+        List<int> multiValuedAttributeIds;
         using (ActivitySource.StartActivity("Cso.LoadAttributeCounts"))
         {
             var attributeValueCounts = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
-                .Where(av => av.ConnectedSystemObject.Id == id)
-                .GroupBy(av => av.Attribute.Name)
-                .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+                .Where(av => EF.Property<Guid>(av, "ConnectedSystemObjectId") == id)
+                .GroupBy(av => new { av.AttributeId, av.Attribute.Name, av.Attribute.AttributePlurality })
+                .Select(g => new { g.Key.AttributeId, g.Key.Name, g.Key.AttributePlurality, Count = g.Count() })
                 .ToListAsync();
 
-            totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
-        }
-
-        // Step 3: Load SVA values (all of them) and MVA values (capped)
-        // Identify which attributes are multi-valued
-        HashSet<int> multiValuedAttributeIds;
-        using (ActivitySource.StartActivity("Cso.LoadAttributePluralities"))
-        {
-            var mvaAttributeIds = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
-                .Where(av => av.ConnectedSystemObject.Id == id)
-                .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
-                .Distinct()
-                .ToListAsync();
-
-            multiValuedAttributeIds = mvaAttributeIds
+            totalCounts = attributeValueCounts
+                .GroupBy(x => x.Name)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Count));
+            singleValuedAttributeIds = attributeValueCounts
+                .Where(a => a.AttributePlurality != Models.Core.AttributePlurality.MultiValued)
+                .Select(a => a.AttributeId)
+                .ToList();
+            multiValuedAttributeIds = attributeValueCounts
                 .Where(a => a.AttributePlurality == Models.Core.AttributePlurality.MultiValued)
                 .Select(a => a.AttributeId)
-                .ToHashSet();
+                .ToList();
         }
 
-        // Load all SVA values (including referenced CSO display info for bounded set)
+        // Step 3: Load SVA values (all of them) and MVA values (capped). Named by attribute id rather than by excluding
+        // the multi-valued ones, so the (object, attribute) index serves the read without visiting a large group's members.
         List<ConnectedSystemObjectAttributeValue> svaValues;
         using (var svaSpan = ActivitySource.StartActivity("Cso.LoadSvaValues"))
         {
-            // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
             svaValues = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
-                .AsTracking()
-                .AsSplitQuery()
-                .Where(av => av.ConnectedSystemObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
+                .AsNoTracking()
+                .Where(av => EF.Property<Guid>(av, "ConnectedSystemObjectId") == id && singleValuedAttributeIds.Contains(av.AttributeId))
                 .Include(av => av.Attribute)
-                .Include(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.Type)
-                .Include(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.AttributeValues)
-                .ThenInclude(rav => rav.Attribute)
                 .ToListAsync();
             svaSpan?.SetTag("count", svaValues.Count);
         }
 
-        // Load capped MVA values per attribute (including referenced CSO display info for bounded page)
         var cappedMvaValues = new List<ConnectedSystemObjectAttributeValue>();
         using (var mvaSpan = ActivitySource.StartActivity("Cso.LoadCappedMvaValues"))
         {
@@ -2263,19 +2251,12 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 using var iterSpan = ActivitySource.StartActivity("Cso.LoadCappedMvaValues.Attribute");
                 iterSpan?.SetTag("attributeId", attrId);
-                // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
                 var values = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
-                    .AsTracking()
-                    .AsSplitQuery()
-                    .Where(av => av.ConnectedSystemObject.Id == id && av.AttributeId == attrId)
+                    .AsNoTracking()
+                    .Where(av => EF.Property<Guid>(av, "ConnectedSystemObjectId") == id && av.AttributeId == attrId)
                     .OrderBy(av => av.Id)
                     .Take(CappedMvaLimit)
                     .Include(av => av.Attribute)
-                    .Include(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.Type)
-                    .Include(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.AttributeValues)
-                    .ThenInclude(rav => rav.Attribute)
                     .ToListAsync();
                 iterSpan?.SetTag("returned", values.Count);
 
@@ -2285,6 +2266,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Combine and attach to entity
         entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+        using (ActivitySource.StartActivity("Cso.LoadReferencedObjects"))
+            await AttachReferencedConnectedSystemObjectsAsync(entity.AttributeValues);
 
         // Total change-history count, surfaced on the result so the UI can render a badge
         // without eager-loading the change rows themselves.
@@ -2403,24 +2386,73 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         if (includeTotalCount)
             totalCount = await query.CountAsync();
 
-        // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
         var values = await query
-            .AsTracking()
-            .AsSplitQuery()
+            .AsNoTracking()
             // The id is the whole sort key, so it is already the total order Skip/Take windows need; there is no
             // second key that could tie.
             .OrderBy(av => av.Id)
             .Skip(offset)
             .Take(count)
             .Include(av => av.Attribute)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(rav => rav.Attribute)
             .ToListAsync();
+        await AttachReferencedConnectedSystemObjectsAsync(values);
 
         return (values, totalCount);
+    }
+
+    /// <summary>
+    /// Sets the referenced object on every value that references one, read by id: the objects with their Object Type,
+    /// and of their values only those <see cref="ConnectedSystemObject.NameOrId"/> and the secondary external id shown
+    /// beside a reference read. Never an Include from the values themselves: the planner cannot tell that a large
+    /// group's few non-member values reference few objects, so it drove that read from the whole attribute value table
+    /// and a group of 594,000 members took 12 seconds to open. Every read here is keyed by an explicit id list instead.
+    /// </summary>
+    private async Task AttachReferencedConnectedSystemObjectsAsync(IReadOnlyCollection<ConnectedSystemObjectAttributeValue> values)
+    {
+        var referencedIds = values
+            .Where(v => v.ReferenceValueId.HasValue)
+            .Select(v => v.ReferenceValueId!.Value)
+            .Distinct()
+            .ToList();
+        if (referencedIds.Count == 0)
+            return;
+
+        var referencedObjects = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Where(cso => referencedIds.Contains(cso.Id))
+            .ToDictionaryAsync(cso => cso.Id);
+
+        // Kept in step with ObjectNaming.ConnectedSystemNameAttributes rather than hand-copied (#1606).
+        var nameAttributesLower = ObjectNaming.ConnectedSystemNameAttributes
+            .Select(name => name.ToLower())
+            .ToList();
+        var typeIds = referencedObjects.Values.Select(cso => cso.TypeId).Distinct().ToList();
+        var namingAttributeIds = await Repository.Database.ConnectedSystemAttributes
+            .Where(a => typeIds.Contains(a.ConnectedSystemObjectType.Id) && nameAttributesLower.Contains(a.Name.ToLower()))
+            .Select(a => a.Id)
+            .ToListAsync();
+        var attributeIds = namingAttributeIds
+            .Concat(referencedObjects.Values.Select(cso => cso.ExternalIdAttributeId))
+            .Concat(referencedObjects.Values
+                .Where(cso => cso.SecondaryExternalIdAttributeId.HasValue)
+                .Select(cso => cso.SecondaryExternalIdAttributeId!.Value))
+            .Distinct()
+            .ToList();
+
+        var namingValues = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .AsNoTracking()
+            .Where(av => referencedIds.Contains(EF.Property<Guid>(av, "ConnectedSystemObjectId")) && attributeIds.Contains(av.AttributeId))
+            .Select(av => new { OwnerId = EF.Property<Guid>(av, "ConnectedSystemObjectId"), Value = av, av.Attribute })
+            .ToListAsync();
+        foreach (var naming in namingValues)
+        {
+            naming.Value.Attribute = naming.Attribute;
+            referencedObjects[naming.OwnerId].AttributeValues.Add(naming.Value);
+        }
+
+        foreach (var value in values.Where(v => v.ReferenceValueId.HasValue))
+            value.ReferenceValue = referencedObjects.GetValueOrDefault(value.ReferenceValueId!.Value);
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
