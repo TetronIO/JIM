@@ -473,6 +473,35 @@ public class OracleProviderTests
     }
 
     [Test]
+    public void BuildConnectionString_Tcps_RequiresTheCertificateToNameTheHost()
+    {
+        // ODP.NET leaves SSL_SERVER_DN_MATCH off unless the descriptor turns it on, and then accepts a
+        // certificate issued for any host that chains to a trusted authority (#2589).
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.Tls };
+
+        var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
+
+        Assert.That(builder.DataSource, Does.Contain("(SECURITY=(SSL_SERVER_DN_MATCH=TRUE))"));
+    }
+
+    [Test]
+    public void BuildConnectionString_NotTcps_CarriesNoTlsSecurityClause()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var encryption in new[] { SqlConnectionEncryption.OracleNativeNetworkEncryption, SqlConnectionEncryption.None })
+            {
+                var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = encryption };
+
+                var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
+
+                Assert.That(builder.DataSource, Does.Not.Contain("SECURITY"),
+                    $"{encryption}: certificate checks belong to a TLS connection; there is no certificate on the ordinary listener.");
+            }
+        }
+    }
+
+    [Test]
     public void BuildConnectionString_NativeNetworkEncryption_UsesTheOrdinaryListenerAndProtocol()
     {
         // Native Network Encryption is negotiated on an ordinary TCP connection to the ordinary

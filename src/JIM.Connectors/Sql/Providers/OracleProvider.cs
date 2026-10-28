@@ -403,7 +403,12 @@ internal class OracleProvider : SqlProviderBase
             throw new ArgumentException("An Oracle connection needs either a service name or a SID to identify the database.", nameof(settings));
         }
 
-        return $"(DESCRIPTION=(ADDRESS=(PROTOCOL={protocol})(HOST={settings.Host})(PORT={port}))(CONNECT_DATA={connectData}))";
+        // Over TCPS, the server's certificate must name the host JIM connects to. ODP.NET only checks that
+        // when told to: without SSL_SERVER_DN_MATCH it accepts a certificate issued for any host that
+        // chains to a trusted authority, which leaves the session open to interception (#2589).
+        var security = settings.Encryption == SqlConnectionEncryption.Tls ? "(SECURITY=(SSL_SERVER_DN_MATCH=TRUE))" : string.Empty;
+
+        return $"(DESCRIPTION=(ADDRESS=(PROTOCOL={protocol})(HOST={settings.Host})(PORT={port}))(CONNECT_DATA={connectData}){security})";
     }
 
     #endregion
