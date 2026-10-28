@@ -102,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A misspelt field in the SQL Connector's Object Types document is now named with the field you most likely meant ("Did you mean 'anchorColumns'?"), in the portal, REST and PowerShell alike, instead of a message naming internal types. (#2570)
 - 🔄 The Connections tab names each object by its Secondary External ID where it has one, such as an LDAP distinguished name, with its External ID beneath. REST and `Get-JIMMetaverseObjectConnection` return both, plus pending values, in place of `displayName`.
 - 🔄 A Full Synchronisation now evaluates every Connected System Object on every run, whether or not it has changed, so it corrects anything a Delta Synchronisation missed and applies JIM upgrades to existing data. It takes longer on a large system; schedule Delta Synchronisation for routine runs. (#891)
 - 🔄 The Operations page's Queue and History tabs are now one **Activity** tab: queued, running and finished work in time order, full progress for every run including parallel Schedule steps, estimated start and finish times, and the next Schedule due. Each section's heading folds its rows, an empty section is one line, and the filters sit behind a **Filters** button with the active ones shown as chips. (#2549)

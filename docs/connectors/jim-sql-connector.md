@@ -164,7 +164,7 @@ Each entry in the document names an Object Type, the table or view it comes from
 
 You do not list the ordinary columns; JIM discovers them. You only say what the database cannot: which table is which object, what identifies a row, which columns point at other objects, and which child tables belong to which parent.
 
-The document is checked when you save. A mistake is reported immediately, naming the Object Type and field, and an unrecognised field name is treated as a mistake rather than ignored, so a typo cannot silently leave data out.
+The document is checked when you save. A mistake is reported immediately, naming the Object Type and field, and an unrecognised field name is treated as a mistake rather than ignored, so a typo cannot silently leave data out. Where the unrecognised name is close to a real one, the message suggests it: `Did you mean 'anchorColumns'?`.
 
 #### Object Type fields
 
