@@ -82,7 +82,9 @@ BeforeAll {
     function script:Invoke-SignIn {
         param(
             [string]$ClientId, [string]$RedirectUri, [string]$Scope, [securestring]$ClientSecret,
-            [string]$Authority = $script:Authority, [string]$UserName = $script:PersonName, [string]$Password = $script:PersonPassword
+            [string]$Authority = $script:Authority, [string]$UserName = $script:PersonName, [string]$Password = $script:PersonPassword,
+            # The page a browser makes the token request from; Keycloak must allow it (CORS) or the browser drops the answer.
+            [string]$Origin
         )
 
         $verifier = -join ((1..64) | ForEach-Object { [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~' | Get-Random })
@@ -133,7 +135,13 @@ BeforeAll {
             client_id = $ClientId; code_verifier = $verifier
         }
         if ($ClientSecret) { $body.client_secret = [System.Net.NetworkCredential]::new('', $ClientSecret).Password }
-        Invoke-RestMethod -Method Post -Uri "$Authority/protocol/openid-connect/token" -Body $body
+        if (-not $Origin) {
+            return Invoke-RestMethod -Method Post -Uri "$Authority/protocol/openid-connect/token" -Body $body
+        }
+
+        $tokenResponse = Invoke-WebRequest -Method Post -Uri "$Authority/protocol/openid-connect/token" -Body $body -Headers @{ Origin = $Origin }
+        "$($tokenResponse.Headers['Access-Control-Allow-Origin'])" | Should -Be $Origin -Because 'Keycloak lets a browser on that page read the tokens'
+        $tokenResponse.Content | ConvertFrom-Json
     }
 
     if (-not $env:JIM_TEST_KEYCLOAK_URL) { return }
@@ -208,6 +216,15 @@ Describe 'Register-JIMIdentityProvider -Provider Keycloak against Keycloak' -Ski
         @($access.aud) | Should -Contain 'jim'
         $access.sub | Should -Be $script:PersonId
         $tokens.refresh_token | Should -Not -BeNullOrEmpty
+    }
+
+    It 'Signs the same person in to the API reference''s Try It, from JIM''s page, with JIM''s audience (#2594)' {
+        $tokens = Invoke-SignIn -ClientId 'jim-powershell' -RedirectUri "$($script:JimUrl)/api/reference" -Scope 'openid jim-api' `
+            -Origin $script:JimUrl
+
+        $access = ConvertFrom-Jwt $tokens.access_token
+        @($access.aud) | Should -Contain 'jim'
+        $access.sub | Should -Be $script:PersonId
     }
 
     It 'Reports drift with -WhatIf and changes nothing, then repairs it' {

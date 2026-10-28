@@ -27,6 +27,7 @@ $script:JIMKeycloakClientPropertyText = [ordered]@{
     serviceAccountsEnabled    = { 'turn off service accounts' }
     redirectUris              = { param($v) "set the redirect URIs to $($v -join ', ')" }
     PostLogoutRedirectUris    = { param($v) "set the post-logout redirect URIs to $($v -join ', ')" }
+    webOrigins                = { param($v) "set the web origins to $($v -join ', ')" }
     Pkce                      = { 'require PKCE with S256' }
 }
 
@@ -183,6 +184,7 @@ function Get-JIMKeycloakRegistrationState {
             DirectAccessGrantsEnabled = [bool]$client.directAccessGrantsEnabled
             ServiceAccountsEnabled    = [bool]$client.serviceAccountsEnabled
             RedirectUris              = @($client.redirectUris)
+            WebOrigins                = @($client.webOrigins)
             PostLogoutRedirectUris    = @(if ($postLogout) { $postLogout -split '##' })
             Pkce                      = [string]$attributes.'pkce.code.challenge.method'
             DefaultClientScopes       = @($defaults)
@@ -234,7 +236,7 @@ function Get-JIMKeycloakRegistrationPlan {
         The portal's client, JIM_SSO_CLIENT_ID.
 
     .PARAMETER PublicClientId
-        The PowerShell module's client, JIM_SSO_PUBLIC_CLIENT_ID.
+        The PowerShell module's client, JIM_SSO_PUBLIC_CLIENT_ID, which the API reference's Try It signs in with too.
 
     .PARAMETER Current
         What the realm holds, as Get-JIMKeycloakRegistrationState reads it, with the portal's secret when -ClientSecret
@@ -260,6 +262,10 @@ function Get-JIMKeycloakRegistrationPlan {
     )
 
     $baseUrls = @($Url | ForEach-Object { $_.TrimEnd('/') })
+    # The API reference's Try It signs in from the browser (#2594): Keycloak redirects back to the page itself, and
+    # answers its token request only from an origin the client lists.
+    $tryItRedirects = @($baseUrls | ForEach-Object { "$_/api/reference" })
+    $tryItOrigins = @($baseUrls | ForEach-Object { ([uri]$_).GetLeftPart([UriPartial]::Authority) } | Select-Object -Unique)
     $apiScope = $script:JIMKeycloakApiScope
     $changes = [System.Collections.Generic.List[object]]::new()
     $available = @($Current.ClientScopes.Name)
@@ -316,7 +322,7 @@ function Get-JIMKeycloakRegistrationPlan {
             Properties = [ordered]@{
                 enabled = $true; publicClient = $true; standardFlowEnabled = $true; implicitFlowEnabled = $false
                 directAccessGrantsEnabled = $false; serviceAccountsEnabled = $false
-                redirectUris = @(Get-JIMLoopbackRedirectUri); Pkce = 'S256'
+                redirectUris = @(Get-JIMLoopbackRedirectUri) + $tryItRedirects; webOrigins = $tryItOrigins; Pkce = 'S256'
             }
         }
     )
