@@ -1620,7 +1620,12 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         csoQuery = afterId.HasValue
             ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
             : csoQuery.Skip(offset);
-        var results = await csoQuery.Take(pageSize).ToListAsync();
+        List<ConnectedSystemObject> results;
+        using (var loadSpan = ActivitySource.StartActivity("Cso.Page.LoadWithAttributeValues"))
+        {
+            results = await csoQuery.Take(pageSize).ToListAsync();
+            loadSpan?.SetTag("attributeValueCount", results.Sum(cso => cso.AttributeValues.Count));
+        }
 
         // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
         await PopulateReferenceValuesAsync(results);
@@ -1894,6 +1899,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task PopulateReferenceValuesAsync(List<ConnectedSystemObject> csos)
     {
+        using var span = ActivitySource.StartActivity("Cso.PopulateReferenceValues");
         var allAttributeValues = csos.SelectMany(cso => cso.AttributeValues).ToList();
         var referencedCsoIds = allAttributeValues
             .Where(av => av.ReferenceValueId.HasValue)
@@ -1958,6 +1964,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task LoadMetaverseObjectsForCsosAsync(List<ConnectedSystemObject> csos)
     {
+        using var span = ActivitySource.StartActivity("Cso.LoadMetaverseObjects");
         var mvoIds = csos
             .Where(cso => cso.MetaverseObjectId != null)
             .Select(cso => cso.MetaverseObjectId!.Value)
