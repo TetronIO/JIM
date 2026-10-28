@@ -188,6 +188,23 @@ public class ServerCertificateCardTests : JimComponentTestContext
     }
 
     /// <summary>
+    /// An untrusted issuer on a connection that takes nothing from the JIM certificate store (Oracle Database over
+    /// TCPS): trusting would report success and the next connection would be refused just the same.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereTheConnectionCannotUseTheJimStore_DoesNotOfferTheTrustAction()
+    {
+        var diagnostic = Diagnostic(ServerCertificateFailureReason.UntrustedIssuer);
+        diagnostic.AcceptsJimTrustedCertificates = false;
+
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, diagnostic)
+            .Add(c => c.ConnectedSystemId, 42));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-trust']"), Is.Empty);
+    }
+
+    /// <summary>
     /// The card renders in places that cannot act, such as an Activity naming no Connected System. It stays usable
     /// there; it just does not offer the action.
     /// </summary>

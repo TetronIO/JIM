@@ -542,7 +542,7 @@ The certificate the server presented, the chain JIM built from it, which check i
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Certificate` | `object` | The certificate the server presented and which check it fails, judged with the JIM certificate store taken into account. It has `Host`, `Port`, `FailureReason`, `Subject`, `Issuer`, `SubjectAlternativeNames`, `ValidFrom`, `ValidTo`, `Thumbprint`, `SignatureAlgorithm`, `IsSelfSigned`, `IssuerThumbprint`, `IsIssuerCertificateAvailable`, `Chain`, `IsChainComplete`, `MissingIssuer`, `RootThumbprint`, `RootSubject`, `Remediation`, `IsExpired` and `IsNotYetValid`. |
+| `Certificate` | `object` | The certificate the server presented and which check it fails, judged as the connection will be: with the JIM certificate store taken into account where the connection uses it (`AcceptsJimTrustedCertificates`), and against the operating system alone where it does not. It has `Host`, `Port`, `FailureReason`, `Subject`, `Issuer`, `SubjectAlternativeNames`, `ValidFrom`, `ValidTo`, `Thumbprint`, `SignatureAlgorithm`, `IsSelfSigned`, `IssuerThumbprint`, `IsIssuerCertificateAvailable`, `Chain`, `IsChainComplete`, `MissingIssuer`, `RootThumbprint`, `RootSubject`, `Remediation`, `AcceptsJimTrustedCertificates`, `IsExpired` and `IsNotYetValid`. |
 | `ReadAt` | `datetime` | When the server was asked, so a caller knows how current the answer is. |
 <!-- END GENERATED: Get-JIMConnectedSystemServerCertificate -->
 
@@ -603,7 +603,7 @@ With `-PassThru`, the outcome; otherwise nothing.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Outcome` | `string` | What happened: Trusted when the certificate was added to the certificate store, AlreadyTrusted when it was there already, ThumbprintMismatch when the server presented a different certificate from the one named. The other values say why nothing could be trusted. One of `Trusted`, `AlreadyTrusted`, `ThumbprintMismatch`, `ConnectedSystemNotFound`, `NotConfiguredForSecureConnection`, `ServerUnreachable` or `InvalidChain`. |
+| `Outcome` | `string` | What happened: Trusted when the certificate was added to the certificate store, AlreadyTrusted when it was there already, ThumbprintMismatch when the server presented a different certificate from the one named. The other values say why nothing could be trusted. One of `Trusted`, `AlreadyTrusted`, `ThumbprintMismatch`, `ConnectedSystemNotFound`, `NotConfiguredForSecureConnection`, `ServerUnreachable`, `InvalidChain` or `NotUsedByThisConnection`. |
 | `Message` | `string` | A sentence explaining the outcome. |
 | `Certificate` | `object` | The certificate as it now sits in the certificate store; empty unless the Outcome is Trusted. It has `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `SerialNumber`, `ValidFrom`, `ValidTo`, `SourceType`, `FilePath`, `IsEnabled`, `CreatedAt`, `CreatedBy`, `Notes`, `IsExpired`, `IsExpiringSoon`, `DaysUntilExpiry`, `TrustedFor`, `UsedBySignIn` and `SignInDependsOnIt`. |
 | `ExpectedThumbprint` | `string` | The thumbprint named in the request; set when the Outcome is ThumbprintMismatch. |
@@ -637,7 +637,7 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 - **Check the thumbprint against the server's administrator before running this.** It is the only thing standing between an unattended script and trusting whatever is presented.
 - **Any certificate in the chain works; the root lasts longest.** JIM accepts the server when any certificate in its chain is in the Trusted Certificates store. `rootThumbprint` is populated when JIM reached the root, and trusting it survives the renewal of every certificate beneath it; trusting the server's own certificate has to be repeated at every renewal. Where `isChainComplete` is `$false`, trust the highest certificate JIM found, or add `missingIssuer` under Admin > Certificates. A self-signed certificate is its own root.
 - **A changed certificate stops the action.** If the server is presenting anything other than the thumbprint you named, nothing is trusted and the outcome is `ThumbprintMismatch`, with both values returned so you can compare them. Expected after a renewal; worth investigating otherwise.
-- Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries. A chain through a broken certificate authority is refused with `InvalidChain` and nothing is trusted.
+- Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries. A chain through a broken certificate authority is refused with `InvalidChain` and nothing is trusted. So is a connection that takes nothing from the certificate store, Oracle Database over TCPS, with `NotUsedByThisConnection`: its certificate must be one the operating system already trusts, and the read reports `acceptsJimTrustedCertificates` as `$false`.
 - Supports `ShouldProcess`.
 - Remove a certificate later with `Remove-JIMCertificate`.
 
