@@ -230,6 +230,7 @@ public partial class ActivityRepository : IActivityRepository
 
     public async Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
+        // One group or none, so Single: FirstOrDefault over a constant-key group makes EF Core log warning 10103.
         var counts = await Repository.Database.ActivityRunProfileExecutionItems
             .Where(r => r.Activity.Id == activityId)
             .GroupBy(_ => 1)
@@ -240,7 +241,7 @@ public partial class ActivityRepository : IActivityRepository
                 TotalUnhandledErrors = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
                 TotalObjectTypeChangeRefusals = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged)
             })
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
 
         return counts != null
             ? new ActivityRpeiErrorCounts(counts.TotalWithErrors, counts.TotalRpeis, counts.TotalUnhandledErrors, counts.TotalObjectTypeChangeRefusals)

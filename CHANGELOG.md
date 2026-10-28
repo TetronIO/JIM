@@ -174,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The Worker no longer logs an Entity Framework warning that a query "may lead to unpredictable results" when it completes an Activity or reads change history date ranges. The queries were always correct; they now say so.
 - 🐛 A member removed from a group in a Connected System is now removed from its Metaverse Object when the group also references an object JIM never joins, such as a contact or a member out of every Synchronisation Rule's scope. Before, any such reference stopped every removal from that group flowing, on Full and Delta Synchronisation alike.
 - 🐛 A synchronisation's Activity and completion message count the objects it synchronised, not the reference values its cross-page reference step resolved: a run over 790,007 objects reported 4,352,113.
 - 🐛 A reference to an object JIM never joins no longer logs a warning each time a group holding it is synchronised; each run logs one summary line instead.
