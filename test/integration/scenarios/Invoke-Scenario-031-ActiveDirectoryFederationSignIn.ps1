@@ -28,6 +28,10 @@
                        in as the same Metaverse Object.
       7  No role       The employee, who holds no JIM role, signs in to the portal and with Connect-JIM, is told who
                        they are, and is refused every Administrator API.
+      8  Try It        The API reference's Try It signs the administrator in as a browser on JIM's page does (#2594):
+                       with the public client and AD FS's own endpoints and API scope from the page, PKCE back to
+                       /api/reference, and the code exchanged with JIM's origin, which AD FS allows (CORS, turned on by
+                       the runner as the AD FS guide says). Its bearer token is accepted on /api as the same person.
 
     It is reported as its own commit status, jim-ad-lab-adfs, by ad-lab.yml, which runs it apart from the LDAP
     scenarios (Test-ScenarioRunsOnItsOwn). Active Directory lab only.
@@ -230,12 +234,12 @@ try {
     # ---------------------------------------------------------------------------------------------------------------
     # 1 and 2: the administrator signs in to the portal, and is the initial administrator JIM provisioned from oid
     # ---------------------------------------------------------------------------------------------------------------
-    Write-Host "  [1/7] The administrator signs in to the portal through AD FS" -ForegroundColor DarkGray
+    Write-Host "  [1/8] The administrator signs in to the portal through AD FS" -ForegroundColor DarkGray
     $adminPortal = Invoke-AdfsSignInCheck -Check Portal -JimUrl $signInUrl -UserName $administrator.UserName -Password $administrator.Password
     Add-TestResult -Name "The administrator signs in to the portal through the OpenID Connect code flow" `
         -Passed ($adminPortal.ok -and $adminPortal.userInfo.authorised) -Detail (Format-SignInResult $adminPortal)
 
-    Write-Host "  [2/7] JIM provisioned them from oid, matched to Object GUID" -ForegroundColor DarkGray
+    Write-Host "  [2/8] JIM provisioned them from oid, matched to Object GUID" -ForegroundColor DarkGray
     $adminMvoId = if ($adminPortal.ok -and $adminPortal.userInfo.metaverseObjectId) { [guid]$adminPortal.userInfo.metaverseObjectId } else { $null }
     $adminMvoGuid = if ($adminMvoId) { Get-ObjectGuidValue -MetaverseObjectId $adminMvoId } else { $null }
     Add-TestResult -Name "JIM provisioned the initial administrator from oid, matched to Object GUID, as an Administrator" `
@@ -245,16 +249,16 @@ try {
     # ---------------------------------------------------------------------------------------------------------------
     # 3, 4 and 5: Connect-JIM through PKCE, its bearer token on /api, and the same person as the portal's
     # ---------------------------------------------------------------------------------------------------------------
-    Write-Host "  [3/7] Connect-JIM signs the administrator in through PKCE" -ForegroundColor DarkGray
+    Write-Host "  [3/8] Connect-JIM signs the administrator in through PKCE" -ForegroundColor DarkGray
     $adminShell = Invoke-AdfsSignInCheck -Check ConnectJim -JimUrl $signInUrl -UserName $administrator.UserName -Password $administrator.Password
     Add-TestResult -Name "Connect-JIM signs the administrator in interactively through PKCE" `
         -Passed ($adminShell.ok -and $adminShell.connection.connected -and "$($adminShell.connection.authMethod)" -eq 'OAuth') -Detail (Format-SignInResult $adminShell)
 
-    Write-Host "  [4/7] Its bearer token is accepted on /api" -ForegroundColor DarkGray
+    Write-Host "  [4/8] Its bearer token is accepted on /api" -ForegroundColor DarkGray
     Add-TestResult -Name "A bearer token AD FS issued is accepted on /api, Administrator APIs included" `
         -Passed ($adminShell.ok -and $adminShell.userInfo.authorised -and $adminShell.administratorApiStatus -eq 200) -Detail (Format-SignInResult $adminShell)
 
-    Write-Host "  [5/7] The portal and Connect-JIM resolve the same person" -ForegroundColor DarkGray
+    Write-Host "  [5/8] The portal and Connect-JIM resolve the same person" -ForegroundColor DarkGray
     $shellMvoId = if ($adminShell.ok -and $adminShell.userInfo.metaverseObjectId) { [guid]$adminShell.userInfo.metaverseObjectId } else { $null }
     Add-TestResult -Name "The portal and Connect-JIM resolve the administrator to the same Metaverse Object" `
         -Passed ($null -ne $adminMvoId -and $shellMvoId -eq $adminMvoId) -Detail "Portal: $adminMvoId; Connect-JIM: $shellMvoId"
@@ -262,7 +266,7 @@ try {
     # ---------------------------------------------------------------------------------------------------------------
     # 7: the employee, who holds no JIM role
     # ---------------------------------------------------------------------------------------------------------------
-    Write-Host "  [6/7] The employee, who holds no JIM role, signs in and is refused every Administrator API" -ForegroundColor DarkGray
+    Write-Host "  [6/8] The employee, who holds no JIM role, signs in and is refused every Administrator API" -ForegroundColor DarkGray
     $employeePortal = Invoke-AdfsSignInCheck -Check Portal -JimUrl $signInUrl -UserName $employeeUpn -Password $employeePassword
     $employeeRoles = @(if ($employeePortal.ok) { $employeePortal.userInfo.roles })
     Add-TestResult -Name "The employee signs in to the portal as their synchronised Metaverse Object, with the User role only" `
@@ -280,7 +284,7 @@ try {
     # ---------------------------------------------------------------------------------------------------------------
     # 6: renamed in Active Directory, the employee is still the same person to JIM
     # ---------------------------------------------------------------------------------------------------------------
-    Write-Host "  [7/7] The employee, renamed in Active Directory, signs in as the same person" -ForegroundColor DarkGray
+    Write-Host "  [7/8] The employee, renamed in Active Directory, signs in as the same person" -ForegroundColor DarkGray
     $renamedSam = 'sso.renamed'
     $renamedUpn = "$renamedSam@$(([string]$DirectoryConfig.Domain).ToLowerInvariant())"
     $rename = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Operation modify -Ldif (@(
@@ -292,6 +296,22 @@ try {
     $renamedPortal = Invoke-AdfsSignInCheck -Check Portal -JimUrl $signInUrl -UserName $renamedUpn -Password $employeePassword
     Add-TestResult -Name "Renamed in Active Directory (sAMAccountName and userPrincipalName), the employee signs in as the same Metaverse Object" `
         -Passed ($renamedPortal.ok -and "$($renamedPortal.userInfo.metaverseObjectId)" -eq "$($employeeMvo.id)") -Detail (Format-SignInResult $renamedPortal)
+
+    # ---------------------------------------------------------------------------------------------------------------
+    # 8: the API reference's Try It signs the administrator in, as a browser on JIM's page would (#2594)
+    # ---------------------------------------------------------------------------------------------------------------
+    Write-Host "  [8/8] The API reference's Try It signs the administrator in through AD FS" -ForegroundColor DarkGray
+    $tryIt = Invoke-AdfsSignInCheck -Check TryIt -JimUrl $signInUrl -UserName $administrator.UserName -Password $administrator.Password
+    $tryItSettings = if ($tryIt.ok) { $tryIt.tryIt } else { $null }
+    $adfsBase = ([string]$federationConfig.Authority).TrimEnd('/')
+    Add-TestResult -Name "The API reference offers Try It AD FS's own endpoints, the public client and the Web API's openid scope" `
+        -Passed ($null -ne $tryItSettings -and "$($tryItSettings.authorizationUrl)" -like "$adfsBase/*" -and "$($tryItSettings.tokenUrl)" -like "$adfsBase/*" -and
+            "$($tryItSettings.clientId)" -eq "$env:JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID" -and "$($tryItSettings.apiScope)" -like 'api://*/openid') `
+        -Detail (Format-SignInResult $tryIt)
+    Add-TestResult -Name "AD FS lets JIM's page read Try It's token (CORS), and /api accepts it as the same administrator" `
+        -Passed ($null -ne $tryItSettings -and "$($tryItSettings.allowedOrigin)" -eq "$($tryItSettings.origin)" -and
+            "$($tryIt.userInfo.metaverseObjectId)" -eq "$adminMvoId" -and $tryIt.administratorApiStatus -eq 200) `
+        -Detail (Format-SignInResult $tryIt)
 
     Assert-NoWorkerErrors -Since $startTime
 }
