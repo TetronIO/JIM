@@ -36,7 +36,7 @@ These two are a pair. Every backup schedule that captures the database must capt
 
 ### Why the keys matter
 
-JIM encrypts credentials with [ASP.NET Core Data Protection](https://learn.microsoft.com/aspnet/core/security/data-protection/introduction) (AES-256-GCM). The `jim.web`, `jim.worker`, and `jim.scheduler` services all share the same key set so they can decrypt each other's data. Key facts that shape your backup strategy:
+JIM encrypts credentials with AES-256-GCM, under a set of encryption keys it manages itself. The `jim.web`, `jim.worker`, and `jim.scheduler` services all share the same key set so they can decrypt each other's data. Key facts that shape your backup strategy:
 
 - **Keys are not stored in the database.** They are files on the key volume, deliberately kept separate from the ciphertext they protect.
 - **Keys are not themselves encrypted at rest.** This is the correct design for a self-contained, air-gappable product with no external key-management dependency, but it makes the key volume as sensitive as the database. Protect and store its backups accordingly (see [Securing key backups](#securing-key-backups)).

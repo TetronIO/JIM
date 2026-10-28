@@ -41,7 +41,7 @@ public class MetaverseObjectTypeHeader
     public bool BuiltIn { get; set; }
 
     /// <summary>
-    /// The name of the MudBlazor icon the portal shows for the Object Type; null when none is set.
+    /// The name of the Material Design icon the portal shows for the Object Type, such as Devices; null when none is set.
     /// </summary>
     public string? Icon { get; set; }
 

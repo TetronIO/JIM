@@ -74,7 +74,7 @@ JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider
 
 | Client | Used by | Authentication | Configured via |
 |--------|---------|----------------|----------------|
-| **Confidential** | The JIM web application (Blazor UI) | A stored client secret sent directly from the backend to the IdP's token endpoint. Never exposed to the browser. | `JIM_SSO_CLIENT_ID` and `JIM_SSO_SECRET` |
+| **Confidential** | The JIM portal | A stored client secret sent directly from the backend to the IdP's token endpoint. Never exposed to the browser. | `JIM_SSO_CLIENT_ID` and `JIM_SSO_SECRET` |
 | **Public** | Interactive clients that run on the user's machine (PowerShell module, future CLI tools) | PKCE with a loopback redirect URI (`http://localhost:8400/callback/`). No secret; the IdP relies on PKCE to bind the authorisation response to the original client. | `JIM_SSO_PUBLIC_CLIENT_ID` (falls back to `JIM_SSO_CLIENT_ID` when unset) |
 
 **When are these the same registration?**
@@ -251,7 +251,7 @@ When your identity provider changes the key it signs tokens with, you need do no
 
 JIM delegates interactive authentication entirely to your identity provider and never sees or stores user credentials, whichever kind your provider is configured to require, i.e. Kerberos, passwords, smart cards, other certificate-based authentication types, FIDO2 passkeys, etc. Defences against credential attacks therefore belong **at the identity provider**, not in JIM:
 
-- **Where password authentication is in use, we recommend you enable brute-force/lockout protection**<br /> Entra ID (Smart Lockout), AD FS (the built-in Extranet Lockout Policy), and Keycloak (**Realm settings > Security defences > Brute force detection**) all offer this. The bundled devcontainer Keycloak realm ships with brute-force detection enabled by default.
+- **Where password authentication is in use, we recommend you enable brute-force/lockout protection**<br /> Entra ID (Smart Lockout), AD FS (the built-in Extranet Lockout Policy), and Keycloak (**Realm settings > Security defences > Brute force detection**) all offer this.
 - **Enable multi-factor authentication where available**<br /> MFA at the identity provider protects every application behind it, including JIM, without any JIM-side configuration.
 - **Prefer phishing-resistant methods where your provider supports them**<br /> Kerberos, certificate-based authentication, and FIDO2 passkeys remove the guessable secret altogether, protecting users against credential-stuffing and password-guessing.
 

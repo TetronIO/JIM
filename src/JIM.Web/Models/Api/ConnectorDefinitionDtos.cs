@@ -333,7 +333,7 @@ public class ConnectorDefinitionFileDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The filename of the connector file, e.g. "JIM.Connectors.dll".
+    /// The file name of the Connector file, such as "Example.Connector.dll".
     /// </summary>
     public string Filename { get; set; } = null!;
 

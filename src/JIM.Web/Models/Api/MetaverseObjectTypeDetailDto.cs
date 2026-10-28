@@ -39,7 +39,7 @@ public class MetaverseObjectTypeDetailDto
     public bool BuiltIn { get; set; }
 
     /// <summary>
-    /// The name of the MudBlazor icon the portal shows for the Object Type; null when none is set.
+    /// The name of the Material Design icon the portal shows for the Object Type, such as Devices; null when none is set.
     /// </summary>
     public string? Icon { get; set; }
 
@@ -135,7 +135,8 @@ public class CreateMetaverseObjectTypeRequest
     public string PluralName { get; set; } = null!;
 
     /// <summary>
-    /// Optional MudBlazor icon name to associate with the object type in the UI.
+    /// The name of a Material Design icon for the portal to show for the Object Type, such as Devices; optional. A name
+    /// JIM does not recognise shows a default icon.
     /// </summary>
     public string? Icon { get; set; }
 
@@ -198,8 +199,9 @@ public class UpdateMetaverseObjectTypeRequest
     public string? PluralName { get; set; }
 
     /// <summary>
-    /// The MudBlazor icon name shown for the type in the UI. Omitted or null leaves it unchanged; an empty or
-    /// whitespace-only string clears it. Cannot be changed on a built-in type.
+    /// The name of the Material Design icon the portal shows for the Object Type, such as Devices; a name JIM does not
+    /// recognise shows a default icon. Omitted or null leaves it unchanged; an empty or whitespace-only string clears it.
+    /// Cannot be changed on a built-in type.
     /// </summary>
     public string? Icon { get; set; }
 

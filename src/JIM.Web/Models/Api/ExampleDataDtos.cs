@@ -21,7 +21,7 @@ public class ExampleDataSetDto
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// The .NET culture code the values are in, for example "en-GB".
+    /// The culture code the values are in, for example "en-GB".
     /// </summary>
     public string Culture { get; set; } = null!;
 

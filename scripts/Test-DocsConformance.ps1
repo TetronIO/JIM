@@ -43,6 +43,9 @@
       LANG-6  no promises about the future
       LANG-7  no minimisers ("simply")
       LANG-8  no GitHub issue or pull request numbers
+      LANG-10 no names of what JIM is built with (frameworks, libraries, its
+              own project names, its development infrastructure), in running
+              text, a diagram spec, or the text of an included SVG diagram
       TERM-1  the vocabulary and the glossary agree, and every product noun
               has a home page
       EXC-1   every exception marker is well formed, names a rule, gives a
@@ -168,7 +171,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:KnownRules = @('STR-1', 'STR-2', 'STR-3', 'STR-4', 'STR-5', 'STR-6', 'STR-7', 'STR-8', 'MNT-3', 'A11Y-1', 'A11Y-2', 'TYP-1', 'TUT-2',
-    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'TERM-1', 'STY-1', 'STY-3', 'VIS-1', 'EXC-1')
+    'PRI-1', 'LANG-1', 'LANG-2', 'LANG-3', 'LANG-4', 'LANG-5', 'LANG-6', 'LANG-7', 'LANG-8', 'LANG-10', 'TERM-1', 'STY-1', 'STY-3', 'VIS-1', 'EXC-1')
 # Rules no marker can excuse. EXC-1 guards the markers themselves. MNT-3 compares with the base
 # branch, so once the growth it excused merges, its marker suppresses nothing and fails every
 # later pull request. PRI-1 is what /release reads to find the pages due for re-validation; a
@@ -993,6 +996,7 @@ function New-LanguageModel {
         TimeRelative  = @($Config.TimeRelativePatterns | ForEach-Object { [regex]::new($_, $options) })
         Future        = @($Config.FuturePatterns | ForEach-Object { [regex]::new($_, $options) })
         Minimisers    = @($Config.MinimiserPatterns | ForEach-Object { [regex]::new($_, $options) })
+        InternalTerms = @($Config.InternalTermPatterns | ForEach-Object { [regex]::new($_, $options) })
     }
 }
 
@@ -1040,6 +1044,20 @@ function Format-LikeWord {
     param([string]$Word, [string]$Suggestion)
     if ($Word.Length -gt 0 -and [char]::IsUpper($Word[0])) { return $Suggestion.Substring(0, 1).ToUpperInvariant() + $Suggestion.Substring(1) }
     return $Suggestion
+}
+
+# LANG-10: a name for what JIM is built with (a framework, a library, one of JIM's own projects, or its
+# development infrastructure) tells the reader nothing they act on (VOI-4, VOI-6). The names are distinctive,
+# unlike VOI-1's everyday words, so a list catches them without false positives; one the reader types sits in
+# code, which the prose text has already dropped.
+function Find-InternalTerm {
+    param([string]$Text, [int]$Line, $Language)
+
+    foreach ($r in $Language.InternalTerms) {
+        foreach ($m in $r.Matches($Text)) {
+            New-Finding 'LANG-10' $Line "'$($m.Value)' names how JIM is built; say what it is to the reader (the portal, the database, the web container), or leave it out (VOI-6)."
+        }
+    }
 }
 
 function Test-Language {
@@ -1133,10 +1151,33 @@ function Test-Language {
             New-Finding 'LANG-8' $p.Line "a link to a GitHub issue or pull request; a public page leaves JIM's own workings out (VOI-4)."
         }
 
+        # LANG-10
+        foreach ($finding in Find-InternalTerm -Text $text -Line $p.Line -Language $Language) { $finding }
+
         # STY-1 (the pattern is described where $script:EmojiRegex is defined).
         foreach ($m in $script:EmojiRegex.Matches($text)) {
             New-Finding 'STY-1' $p.Line "an emoji ('$($m.Value)'); use a Material Design icon instead, such as :material-check-circle-outline:{ .jim-yes role=`"img`" aria-label=`"Yes`" } for a tick in a table (see STY-1 and STY-3)."
         }
+    }
+
+    # LANG-10 reads a diagram spec too: its labels and its description are text the reader sees, though
+    # they sit in a code fence the other language rules skip. Code spans in a label are what the reader
+    # types, as they are in running text.
+    foreach ($fence in @($Page.Fences | Where-Object { $_.Info -match '^jim-diagram\b' })) {
+        for ($k = 0; $k -lt $fence.Content.Count; $k++) {
+            $spec = [regex]::Replace($fence.Content[$k], '(`+).+?\1', ' ')
+            foreach ($finding in Find-InternalTerm -Text $spec -Line ($fence.Line + 1 + $k) -Language $Language) { $finding }
+        }
+    }
+
+    # And the text of an SVG diagram the page includes: its labels, title and description reach the reader through
+    # the page, so a name in them is the page's, reported at the line that includes it.
+    for ($i = $Page.FrontMatter.BodyStart; $i -lt $Page.Lines.Count; $i++) {
+        if ($Page.InFenceLine[$i] -or $Page.Lines[$i] -notmatch '--8<--\s*"(?<path>[^"]+\.svg)"') { continue }
+        $svgPath = Join-Path $DocsPath $Matches['path']
+        if (-not (Test-Path -LiteralPath $svgPath -PathType Leaf)) { continue }
+        $svgText = ([regex]::Matches((Get-Content -LiteralPath $svgPath -Raw), '>([^<>]+)<') | ForEach-Object { $_.Groups[1].Value }) -join ' '
+        foreach ($finding in Find-InternalTerm -Text ([System.Net.WebUtility]::HtmlDecode($svgText)) -Line ($i + 1) -Language $Language) { $finding }
     }
 }
 

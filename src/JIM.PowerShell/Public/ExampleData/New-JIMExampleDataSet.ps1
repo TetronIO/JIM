@@ -15,7 +15,7 @@ function New-JIMExampleDataSet {
         The name for the Example Data Set.
 
     .PARAMETER Culture
-        The .NET culture the values are in, for example "en-GB".
+        The culture code the values are in, for example "en-GB".
 
     .PARAMETER Values
         The values that make up the Example Data Set.

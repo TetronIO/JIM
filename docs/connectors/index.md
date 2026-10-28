@@ -41,7 +41,7 @@ JIM ships with the following built-in connectors. **Passwords** means the connec
 | [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, Samba AD, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export, [Passwords](../concepts/passwords.md) | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } |
 | [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) | Any system exposing a SCIM 2.0 service provider interface (RFC 7643/7644) | Full Import, Delta Import, Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } |
 | [JIM SCIM 2.0 Service Provider Connector](jim-scim-service-provider-connector.md) | Identity providers and other SCIM 2.0 clients that push Users and Groups to JIM's own SCIM endpoint ([Preview](../administration/preview-features.md)) | Full Import, Delta Import | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } |
-| [JIM SQL Connector](jim-sql-connector.md) | Microsoft SQL Server and Oracle Database, through fully managed ADO.NET drivers | Full Import, Delta Import, Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } |
+| [JIM SQL Connector](jim-sql-connector.md) | Microsoft SQL Server and Oracle Database, through built-in drivers with nothing to install | Full Import, Delta Import, Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } |
 
 A Connected System whose connector cannot probe is still checked against JIM's own records of it.
 

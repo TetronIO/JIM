@@ -152,7 +152,7 @@ None of these checks starts until its service has finished starting, however lon
 - **AppArmor, on Ubuntu 24.04**<br /> Ubuntu gives Podman's `crun` and `podman` AppArmor profiles of their own. A rootful container that sets no-new-privileges, as JIM's do, cannot leave them for its own profile, so AppArmor combines the two, and the combination breaks two things:
 
     - It allows the container no network at all, so JIM cannot reach its database or identity provider.
-    - It stops the processes in a container signalling one another. The .NET runtime signals its own threads to reclaim memory, so JIM's services crash, and Podman restarts them, over and over.
+    - It stops the processes in a container signalling one another. JIM's runtime signals its own threads to reclaim memory, so JIM's services crash, and Podman restarts them, over and over.
 
     The installer offers to fix both, in AppArmor's places for site changes: a network rule in each profile's local override, and a rule in `/etc/apparmor.d/abstractions/base.d/jim-podman` that lets each profile signal itself when combined with `crun`'s or `podman`'s. Ubuntu already lets every profile signal itself (`signal peer=@{profile_name}` in its base abstraction); the rule extends that to the combined profile, and allows nothing between different profiles. JIM's containers keep their own AppArmor profile. By hand, as root:
 

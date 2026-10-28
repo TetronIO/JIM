@@ -7,7 +7,7 @@ audience: security-assessor
 
 # Security Headers
 
-Every response JIM.Web sends, whether from the Blazor admin portal, a static asset, or the REST API, carries a
+Every response JIM's web application sends, whether from the portal, a static asset, or the REST API, carries a
 set of defence-in-depth security headers. This is an application-layer control (OWASP Top 10 A02: Security
 Misconfiguration) that reduces the impact of cross-site scripting, clickjacking, and MIME-sniffing attacks, and
 requires no configuration.
@@ -15,8 +15,8 @@ requires no configuration.
 ```jim-diagram
 archetype: flow
 title: How JIM's security headers reach the browser
-desc: "Every response from JIM.Web, whether the portal, a static asset or the REST API, gets five security headers: the Content Security Policy and four more. Where something more specific sets one of them, its value wins. A reverse proxy in front of JIM, if there is one, passes the headers on unchanged unless it is configured to strip or rewrite them. The browser then applies them."
-in: {label: JIM.Web response, note: 'portal, asset or API'}
+desc: "Every response from JIM's web application, whether the portal, a static asset or the REST API, gets five security headers: the Content Security Policy and four more. Where something more specific sets one of them, its value wins. A reverse proxy in front of JIM, if there is one, passes the headers on unchanged unless it is configured to strip or rewrite them. The browser then applies them."
+in: {label: JIM response, note: 'portal, asset or API'}
 steps:
 - {id: headers, label: Security headers, sub: 'CSP and four more', note: 'a more specific value wins'}
 - {id: proxy, label: Reverse proxy, sub: if there is one, note: 'passes them on unless set to strip'}
@@ -38,8 +38,7 @@ example) and sets one of these headers replaces JIM's default, so the more speci
 
 ## :material-lock-check-outline: Content Security Policy
 
-JIM's Content Security Policy (CSP) is currently in **stage one**: a restrictive, same-origin-only policy
-compatible with Blazor Server and MudBlazor as they stand today.
+JIM's Content Security Policy (CSP) is a restrictive, same-origin-only policy:
 
 ```text
 default-src 'self';
@@ -57,13 +56,11 @@ Everything (scripts, styles, images, fonts, WebSocket connections) is restricted
 designed for [air-gapped deployment](deployment.md#air-gapped-deployment), so nothing in the default policy
 depends on a third-party host, CDN, or external font provider.
 
-`'unsafe-inline'` is present for `script-src` and `style-src` because Blazor Server's reconnection handling and
-MudBlazor's component styling both rely on inline `<script>`/`style="..."` usage. This is a deliberate,
-documented stage-one compromise; a future stage-two release will move to a nonce-based policy and remove it.
+`'unsafe-inline'` is present for `script-src` and `style-src` because the portal's reconnection handling and its
+component styling rely on inline `<script>` and `style="..."` usage.
 
-`connect-src` allows both `ws:` and `wss:` so the Blazor Server SignalR circuit (the WebSocket connection that
-keeps the UI live) works identically whether JIM is reached over plain HTTP (local development) or HTTPS
-(a real deployment).
+`connect-src` allows both `ws:` and `wss:` so the WebSocket connection that keeps the portal live works whether
+JIM is reached over plain HTTP or HTTPS.
 
 ## :material-lan: Reverse proxies and corporate networks
 

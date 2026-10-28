@@ -69,9 +69,14 @@
     docs/.conformance/coverage.psd1.
 
 .PARAMETER OpenApiPath
-    The OpenAPI document ACC-3 and COV-4 check against, as
-    scripts/Generate-OpenApiDoc.ps1 writes it. Without it, those two rules are
-    skipped.
+    The OpenAPI document ACC-3, COV-4 and LANG-10 check against, as
+    scripts/Generate-OpenApiDoc.ps1 writes it. Without it, those three rules
+    are skipped.
+
+.PARAMETER ConformanceConfigPath
+    The documentation conformance configuration, relative to RepositoryRoot,
+    whose InternalTermPatterns LANG-10 applies to the API reference's text.
+    Defaults to docs/.conformance/config.psd1.
 
 .PARAMETER Rule
     Run only these rules, comma-separated (for example ACC-3,COV-4). Defaults to
@@ -86,11 +91,12 @@ param(
     [string]$RepositoryRoot = '.',
     [string]$ConfigPath = 'docs/.conformance/coverage.psd1',
     [string]$OpenApiPath,
+    [string]$ConformanceConfigPath = 'docs/.conformance/config.psd1',
     [string[]]$Rule
 )
 
 $ErrorActionPreference = 'Stop'
-$script:Rules = @('COV-1', 'COV-2', 'COV-6', 'LNK-3', 'COV-5', 'ACC-3', 'COV-4')
+$script:Rules = @('COV-1', 'COV-2', 'COV-6', 'LNK-3', 'COV-5', 'ACC-3', 'COV-4', 'LANG-10')
 $script:HttpMethods = @('get', 'post', 'put', 'patch', 'delete')
 $script:StandardPath = 'engineering/DOCUMENTATION_STANDARD.md'
 
@@ -386,9 +392,9 @@ $allowPath = $ConfigPath
 
 $selected = if ($Rule) { @($Rule -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } else { $script:Rules }
 $apiNote = $null
-if (-not $OpenApiPath -and ('ACC-3' -in $selected -or 'COV-4' -in $selected)) {
-    $selected = @($selected | Where-Object { $_ -notin 'ACC-3', 'COV-4' })
-    $apiNote = 'ACC-3 and COV-4 skipped: they need the OpenAPI document (-OpenApiPath), which build-and-test generates and checks.'
+if (-not $OpenApiPath -and ('ACC-3' -in $selected -or 'COV-4' -in $selected -or 'LANG-10' -in $selected)) {
+    $selected = @($selected | Where-Object { $_ -notin 'ACC-3', 'COV-4', 'LANG-10' })
+    $apiNote = 'ACC-3, COV-4 and LANG-10 skipped: they need the OpenAPI document (-OpenApiPath), which build-and-test generates and checks.'
 }
 
 # The docs pages the checks read.
@@ -706,6 +712,42 @@ if ('COV-4' -in $selected) {
 
 $inActions = $env:GITHUB_ACTIONS -eq 'true'
 function ConvertTo-AnnotationText { param([string]$Text) $Text.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A') }
+
+# ---------------------------------------------------------------------------
+# LANG-10: the API reference names nothing JIM is built with
+# ---------------------------------------------------------------------------
+
+# The API reference publishes every summary and description in the OpenAPI document, which come from the XML
+# comments on the controllers and DTOs, and the PowerShell reference tables the same descriptions. A framework
+# name in one reaches the reader as surely as one on a page, so the conformance check's list applies here too.
+function Get-OpenApiText {
+    param($Node, [string]$Pointer)
+    if ($Node -is [System.Collections.IDictionary]) {
+        foreach ($key in $Node.Keys) {
+            $child = $Node[$key]
+            if ($key -in 'summary', 'description' -and $child -is [string]) { [pscustomobject]@{ Pointer = "$Pointer/$key"; Text = $child } }
+            else { Get-OpenApiText -Node $child -Pointer "$Pointer/$key" }
+        }
+    }
+    elseif ($Node -is [System.Collections.IList]) {
+        for ($i = 0; $i -lt $Node.Count; $i++) { Get-OpenApiText -Node $Node[$i] -Pointer "$Pointer/$i" }
+    }
+}
+
+if ('LANG-10' -in $selected) {
+    $conformance = Import-PowerShellDataFile (Join-Path $root $ConformanceConfigPath)
+    $terms = @($conformance.InternalTermPatterns | ForEach-Object { [regex]::new($_, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) })
+    $document = Get-Content -LiteralPath $OpenApiPath -Raw | ConvertFrom-Json -AsHashtable
+    foreach ($entry in Get-OpenApiText -Node $document -Pointer '') {
+        # Code is what the reader types, as it is on a page.
+        $text = [regex]::Replace($entry.Text, '(`+).+?\1|<c>.*?</c>|<code>.*?</code>', ' ')
+        foreach ($term in $terms) {
+            foreach ($m in $term.Matches($text)) {
+                $findings.Add((New-Finding 'LANG-10' 'OpenAPI document' 1 "$($entry.Pointer) names how JIM is built ('$($m.Value)'); the API and PowerShell references publish it. Say what it is to the reader in the XML comment it comes from (VOI-6)."))
+            }
+        }
+    }
+}
 
 foreach ($f in $findings | Sort-Object Path, Line, Rule) {
     Write-Host "ERROR   $($f.Path):$($f.Line)  $($f.Rule)  $($f.Message)" -ForegroundColor Red
