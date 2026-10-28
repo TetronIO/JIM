@@ -227,13 +227,12 @@
         : Math.Floor(Math.Clamp((double)ObjectsProcessed / ObjectsToProcess * 100d, 0d, 100d) * 10d) / 10d;
 
     /// <summary>
-    /// A rate of zero once the run is under way means samples exist but the counter has not moved,
-    /// which is the run tidying up rather than the run having stopped. Saying so beats an empty
-    /// cell or a fabricated estimate, and it is what the worker's own tracker used to report inside
-    /// the progress message. Before the first object is processed the rate is legitimately zero,
-    /// and that is a run yet to get going, not a stalled one.
+    /// Every object counted while the step is still running: it is saving what it processed. Only
+    /// the total says this. A counter standing still short of it is a run working through slow
+    /// objects (a page of large groups can hold it for minutes), and reading that as tidying up
+    /// put "Finishing up" beside 95%.
     /// </summary>
-    private bool IsStalled => ObjectsPerSecond is <= 0 && ObjectsProcessed > 0;
+    private bool IsFinishingUp => !IsIndeterminate && ObjectsProcessed >= ObjectsToProcess;
 
     private string ProcessedText => IsIndeterminate
         ? ObjectsProcessed.ToString("N0")
@@ -252,7 +251,7 @@
     {
         get
         {
-            if (IsStalled)
+            if (IsFinishingUp)
                 return "Finishing up";
 
             if (EstimatedSecondsRemaining is not { } seconds)

@@ -285,13 +285,30 @@ public class RunProgressMetricsTests : JimComponentTestContext
     }
 
     [Test]
-    public void RunProgressMetrics_CounterStalled_SaysFinishingUpRatherThanGoingQuiet()
+    public void RunProgressMetrics_CounterReachedItsTotal_SaysFinishingUpRatherThanGoingQuiet()
     {
-        // The worker's own tracker said "finishing up" when the counter stopped advancing. The
-        // portal's tracker simply reports a zero rate, so the panel has to say it instead.
+        // Every object is counted but the step has not ended: it is saving what it processed.
         var cut = RenderMetrics(processed: 10527, objectsPerSecond: 0d, secondsRemaining: null);
 
         Assert.That(Values(cut), Does.Contain("Finishing up"));
+    }
+
+    [Test]
+    public void RunProgressMetrics_CounterReachedItsTotalWhileARateIsStillMeasured_SaysFinishingUp()
+    {
+        var cut = RenderMetrics(processed: 10527, objectsPerSecond: 12d, secondsRemaining: 0d);
+
+        Assert.That(Values(cut), Does.Contain("Finishing up"));
+    }
+
+    [Test]
+    public void RunProgressMetrics_CounterStalledShortOfItsTotal_IsNotMistakenForFinishingUp()
+    {
+        // A page of large groups can hold the counter still for minutes at 95%. That is a run
+        // still working through objects, not one tidying up.
+        var cut = RenderMetrics(processed: 753500, total: 790007, objectsPerSecond: 0d, secondsRemaining: null);
+
+        Assert.That(Values(cut), Does.Not.Contain("Finishing up"));
     }
 
     [Test]

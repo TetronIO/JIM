@@ -148,6 +148,95 @@ public class ActivityEtaTrackerTests
     }
 
     [Test]
+    public void RecordSample_CounterStillLongerThanTheWindowAfterProgress_ReportsASlowingRateRatherThanZero()
+    {
+        // The worker saves its count once per page, and a page of large groups can take longer
+        // than the rate window. Every sample inside the window then carried the same count, so
+        // the rate read as zero and a run still working looked like one tidying up. The window
+        // has to reach back to the last point the counter moved.
+        _tracker.RecordSample(_activityId, 0, 10000);
+        _clock.Advance(TimeSpan.FromSeconds(30));
+        _tracker.RecordSample(_activityId, 500, 10000);
+
+        // Polled every 10 seconds for three minutes with no movement.
+        for (var i = 0; i < 18; i++)
+        {
+            _clock.Advance(TimeSpan.FromSeconds(10));
+            _tracker.RecordSample(_activityId, 500, 10000);
+        }
+
+        var estimate = _tracker.RecordSample(_activityId, 500, 10000);
+
+        using (Assert.EnterMultipleScope())
+        {
+            // 500 objects over the 210 seconds since the counter last stood still before moving.
+            Assert.That(estimate.ObjectsPerSecond, Is.EqualTo(500d / 210d).Within(0.001));
+            Assert.That(estimate.EstimatedSecondsRemaining, Is.EqualTo(9500d / (500d / 210d)).Within(0.1));
+        }
+    }
+
+    [Test]
+    public void RecordSample_CounterStalledAfterSteadyProgress_KeepsTheWindowOfProgressBeforeTheStall()
+    {
+        // 500 objects every 15 seconds for two minutes, then a page that holds the counter for
+        // three. Measured from the last couple of movements alone, the rate collapsed to a few
+        // objects a second and the time remaining leapt from minutes to over an hour, when the
+        // run was minutes from the end (seen live on a 790,000-object Full Synchronisation).
+        _tracker.RecordSample(_activityId, 0, 20000);
+        for (var i = 1; i <= 8; i++)
+        {
+            _clock.Advance(TimeSpan.FromSeconds(15));
+            _tracker.RecordSample(_activityId, i * 500, 20000);
+        }
+
+        for (var i = 0; i < 18; i++)
+        {
+            _clock.Advance(TimeSpan.FromSeconds(10));
+            _tracker.RecordSample(_activityId, 4000, 20000);
+        }
+
+        var estimate = _tracker.RecordSample(_activityId, 4000, 20000);
+
+        // 4,000 objects over the 120 seconds of progress plus the 180-second stall.
+        Assert.That(estimate.ObjectsPerSecond, Is.EqualTo(4000d / 300d).Within(0.001));
+    }
+
+    [Test]
+    public void RecordSample_CounterStalledAfterProgress_RateKeepsFallingTheLongerItStalls()
+    {
+        _tracker.RecordSample(_activityId, 0, 10000);
+        _clock.Advance(TimeSpan.FromSeconds(30));
+        _tracker.RecordSample(_activityId, 500, 10000);
+
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        var earlier = _tracker.RecordSample(_activityId, 500, 10000);
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        var later = _tracker.RecordSample(_activityId, 500, 10000);
+
+        Assert.That(later.ObjectsPerSecond, Is.GreaterThan(0d).And.LessThan(earlier.ObjectsPerSecond!.Value));
+    }
+
+    [Test]
+    public void RecordSample_FrequentPollsDuringALongStall_DoNotPushTheLastMovementOutOfTheWindow()
+    {
+        // The Activity page polls every couple of seconds; a stall of several minutes is far more
+        // polls than the per-Activity sample cap.
+        _tracker.RecordSample(_activityId, 0, 10000);
+        _clock.Advance(TimeSpan.FromSeconds(30));
+        _tracker.RecordSample(_activityId, 500, 10000);
+
+        for (var i = 0; i < 200; i++)
+        {
+            _clock.Advance(TimeSpan.FromSeconds(2));
+            _tracker.RecordSample(_activityId, 500, 10000);
+        }
+
+        var estimate = _tracker.RecordSample(_activityId, 500, 10000);
+
+        Assert.That(estimate.ObjectsPerSecond, Is.GreaterThan(0d));
+    }
+
+    [Test]
     public void Remove_ClearsTheActivityState()
     {
         _tracker.RecordSample(_activityId, 0, 1000);
