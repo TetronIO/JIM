@@ -123,7 +123,7 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 | Setting | Required | What to enter |
 |---------|----------|---------------|
-| Object Types | Yes | A JSON document describing your tables, typed or pasted into this multi-line field. Step 2 explains it. |
+| Object Types | Yes | Which tables or views hold each kind of object, and what identifies a row. The portal shows one card per Object Type; Step 2 explains it. |
 
 #### Delta Import
 
@@ -133,9 +133,20 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 ### Step 2: Describe your tables
 
-SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM in a short JSON document. Enter it in the **Object Types** field under **Object Type Configuration** on the Connected System's **Settings** tab. The field shows a complete example beneath it; select **Copy** to start from that.
+SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM. On the Connected System's **Settings** tab, **Object Types** under **Object Type Configuration** shows one card per Object Type. Select **Add Object Type**, then on its card give it a name and choose:
 
-To find the exact names of your tables, views, columns and keys, list what the database account can see with [`Get-JIMConnectedSystemCatalogue`](../powershell/connected-system-schema.md#get-jimconnectedsystemcatalogue) or the catalogue endpoints of the REST API, once the connection settings are saved. A table's primary key, which it reports in key order, is usually the right `anchorColumns`.
+- its **Schema** and **Table or view**, or **Read from a SELECT statement instead** where you cannot create a view
+- its **Anchor**: the column or columns whose values identify a row, in key order
+- any **References to other Object Types**: columns whose values hold another object's anchor, such as a manager
+- any **Multi-valued attributes**: child tables holding one row per value, such as phone numbers or group members
+
+Names are chosen from the database's own list of tables, views and columns, read with the connection settings on screen. Where the database declares a primary key, the card offers it as the anchor. Where a column has a foreign key to another Object Type's anchor, the card offers it as a reference, and a foreign key to a table no Object Type reads from yet offers to add one for it. Nothing changes until you accept. If JIM cannot reach the database, the card says why, names are typed instead, and **Retry** reads the list again.
+
+You do not list the ordinary columns; JIM discovers them. You only say what the database cannot: which table is which object, what identifies a row, which columns point at other objects, and which child tables belong to which parent. A card shows any problem with its Object Type as you work, and a collapsed card shows how many it has.
+
+#### The Object Types document
+
+Behind the cards, the setting holds a JSON document. It is what REST and PowerShell send as the setting's value, and what **View as JSON** shows. To find the exact names to put in it, list what the database account can see with [`Get-JIMConnectedSystemCatalogue`](../powershell/connected-system-schema.md#get-jimconnectedsystemcatalogue) or the catalogue endpoints of the REST API, once the connection settings are saved. A table's primary key, which it reports in key order, is usually the right `anchorColumns`.
 
 Each entry in the document names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
 
@@ -164,11 +175,9 @@ Each entry in the document names an Object Type, the table or view it comes from
 }
 ```
 
-You do not list the ordinary columns; JIM discovers them. You only say what the database cannot: which table is which object, what identifies a row, which columns point at other objects, and which child tables belong to which parent.
-
 The document is checked when you save. A mistake is reported immediately, naming the Object Type and field, and an unrecognised field name is treated as a mistake rather than ignored, so a typo cannot silently leave data out. Where the unrecognised name is close to a real one, the message suggests it: `Did you mean 'anchorColumns'?`.
 
-#### Object Type fields
+##### Object Type fields
 
 | Field | Required | What it is |
 |-------|----------|------------|
@@ -182,7 +191,7 @@ The document is checked when you save. A mistake is reported immediately, naming
 | `watermarkColumn` | For Watermark Column Delta Import | The last-modified column on this table; see [Delta Import with a watermark column](jim-sql-connector-delta-import-watermark.md). |
 | `changeLog` | For Change-Log Table Delta Import | The change-log table for this Object Type; see [Delta Import with a change-log table](jim-sql-connector-delta-import-change-log.md). |
 
-#### Related table fields
+##### Related table fields
 
 A related table turns a child table into a multi-valued attribute. The commonest case is group membership: a `GROUP_MEMBERS` table of `(GROUP_ID, EMPLOYEE_ID)` becomes a `Members` attribute on the `Group` Object Type, and with `referencesObjectType` each member is a reference to a `Person`. Every row is a value, whatever the column's type, so a related table of dates imports each date. A related table of true or false values becomes a single-valued attribute, because a Boolean holds one value; a parent with rows holding both has each value reported rather than one chosen.
 

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Configure a SQL Connected System's Object Types in the portal, one card per Object Type, choosing tables, views and columns from the database itself, with its primary and foreign keys offered as anchors and references, instead of writing a JSON document. (#2570)
 - ✨ See what a SQL Connected System's database contains before writing its Object Types: list its tables and views, or one table's columns, primary key and foreign keys, or the columns a SELECT statement would return, with `Get-JIMConnectedSystemCatalogue` or REST. (#2570)
 - ✨ When a value JIM is configured with does not match what the identity provider sends, sign-in says which: a portal sign-in stops on a page naming the setting, such as `JIM_SSO_CLIENT_ID`, the value JIM expected and the value it received, instead of **Something went wrong**. Covers the audience, issuer, client secret, scopes and the claim JIM identifies people by. An API token refused for its audience or issuer is logged the same way, and administrators see every problem with `Get-JIMSignInDiagnostic` or REST, with the redirect URIs to register. (#2443)
 - ✨ An Oracle Database connection over TCPS can now use a server certificate from your own certificate authority: trust the root of its chain from the failed connection test's certificate card, or under **Admin > Certificates**, with no change to the JIM images. (#2581)
