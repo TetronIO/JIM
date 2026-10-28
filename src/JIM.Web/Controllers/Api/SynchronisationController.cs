@@ -2402,6 +2402,156 @@ public class SynchronisationController(
 
     #endregion
 
+    #region Catalogue
+
+    /// <summary>
+    /// List the tables and views a Connected System's source contains
+    /// </summary>
+    /// <remarks>
+    /// Reads the source's own catalogue with the Connected System's saved settings, so a script, or an
+    /// administrator writing the SQL Connector's Object Types document, can see what there is to choose from.
+    /// Purely informational: nothing is written to JIM or to the source.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose source to read.</param>
+    /// <returns>One entry per table and view the configured account can see: tables first, then views.</returns>
+    /// <response code="200">The tables and views.</response>
+    /// <response code="400">The Connector cannot describe what its source contains, or the Connected System's settings are not complete enough to connect.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">JIM could not read the catalogue, e.g. the database was unreachable or refused the credentials.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/catalogue", Name = "GetConnectedSystemCatalogue")]
+    [ProducesResponseType(typeof(IEnumerable<ConnectedSystemCatalogueObjectDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> GetConnectedSystemCatalogueAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Reading the catalogue for Connected System: {Id}", connectedSystemId);
+
+        return await ReadCatalogueAsync(connectedSystemId, async () =>
+        {
+            var objects = await _application.ConnectedSystems.GetCatalogueObjectsAsync(connectedSystemId, cancellationToken: HttpContext?.RequestAborted ?? default);
+            return Ok(objects.Select(ConnectedSystemCatalogueObjectDto.FromModel));
+        });
+    }
+
+    /// <summary>
+    /// Describe one table or view in a Connected System's source
+    /// </summary>
+    /// <remarks>
+    /// Returns the object's columns, its primary key in key order, and the foreign keys it declares (one entry per
+    /// constraint, a composite key's columns paired in order). A name is matched ignoring case, as schema discovery
+    /// matches it. Views declare no keys. Purely informational.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose source to read.</param>
+    /// <param name="schema">The schema the table or view is in. Leave it out to find the object by name alone, which is refused where the name is in more than one schema.</param>
+    /// <param name="name">The table or view.</param>
+    /// <response code="200">The table or view's columns and keys.</response>
+    /// <response code="400">No name was given, the name is in more than one schema and none was given, the Connector cannot describe what its source contains, or the settings are not complete enough to connect.</response>
+    /// <response code="404">No Connected System with that identifier exists, or the configured account cannot see a table or view of that name.</response>
+    /// <response code="502">JIM could not read the catalogue, e.g. the database was unreachable or refused the credentials.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/catalogue/object", Name = "GetConnectedSystemCatalogueObject")]
+    [ProducesResponseType(typeof(ConnectedSystemCatalogueObjectDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> GetConnectedSystemCatalogueObjectAsync(int connectedSystemId, [FromQuery] string? schema, [FromQuery] string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(ApiErrorResponse.BadRequest("Name the table or view to describe."));
+
+        _logger.LogTrace("Describing {Name} in the catalogue for Connected System: {Id}", LogSanitiser.Sanitise(name), connectedSystemId);
+
+        return await ReadCatalogueAsync(connectedSystemId, async () =>
+        {
+            var detail = await _application.ConnectedSystems.GetCatalogueObjectAsync(connectedSystemId, schema, name, cancellationToken: HttpContext?.RequestAborted ?? default);
+            if (detail == null)
+            {
+                var qualified = string.IsNullOrWhiteSpace(schema) ? name : $"{schema}.{name}";
+                return NotFound(ApiErrorResponse.NotFound($"The database account cannot see a table or view called '{qualified}'. Check the name, the schema, and the permissions granted to the account JIM connects as."));
+            }
+
+            return Ok(ConnectedSystemCatalogueObjectDetailDto.FromModel(detail));
+        });
+    }
+
+    /// <summary>
+    /// Describe the columns a query would return
+    /// </summary>
+    /// <remarks>
+    /// Learns a SELECT statement's result columns from the source without reading a row, as schema discovery does
+    /// for an Object Type read from a 'select'. The statement is held to the same rule: a single SELECT or WITH
+    /// statement, with no terminating semicolon. Purely informational.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose source to ask.</param>
+    /// <param name="request">The statement.</param>
+    /// <response code="200">The statement's columns.</response>
+    /// <response code="400">No statement was given, it is not a single query, the source would not accept it, the Connector cannot describe what its source contains, or the settings are not complete enough to connect.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">JIM could not reach the source, e.g. the database was unreachable or refused the credentials.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/catalogue/statement", Name = "DescribeConnectedSystemCatalogueStatement")]
+    [ProducesResponseType(typeof(ConnectedSystemCatalogueObjectDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> DescribeConnectedSystemCatalogueStatementAsync(int connectedSystemId, [FromBody] DescribeCatalogueStatementRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Statement))
+            return BadRequest(ApiErrorResponse.BadRequest("Supply the statement to describe."));
+
+        _logger.LogTrace("Describing a statement for Connected System: {Id}", connectedSystemId);
+
+        return await ReadCatalogueAsync(connectedSystemId, async () =>
+        {
+            var detail = await _application.ConnectedSystems.DescribeCatalogueStatementAsync(connectedSystemId, request.Statement, cancellationToken: HttpContext?.RequestAborted ?? default);
+            return Ok(ConnectedSystemCatalogueObjectDetailDto.FromModel(detail));
+        });
+    }
+
+    /// <summary>
+    /// The checks and failure mapping every catalogue read shares: an unknown Connected System is a 404, a
+    /// Connector with no catalogue and settings the administrator has not finished are a 400, a request the
+    /// Connector refuses (an ambiguous name, a statement it will not run) is a 400, and anything else is the
+    /// source failing, a 502.
+    /// </summary>
+    private async Task<IActionResult> ReadCatalogueAsync(int connectedSystemId, Func<Task<IActionResult>> read)
+    {
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        if (await _application.ConnectedSystems.GetCatalogueDeclarationAsync(connectedSystemId) == null)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"The '{connectedSystem.ConnectorDefinition.Name}' connector cannot describe what its source contains."));
+
+        try
+        {
+            return await read();
+        }
+        catch (InvalidSettingValuesException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        // Fallback dispatcher: any failure reading the source (unreachable, refused credentials, a malformed
+        // response) becomes a 502 rather than the generic 500, and the cancellation exclusion keeps an aborted
+        // request propagating rather than being reported as a catalogue failure.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to read the catalogue for Connected System {Id}: {Message}",
+                connectedSystemId, LogSanitiser.Sanitise(ex.Message));
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiErrorResponse.BadGateway($"JIM could not read what the source contains: {ex.Message}"));
+        }
+    }
+
+    #endregion
+
     #region Directory Servers
 
     /// <summary>

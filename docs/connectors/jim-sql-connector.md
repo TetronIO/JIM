@@ -135,6 +135,8 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM in a short JSON document. Enter it in the **Object Types** field under **Object Type Configuration** on the Connected System's **Settings** tab. The field shows a complete example beneath it; select **Copy** to start from that.
 
+To find the exact names of your tables, views, columns and keys, list what the database account can see with [`Get-JIMConnectedSystemCatalogue`](../powershell/connected-system-schema.md#get-jimconnectedsystemcatalogue) or the catalogue endpoints of the REST API, once the connection settings are saved. A table's primary key, which it reports in key order, is usually the right `anchorColumns`.
+
 Each entry in the document names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
 
 ```json title="A Person with a manager reference and a related table of phone numbers"

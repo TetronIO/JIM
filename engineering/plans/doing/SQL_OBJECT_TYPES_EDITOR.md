@@ -1,6 +1,6 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Doing (Phases 1-2 complete)
+- **Status:** Doing (Phases 1-3 complete)
 - **Issue:** [#2570](https://github.com/TetronIO/JIM/issues/2570)
 - **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/doing/PRD_SQL_OBJECT_TYPES_EDITOR.md)
 - **Last Updated:** 2026-10-28
@@ -112,7 +112,7 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - `ConnectedSystemServer` methods as above.
 - **Tests:** provider command shapes for both SQL Server and Oracle (existing provider test pattern); grouping of a composite foreign key; a view returns an empty primary key; Application methods apply drafts and refuse a Connector without the capability (`ConnectedSystemDirectoryServerDiscoveryTests` is the pattern); schema discovery's foreign-key suggestions are unchanged after the move.
 
-### Phase 3: REST and PowerShell
+### Phase 3: REST and PowerShell ✅
 
 - `SynchronisationController`: `GET .../catalogue` (objects), `GET .../catalogue/object?schema=&name=` (detail; query parameters rather than path segments because schema and object names can contain characters a route would mangle), `POST .../catalogue/statement` with `{ "statement": "..." }` (POST because a statement does not belong in a URL or its logs). 400 for no capability or an invalid statement, 404 for no Connected System, 502 for a database that cannot be reached, as the directory-server endpoint does.
 - DTOs in `JIM.Web/Models/Api/` with published `<summary>` text per `src/CLAUDE.md`.

@@ -157,6 +157,7 @@ public class SqlConnectorCatalogueTests
         {
             Assert.That(exception!.Message, Does.Contain("HR"));
             Assert.That(exception.Message, Does.Contain("ARCHIVE"));
+            Assert.That(exception.Message, Does.Not.Contain("(Parameter"), "the message reaches administrators through REST and PowerShell, so it must not carry .NET's parameter-name suffix");
         }
     }
 
@@ -194,7 +195,11 @@ public class SqlConnectorCatalogueTests
     {
         var exception = Assert.ThrowsAsync<ArgumentException>(() => _connector.DescribeStatementAsync(_settings, "DELETE FROM HR.EMPLOYEES", _logger));
 
-        Assert.That(exception!.Message, Does.Contain("SELECT"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exception!.Message, Does.Contain("SELECT"));
+            Assert.That(exception.Message, Does.Not.Contain("(Parameter"));
+        }
     }
 
     [Test]

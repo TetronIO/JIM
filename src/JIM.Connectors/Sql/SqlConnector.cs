@@ -533,8 +533,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
 
             if (candidates.Count > 1)
                 throw new ArgumentException(
-                    $"'{objectName}' exists in more than one schema ({string.Join(", ", candidates.Select(candidate => candidate.Object.SchemaName))}). Say which schema to read it from.",
-                    nameof(schemaName));
+                    $"'{objectName}' exists in more than one schema ({string.Join(", ", candidates.Select(candidate => candidate.Object.SchemaName))}). Say which schema to read it from.");
 
             // Everything below is read with the names as the database spells them, which is what its catalogue
             // queries compare against.
@@ -576,9 +575,9 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         switch (SqlSchemaConfiguration.CheckSelectStatement(statement))
         {
             case SqlSchemaConfiguration.SelectStatementProblem.NotAQuery:
-                throw new ArgumentException("The statement does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.", nameof(statement));
+                throw new ArgumentException("The statement does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.");
             case SqlSchemaConfiguration.SelectStatementProblem.MoreThanOneStatement:
-                throw new ArgumentException("The statement contains a semicolon. It must be a single statement, with no terminator.", nameof(statement));
+                throw new ArgumentException("The statement contains a semicolon. It must be a single statement, with no terminator.");
         }
 
         var (provider, connection) = await OpenCatalogueConnectionAsync(settings, logger);
@@ -591,7 +590,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             }
             catch (DbException ex)
             {
-                throw new ArgumentException($"The database would not accept the statement: {ex.Message}", nameof(statement), ex);
+                throw new ArgumentException($"The database would not accept the statement: {ex.Message}", ex);
             }
 
             return new ConnectorCatalogueObjectDetail

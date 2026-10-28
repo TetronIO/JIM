@@ -28,6 +28,86 @@ subject:
 
 ---
 
+## :material-table-search: Get-JIMConnectedSystemCatalogue
+
+Lists what a Connected System's source contains, read from the source's own catalogue: every table and view the configured account can see, or, for one of them, its columns, primary key and foreign keys. It also describes the columns a SELECT statement would return, without reading any rows. Use it to find the names to put in the SQL Connector's Object Types setting before importing the schema. Purely informational: it never writes anything. Connectors that cannot describe their source return an error naming why.
+
+<!-- BEGIN GENERATED: Get-JIMConnectedSystemCatalogue -->
+### Syntax
+
+```powershell
+# List (default)
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId <int>
+
+# Object
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId <int> -Name <string> [-Schema <string>]
+
+# Statement
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId <int> -Statement <string>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
+| `Name` | `string` | Yes (Object) |  | The table or view to describe. Matched ignoring case. |
+| `Schema` | `string` | No (Object) |  | The schema the table or view is in. Leave it out to find the object by name alone, which is refused when the name is in more than one schema. |
+| `Statement` | `string` | Yes (Statement) |  | A SELECT (or WITH) statement whose result columns to describe: a single statement, with no terminating semicolon. |
+
+### Output
+
+By default, one entry per table and view, tables first. With `-Name` or `-Statement`, one description.
+
+**By default**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `SchemaName` | `string` | The schema the object is in, e.g. "HR". Empty where the source has no schemas. |
+| `Name` | `string` | The object's name, exactly as the source spells it, e.g. "EMPLOYEES". |
+| `Kind` | `string` | Whether it is a "Table" or a "View". |
+
+**With `-Name` or `-Statement`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `SchemaName` | `string` | The schema the object is in. Empty for a query, or where the source has no schemas. |
+| `Name` | `string` | The object's name, exactly as the source spells it. Empty for a query. |
+| `Kind` | `string` | Whether it is a "Table", a "View" or a "Statement" (a query). |
+| `Columns` | `object[]` | Every column, in the order the source reports them. Each has `Name`, `DataTypeName`, `MaxLength`, `Precision`, `Scale` and `IsNullable`. |
+| `PrimaryKey` | `string[]` | The primary key's columns, in key order. Empty where none is declared, which is always so for a view or a query. |
+| `ForeignKeys` | `object[]` | The foreign keys the table declares, one entry per constraint. Empty for a view or a query. Each has `ConstraintName`, `Columns`, `ReferencedSchemaName`, `ReferencedObjectName` and `ReferencedColumns`. |
+<!-- END GENERATED: Get-JIMConnectedSystemCatalogue -->
+
+### Examples
+
+```powershell title="List the tables and views a Connected System can see"
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3
+```
+
+```powershell title="List only the views"
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3 | Where-Object { $_.Kind -eq 'View' }
+```
+
+```powershell title="List a table's columns"
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3 -Schema 'HR' -Name 'EMPLOYEES' | Select-Object -ExpandProperty Columns
+```
+
+```powershell title="Find a table's primary key, the usual anchor"
+(Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3 -Schema 'HR' -Name 'EMPLOYEES').PrimaryKey
+```
+
+```powershell title="Describe a SELECT statement's columns without running it"
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3 -Statement 'SELECT EMPLOYEE_ID, GIVEN_NAME FROM HR.EMPLOYEES'
+```
+
+### Notes
+
+- It reads with the Connected System's saved settings, so save the connection settings first.
+- A view declares no keys, so its `PrimaryKey` and `ForeignKeys` are always empty; choose its anchor columns yourself.
+
+---
+
 ## :material-import: Import-JIMConnectedSystemSchema
 
 Imports a Connected System's schema, its Object Types and their attributes, or refreshes one imported before.
