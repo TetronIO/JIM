@@ -4829,9 +4829,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // TryResolveReferencesFromLookup (UnresolvedReferenceValue, StringValue,
         // ResolvedReferenceCsoId stamping) and its logging (Attribute.Name).
         // The CSO graph is deliberately NOT included: the deferred pass reads only the
-        // ConnectedSystemObjectId scalar, and the referenced CSOs are bulk-fetched
-        // separately via GetConnectedSystemObjectsByMetaverseObjectIdsAsync.
-        // AsNoTracking: mutations are persisted via UpdatePendingExportsAsync (raw bulk
+        // ConnectedSystemObjectId scalar, and what the referenced objects are written as is
+        // bulk-fetched separately via GetReferenceAnchorsByMetaverseObjectIdsAsync.
+        // AsNoTracking: mutations are persisted via PersistResolvedReferencesAsync (raw bulk
         // SQL + tracker detach), not EF change tracking.
         return await Repository.Database.PendingExports
             .AsNoTracking()
@@ -4959,31 +4959,51 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Collects all remaining executable exports with unresolved references (deferred) strictly
-    /// after the given keyset cursor, in a single query. Used to fast-path the export
-    /// batch-collection loop once a batch is discovered to be made up entirely of deferred
-    /// exports: paging through the remainder 100 rows at a time would only ever build the same
-    /// deferred list one page slower (issue #985). Same Include chain and keyset predicate as
-    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports,
-    /// with no page size limit.
+    /// Collects the ids of all remaining executable exports with unresolved references (deferred)
+    /// strictly after the given keyset cursor, in a single query. Used to fast-path the export
+    /// batch-collection loop once a batch is discovered to be made up entirely of deferred exports:
+    /// paging through the remainder 100 rows at a time would only ever build the same deferred list
+    /// one page slower (issue #985). Same keyset predicate as <see cref="GetExecutableExportBatchAsync"/>,
+    /// restricted to HasUnresolvedReferences exports, with no page size limit. Ids only: loading the
+    /// exports themselves here, with every member value of every deferred group, took 190 seconds and
+    /// most of the worker's memory for 39,907 exports at 790k objects; the deferred pass now loads
+    /// them a chunk at a time (<see cref="GetDeferredExportsByIdsAsync"/>).
     /// </summary>
-    public async Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    public async Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
     {
         var query = ExecutableExportsQuery(connectedSystemId)
             .Where(pe => pe.HasUnresolvedReferences);
 
         return await AfterExportCursor(query, afterCreatedAt, afterId)
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .Select(pe => pe.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Loads one chunk of the deferred export pass by id, untracked, in (CreatedAt, Id) order. The
+    /// Include chain is the one the pass has always read the deferred exports with:
+    /// AttributeValueChanges and their attributes for reference resolution, and the object with its
+    /// type (LdapConnectorExport's GetObjectClass() fallback and placeholder modifications) and its
+    /// attribute values with their attributes.
+    /// </summary>
+    public async Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+    {
+        if (pendingExportIds.Count == 0)
+            return [];
+
+        return await Repository.Database.PendingExports
             .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
-            // Same rationale as GetExecutableExportBatchAsync: CSO.Type is required by
-            // LdapConnectorExport (GetObjectClass() fallback, placeholder modifications).
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.Type)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
+            .Where(pe => pendingExportIds.Contains(pe.Id))
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
             .ToListAsync();
@@ -5185,6 +5205,73 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // Detach updated entities and their children from the change tracker (no-op if loaded with
         // AsNoTracking) so no later SaveChangesAsync re-persists what the raw SQL already wrote.
         DetachPendingExportGraphs(exportList);
+    }
+
+    /// <summary>
+    /// Writes what reference resolution changed and nothing else, so the deferred export pass can save a
+    /// chunk's resolutions before its batches re-load them on their own contexts. Rewriting every
+    /// column of every change through <see cref="UpdatePendingExportsAsync"/> took 112 seconds for
+    /// 40,007 deferred exports at 790k objects. Typed arrays through <c>unnest</c> rather than VALUES
+    /// lists, the changes before the exports (as <see cref="BulkUpdatePendingExportsRawAsync"/> orders
+    /// them), in one transaction; tracked copies of the rows written are detached, so no later save on
+    /// a long-lived context writes the old values back.
+    /// </summary>
+    public async Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+    {
+        if (pendingExports.Count == 0 && resolvedChanges.Count == 0)
+            return;
+
+        var columns = PendingExportBulkColumns.PendingExportAttributeValueChangesReferenceResolutionUpdate;
+        var changeSql = $"""
+            UPDATE "PendingExportAttributeValueChanges" AS t
+            SET {string.Join(", ", columns.Select(c => $@"""{c}"" = v.""{c}"""))}
+            FROM unnest(@ids, @values0, @values1, @values2) AS v("Id", {BulkSqlHelpers.ToQuotedList(columns)})
+            WHERE t."Id" = v."Id"
+            """;
+        const string exportSql = """
+            UPDATE "PendingExports" AS t
+            SET "HasUnresolvedReferences" = v."HasUnresolvedReferences"
+            FROM unnest(@ids, @flags) AS v("Id", "HasUnresolvedReferences")
+            WHERE t."Id" = v."Id"
+            """;
+
+        await using (var ownTransaction = await BeginTransactionIfNoneAsync())
+        {
+            var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+            await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+            var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+            if (resolvedChanges.Count > 0)
+            {
+                await using var command = new NpgsqlCommand(changeSql, npgsqlConn, npgsqlTx);
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                    { Value = resolvedChanges.Select(c => c.Id).ToArray() });
+                // Array order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesReferenceResolutionUpdate.
+                command.Parameters.Add(new NpgsqlParameter("values0", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+                    { Value = resolvedChanges.Select(c => c.StringValue).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("values1", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+                    { Value = resolvedChanges.Select(c => c.UnresolvedReferenceValue).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("values2", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                    { Value = resolvedChanges.Select(c => c.ResolvedReferenceCsoId).ToArray() });
+                await command.ExecuteNonQueryAsync();
+            }
+
+            if (pendingExports.Count > 0)
+            {
+                await using var command = new NpgsqlCommand(exportSql, npgsqlConn, npgsqlTx);
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                    { Value = pendingExports.Select(pe => pe.Id).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("flags", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Boolean)
+                    { Value = pendingExports.Select(pe => pe.HasUnresolvedReferences).ToArray() });
+                await command.ExecuteNonQueryAsync();
+            }
+
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
+        }
+
+        DetachPendingExportGraphs(pendingExports.ToList());
     }
 
     /// <summary>
@@ -6561,6 +6648,69 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 result.TryAdd(cso.MetaverseObjectId.Value, cso);
             }
         }
+        return result;
+    }
+
+    /// <summary>
+    /// Per Metaverse Object joined to an object in the Connected System, that object's id and the anchor
+    /// a reference to it is written as: the value of its secondary external ID where it holds one (the
+    /// DN for LDAP), otherwise its primary external ID's; the same preference
+    /// <see cref="ReferenceAnchorSummary.Of"/> applies to an object in hand. Raw SQL into a Summary
+    /// DTO: the export's deferred pass resolves every member of every deferred group against this, and
+    /// loading the full objects for it (every attribute value, into the change tracker) took 57 seconds
+    /// and most of the worker's memory for 750,000 referenced objects.
+    /// </summary>
+    public async Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+    {
+        var result = new Dictionary<Guid, ReferenceAnchorSummary>();
+        if (metaverseObjectIds.Count == 0)
+            return result;
+
+        // One object per Metaverse Object and Connected System (IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_U),
+        // and its anchor value row: the secondary external ID's first, then the primary's.
+        const string sql = """
+            SELECT cso."MetaverseObjectId", cso."Id",
+                   anchor."StringValue", anchor."GuidValue", anchor."IntValue", anchor."LongValue", anchor."DecimalValue",
+                   COALESCE(anchor."IsSecondaryExternalId", false)
+            FROM "ConnectedSystemObjects" cso
+            LEFT JOIN LATERAL (
+                SELECT av."StringValue", av."GuidValue", av."IntValue", av."LongValue", av."DecimalValue", attr."IsSecondaryExternalId"
+                FROM "ConnectedSystemObjectAttributeValues" av
+                JOIN "ConnectedSystemAttributes" attr ON attr."Id" = av."AttributeId"
+                WHERE av."ConnectedSystemObjectId" = cso."Id"
+                  AND (attr."IsSecondaryExternalId" OR attr."IsExternalId")
+                ORDER BY attr."IsSecondaryExternalId" DESC, av."Id"
+                LIMIT 1
+            ) anchor ON true
+            WHERE cso."ConnectedSystemId" = @connectedSystemId
+              AND cso."MetaverseObjectId" = ANY(@metaverseObjectIds)
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("metaverseObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = metaverseObjectIds.ToArray() });
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            // Rendered through the one rule every anchor is written by (typed slots, canonical decimals).
+            var anchorValue = new ConnectedSystemObjectAttributeValue
+            {
+                StringValue = reader.IsDBNull(2) ? null : reader.GetString(2),
+                GuidValue = reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
+                DecimalValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6)
+            };
+            result[reader.GetGuid(0)] = new ReferenceAnchorSummary(reader.GetGuid(1), anchorValue.ToReferenceValueString(), reader.GetBoolean(7));
+        }
+
         return result;
     }
 

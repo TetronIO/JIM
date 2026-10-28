@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Concurrent;
 using System.Globalization;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
@@ -669,8 +670,11 @@ public class ExportExecutionServer
                 // collected in memory; a strictly-increasing cursor is immune to both, so
                 // nothing is ever re-read. The previous OFFSET implementation restarted its
                 // scan from zero for every batch and degraded to O(n²) page loads once
-                // thousands of deferred exports accumulated (issue #985).
-                var deferredExports = new List<PendingExport>();
+                // thousands of deferred exports accumulated (issue #985). Deferred exports are
+                // collected by id only, in queue order: the deferred pass loads them a chunk at a
+                // time, so the whole set, with every member value of every deferred group, is
+                // never held at once.
+                var deferredExportIds = new List<Guid>();
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
 
@@ -760,7 +764,7 @@ public class ExportExecutionServer
                         // Separate immediate from deferred exports
                         var immediateExports = eligibleExports.Where(pe => !pe.HasUnresolvedReferences).ToList();
                         var batchDeferred = eligibleExports.Where(pe => pe.HasUnresolvedReferences).ToList();
-                        deferredExports.AddRange(batchDeferred);
+                        deferredExportIds.AddRange(batchDeferred.Select(pe => pe.Id));
 
                         // Run Profile Safeguards (#1618): a defensive guard, not the primary mechanism -
                         // excludedChangeTypes above already keeps a withheld type out of every batch this
@@ -795,23 +799,19 @@ public class ExportExecutionServer
                             using var span = Diagnostics.Diagnostics.Database.StartSpan("CollectRemainingDeferred")
                                 .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start");
 
-                            var remainingDeferred = await SyncRepo.GetRemainingDeferredExportsAsync(
+                            var remainingDeferredIds = await SyncRepo.GetRemainingDeferredExportIdsAsync(
                                 connectedSystem.Id, cursorCreatedAt, cursorId);
 
                             // Safety net: mirror the processedIds guard above, even though a
                             // strictly-increasing cursor should make duplicates impossible here.
                             if (processedIds.Count > 0)
-                                remainingDeferred = remainingDeferred.Where(pe => !processedIds.Contains(pe.Id)).ToList();
+                                remainingDeferredIds = remainingDeferredIds.Where(id => !processedIds.Contains(id)).ToList();
 
-                            foreach (var pe in remainingDeferred)
-                            {
-                                processedIds.Add(pe.Id);
-                                result.ProcessedPendingExportIds.Add(pe.Id);
-                            }
+                            processedIds.UnionWith(remainingDeferredIds);
+                            result.ProcessedPendingExportIds.AddRange(remainingDeferredIds);
+                            deferredExportIds.AddRange(remainingDeferredIds);
 
-                            deferredExports.AddRange(remainingDeferred);
-
-                            span.SetTag("collectedCount", remainingDeferred.Count);
+                            span.SetTag("collectedCount", remainingDeferredIds.Count);
                             span.SetSuccess();
 
                             exhausted = true;
@@ -950,9 +950,9 @@ public class ExportExecutionServer
                 }
 
                 // Second pass: Exports with unresolved references (deferred)
-                if (deferredExports.Count > 0)
+                if (deferredExportIds.Count > 0)
                 {
-                    await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExports, result, options, changeLimitLedger,
+                    await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExportIds, result, options, changeLimitLedger,
                         cancellationToken, progressCallback, connectorFactory, repositoryFactory);
 
                     // Drain any remaining deferred export items via callback
@@ -1053,12 +1053,20 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Processes deferred exports (those with unresolved references) after all immediate exports.
+    /// Processes deferred exports (those with unresolved references) after all immediate exports, a chunk at a time
+    /// (<see cref="ExportExecutionOptions.DeferredChunkSize"/>). Each chunk is loaded, resolved against what the
+    /// referenced objects' references are written as, saved, and handed out as batches only once the batches before it
+    /// have all been taken; so the pass holds one chunk in memory, and its progress moves from the first chunk. Loading,
+    /// resolving and saving the whole set before writing any of it left a 790k-object export at 0% for six minutes.
     /// </summary>
+    /// <remarks>
+    /// A later chunk resolves against the objects as they stand when it is loaded, so it can resolve a reference to an
+    /// object an earlier chunk wrote; whole-set resolution waited for the next run for those.
+    /// </remarks>
     private async Task ProcessDeferredExportsAsync(
         ConnectedSystem connectedSystem,
         IConnectorExportUsingCalls connector,
-        List<PendingExport> deferredExports,
+        List<Guid> deferredExportIds,
         ExportExecutionResult result,
         ExportExecutionOptions options,
         ExportChangeLimitLedger changeLimitLedger,
@@ -1067,193 +1075,166 @@ public class ExportExecutionServer
         Func<IConnector>? connectorFactory,
         Func<ISyncRepositoryScope>? repositoryFactory)
     {
-        var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
+        var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null
+            && deferredExportIds.Count > options.BatchSize;
 
-        // This pass counts its own work: the deferred exports, each finished with once it has been
-        // written or confirmed still unwritable. Reporting the export's totals here left the pass
-        // reading as complete for the whole time it ran.
-        var passTotal = deferredExports.Count;
+        // This pass counts its own work: the deferred exports, each finished with once it has been written, confirmed
+        // still unwritable, or withheld. Reporting the export's totals here left the pass reading as complete for the
+        // whole time it ran.
+        var passTotal = deferredExportIds.Count;
+        var immediateProcessedCount = result.SuccessCount + result.FailedCount;
+        var chunks = deferredExportIds.Chunk(Math.Max(1, options.DeferredChunkSize)).ToList();
+        var nextChunk = 0;
+        var readyBatches = new Queue<List<PendingExport>>();
 
-        await ReportProgressAsync(progressCallback, new ExportProgressInfo
+        // The pass's progress is the exports its batches have written plus those it finished with unwritten. Chunks are
+        // prepared under the batch runner's gate on the caller's context while parallel workers write, so both counters
+        // are read and written atomically; and every report reads them as it is made, so the bar never steps back.
+        var written = 0;
+        var finishedUnwritten = 0;
+
+        // Read by batches as they record their outcomes, added to as each chunk is resolved.
+        var unresolvedReferenceNotes = new ConcurrentDictionary<Guid, string>();
+
+        // What the pass records for exports it does not write. Kept off the result until the batches are done: the
+        // parallel workers add their own outcomes to it under a lock this pass does not hold.
+        var deferredItems = new List<ProcessedExportItem>();
+        var deferredWholeCount = 0;
+        var resolvedCount = 0;
+        var writtenInPartCount = 0;
+        var missingMvoIds = new HashSet<Guid>();
+
+        Task ReportPassProgressAsync(string message) => ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
             Phase = ExportPhase.ResolvingReferences,
             TotalExports = result.TotalPendingExports,
-            ProcessedExports = result.SuccessCount,
+            ProcessedExports = immediateProcessedCount + Volatile.Read(ref written),
             PassTotal = passTotal,
-            PassProcessed = 0,
-            Message = $"Resolving {deferredExports.Count} deferred exports"
+            PassProcessed = Volatile.Read(ref written) + Volatile.Read(ref finishedUnwritten),
+            Message = message
         });
 
-        // Bulk pre-fetch all referenced CSOs in a single query
-        var mvoIds = CollectUnresolvedMvoIds(deferredExports);
-        Dictionary<Guid, ConnectedSystemObject> csoLookup;
-        using (Diagnostics.Diagnostics.Database.StartSpan("BulkFetchCsosByMvoIds")
-            .SetTag("mvoIdCount", mvoIds.Count))
+        await ReportPassProgressAsync($"Resolving {passTotal} deferred exports");
+
+        // Loads, resolves and saves one chunk, records what it cannot write, and returns what it can.
+        async Task<List<PendingExport>> PrepareChunkAsync(Guid[] chunkIds, int chunkStart)
         {
-            csoLookup = mvoIds.Count > 0
-                ? await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
-                : new Dictionary<Guid, ConnectedSystemObject>();
-        }
+            await ReportPassProgressAsync($"Loading deferred exports {chunkStart + 1} to {chunkStart + chunkIds.Length} of {passTotal}");
 
-        // Separate resolved from still-unresolved exports. A still-unresolved export that has something
-        // it can write now (issue #1398) is written now alongside the resolved ones and stays pending only
-        // for the references it still owes; one with nothing writable is deferred whole, as before.
-        var resolvedExports = new List<PendingExport>();
-        var writeInPartExports = new List<PendingExport>();
-        var stillUnresolvedExports = new List<PendingExport>();
-        var resolveProcessedCount = 0;
-
-        foreach (var export in deferredExports)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var resolved = TryResolveReferencesFromLookup(export, csoLookup);
-            if (resolved)
+            List<PendingExport> chunkExports;
+            using (Diagnostics.Diagnostics.Database.StartSpan("LoadDeferredChunk")
+                .SetTag("count", chunkIds.Length))
             {
-                export.HasUnresolvedReferences = false;
-                resolvedExports.Add(export);
-            }
-            else
-            {
-                stillUnresolvedExports.Add(export);
-                if (CanWriteInPart(export))
-                    writeInPartExports.Add(export);
+                chunkExports = await SyncRepo.GetDeferredExportsByIdsAsync(chunkIds);
             }
 
-            resolveProcessedCount++;
-
-            // Throttle progress reporting — resolution is a microsecond dictionary lookup,
-            // but each progress report triggers a SaveChangesAsync round-trip. Report every
-            // 50 items or on the final item to avoid hundreds of unnecessary DB writes.
-            if (resolveProcessedCount % 50 == 0 || resolveProcessedCount == deferredExports.Count)
+            if (chunkExports.Count < chunkIds.Length)
             {
-                await ReportProgressAsync(progressCallback, new ExportProgressInfo
+                // Collected by the first pass and gone since: nothing left to write, so finished with.
+                Log.Warning("ProcessDeferredExportsAsync: {Missing} of {Count} deferred export(s) collected for {SystemName} no longer exist and were skipped",
+                    chunkIds.Length - chunkExports.Count, chunkIds.Length, connectedSystem.Name);
+                Interlocked.Add(ref finishedUnwritten, chunkIds.Length - chunkExports.Count);
+            }
+
+            // What each referenced Metaverse Object's object in this system is written as, in one query.
+            var mvoIds = CollectUnresolvedMvoIds(chunkExports);
+            Dictionary<Guid, ReferenceAnchorSummary> anchors;
+            using (Diagnostics.Diagnostics.Database.StartSpan("FetchReferenceAnchors")
+                .SetTag("mvoIdCount", mvoIds.Count))
+            {
+                anchors = mvoIds.Count > 0
+                    ? await SyncRepo.GetReferenceAnchorsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+                    : new Dictionary<Guid, ReferenceAnchorSummary>();
+            }
+
+            // Separate resolved from still-unresolved exports. A still-unresolved export that has something it can write
+            // now (issue #1398) is written now alongside the resolved ones and stays pending only for the references it
+            // still owes; one with nothing writable is deferred whole, as before.
+            var resolvedExports = new List<PendingExport>();
+            var writeInPartExports = new List<PendingExport>();
+            var stillUnresolvedExports = new List<PendingExport>();
+            var resolvedChanges = new Dictionary<Guid, List<PendingExportAttributeValueChange>>();
+            foreach (var export in chunkExports)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var exportResolvedChanges = new List<PendingExportAttributeValueChange>();
+                if (TryResolveReferencesFromLookup(export, anchors, exportResolvedChanges))
                 {
-                    Phase = ExportPhase.ResolvingReferences,
-                    TotalExports = result.TotalPendingExports,
-                    ProcessedExports = result.SuccessCount + result.FailedCount,
-                    // Resolution classifies; it finishes with nothing. Counting it here would run the
-                    // window to full and then back down as the writing began, which the estimator
-                    // reads as a new phase and the administrator reads as progress being lost.
-                    PassTotal = passTotal,
-                    PassProcessed = 0,
-                    Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
-                });
+                    export.HasUnresolvedReferences = false;
+                    resolvedExports.Add(export);
+                }
+                else
+                {
+                    stillUnresolvedExports.Add(export);
+                    if (CanWriteInPart(export))
+                        writeInPartExports.Add(export);
+                }
+
+                if (exportResolvedChanges.Count > 0)
+                    resolvedChanges[export.Id] = exportResolvedChanges;
             }
-        }
 
-        // What each still-unresolved export owes, and why (issue #1398): a reference whose target object
-        // exists but has no anchor yet is merely waiting; one whose target has no object in this system
-        // at all cannot resolve as things stand, and is reported per the Connected System's Unresolved
-        // Reference Handling. Built before anything is written so the write's own item can carry it.
-        var unresolvedReferenceNotes = await BuildUnresolvedReferenceNotesAsync(connectedSystem, stillUnresolvedExports, csoLookup, result);
+            resolvedCount += resolvedExports.Count;
+            writtenInPartCount += writeInPartExports.Count;
+            missingMvoIds.UnionWith(CollectUnresolvedMvoIds(stillUnresolvedExports).Where(id => !anchors.ContainsKey(id)));
 
-        // Batch-export resolved deferred exports, and the partial writes alongside them
-        var exportsToWrite = resolvedExports.Concat(writeInPartExports).ToList();
+            // What each still-unresolved export owes, and why (issue #1398): a reference whose target object exists but
+            // has no anchor yet is merely waiting; one whose target has no object in this system at all cannot resolve as
+            // things stand, and is reported per the Connected System's Unresolved Reference Handling. Built before
+            // anything is written so the write's own item can carry it.
+            foreach (var (exportId, note) in await BuildUnresolvedReferenceNotesAsync(connectedSystem, stillUnresolvedExports, anchors, result))
+                unresolvedReferenceNotes[exportId] = note;
 
-        // Run Profile Safeguards (#1618): reserve against the same ledger the first pass used, before
-        // the exports are split into batches. A deferred export withheld here is left exactly as the
-        // first pass left it: still Pending, its unresolved-reference state untouched (the in-memory
-        // resolution above is never persisted for it), and NOT marked deferred - it simply was not
-        // attempted this run, so DeferredCount must not count it either. The next Export run resolves
-        // and attempts it in the ordinary order.
-        exportsToWrite = ReserveAgainstLedger(exportsToWrite, changeLimitLedger);
+            // Run Profile Safeguards (#1618): reserve against the same ledger the first pass used, chunk by chunk in queue
+            // order. A deferred export withheld here is left exactly as the first pass left it: still Pending, its
+            // unresolved-reference state untouched (the in-memory resolution above is never saved for it), and NOT marked
+            // deferred - it simply was not attempted this run, so DeferredCount must not count it either. The next
+            // Export run resolves and attempts it in the ordinary order.
+            var writable = resolvedExports.Concat(writeInPartExports).ToList();
+            var exportsToWrite = ReserveAgainstLedger(writable, changeLimitLedger);
+            Interlocked.Add(ref finishedUnwritten, writable.Count - exportsToWrite.Count);
 
-        if (exportsToWrite.Count > 0)
-        {
-            // Persist the in-memory reference resolutions BEFORE executing the deferred batches.
-            // The parallel path (ProcessBatchesInParallelAsync) re-loads each batch by ID on a
-            // fresh per-batch repository/DbContext, which only sees persisted state; without
-            // persisting first, those contexts read the still-unresolved rows and send raw
-            // Metaverse Object identifiers to the target system (observed against OpenLDAP as
-            // "member: value #0 invalid per syntax" when Max Export Parallelism first defaulted
-            // above 1). The sequential path passes these in-memory instances straight to the
-            // connector and does not strictly need the persist, but doing it unconditionally
-            // also means a worker crash mid-export no longer loses completed resolution work.
-            // UpdatePendingExportsAsync persists both the parent rows and the attribute value
-            // change rows (StringValue/UnresolvedReferenceValue) via raw SQL.
-            using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedDeferredExports")
-                .SetTag("count", exportsToWrite.Count))
+            if (exportsToWrite.Count > 0)
             {
-                await SyncRepo.UpdatePendingExportsAsync(exportsToWrite);
+                // Saved BEFORE the chunk's batches run. The parallel path (ProcessBatchesInParallelAsync) re-loads each
+                // batch by id on a fresh per-batch repository/DbContext, which only sees saved state; without this, those
+                // contexts read the still-unresolved rows and send raw Metaverse Object identifiers to the target system
+                // (observed against OpenLDAP as "member: value #0 invalid per syntax" when Max Export Parallelism first
+                // defaulted above 1). The sequential path hands these in-memory instances straight to the Connector and
+                // does not strictly need it, but saving unconditionally also means a worker crash mid-export no longer
+                // loses completed resolution work. Only what resolution changed is written.
+                var changesToSave = exportsToWrite
+                    .SelectMany(export => resolvedChanges.TryGetValue(export.Id, out var changes) ? changes : [])
+                    .ToList();
+
+                await ReportPassProgressAsync($"Saving resolved references for {exportsToWrite.Count} deferred exports");
+                using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedReferences")
+                    .SetTag("count", exportsToWrite.Count)
+                    .SetTag("changeCount", changesToSave.Count))
+                {
+                    await SyncRepo.PersistResolvedReferencesAsync(exportsToWrite, changesToSave);
+                }
             }
 
-            // Clear the change tracker before exporting deferred batches.
-            // The CSO lookup query above re-loaded entities into the tracker, which causes
-            // identity conflicts when the EF fallback paths (used in tests with in-memory DB)
-            // try to attach/update the original PE instances.
-            SyncRepo.ClearChangeTracker();
-
-            var deferredBatches = exportsToWrite
-                .Select((export, index) => new { export, index })
-                .GroupBy(x => x.index / options.BatchSize)
-                .Select(g => g.Select(x => x.export).ToList())
-                .ToList();
-
-            if (useParallelBatches && deferredBatches.Count > 1)
-            {
-                // Snapshot the immediate-phase counts, mirroring ProcessDeferredBatchesSequentiallyAsync:
-                // ProcessBatchSuccessAsync increments the result counters for deferred batches too, so
-                // progress reports add deferred-phase progress to this fixed offset rather than
-                // resetting to a phase-local count (the "2,884 of 209,984" UI regression).
-                var immediateProcessedCount = result.SuccessCount + result.FailedCount;
-
-                // The deferred batches are already in hand; each is taken once. A failed deferred batch does not stop the
-                // others, as it never has on this pass: each batch's references were resolved independently.
-                var remainingBatches = new Queue<List<PendingExport>>(deferredBatches);
-                await ProcessBatchesInParallelAsync(connectedSystem, connector,
-                    () => Task.FromResult(remainingBatches.TryDequeue(out var next) ? next : null),
-                    stopOnBatchFailure: false, result, options,
-                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
-                    processedExportsOffset: immediateProcessedCount, passTotal: passTotal,
-                    unresolvedReferenceNotes: unresolvedReferenceNotes);
-            }
-            else
-            {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, connectedSystem, deferredBatches, result, cancellationToken, progressCallback, passTotal,
-                    connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes);
-            }
-        }
-
-        // Mark the exports that wrote nothing as deferred in batch. Those written in part were left
-        // pending by ProcessBatchSuccessAsync with the same cadence, and counted as written.
-        var deferredWholeExports = stillUnresolvedExports.Except(writeInPartExports).ToList();
-        if (stillUnresolvedExports.Count > 0)
-        {
-            var unresolvedMvoIds = CollectUnresolvedMvoIds(stillUnresolvedExports);
-            var resolvedMvoIds = csoLookup.Keys.ToHashSet();
-            var missingMvoIds = unresolvedMvoIds.Except(resolvedMvoIds).ToList();
-
-            Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references: " +
-                "{WrittenInPart} written in part and pending for their references, {DeferredWhole} deferred whole. " +
-                "{Resolved} resolved this cycle. " +
-                "{MissingCount} referenced MVO(s) have no CSO in the target system: [{MissingIds}]",
-                stillUnresolvedExports.Count, writeInPartExports.Count, deferredWholeExports.Count, resolvedExports.Count,
-                missingMvoIds.Count,
-                string.Join(", ", missingMvoIds.Take(10).Select(id => id.ToString())));
-        }
-
-        if (deferredWholeExports.Count > 0)
-        {
-            var markedDeferredCount = 0;
-
+            // Mark the exports that wrote nothing as deferred. Those written in part are left pending by
+            // ProcessBatchSuccessAsync with the same cadence, and counted as written.
+            var deferredWholeExports = stillUnresolvedExports.Except(writeInPartExports).ToList();
             foreach (var export in deferredWholeExports)
             {
-                var exportUnresolvedCount = export.AttributeValueChanges.Count(IsUnresolvedReference);
-                var exportTotalChanges = export.AttributeValueChanges.Count;
                 Log.Debug("ProcessDeferredExportsAsync: Deferring export {ExportId} for CSO {CsoId} - " +
                     "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references",
-                    export.Id, export.ConnectedSystemObjectId, exportUnresolvedCount, exportTotalChanges);
+                    export.Id, export.ConnectedSystemObjectId, export.AttributeValueChanges.Count(IsUnresolvedReference), export.AttributeValueChanges.Count);
 
                 await MarkExportDeferredAsync(export);
-                result.DeferredCount++;
+                deferredWholeCount++;
 
-                // Nothing was written, so there is no write to report; but a reference that can never
-                // resolve as things stand is reported on its own item under Error handling (issue #1398),
-                // otherwise the export would sit deferred for ever with nothing to say why.
+                // Nothing was written, so there is no write to report; but a reference that can never resolve as things
+                // stand is reported on its own item under Error handling (issue #1398), otherwise the export would sit
+                // deferred for ever with nothing to say why.
                 if (unresolvedReferenceNotes.TryGetValue(export.Id, out var note))
                 {
-                    result.ProcessedExportItems.Add(new ProcessedExportItem
+                    deferredItems.Add(new ProcessedExportItem
                     {
                         ChangeType = export.ChangeType,
                         ConnectedSystemObject = export.ConnectedSystemObject,
@@ -1264,24 +1245,75 @@ public class ExportExecutionServer
                     }.WithCauseFrom(export));
                 }
 
-                // Confirming an export still cannot be written finishes with it as surely as
-                // writing it does, so it counts towards this pass's own work. Throttled to keep the
-                // progress writes off the per-export path.
-                markedDeferredCount++;
-                if (markedDeferredCount % 50 == 0 || markedDeferredCount == deferredWholeExports.Count)
-                {
-                    await ReportProgressAsync(progressCallback, new ExportProgressInfo
-                    {
-                        Phase = ExportPhase.ResolvingReferences,
-                        TotalExports = result.TotalPendingExports,
-                        ProcessedExports = result.SuccessCount + result.FailedCount,
-                        PassTotal = passTotal,
-                        PassProcessed = exportsToWrite.Count + markedDeferredCount,
-                        Message = "Recording exports that are still waiting on their references"
-                    });
-                }
+                // Confirming an export still cannot be written finishes with it as surely as writing it does.
+                Interlocked.Increment(ref finishedUnwritten);
             }
+
+            if (deferredWholeExports.Count > 0)
+                await ReportPassProgressAsync("Recording exports that are still waiting on their references");
+
+            // The chunk's own reads and writes leave nothing the batches need tracked; keep the caller's context from
+            // growing across chunks.
+            SyncRepo.ClearChangeTracker();
+            return exportsToWrite;
         }
+
+        // Batches are taken on demand; a chunk is prepared only when every batch of the one before it has been taken.
+        async Task<List<PendingExport>?> TakeNextDeferredBatchAsync()
+        {
+            while (readyBatches.Count == 0 && nextChunk < chunks.Count)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var chunkStart = nextChunk * Math.Max(1, options.DeferredChunkSize);
+                var exportsToWrite = await PrepareChunkAsync(chunks[nextChunk++], chunkStart);
+                foreach (var batch in exportsToWrite.Chunk(options.BatchSize))
+                    readyBatches.Enqueue(batch.ToList());
+            }
+
+            return readyBatches.TryDequeue(out var next) ? next : null;
+        }
+
+        if (useParallelBatches)
+        {
+            // ProcessBatchSuccessAsync increments the result counters for deferred batches too, so progress reports add
+            // deferred-phase progress to the immediate phase's fixed count rather than resetting to a phase-local count
+            // (the "2,884 of 209,984" UI regression). A failed deferred batch does not stop the others, as it never has
+            // on this pass: each batch's references were resolved independently.
+            await ProcessBatchesInParallelAsync(connectedSystem, connector, TakeNextDeferredBatchAsync,
+                stopOnBatchFailure: false, result, options,
+                cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
+                processedExportsOffset: immediateProcessedCount, passTotal: passTotal,
+                unresolvedReferenceNotes: unresolvedReferenceNotes,
+                batchExecuted: count => Interlocked.Add(ref written, count),
+                passProcessedOffset: () => Volatile.Read(ref finishedUnwritten));
+        }
+        else
+        {
+            await ProcessDeferredBatchesSequentiallyAsync(connector, connectedSystem, TakeNextDeferredBatchAsync, result, cancellationToken,
+                progressCallback, passTotal, connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes,
+                batchExecuted: count => Interlocked.Add(ref written, count),
+                passProcessedOffset: () => Volatile.Read(ref finishedUnwritten));
+        }
+
+        result.DeferredCount += deferredWholeCount;
+        result.ProcessedExportItems.AddRange(deferredItems);
+
+        var stillUnresolvedCount = writtenInPartCount + deferredWholeCount;
+        if (stillUnresolvedCount > 0)
+        {
+            Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references: " +
+                "{WrittenInPart} written in part and pending for their references, {DeferredWhole} deferred whole. " +
+                "{Resolved} resolved this cycle. " +
+                "{MissingCount} referenced MVO(s) have no CSO in the target system: [{MissingIds}]",
+                stillUnresolvedCount, writtenInPartCount, deferredWholeCount, resolvedCount,
+                missingMvoIds.Count,
+                string.Join(", ", missingMvoIds.Take(10).Select(id => id.ToString())));
+        }
+
+        Log.Information("ProcessDeferredExportsAsync: Deferred pass for {SystemName} finished {Finished} of {Total} deferred export(s) in {Chunks} chunk(s): " +
+            "{Written} written, {Unwritten} finished without being written",
+            connectedSystem.Name, Volatile.Read(ref written) + Volatile.Read(ref finishedUnwritten), passTotal, chunks.Count,
+            Volatile.Read(ref written), Volatile.Read(ref finishedUnwritten));
     }
 
     /// <summary>
@@ -1297,7 +1329,7 @@ public class ExportExecutionServer
     private async Task<Dictionary<Guid, string>> BuildUnresolvedReferenceNotesAsync(
         ConnectedSystem connectedSystem,
         List<PendingExport> stillUnresolvedExports,
-        Dictionary<Guid, ConnectedSystemObject> csoLookup,
+        IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
         ExportExecutionResult result)
     {
         var notes = new Dictionary<Guid, string>();
@@ -1310,7 +1342,7 @@ public class ExportExecutionServer
             .SelectMany(export => export.AttributeValueChanges
                 .Where(IsUnresolvedReference)
                 .Select(change => (Export: export, Change: change, MvoId: Guid.TryParse(change.UnresolvedReferenceValue, out var mvoId) ? mvoId : (Guid?)null)))
-            .Where(u => u.MvoId.HasValue && !csoLookup.ContainsKey(u.MvoId.Value))
+            .Where(u => u.MvoId.HasValue && !anchors.ContainsKey(u.MvoId.Value))
             .Select(u => (u.Export, u.Change, MvoId: u.MvoId!.Value))
             .ToList();
 
@@ -1385,22 +1417,29 @@ public class ExportExecutionServer
     // inlined in ExecuteUsingCallsWithBatchingAsync to support batch-loading from the database.
 
     /// <summary>
-    /// Processes deferred batches sequentially using the existing connector and DbContext.
+    /// Processes deferred batches sequentially using the existing connector and DbContext, taking each batch as the last
+    /// one finishes.
     /// </summary>
+    /// <param name="takeNextBatch">Returns the next batch to execute, or null when there are no more.</param>
     /// <param name="passTotal">
     /// How many deferred exports this pass covers, so its progress is reported against its own work
     /// rather than the export's totals.
     /// </param>
+    /// <param name="batchExecuted">Told how many Pending Exports each batch held once its outcome is recorded.</param>
+    /// <param name="passProcessedOffset">How many of the pass's exports it has finished with without writing them,
+    /// counted towards its progress beside the batches written.</param>
     private async Task ProcessDeferredBatchesSequentiallyAsync(
         IConnectorExportUsingCalls connector,
         ConnectedSystem connectedSystem,
-        List<List<PendingExport>> batches,
+        Func<Task<List<PendingExport>?>> takeNextBatch,
         ExportExecutionResult result,
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         int passTotal,
         TimeSpan initialPasswordTimeToLive,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
+        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
+        Action<int>? batchExecuted = null,
+        Func<int>? passProcessedOffset = null)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -1415,25 +1454,17 @@ public class ExportExecutionServer
             TotalExports = result.TotalPendingExports,
             ProcessedExports = immediateProcessedCount + processedCount,
             PassTotal = passTotal,
-            PassProcessed = processedCount,
+            PassProcessed = processedCount + (passProcessedOffset?.Invoke() ?? 0),
             Message = subPhase
         });
 
-        foreach (var batch in batches)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Report progress for deferred batch execution
-            await ReportProgressAsync(progressCallback, new ExportProgressInfo
-            {
-                Phase = ExportPhase.Executing,
-                TotalExports = result.TotalPendingExports,
-                ProcessedExports = immediateProcessedCount + processedCount,
-                PassTotal = passTotal,
-                PassProcessed = processedCount,
-                CurrentBatchSize = batch.Count,
-                Message = "Exporting deferred"
-            });
+            var batch = await takeNextBatch();
+            if (batch == null)
+                break;
 
             ExecutingBatchMark executingMark;
             using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
@@ -1479,6 +1510,20 @@ public class ExportExecutionServer
             }
 
             processedCount += batch.Count;
+            batchExecuted?.Invoke(batch.Count);
+
+            // Reported once the batch is recorded, as the parallel path does: reported before it, the pass's last report
+            // stopped a batch short of its total.
+            await ReportProgressAsync(progressCallback, new ExportProgressInfo
+            {
+                Phase = ExportPhase.Executing,
+                TotalExports = result.TotalPendingExports,
+                ProcessedExports = immediateProcessedCount + processedCount,
+                PassTotal = passTotal,
+                PassProcessed = processedCount + (passProcessedOffset?.Invoke() ?? 0),
+                CurrentBatchSize = batch.Count,
+                Message = "Exporting deferred"
+            });
         }
     }
 
@@ -1508,6 +1553,8 @@ public class ExportExecutionServer
     /// <param name="stopOnBatchFailure">Whether a failed batch stops further batches being taken.</param>
     /// <param name="spanName">The connector span each batch's export is recorded under.</param>
     /// <param name="batchExecuted">Told how many Pending Exports each batch held once its outcome is recorded.</param>
+    /// <param name="passProcessedOffset">With <paramref name="passTotal"/>: how many of the pass's exports it has finished
+    /// with without writing them, counted towards its progress beside the batches written.</param>
     private async Task ProcessBatchesInParallelAsync(
         ConnectedSystem connectedSystem,
         IConnectorExportUsingCalls primaryConnector,
@@ -1524,7 +1571,8 @@ public class ExportExecutionServer
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
         int? passTotal = null,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
-        Action<int>? batchExecuted = null)
+        Action<int>? batchExecuted = null,
+        Func<int>? passProcessedOffset = null)
     {
         // The one gate on the caller's DbContext; see the remarks above.
         using var callerContextGate = new SemaphoreSlim(1, 1);
@@ -1540,7 +1588,7 @@ public class ExportExecutionServer
             TotalExports = result.TotalPendingExports,
             ProcessedExports = processedExportsOffset + Volatile.Read(ref processedCount),
             PassTotal = passTotal,
-            PassProcessed = passTotal.HasValue ? Volatile.Read(ref processedCount) : null,
+            PassProcessed = passTotal.HasValue ? Volatile.Read(ref processedCount) + (passProcessedOffset?.Invoke() ?? 0) : null,
             Message = subPhase
         }, callerContextGate);
 
@@ -1806,7 +1854,7 @@ public class ExportExecutionServer
             // Counts a batch as finished, and reports progress through the caller's context.
             async Task RecordBatchExecutedAsync(int batchCount)
             {
-                var newProcessedCount = Interlocked.Add(ref processedCount, batchCount);
+                Interlocked.Add(ref processedCount, batchCount);
                 batchExecuted?.Invoke(batchCount);
 
                 if (progressCallback == null)
@@ -1814,13 +1862,17 @@ public class ExportExecutionServer
 
                 await UnderCallerContextGateAsync(async () =>
                 {
+                    // Read under the gate, not from the add above: two workers finishing together would otherwise report
+                    // in either order, and the later count could reach the Activity first and then be overwritten by the
+                    // earlier one.
+                    var processedSoFar = Volatile.Read(ref processedCount);
                     await progressCallback(new ExportProgressInfo
                     {
                         Phase = ExportPhase.Executing,
                         TotalExports = result.TotalPendingExports,
-                        ProcessedExports = processedExportsOffset + newProcessedCount,
+                        ProcessedExports = processedExportsOffset + processedSoFar,
                         PassTotal = passTotal,
-                        PassProcessed = passTotal.HasValue ? newProcessedCount : null,
+                        PassProcessed = passTotal.HasValue ? processedSoFar + (passProcessedOffset?.Invoke() ?? 0) : null,
                         CurrentBatchSize = batchCount,
                         Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
                     });
@@ -3966,11 +4018,15 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Attempts to resolve unresolved reference attributes in a Pending Export using a pre-fetched CSO lookup.
-    /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN),
-    /// not the primary external ID (objectGUID). We use the secondary external ID when available.
+    /// Attempts to resolve unresolved reference attributes in a Pending Export using pre-fetched reference anchors.
+    /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN), not the primary
+    /// external ID (objectGUID); the anchors carry the secondary external ID where the object has one.
     /// </summary>
-    internal static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
+    /// <param name="anchors">Per referenced Metaverse Object, its object in the target system and that object's anchor.</param>
+    /// <param name="resolvedChanges">Given each change this call resolves, so the caller can save exactly those.</param>
+    internal static bool TryResolveReferencesFromLookup(PendingExport pendingExport,
+        IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
+        ICollection<PendingExportAttributeValueChange>? resolvedChanges = null)
     {
         var allResolved = true;
 
@@ -3983,25 +4039,11 @@ public class ExportExecutionServer
             if (!Guid.TryParse(attrChange.UnresolvedReferenceValue, out var referencedMvoId))
                 continue;
 
-            // Look up the CSO from the pre-fetched dictionary
-            if (csoLookup.TryGetValue(referencedMvoId, out var referencedCso))
+            if (anchors.TryGetValue(referencedMvoId, out var referenced))
             {
-                // For reference attributes, prefer the secondary external ID (e.g., DN for LDAP)
-                // as this is what the Connected System uses for references.
-                // Fall back to primary external ID if secondary is not available.
-                var secondaryExternalIdAttr = referencedCso.AttributeValues
-                    .FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true);
-
-                var externalIdAttr = referencedCso.AttributeValues
-                    .FirstOrDefault(av => av.Attribute?.IsExternalId == true);
-
-                // Use secondary external ID (DN) if available, otherwise fall back to primary
-                var resolvedAttr = secondaryExternalIdAttr ?? externalIdAttr;
-                var resolvedValue = resolvedAttr?.ToReferenceValueString();
-
-                if (resolvedValue != null)
+                if (referenced.AnchorValue != null)
                 {
-                    attrChange.StringValue = resolvedValue;
+                    attrChange.StringValue = referenced.AnchorValue;
                     attrChange.UnresolvedReferenceValue = null;
 
                     // Issue #1079 (optimistic export apply, persisted per SPEC-1079B): the
@@ -4009,12 +4051,13 @@ public class ExportExecutionServer
                     // resolution site; the column then persists with the rest of the change, so
                     // optimistic apply can populate ConnectedSystemObjectAttributeValue.ReferenceValueId
                     // without a further database round-trip, this run or any later one.
-                    attrChange.ResolvedReferenceCsoId = referencedCso.Id;
+                    attrChange.ResolvedReferenceCsoId = referenced.ConnectedSystemObjectId;
+                    resolvedChanges?.Add(attrChange);
 
                     Log.Debug("Resolved reference for MVO {MvoId} to {Value} using {IdType}",
                         referencedMvoId,
                         LogSanitiser.Sanitise(attrChange.StringValue),
-                        secondaryExternalIdAttr != null ? "secondary external ID (DN)" : "primary external ID");
+                        referenced.IsSecondaryExternalId ? "secondary external ID (DN)" : "primary external ID");
                 }
                 else
                 {
@@ -4024,7 +4067,7 @@ public class ExportExecutionServer
                     // leaving it unresolved keeps the export deferred until the anchor arrives.
                     Log.Debug("TryResolveReferencesFromLookup: Cannot resolve reference for PE {PeId}: " +
                         "CSO {CsoId} (MVO {MvoId}) does not hold an anchor value yet. Export stays deferred.",
-                        pendingExport.Id, referencedCso.Id, referencedMvoId);
+                        pendingExport.Id, referenced.ConnectedSystemObjectId, referencedMvoId);
                     allResolved = false;
                 }
             }
@@ -4068,27 +4111,30 @@ public class ExportExecutionServer
         Log.Information("ExecuteDeferredReferencesAsync: Checking {Count} deferred export(s) from previous cycles for reference resolution",
             unresolvedExports.Count);
 
-        // Bulk pre-fetch all referenced CSOs in a single query
+        // Bulk pre-fetch what every referenced object is written as, in a single query
         var mvoIds = CollectUnresolvedMvoIds(unresolvedExports);
-        Dictionary<Guid, ConnectedSystemObject> csoLookup;
-        using (Diagnostics.Diagnostics.Database.StartSpan("BulkFetchCsosByMvoIds")
+        Dictionary<Guid, ReferenceAnchorSummary> anchors;
+        using (Diagnostics.Diagnostics.Database.StartSpan("FetchReferenceAnchors")
             .SetTag("mvoIdCount", mvoIds.Count))
         {
-            csoLookup = mvoIds.Count > 0
-                ? await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
-                : new Dictionary<Guid, ConnectedSystemObject>();
+            anchors = mvoIds.Count > 0
+                ? await SyncRepo.GetReferenceAnchorsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+                : new Dictionary<Guid, ReferenceAnchorSummary>();
         }
 
-        // Resolve references using the pre-fetched lookup and collect resolved exports for batch update
+        // Resolve references using the pre-fetched anchors and collect resolved exports for batch update
         var resolvedExports = new List<PendingExport>();
+        var resolvedChanges = new List<PendingExportAttributeValueChange>();
         var stillUnresolvedCount = 0;
         foreach (var export in unresolvedExports)
         {
-            var resolved = TryResolveReferencesFromLookup(export, csoLookup);
+            var exportResolvedChanges = new List<PendingExportAttributeValueChange>();
+            var resolved = TryResolveReferencesFromLookup(export, anchors, exportResolvedChanges);
             if (resolved)
             {
                 export.HasUnresolvedReferences = false;
                 resolvedExports.Add(export);
+                resolvedChanges.AddRange(exportResolvedChanges);
                 Log.Debug("ExecuteDeferredReferencesAsync: Resolved references for export {ExportId}", export.Id);
             }
             else
@@ -4106,13 +4152,13 @@ public class ExportExecutionServer
             "{Resolved}/{Total} deferred export(s) resolved, {StillUnresolved} still pending",
             resolvedExports.Count, unresolvedExports.Count, stillUnresolvedCount);
 
-        // Batch update all resolved exports in a single SaveChanges
+        // Save what resolution changed on the resolved exports; partial resolutions of those still waiting are not kept
         if (resolvedExports.Count > 0)
         {
             using (Diagnostics.Diagnostics.Database.StartSpan("UpdateResolvedDeferredExports")
                 .SetTag("count", resolvedExports.Count))
             {
-                await SyncRepo.UpdatePendingExportsAsync(resolvedExports);
+                await SyncRepo.PersistResolvedReferencesAsync(resolvedExports, resolvedChanges);
             }
         }
     }

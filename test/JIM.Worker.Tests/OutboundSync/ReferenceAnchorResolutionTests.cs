@@ -77,7 +77,7 @@ public class ReferenceAnchorResolutionTests
         var (export, change) = ExportReferencing(mvoId);
 
         var resolved = ExportExecutionServer.TryResolveReferencesFromLookup(
-            export, new Dictionary<Guid, ConnectedSystemObject> { [mvoId] = referencedCso });
+            export, new Dictionary<Guid, ReferenceAnchorSummary> { [mvoId] = ReferenceAnchorSummary.Of(referencedCso) });
 
         using (Assert.EnterMultipleScope())
         {
@@ -97,7 +97,7 @@ public class ReferenceAnchorResolutionTests
         var (export, change) = ExportReferencing(mvoId);
 
         var resolved = ExportExecutionServer.TryResolveReferencesFromLookup(
-            export, new Dictionary<Guid, ConnectedSystemObject> { [mvoId] = referencedCso });
+            export, new Dictionary<Guid, ReferenceAnchorSummary> { [mvoId] = ReferenceAnchorSummary.Of(referencedCso) });
 
         using (Assert.EnterMultipleScope())
         {
@@ -115,7 +115,7 @@ public class ReferenceAnchorResolutionTests
         var (export, change) = ExportReferencing(mvoId);
 
         var resolved = ExportExecutionServer.TryResolveReferencesFromLookup(
-            export, new Dictionary<Guid, ConnectedSystemObject> { [mvoId] = referencedCso });
+            export, new Dictionary<Guid, ReferenceAnchorSummary> { [mvoId] = ReferenceAnchorSummary.Of(referencedCso) });
 
         using (Assert.EnterMultipleScope())
         {
@@ -136,7 +136,7 @@ public class ReferenceAnchorResolutionTests
         var (export, change) = ExportReferencing(mvoId);
 
         var resolved = ExportExecutionServer.TryResolveReferencesFromLookup(
-            export, new Dictionary<Guid, ConnectedSystemObject> { [mvoId] = referencedCso });
+            export, new Dictionary<Guid, ReferenceAnchorSummary> { [mvoId] = ReferenceAnchorSummary.Of(referencedCso) });
 
         using (Assert.EnterMultipleScope())
         {
@@ -156,7 +156,7 @@ public class ReferenceAnchorResolutionTests
         var (export, change) = ExportReferencing(mvoId);
 
         var resolved = ExportExecutionServer.TryResolveReferencesFromLookup(
-            export, new Dictionary<Guid, ConnectedSystemObject>());
+            export, new Dictionary<Guid, ReferenceAnchorSummary>());
 
         using (Assert.EnterMultipleScope())
         {
@@ -175,7 +175,7 @@ public class ReferenceAnchorResolutionTests
         var (export, change) = ExportReferencing(mvoId);
 
         var resolved = ExportExecutionServer.TryResolveReferencesFromLookup(
-            export, new Dictionary<Guid, ConnectedSystemObject> { [mvoId] = referencedCso });
+            export, new Dictionary<Guid, ReferenceAnchorSummary> { [mvoId] = ReferenceAnchorSummary.Of(referencedCso) });
 
         using (Assert.EnterMultipleScope())
         {
