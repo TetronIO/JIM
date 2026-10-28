@@ -1923,14 +1923,14 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // This [NotMapped] property provides the same data that consumers previously got
         // from av.ReferenceValue.MetaverseObjectId, without touching EF navigations. The referenced object's type and
         // creation time tell a synchronisation whether an unjoined reference could still be joined later in the run.
-        foreach (var av in allAttributeValues)
+        var resolvedValues = allAttributeValues
+            .Select(av => (Value: av, Row: av.ReferenceValueId is { } id && rowLookup.TryGetValue(id, out var r) ? r : null))
+            .Where(x => x.Row != null);
+        foreach (var (av, row) in resolvedValues)
         {
-            if (!av.ReferenceValueId.HasValue || !rowLookup.TryGetValue(av.ReferenceValueId.Value, out var row))
-                continue;
-
-            av.ResolvedReferenceMetaverseObjectId = row.MetaverseObjectId;
-            av.ResolvedReferenceTypeId = row.TypeId;
-            av.ResolvedReferenceCreated = row.Created;
+            av.ResolvedReferenceMetaverseObjectId = row!.MetaverseObjectId;
+            av.ResolvedReferenceTypeId = row!.TypeId;
+            av.ResolvedReferenceCreated = row!.Created;
         }
     }
 
