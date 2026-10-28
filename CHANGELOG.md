@@ -176,6 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The Worker no longer logs an Entity Framework warning that a query "may lead to unpredictable results" when it completes an Activity or reads change history date ranges. The queries were always correct; they now say so.
 - 🐛 An export's **Exporting deferred changes** step now shows its progress throughout, saying what it is loading, resolving and saving, and ends at its total. It sat at 0% while it prepared, then stopped one batch short.
 - 🐛 The side panel for a finished run on the Operations page's **Activity** tab now shows why it completed with a warning, beneath its status, where it showed the status alone and the reason was only on the Activity page.
 - 🐛 A portal tab that stops responding, such as one frozen in the background, no longer leaves errors in JIM.Web's log when its page is closed. Lists now finish closing cleanly, and the remaining "Unhandled exception in circuit" entry is logged as a warning, as it already was for a browser that had disconnected.
