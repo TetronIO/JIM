@@ -90,20 +90,17 @@ This step creates the API scope that JIM uses for JWT Bearer token validation (f
     - **State**: Enabled
 5. Click **Add scope**
 
-## :material-api: Step 5a: Configure Scalar API Reference Authentication (Development only, Optional)
+## :material-api: Step 5a: Configure Scalar API Reference Authentication (Optional)
 
-JIM's interactive [Scalar](https://scalar.com/) API reference is only exposed in development environments (it is disabled in production to reduce the attack surface), so this step is only relevant if you are configuring SSO against a non-production JIM instance where you want to use the Scalar "try it out" flow with OAuth.
+Every JIM instance serves the interactive [Scalar](https://scalar.com/) API reference at `/api/reference`. This step lets its **Try It** sign in with OAuth. Skip it if you will use an API key in **Try It**, or the PowerShell module instead.
 
 To enable OAuth authentication in the Scalar API reference:
 
 1. Go to **Authentication**
 2. Click **Add Redirect URI**
 3. Select **Single-page application**
-4. Add redirect URI: `https://your-jim-dev-url/api/reference` (Scalar uses the API reference page itself as the OAuth redirect target; there is no separate `oauth2-redirect.html` handler)
+4. Add redirect URI: `https://your-jim-url/api/reference` (Scalar uses the API reference page itself as the OAuth redirect target; there is no separate `oauth2-redirect.html` handler)
 5. Click **Configure**
-
-!!! note
-    For production deployments, use the JIM PowerShell module for interactive API testing instead. See Step 5b below.
 
 ## :material-console: Step 5b: Configure PowerShell Module Authentication (Optional but recommended)
 
