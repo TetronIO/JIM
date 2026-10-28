@@ -37,7 +37,7 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
                     })
                     NativeApplications = @([PSCustomObject]@{
                         Name = 'JIM Identity Management - PowerShell'; Identifier = '22222222-2222-2222-2222-222222222222'
-                        RedirectUri = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference'
+                        RedirectUri = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference/'
                     })
                     WebApiApplications = @([PSCustomObject]@{
                         Name = 'JIM Identity Management - API'; Identifier = @('api://11111111-1111-1111-1111-111111111111')
@@ -87,7 +87,7 @@ Describe 'Get-JIMAdfsRegistrationPlan' {
             $native.Arguments.RedirectUri[0] | Should -Be 'http://localhost:8400/callback/'
             $native.Arguments.RedirectUri[9] | Should -Be 'http://localhost:8409/callback/'
             # The API reference's Try It signs in through the same public client (#2594).
-            $native.Arguments.RedirectUri[10] | Should -Be 'https://jim.example.com/api/reference'
+            $native.Arguments.RedirectUri[10] | Should -Be 'https://jim.example.com/api/reference/'
 
             $api = $plan.Changes | Where-Object Action -eq 'NewWebApiApplication'
             $api.Arguments.Identifier | Should -Be @($plan.ApiIdentifier)

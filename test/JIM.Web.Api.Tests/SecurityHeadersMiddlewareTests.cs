@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using JIM.Web.Middleware;
 using Microsoft.AspNetCore.Http;
@@ -163,8 +165,14 @@ public class SecurityHeadersMiddlewareTests
     }
 
     [Test]
-    public void ContentSecurityPolicy_Constant_ContainsConnectSrcForWebSockets()
+    public void ContentSecurityPolicy_Constant_RestrictsConnectSrcToJimsOwnOrigin()
     {
-        Assert.That(SecurityHeadersMiddleware.ContentSecurityPolicy, Does.Contain("connect-src 'self' wss: ws:"));
+        // 'self' covers the portal's own WebSocket over http and https alike (CSP Level 3). A bare wss: or ws:
+        // scheme source would let a page open a WebSocket to any host at all (#2603).
+        var connectSrc = SecurityHeadersMiddleware.ContentSecurityPolicy.Split(';')
+            .Select(directive => directive.Trim())
+            .Single(directive => directive.StartsWith("connect-src ", StringComparison.Ordinal));
+
+        Assert.That(connectSrc, Is.EqualTo("connect-src 'self'"));
     }
 }

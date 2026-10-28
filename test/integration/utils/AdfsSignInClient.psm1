@@ -360,8 +360,10 @@ function Get-TryItSignInSetting {
     $apiScopes = @($flow.scopes.PSObject.Properties.Name | Where-Object { $_ -ne 'openid' })
     if ($apiScopes.Count -ne 1) { throw "The OpenAPI document's OAuth2 flow offers $($apiScopes.Count) API scopes, not one: $($apiScopes -join ', ')." }
 
-    $page = Invoke-SignInRequest -Session $Session -Uri "$JimUrl/api/reference"
-    if ($page.StatusCode -ne 200) { throw "GET /api/reference answered $($page.StatusCode)." }
+    # Scalar redirects /api/reference to /api/reference/, and signs in from the page it lands on: that address, not the
+    # one asked for, is Try It's redirect URI.
+    $page = Invoke-SignInRedirects -Session $Session -Response (Invoke-SignInRequest -Session $Session -Uri "$JimUrl/api/reference")
+    if ($page.StatusCode -ne 200) { throw "GET /api/reference answered $($page.StatusCode) at $($page.Uri.GetLeftPart([UriPartial]::Path))." }
     # Scalar writes its configuration into the page; the flow's client ID is x-scalar-client-id there (clientId in
     # older versions).
     $clientId = [regex]::Match($page.Content, '"(?:x-scalar-client-id|clientId)"\s*:\s*"([^"]+)"').Groups[1].Value
@@ -369,6 +371,7 @@ function Get-TryItSignInSetting {
 
     return [pscustomobject]@{
         AuthorizationUrl = [string]$flow.authorizationUrl; TokenUrl = [string]$flow.tokenUrl; ApiScope = [string]$apiScopes[0]; ClientId = $clientId
+        RedirectUri = $page.Uri.GetLeftPart([UriPartial]::Path)
     }
 }
 
@@ -380,7 +383,7 @@ function Invoke-TryItSignIn {
 
     .DESCRIPTION
         From the settings Get-TryItSignInSetting reads: an authorisation code request with PKCE and no secret, redirected
-        back to JIM's /api/reference; AD FS's forms sign-in; then the code exchanged at the token endpoint with JIM's
+        back to the API reference page where the browser landed (/api/reference/); AD FS's forms sign-in; then the code exchanged at the token endpoint with JIM's
         origin in Origin, as the page's script sends it. A browser keeps the token only when AD FS answers with that
         origin in Access-Control-Allow-Origin, so it is returned for the caller to check rather than assumed.
     #>
@@ -394,7 +397,7 @@ function Invoke-TryItSignIn {
 
     $session = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
     $settings = Get-TryItSignInSetting -Session $session -JimUrl $JimUrl
-    $redirectUri = "$JimUrl/api/reference"
+    $redirectUri = $settings.RedirectUri
     $origin = ([uri]$JimUrl).GetLeftPart([UriPartial]::Authority)
 
     $verifier = -join ((1..64) | ForEach-Object { [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~' | Get-Random })

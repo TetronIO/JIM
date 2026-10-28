@@ -316,8 +316,8 @@
         "http://localhost:8407/callback/",
         "http://localhost:8408/callback/",
         "http://localhost:8409/callback/",
-        "http://localhost:5200/api/reference",
-        "https://localhost:7000/api/reference"
+        "http://localhost:5200/api/reference/",
+        "https://localhost:7000/api/reference/"
       ],
       "webOrigins": [
         "http://localhost:5200",

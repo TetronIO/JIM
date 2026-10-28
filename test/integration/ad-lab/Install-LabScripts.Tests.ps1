@@ -65,13 +65,14 @@ Describe 'Get-LabDeploymentMap' {
         $entry.Destination | Should -Be (Join-Path '/lab' 'delegation' 'jim-ad-delegation.acl')
     }
 
-    It 'places the PowerShell module under module/JIM, leaving out its tests and notes' {
-        $map = @(Get-LabDeploymentMap -RepositoryRoot '/repo' -Destination '/lab' `
+    It 'places the PowerShell module under module/(its digest)/JIM, leaving out its tests and notes' {
+        $digest = 'a' * 64
+        $map = @(Get-LabDeploymentMap -RepositoryRoot '/repo' -Destination '/lab' -ModuleDigest $digest `
                 -ModuleFile @('JIM.psd1', 'Public/IdentityProviders/Register-JIMIdentityProvider.ps1', 'Tests/X.Tests.ps1', 'CLAUDE.md'))
         $module = @($map | Where-Object Area -eq 'module')
         @($module.Destination | Sort-Object) | Should -Be @(
-            (Join-Path '/lab' 'module' 'JIM' 'JIM.psd1'),
-            (Join-Path '/lab' 'module' 'JIM' 'Public' 'IdentityProviders' 'Register-JIMIdentityProvider.ps1')
+            (Join-Path '/lab' 'module' $digest 'JIM' 'JIM.psd1'),
+            (Join-Path '/lab' 'module' $digest 'JIM' 'Public' 'IdentityProviders' 'Register-JIMIdentityProvider.ps1')
         )
         ($module | Where-Object { $_.Destination -like '*JIM.psd1' }).Source | Should -Be (Join-Path '/repo' 'src' 'JIM.PowerShell' 'JIM.psd1')
     }
@@ -80,6 +81,33 @@ Describe 'Get-LabDeploymentMap' {
         $map = @(Get-LabDeploymentMap -RepositoryRoot '/repo' -Destination '/lab')
         $map.Count | Should -Be 1
         $map[0].Area | Should -Be 'delegation'
+    }
+}
+
+Describe 'Get-LabModuleCopyToPrune' {
+    # A run can last hours, and a newer main deployed meanwhile must not take its module away: the copies are kept by
+    # digest, and only those not deployed for the retention period go.
+    BeforeAll {
+        $script:Now = [datetime]::new(2026, 10, 28, 12, 0, 0, [DateTimeKind]::Utc)
+        $script:Current = 'c' * 64
+    }
+
+    It 'keeps the copy just deployed, and another commit''s deployed within the retention period' {
+        $copies = @(
+            [pscustomobject]@{ Name = $script:Current; LastWriteTimeUtc = $script:Now.AddDays(-30) },
+            [pscustomobject]@{ Name = 'b' * 64; LastWriteTimeUtc = $script:Now.AddHours(-3) }
+        )
+        @(Get-LabModuleCopyToPrune -Copy $copies -Current $script:Current -Now $script:Now -RetentionDays 7) | Should -BeNullOrEmpty
+    }
+
+    It 'prunes a copy not deployed for longer than the retention period' {
+        $copies = @([pscustomobject]@{ Name = 'b' * 64; LastWriteTimeUtc = $script:Now.AddDays(-8) })
+        @(Get-LabModuleCopyToPrune -Copy $copies -Current $script:Current -Now $script:Now -RetentionDays 7) | Should -Be @('b' * 64)
+    }
+
+    It 'prunes the single module\JIM of the earlier layout, whatever its age' {
+        $copies = @([pscustomobject]@{ Name = 'JIM'; LastWriteTimeUtc = $script:Now })
+        @(Get-LabModuleCopyToPrune -Copy $copies -Current $script:Current -Now $script:Now -RetentionDays 7) | Should -Be @('JIM')
     }
 }
 
@@ -202,27 +230,47 @@ Describe 'Install-LabScripts.ps1 end to end' {
         (Get-FileHash -LiteralPath $target).Hash | Should -Be (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'host' 'New-LabDomainController.ps1')).Hash
     }
 
-    It 'deploys the PowerShell module, whose digest is the checkout''s' {
+    It 'deploys the PowerShell module under its digest, which is the checkout''s' {
         Import-Module (Join-Path $PSScriptRoot 'guest' 'LabFederationServer.psm1') -Force
+        $checkout = Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $script:RepositoryRoot 'src' 'JIM.PowerShell'))
         $result = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
         $result.ExitCode | Should -Be 0
-        (Test-Path -LiteralPath (Join-Path $script:Destination 'module' 'JIM' 'JIM.psd1')) | Should -BeTrue
-        (Test-Path -LiteralPath (Join-Path $script:Destination 'module' 'JIM' 'Tests')) | Should -BeFalse
-        $checkout = Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $script:RepositoryRoot 'src' 'JIM.PowerShell'))
-        Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $script:Destination 'module' 'JIM')) | Should -Be $checkout
+        (Test-Path -LiteralPath (Join-Path $script:Destination 'module' $checkout 'JIM' 'JIM.psd1')) | Should -BeTrue
+        (Test-Path -LiteralPath (Join-Path $script:Destination 'module' $checkout 'JIM' 'Tests')) | Should -BeFalse
+        Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $script:Destination 'module' $checkout 'JIM')) | Should -Be $checkout
     }
 
     It 'removes a module file the checkout no longer has, and says so, and nothing outside the module' {
+        Import-Module (Join-Path $PSScriptRoot 'guest' 'LabFederationServer.psm1') -Force
+        $checkout = Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $script:RepositoryRoot 'src' 'JIM.PowerShell'))
         $null = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
-        $stale = Join-Path $script:Destination 'module' 'JIM' 'Public' 'Removed-JIMThing.ps1'
+        $stale = Join-Path $script:Destination 'module' $checkout 'JIM' 'Public' 'Removed-JIMThing.ps1'
         $outside = Join-Path $script:Destination 'operator-notes.txt'
         Set-Content -LiteralPath $stale -Value '# gone from the checkout'
         Set-Content -LiteralPath $outside -Value 'mine'
         $result = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
         $result.ExitCode | Should -Be 0
-        $result.Text | Should -Match 'removed\s+module[\\/]JIM[\\/]Public[\\/]Removed-JIMThing.ps1'
+        $result.Text | Should -Match "removed\s+module[\\/]$checkout[\\/]JIM[\\/]Public[\\/]Removed-JIMThing.ps1"
         (Test-Path -LiteralPath $stale) | Should -BeFalse
         (Test-Path -LiteralPath $outside) | Should -BeTrue
+    }
+
+    It 'keeps another commit''s module deployed recently, for a run still using it, and prunes old copies and the old layout' {
+        $recent = Join-Path $script:Destination 'module' ('b' * 64) 'JIM'
+        $old = Join-Path $script:Destination 'module' ('d' * 64) 'JIM'
+        $legacy = Join-Path $script:Destination 'module' 'JIM'
+        foreach ($folder in $recent, $old, $legacy) {
+            $null = New-Item -ItemType Directory -Path $folder -Force
+            Set-Content -LiteralPath (Join-Path $folder 'JIM.psd1') -Value '@{}'
+        }
+        (Get-Item -LiteralPath (Split-Path -Parent $old)).LastWriteTimeUtc = [datetime]::UtcNow.AddDays(-8)
+
+        $result = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
+        $result.ExitCode | Should -Be 0
+        (Test-Path -LiteralPath $recent) | Should -BeTrue
+        (Test-Path -LiteralPath $old) | Should -BeFalse
+        (Test-Path -LiteralPath $legacy) | Should -BeFalse
+        $result.Text | Should -Match "removed\s+module[\\/]$('d' * 64)"
     }
 
     It 'never creates settings.json unless asked' {

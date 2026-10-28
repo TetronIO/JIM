@@ -14,7 +14,7 @@ function Register-JIMIdentityProvider {
 
         For AD FS it creates an Application Group holding the portal (a Server application, with a client secret), the
         PowerShell module (a Native application, with loopback redirect URIs for ports 8400 to 8409, and each -Url's
-        /api/reference, for the API reference's Try It) and JIM's API (a Web API open to everyone, whose one claim rule
+        /api/reference/, for the API reference's Try It) and JIM's API (a Web API open to everyone, whose one claim rule
         issues each person's objectGUID as oid with their name and email). Only JIM's two clients may ask for the API.
         Try It also needs CORS on for JIM's address, a farm-wide setting this command leaves to you; the AD FS SSO guide
         gives the commands.
@@ -23,7 +23,7 @@ function Register-JIMIdentityProvider {
         federation server, or pass -Session with a PowerShell session to it.
 
         For Keycloak it creates, in the realm -Authority names, the portal's confidential client and the PowerShell
-        module's public client (with loopback redirect URIs for ports 8400 to 8409, and each -Url's /api/reference with
+        module's public client (with loopback redirect URIs for ports 8400 to 8409, and each -Url's /api/reference/ with
         its origin as a web origin, for the API reference's Try It), both using PKCE, and the jim-api
         client scope, which puts the portal's client in an access token's audience. Only JIM's two clients may ask for
         jim-api. Keycloak is configured through its admin REST API, from any computer that can reach it, with an

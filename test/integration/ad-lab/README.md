@@ -128,11 +128,13 @@ cd C:\src\JIM
 ```
 
 `Install-LabScripts.ps1` copies the host scripts flat into `C:\jim-ad-lab` (or `-Destination`), the `guest` folder beside
-them, the delegation file into `delegation` and the JIM PowerShell module into `module\JIM` (it registers JIM on the AD
-FS server), which is the layout `JIM_AD_LAB_SCRIPT_ROOT` points the runner at. It is idempotent, prints `new`,
-`updated`, `unchanged` or `removed` per file, and does not deploy itself. It deletes nothing, except a file under
-`module\JIM` that the checkout's module no longer has, because the registration refuses a module copy that is not
-exactly the commit's. It also
+them, the delegation file into `delegation` and the JIM PowerShell module into `module\<digest>\JIM` (it registers JIM
+on the AD FS server), which is the layout `JIM_AD_LAB_SCRIPT_ROOT` points the runner at. It is idempotent, prints `new`,
+`updated`, `unchanged` or `removed` per file, and does not deploy itself. Each version of the module keeps its own
+folder, named by its digest (`Get-LabModuleDigest`), so a run lasting hours still finds its commit's module after a newer
+main is deployed beside it; a version not deployed for 7 days (`-ModuleRetentionDays`) is deleted. It deletes nothing
+else, except a file in the module being deployed that the checkout's module no longer has, because the registration
+refuses a module copy that is not exactly the commit's. It also
 writes `settings.example.json`, and with `-CreateSettings` creates `settings.json` from it when there is none; it refuses
 (before copying anything) if `settings.json` already exists, and never touches that file otherwise. Run it again after any
 change to the lab code, and after pulling a new release: the scripts on the host are a copy, not the checkout.
@@ -148,7 +150,8 @@ C:\jim-ad-lab\Register-LabScriptsUpdateTask.ps1
 It runs `Update-LabScripts.ps1` as SYSTEM every hour (`\JIM\Update AD lab scripts`): it brings its own clone of main,
 `C:\jim-ad-lab-source`, to `origin/main` (reset hard and cleaned, so it must never be a working checkout) and runs
 `Install-LabScripts.ps1` from it, logging to `C:\jim-ad-lab\logs\update-lab-scripts.log`. The repository is public, so
-it needs no credentials. A run dispatched within the hour of a module change can still find the copy behind, and says so.
+it needs no credentials. A run dispatched within the hour of a module change can still find no copy of its module, and
+says so. A merge during a run does no harm: the run keeps using its own commit's copy.
 **2. Fill in `settings.json`.** Every value in the example is a placeholder. `Invoke-LabRebuild.ps1` reads this file, and
 the first build below is easiest when it is driven from the same values:
 
@@ -346,9 +349,11 @@ It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB o
    - registers JIM on it with `Register-LabIdentityProvider.ps1` on the host, which runs JIM's own
      `Register-JIMIdentityProvider -Provider ADFS` against the AD FS server over PowerShell Direct, with JIM's address as
      the sign-in checks reach it, `https://jim.web:8443` (`Get-ActiveDirectoryLabJimUrl`). The registration is made from
-     the copy of the JIM PowerShell module that `Install-LabScripts.ps1` put on the host, and refuses to run unless that
-     copy's digest is the commit's (`Get-LabModuleDigest`): **after any change to `src/JIM.PowerShell`, run
-     `Install-LabScripts.ps1` on the host again before the next run**, or the AD FS scenarios fail, saying so. The same
+     the commit's copy of the JIM PowerShell module that `Install-LabScripts.ps1` put on the host,
+     `module\<digest>\JIM`, and refuses to run unless that copy's content gives the commit's digest
+     (`Get-LabModuleDigest`): **after any change to `src/JIM.PowerShell`, the host needs that version deployed before
+     the run** (the hourly update does it for main; for another branch run `Install-LabScripts.ps1` from its checkout),
+     or the AD FS scenarios fail, saying so. The same
      script then turns CORS on for that address, with the commands the AD FS SSO guide gives administrators, so the API
      reference's Try It can sign in (#2594). The script runs from the host's copy too, so a change to it reaches the
      lab only once the host is redeployed;
@@ -373,7 +378,7 @@ to AD FS, fills in AD FS's forms sign-in page, posts the `form_post` reply back 
 `Connect-JIM` opens. It checks the portal sign-in, the initial administrator provisioned from `oid`, a bearer token on
 `/api`, `Connect-JIM` through PKCE, the same person from both, the employee renamed in Active Directory, the
 employee's `User`-only access, and the API reference's Try It: the client, endpoints and scope its page and OpenAPI
-document give, PKCE back to `/api/reference`, the code exchanged with JIM's origin (which AD FS must allow), and its
+document give, PKCE back to `/api/reference/` (where Scalar redirects the page), the code exchanged with JIM's origin (which AD FS must allow), and its
 token on `/api`.
 The runner does not give JIM the certificate: the scenario trusts it the way an administrator would, with
 `Add-JIMCertificate -FromIdentityProvider`. It reads the certificate off the wire rather than copying

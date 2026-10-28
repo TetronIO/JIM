@@ -263,8 +263,9 @@ function Get-JIMKeycloakRegistrationPlan {
 
     $baseUrls = @($Url | ForEach-Object { $_.TrimEnd('/') })
     # The API reference's Try It signs in from the browser (#2594): Keycloak redirects back to the page itself, and
-    # answers its token request only from an origin the client lists.
-    $tryItRedirects = @($baseUrls | ForEach-Object { "$_/api/reference" })
+    # answers its token request only from an origin the client lists. The page is /api/reference/, with the slash:
+    # Scalar redirects the bare path there and sends the page's own URL as redirect_uri.
+    $tryItRedirects = @($baseUrls | ForEach-Object { "$_/api/reference/" })
     $tryItOrigins = @($baseUrls | ForEach-Object { ([uri]$_).GetLeftPart([UriPartial]::Authority) } | Select-Object -Unique)
     $apiScope = $script:JIMKeycloakApiScope
     $changes = [System.Collections.Generic.List[object]]::new()

@@ -84,7 +84,7 @@ These steps make the same registration in the Keycloak Admin Console. Replace `h
 3. Create the PowerShell module's client the same way, with these differences:
     - **Client ID**: `jim-powershell`
     - **Client authentication**: Off
-    - **Valid redirect URIs**: `http://localhost:8400/callback/` and the same for each port up to 8409, ten in all. The module listens on the first free port of these. Add `https://jim.example.com/api/reference` too, for the API reference's **Try It**, which signs in with the same client.
+    - **Valid redirect URIs**: `http://localhost:8400/callback/` and the same for each port up to 8409, ten in all. The module listens on the first free port of these. Add `https://jim.example.com/api/reference/` too, with the trailing slash, for the API reference's **Try It**, which signs in with the same client.
     - **Web origins**: `https://jim.example.com`, so Keycloak answers **Try It**'s token request from the browser.
     - No post logout redirect URI.
 4. Under **Client scopes**, select **Create client scope**:
