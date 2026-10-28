@@ -159,8 +159,12 @@ initialize('/api/openapi/v1.json', true, {"authentication":{"securitySchemes":{"
             Mock Invoke-SignInRequest -ModuleName AdfsSignInClient -ParameterFilter { "$Uri" -like '*/api/openapi/v1.json' } -MockWith {
                 [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/openapi/v1.json'; StatusCode = 200; Location = $null; Content = $Document }
             }.GetNewClosure()
+            # Scalar redirects the bare path to the page with a trailing slash, the address the browser then signs in from.
             Mock Invoke-SignInRequest -ModuleName AdfsSignInClient -ParameterFilter { "$Uri" -like '*/api/reference' } -MockWith {
-                [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/reference'; StatusCode = 200; Location = $null; Content = $Page }
+                [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/reference'; StatusCode = 302; Location = [uri]'https://jim.web:8443/api/reference/'; Content = '' }
+            }
+            Mock Invoke-SignInRequest -ModuleName AdfsSignInClient -ParameterFilter { "$Uri" -like '*/api/reference/' } -MockWith {
+                [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/reference/'; StatusCode = 200; Location = $null; Content = $Page }
             }.GetNewClosure()
         }
     }
@@ -174,6 +178,13 @@ initialize('/api/openapi/v1.json', true, {"authentication":{"securitySchemes":{"
         $settings.TokenUrl | Should -Be 'https://adfs.panoply.local/adfs/oauth2/token/'
         $settings.ApiScope | Should -Be 'api://11111111-1111-1111-1111-111111111111/openid'
         $settings.ClientId | Should -Be '22222222-2222-2222-2222-222222222222'
+    }
+
+    It 'follows the page''s redirect, and signs in from the address the browser ends up on, as Scalar does' {
+        & $script:Respond $script:OpenApiDocument $script:ReferencePage
+
+        (Get-TryItSignInSetting -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -JimUrl 'https://jim.web:8443').RedirectUri |
+            Should -Be 'https://jim.web:8443/api/reference/'
     }
 
     It 'reads a client ID Scalar names clientId' {

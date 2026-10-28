@@ -373,7 +373,7 @@ to AD FS, fills in AD FS's forms sign-in page, posts the `form_post` reply back 
 `Connect-JIM` opens. It checks the portal sign-in, the initial administrator provisioned from `oid`, a bearer token on
 `/api`, `Connect-JIM` through PKCE, the same person from both, the employee renamed in Active Directory, the
 employee's `User`-only access, and the API reference's Try It: the client, endpoints and scope its page and OpenAPI
-document give, PKCE back to `/api/reference`, the code exchanged with JIM's origin (which AD FS must allow), and its
+document give, PKCE back to `/api/reference/` (where Scalar redirects the page), the code exchanged with JIM's origin (which AD FS must allow), and its
 token on `/api`.
 The runner does not give JIM the certificate: the scenario trusts it the way an administrator would, with
 `Add-JIMCertificate -FromIdentityProvider`. It reads the certificate off the wire rather than copying

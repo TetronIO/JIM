@@ -99,7 +99,7 @@ Every JIM instance serves the interactive [Scalar](https://scalar.com/) API refe
 1. Go to **Authentication**
 2. Click **Add Redirect URI**
 3. Select **Single-page application**
-4. Add redirect URI: `https://your-jim-url/api/reference` (Scalar uses the API reference page itself as the OAuth redirect target; there is no separate `oauth2-redirect.html` handler)
+4. Add redirect URI: `https://your-jim-url/api/reference/`, with the trailing slash (Scalar uses the API reference page itself as the OAuth redirect target, and serves it at that address; there is no separate `oauth2-redirect.html` handler)
 5. Click **Configure**
 
 ## :material-console: Step 5b: Configure PowerShell Module Authentication (Optional but recommended)

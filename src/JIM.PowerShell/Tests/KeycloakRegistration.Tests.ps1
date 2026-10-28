@@ -60,7 +60,7 @@ Describe 'Get-JIMKeycloakRegistrationPlan' {
             $realm.Clients += [PSCustomObject]@{
                 ClientId = 'jim-powershell'; PublicClient = $true; Enabled = $true; StandardFlowEnabled = $true
                 ImplicitFlowEnabled = $false; DirectAccessGrantsEnabled = $false; ServiceAccountsEnabled = $false
-                RedirectUris = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference'
+                RedirectUris = @(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference/'
                 WebOrigins = @('https://jim.example.com')
                 PostLogoutRedirectUris = @(); Pkce = 'S256'
                 DefaultClientScopes = @('basic', 'profile', 'email', 'roles', 'web-origins', 'acr')
@@ -112,7 +112,7 @@ Describe 'Get-JIMKeycloakRegistrationPlan' {
         $module = ($plan.Changes | Where-Object { $_.Action -eq 'NewClient' -and $_.Target -eq 'jim-powershell' }).Arguments.Properties
         $module.publicClient | Should -BeTrue
         $module.directAccessGrantsEnabled | Should -BeFalse
-        $module.redirectUris | Should -Be (@(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference')
+        $module.redirectUris | Should -Be (@(8400..8409 | ForEach-Object { "http://localhost:$_/callback/" }) + 'https://jim.example.com/api/reference/')
         $module.webOrigins | Should -Be @('https://jim.example.com')
         $module.Pkce | Should -Be 'S256'
     }
@@ -121,8 +121,8 @@ Describe 'Get-JIMKeycloakRegistrationPlan' {
         $plan = & $script:Plan (& $script:NewEmptyRealm) -Url 'https://jim.example.com:8443/jim/', 'http://localhost:5200'
 
         $module = ($plan.Changes | Where-Object { $_.Action -eq 'NewClient' -and $_.Target -eq 'jim-powershell' }).Arguments.Properties
-        $module.redirectUris | Should -Contain 'https://jim.example.com:8443/jim/api/reference'
-        $module.redirectUris | Should -Contain 'http://localhost:5200/api/reference'
+        $module.redirectUris | Should -Contain 'https://jim.example.com:8443/jim/api/reference/'
+        $module.redirectUris | Should -Contain 'http://localhost:5200/api/reference/'
         $module.webOrigins | Should -Be @('https://jim.example.com:8443', 'http://localhost:5200')
     }
 
@@ -135,7 +135,7 @@ Describe 'Get-JIMKeycloakRegistrationPlan' {
         $change = (& $script:Plan $realm).Changes | Where-Object { $_.Action -eq 'SetClient' -and $_.Target -eq 'jim-powershell' }
 
         $change.Arguments.Properties.Keys | Sort-Object | Should -Be @('redirectUris', 'webOrigins')
-        $change.Description | Should -Match 'https://jim.example.com/api/reference'
+        $change.Description | Should -Match 'https://jim.example.com/api/reference/'
         $change.Description | Should -Match 'web origins'
     }
 
