@@ -70,6 +70,7 @@ That works for REST and PowerShell, where a document is the natural shape, but i
 
 9. A **View as JSON** action shows the whole document, formatted, with a Copy action. The administrator can edit or paste a document there.
 10. Invalid JSON in the JSON view is reported inline against the line it concerns, using the parser's own messages, and blocks both switching back to the editor and saving until it is fixed.
+10a. Where a field name is not recognised but is close to one that is (`anchorColumn` for `anchorColumns`), the message suggests the intended name. Today the parser only rejects an unrecognised field, so this is a change to `SqlSchemaConfiguration`'s validation, not the portal, and REST and PowerShell callers get the same suggestion.
 11. A document that is valid but uses something the editor cannot represent (if any such case exists by implementation time) opens in the JSON view with a message saying why, rather than being simplified by the editor.
 
 **Saving and validation**
@@ -170,7 +171,7 @@ Object Types                                   [View as JSON] [+ Add Object Type
 
 | Area | Impact |
 |------|--------|
-| Connector (`JIM.Connectors/Sql`) | Catalogue browsing exposed through a capability interface (schemas, tables/views, columns, primary keys, foreign keys), reusing `SqlCatalogueReader` |
+| Connector (`JIM.Connectors/Sql`) | Catalogue browsing exposed through a capability interface (schemas, tables/views, columns, primary keys, foreign keys), reusing `SqlCatalogueReader`; nearest-field suggestions in `SqlSchemaConfiguration` validation messages |
 | Models | Capability interface and catalogue result models in `JIM.Models` |
 | Application | Server method to read a Connected System's catalogue from draft or saved settings |
 | API | New read endpoint for a Connected System's catalogue; DTOs |
