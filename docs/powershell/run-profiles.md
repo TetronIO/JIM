@@ -465,7 +465,7 @@ try {
 - The Run Profile is queued as an asynchronous task on the JIM worker service. Without `-Wait`, the cmdlet returns immediately after the task is queued.
 - When `-Wait` is specified, the cmdlet polls the lightweight Activity progress endpoint (`/activities/{id}/progress`) every 2 seconds and displays a progress bar with the current phase, object counts, throughput and estimated time remaining. If authentication tokens expire during polling, the cmdlet retries up to 3 times before failing.
 - If `-Timeout` is exceeded, the cmdlet throws a terminating error that includes the Activity ID, allowing you to check progress manually via [Get-JIMActivity](activities.md) or the JIM web interface.
-- Run Profiles that are already executing will be rejected by the server; you do not need to check for running profiles before calling this cmdlet.
+- Starting a Run Profile while other work is running or queued is not refused: the run joins the Worker's queue and starts when the work ahead of it has finished, one run at a time. You do not need to check for running Run Profiles first, but with `-Wait` the time spent queued counts towards `-Timeout`.
 
 ---
 

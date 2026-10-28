@@ -248,7 +248,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             {
                 Name = SqlConnectorConstants.SettingOracleEncryption,
                 DefaultStringValue = SqlConnectorConstants.DefaultOracleEncryption,
-                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate; where that certificate is not one the operating system already vouches for, add it in Admin > Certificates.",
+                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate the operating system already trusts: the Oracle driver accepts no additional trust anchors, so a certificate added in Admin > Certificates does not help here.",
                 Category = ConnectedSystemSettingCategory.Connectivity,
                 Type = ConnectedSystemSettingType.DropDown,
                 DropDownValues =
