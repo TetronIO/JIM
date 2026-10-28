@@ -155,7 +155,7 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 
 In production, the recommended way to test API access with SSO is via the JIM PowerShell module (see step 6 below), which supports interactive browser-based authentication.
 
-Every JIM instance also serves the interactive API reference at `/api/reference`, and its **Try It** signs in through your identity provider. It signs in from the browser with no secret, so it uses the public client, as the PowerShell module does: `JIM_SSO_PUBLIC_CLIENT_ID`, or `JIM_SSO_CLIENT_ID` when that is unset. The public client needs `https://your-jim-url/api/reference` as a redirect URI, and the identity provider must answer the browser's token request from JIM's address:
+Every JIM instance also serves the interactive API reference at `/api/reference`, and its **Try It** signs in through your identity provider. It signs in from the browser with no secret, so it uses the public client, as the PowerShell module does: `JIM_SSO_PUBLIC_CLIENT_ID`, or `JIM_SSO_CLIENT_ID` when that is unset. The public client needs `https://your-jim-url/api/reference/`, with the trailing slash, as a redirect URI, and the identity provider must answer the browser's token request from JIM's address:
 
 - **Keycloak**: `Register-JIMIdentityProvider` registers both.
 - **AD FS**: `Register-JIMIdentityProvider` registers the redirect URI. Turning on CORS for JIM's address is a farm-wide setting you make yourself; see [Let the API reference sign in](sso-setup/ad-fs.md#let-the-api-reference-sign-in-optional).
