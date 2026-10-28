@@ -1,6 +1,6 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-3 complete)
 - **Issue:** [#2570](https://github.com/TetronIO/JIM/issues/2570)
 - **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/doing/PRD_SQL_OBJECT_TYPES_EDITOR.md)
 - **Last Updated:** 2026-10-28
@@ -104,7 +104,7 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - **Tests (JIM.Worker.Tests, `SqlObjectTypeConfigurationTests`, where the parser is tested today):** both shipped examples (`ObjectTypesExample`, `DeltaConfigurationExample`) round-trip through deserialise and `Serialise` to an equivalent document that `Parse` accepts; `anchorColumn` yields a problem on the right line suggesting `anchorColumns`; a document with two faults returns both; semantic faults name the Object Type and field.
 - **User-facing:** the save-time message for a misspelt field now suggests the intended one (🐛/🔄 changelog entry, REST and PowerShell included).
 
-### Phase 2: Catalogue capability in the Connector and Application layers
+### Phase 2: Catalogue capability in the Connector and Application layers ✅
 
 - `IConnectorCatalogue` and its models in `JIM.Models`.
 - `SqlCatalogueReader`: catalogue objects, primary keys (first use of `PrimaryKeyColumnsCommandText`), foreign keys grouped by constraint; `SqlConnectorSchema` switched to the shared reads.
@@ -112,7 +112,7 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - `ConnectedSystemServer` methods as above.
 - **Tests:** provider command shapes for both SQL Server and Oracle (existing provider test pattern); grouping of a composite foreign key; a view returns an empty primary key; Application methods apply drafts and refuse a Connector without the capability (`ConnectedSystemDirectoryServerDiscoveryTests` is the pattern); schema discovery's foreign-key suggestions are unchanged after the move.
 
-### Phase 3: REST and PowerShell
+### Phase 3: REST and PowerShell ✅
 
 - `SynchronisationController`: `GET .../catalogue` (objects), `GET .../catalogue/object?schema=&name=` (detail; query parameters rather than path segments because schema and object names can contain characters a route would mangle), `POST .../catalogue/statement` with `{ "statement": "..." }` (POST because a statement does not belong in a URL or its logs). 400 for no capability or an invalid statement, 404 for no Connected System, 502 for a database that cannot be reached, as the directory-server endpoint does.
 - DTOs in `JIM.Web/Models/Api/` with published `<summary>` text per `src/CLAUDE.md`.

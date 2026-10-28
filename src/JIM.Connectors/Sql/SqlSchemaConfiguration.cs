@@ -658,14 +658,36 @@ internal sealed record SqlSchemaConfiguration
     /// </summary>
     private static void ValidateSelectStatement(string statement, string objectTypeName)
     {
+        switch (CheckSelectStatement(statement))
+        {
+            case SelectStatementProblem.NotAQuery:
+                throw new SqlSchemaConfigurationException(
+                    $"Object Type '{objectTypeName}' has a 'select' that does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.") { Field = "select" };
+
+            case SelectStatementProblem.MoreThanOneStatement:
+                throw new SqlSchemaConfigurationException(
+                    $"Object Type '{objectTypeName}' has a 'select' containing a semicolon. It must be a single statement, with no terminator.") { Field = "select" };
+        }
+    }
+
+    /// <summary>
+    /// The one rule for what may be run as an Object Type's source query, shared by the parser and by the
+    /// catalogue's description of a statement so the two can never accept different things.
+    /// </summary>
+    /// <returns>Null where the statement is acceptable.</returns>
+    internal static SelectStatementProblem? CheckSelectStatement(string statement)
+    {
         var trimmed = statement.Trim();
 
         if (!trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase) && !trimmed.StartsWith("WITH", StringComparison.OrdinalIgnoreCase))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has a 'select' that does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.");
+            return SelectStatementProblem.NotAQuery;
 
-        if (trimmed.Contains(';', StringComparison.Ordinal))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has a 'select' containing a semicolon. It must be a single statement, with no terminator.");
+        return trimmed.Contains(';', StringComparison.Ordinal) ? SelectStatementProblem.MoreThanOneStatement : null;
+    }
+
+    internal enum SelectStatementProblem
+    {
+        NotAQuery,
+        MoreThanOneStatement
     }
 }

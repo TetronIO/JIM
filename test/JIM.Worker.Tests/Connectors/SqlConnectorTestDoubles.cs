@@ -483,6 +483,7 @@ internal sealed class FakeSqlCatalogue
 {
     private readonly Dictionary<string, List<FakeCatalogueColumn>> _columns = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<FakeCatalogueForeignKey>> _foreignKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<string>> _primaryKeys = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<FakeCatalogueColumn>> _selectStatementColumns = new(StringComparer.Ordinal);
 
     internal List<(string? SchemaName, string ObjectName)> Tables { get; } = [];
@@ -500,6 +501,17 @@ internal sealed class FakeSqlCatalogue
         Views.Add((schemaName, objectName));
         _columns[Key(schemaName, objectName)] = [.. columns];
     }
+
+    /// <summary>
+    /// Declares a table's primary key, its columns in key order.
+    /// </summary>
+    internal void AddPrimaryKey(string? schemaName, string objectName, params string[] columnNames)
+    {
+        _primaryKeys[Key(schemaName, objectName)] = [.. columnNames];
+    }
+
+    internal IReadOnlyList<string> GetPrimaryKey(string? schemaName, string objectName) =>
+        _primaryKeys.TryGetValue(Key(schemaName, objectName), out var columnNames) ? columnNames : [];
 
     internal void AddForeignKey(string? schemaName, string objectName, FakeCatalogueForeignKey foreignKey)
     {
@@ -969,7 +981,7 @@ internal sealed class FakeDbCommand : DbCommand
             return FakeDbDataReader.ForForeignKeys(catalogue.GetForeignKeys(GetBoundValue(SqlCatalogueParameters.SchemaName), GetBoundValue(SqlCatalogueParameters.ObjectName)!));
 
         if (CommandText == _provider.PrimaryKeyColumnsCommandText)
-            return FakeDbDataReader.Empty();
+            return FakeDbDataReader.ForPrimaryKey(catalogue.GetPrimaryKey(GetBoundValue(SqlCatalogueParameters.SchemaName), GetBoundValue(SqlCatalogueParameters.ObjectName)!));
 
         var selectStatementColumns = catalogue.GetSelectStatementColumns(CommandText);
         if (selectStatementColumns != null)
@@ -1527,6 +1539,14 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
                 ++ordinal,
                 column.CaseExact switch { true => "YES", false => "NO", null => null }
             }).ToList());
+    }
+
+    internal static FakeDbDataReader ForPrimaryKey(IEnumerable<string> columnNames)
+    {
+        var ordinal = 0;
+        return new FakeDbDataReader(
+            [SqlCatalogueColumns.ColumnName, SqlCatalogueColumns.OrdinalPosition, SqlCatalogueColumns.ConstraintName],
+            columnNames.Select(columnName => new object?[] { columnName, ++ordinal, "PK" }).ToList());
     }
 
     internal static FakeDbDataReader ForForeignKeys(IEnumerable<FakeCatalogueForeignKey> foreignKeys)

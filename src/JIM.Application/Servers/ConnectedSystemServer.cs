@@ -3968,6 +3968,123 @@ public partial class ConnectedSystemServer
     }
     #endregion
 
+    #region Connected System Catalogue
+    /// <summary>
+    /// What this Connected System's Connector says about its catalogue (which setting it helps write), or null
+    /// when it has none. The portal offers its catalogue-driven editor for the setting the Connector names, so
+    /// nothing above the Connector needs to know which Connector it is (issue #2570).
+    /// <para>
+    /// A property of the Connector, not of the current settings, mirroring <see cref="GetDirectoryServerDiscoveryAsync"/>.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<ConnectorCatalogueDeclaration?> GetCatalogueDeclarationAsync(int connectedSystemId)
+    {
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return null;
+
+        IConnector connector;
+        try
+        {
+            connector = CreateConnector(connectedSystem);
+        }
+        catch (NotSupportedException)
+        {
+            // A Connector Definition with no built-in Connector behind it supports nothing.
+            return null;
+        }
+
+        using var connectorDisposable = connector as IDisposable;
+        return (connector as IConnectorCatalogue)?.Catalogue;
+    }
+
+    /// <summary>
+    /// The tables and views this Connected System's source contains, so an administrator can choose from them.
+    /// <para>
+    /// Deliberately not recorded as an Activity, for the same reason as <see cref="GetConnectedSystemDirectoryServersAsync"/>:
+    /// it only reads, and changes nothing in JIM or in the Connected System.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose source to read.</param>
+    /// <param name="draftSettingValues">Settings entered on screen but not yet saved, applied over the saved ones, so an administrator can browse the source they are configuring before saving it.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
+    /// <exception cref="NotSupportedException">The Connector has no catalogue.</exception>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<List<ConnectorCatalogueObject>> GetCatalogueObjectsAsync(int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null, CancellationToken cancellationToken = default)
+    {
+        var (connectedSystem, connector, catalogue) = await CreateCatalogueConnectorAsync(connectedSystemId, draftSettingValues);
+        using var connectorDisposable = connector as IDisposable;
+
+        Log.Debug("GetCatalogueObjectsAsync: Reading the catalogue for Connected System {ConnectedSystemId}.", connectedSystemId);
+        return await catalogue.GetCatalogueObjectsAsync(connectedSystem.SettingValues, Log.Logger, cancellationToken);
+    }
+
+    /// <summary>
+    /// One table or view's columns and keys. Read-only and not recorded as an Activity; see <see cref="GetCatalogueObjectsAsync"/>.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose source to read.</param>
+    /// <param name="schemaName">The schema the object is in; null to find it by name alone.</param>
+    /// <param name="objectName">The table or view.</param>
+    /// <param name="draftSettingValues">Settings entered on screen but not yet saved, applied over the saved ones.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Null where the source has no such object, or the configured account cannot see it.</returns>
+    /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>, or no schema was given and the name is in more than one.</exception>
+    /// <exception cref="NotSupportedException">The Connector has no catalogue.</exception>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<ConnectorCatalogueObjectDetail?> GetCatalogueObjectAsync(int connectedSystemId, string? schemaName, string objectName, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null, CancellationToken cancellationToken = default)
+    {
+        var (connectedSystem, connector, catalogue) = await CreateCatalogueConnectorAsync(connectedSystemId, draftSettingValues);
+        using var connectorDisposable = connector as IDisposable;
+
+        Log.Debug("GetCatalogueObjectAsync: Reading one catalogue object for Connected System {ConnectedSystemId}.", connectedSystemId);
+        return await catalogue.GetCatalogueObjectAsync(connectedSystem.SettingValues, schemaName, objectName, Log.Logger, cancellationToken);
+    }
+
+    /// <summary>
+    /// The columns a query would return, learnt without reading a row. Read-only and not recorded as an Activity;
+    /// see <see cref="GetCatalogueObjectsAsync"/>.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose source to ask.</param>
+    /// <param name="statement">The query.</param>
+    /// <param name="draftSettingValues">Settings entered on screen but not yet saved, applied over the saved ones.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>, or the statement is not one the Connector will run.</exception>
+    /// <exception cref="NotSupportedException">The Connector has no catalogue.</exception>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<ConnectorCatalogueObjectDetail> DescribeCatalogueStatementAsync(int connectedSystemId, string statement, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null, CancellationToken cancellationToken = default)
+    {
+        var (connectedSystem, connector, catalogue) = await CreateCatalogueConnectorAsync(connectedSystemId, draftSettingValues);
+        using var connectorDisposable = connector as IDisposable;
+
+        Log.Debug("DescribeCatalogueStatementAsync: Describing a statement for Connected System {ConnectedSystemId}.", connectedSystemId);
+        return await catalogue.DescribeStatementAsync(connectedSystem.SettingValues, statement, Log.Logger, cancellationToken);
+    }
+
+    /// <summary>
+    /// Loads the Connected System untracked, applies any drafts over its saved settings, and creates its Connector,
+    /// refusing one with no catalogue. The caller owns disposing the Connector.
+    /// </summary>
+    private async Task<(ConnectedSystem ConnectedSystem, IConnector Connector, IConnectorCatalogue Catalogue)> CreateCatalogueConnectorAsync(
+        int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues)
+    {
+        // Loaded without change tracking, so applying the drafts below cannot reach the database.
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId)
+            ?? throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
+
+        if (draftSettingValues is { Count: > 0 })
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
+
+        var connector = CreateConnector(connectedSystem);
+        if (connector is IConnectorCatalogue catalogue)
+            return (connectedSystem, connector, catalogue);
+
+        (connector as IDisposable)?.Dispose();
+        throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector cannot describe what its source contains.");
+    }
+    #endregion
+
     #region Connected System Hierarchy
     /// <summary>
     /// Causes the associated Connector to be instantiated and the hierarchy (partitions and containers) to be imported from the Connected System.
