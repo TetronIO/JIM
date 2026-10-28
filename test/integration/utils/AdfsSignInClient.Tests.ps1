@@ -138,3 +138,62 @@ Describe 'Test-LoopbackCallback' {
         Test-LoopbackCallback -Uri 'https://localhost:8400/callback/' | Should -BeFalse
     }
 }
+
+Describe 'Get-TryItSignInSetting' {
+    BeforeAll {
+        # The OpenAPI document as JIM serves it to AD FS deployments (#2544, #2594), and the API reference page with the
+        # configuration Scalar writes into it.
+        $script:OpenApiDocument = @'
+{"components":{"securitySchemes":{"OAuth2":{"type":"oauth2","flows":{"authorizationCode":{
+  "authorizationUrl":"https://adfs.panoply.local/adfs/oauth2/authorize/","tokenUrl":"https://adfs.panoply.local/adfs/oauth2/token/",
+  "scopes":{"openid":"OpenID Connect","api://11111111-1111-1111-1111-111111111111/openid":"Access JIM API"}}}}}}}
+'@
+        $script:ReferencePage = @'
+<html><body><div id="app"></div><script type="module">
+import { initialize } from './scalar.aspnetcore.js'
+initialize('/api/openapi/v1.json', true, {"authentication":{"securitySchemes":{"OAuth2":{"flows":{"authorizationCode":{"x-scalar-client-id":"22222222-2222-2222-2222-222222222222","x-usePkce":"SHA-256","selectedScopes":["openid"]}}}}}}, '')
+</script></body></html>
+'@
+        $script:Respond = {
+            param([string]$Document, [string]$Page)
+            Mock Invoke-SignInRequest -ModuleName AdfsSignInClient -ParameterFilter { "$Uri" -like '*/api/openapi/v1.json' } -MockWith {
+                [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/openapi/v1.json'; StatusCode = 200; Location = $null; Content = $Document }
+            }.GetNewClosure()
+            Mock Invoke-SignInRequest -ModuleName AdfsSignInClient -ParameterFilter { "$Uri" -like '*/api/reference' } -MockWith {
+                [pscustomobject]@{ Uri = [uri]'https://jim.web:8443/api/reference'; StatusCode = 200; Location = $null; Content = $Page }
+            }.GetNewClosure()
+        }
+    }
+
+    It 'reads the endpoints and API scope from the OpenAPI document, and the client ID from the page, as a browser does' {
+        & $script:Respond $script:OpenApiDocument $script:ReferencePage
+
+        $settings = Get-TryItSignInSetting -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -JimUrl 'https://jim.web:8443'
+
+        $settings.AuthorizationUrl | Should -Be 'https://adfs.panoply.local/adfs/oauth2/authorize/'
+        $settings.TokenUrl | Should -Be 'https://adfs.panoply.local/adfs/oauth2/token/'
+        $settings.ApiScope | Should -Be 'api://11111111-1111-1111-1111-111111111111/openid'
+        $settings.ClientId | Should -Be '22222222-2222-2222-2222-222222222222'
+    }
+
+    It 'reads a client ID Scalar names clientId' {
+        & $script:Respond $script:OpenApiDocument $script:ReferencePage.Replace('"x-scalar-client-id"', '"clientId"')
+
+        (Get-TryItSignInSetting -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -JimUrl 'https://jim.web:8443').ClientId |
+            Should -Be '22222222-2222-2222-2222-222222222222'
+    }
+
+    It 'says so when the page names no client ID' {
+        & $script:Respond $script:OpenApiDocument '<html><body>No configuration</body></html>'
+
+        { Get-TryItSignInSetting -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -JimUrl 'https://jim.web:8443' } |
+            Should -Throw '*names no OAuth client ID*'
+    }
+
+    It 'says so when the document does not offer exactly one API scope' {
+        & $script:Respond $script:OpenApiDocument.Replace(',"api://11111111-1111-1111-1111-111111111111/openid":"Access JIM API"', '') $script:ReferencePage
+
+        { Get-TryItSignInSetting -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -JimUrl 'https://jim.web:8443' } |
+            Should -Throw '*offers 0 API scopes*'
+    }
+}

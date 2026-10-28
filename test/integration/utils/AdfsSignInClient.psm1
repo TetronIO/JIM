@@ -341,8 +341,117 @@ function Complete-BrowserSignIn {
     if ($delivered.StatusCode -ne 200) { throw "The module's loopback listener answered $($delivered.StatusCode)." }
 }
 
+function Get-TryItSignInSetting {
+    <#
+    .SYNOPSIS
+        What the API reference's Try It signs in with (#2594), read as the browser reads it: the authorisation and token
+        endpoints and the API scope from the OpenAPI document JIM serves, and the client ID from the API reference page's
+        Scalar configuration.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][Microsoft.PowerShell.Commands.WebRequestSession]$Session,
+        [Parameter(Mandatory)][string]$JimUrl
+    )
+
+    $document = Invoke-SignInRequest -Session $Session -Uri "$JimUrl/api/openapi/v1.json"
+    if ($document.StatusCode -ne 200) { throw "GET /api/openapi/v1.json answered $($document.StatusCode)." }
+    $flow = ($document.Content | ConvertFrom-Json).components.securitySchemes.OAuth2.flows.authorizationCode
+    $apiScopes = @($flow.scopes.PSObject.Properties.Name | Where-Object { $_ -ne 'openid' })
+    if ($apiScopes.Count -ne 1) { throw "The OpenAPI document's OAuth2 flow offers $($apiScopes.Count) API scopes, not one: $($apiScopes -join ', ')." }
+
+    $page = Invoke-SignInRequest -Session $Session -Uri "$JimUrl/api/reference"
+    if ($page.StatusCode -ne 200) { throw "GET /api/reference answered $($page.StatusCode)." }
+    # Scalar writes its configuration into the page; the flow's client ID is x-scalar-client-id there (clientId in
+    # older versions).
+    $clientId = [regex]::Match($page.Content, '"(?:x-scalar-client-id|clientId)"\s*:\s*"([^"]+)"').Groups[1].Value
+    if (-not $clientId) { throw 'The API reference page names no OAuth client ID.' }
+
+    return [pscustomobject]@{
+        AuthorizationUrl = [string]$flow.authorizationUrl; TokenUrl = [string]$flow.tokenUrl; ApiScope = [string]$apiScopes[0]; ClientId = $clientId
+    }
+}
+
+function Invoke-TryItSignIn {
+    <#
+    .SYNOPSIS
+        Signs a person in as the API reference's Try It does (#2594), and returns its bearer token with what the sign-in
+        showed: the settings it used, and the Access-Control-Allow-Origin AD FS answered the token request with.
+
+    .DESCRIPTION
+        From the settings Get-TryItSignInSetting reads: an authorisation code request with PKCE and no secret, redirected
+        back to JIM's /api/reference; AD FS's forms sign-in; then the code exchanged at the token endpoint with JIM's
+        origin in Origin, as the page's script sends it. A browser keeps the token only when AD FS answers with that
+        origin in Access-Control-Allow-Origin, so it is returned for the caller to check rather than assumed.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'A lab account''s password, posted in a form body as a browser posts it.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$JimUrl,
+        [Parameter(Mandatory)][string]$UserName,
+        [Parameter(Mandatory)][string]$Password
+    )
+
+    $session = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+    $settings = Get-TryItSignInSetting -Session $session -JimUrl $JimUrl
+    $redirectUri = "$JimUrl/api/reference"
+    $origin = ([uri]$JimUrl).GetLeftPart([UriPartial]::Authority)
+
+    $verifier = -join ((1..64) | ForEach-Object { [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~' | Get-Random })
+    $challenge = [Convert]::ToBase64String([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::ASCII.GetBytes($verifier))).
+        TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    $query = [ordered]@{
+        client_id = $settings.ClientId; response_type = 'code'; redirect_uri = $redirectUri; scope = "openid $($settings.ApiScope)"
+        state = 'try-it'; code_challenge = $challenge; code_challenge_method = 'S256'
+    }
+    $queryString = ($query.GetEnumerator() | ForEach-Object { "$($_.Key)=$([uri]::EscapeDataString($_.Value))" }) -join '&'
+
+    $atAdfs = Invoke-SignInRedirects -Session $session -Response (Invoke-SignInRequest -Session $session -Uri "$($settings.AuthorizationUrl)?$queryString")
+    $returned = Complete-AdfsSignIn -Session $session -Response $atAdfs -UserName $UserName -Password $Password
+    if ($returned.Uri.GetLeftPart([UriPartial]::Path) -ne $redirectUri) {
+        throw "AD FS did not return the browser to $($redirectUri): $($returned.StatusCode) at $($returned.Uri.GetLeftPart([UriPartial]::Path))."
+    }
+    $code = [regex]::Match($returned.Uri.Query, '[?&]code=([^&]+)').Groups[1].Value
+    if (-not $code) {
+        $reason = [regex]::Match($returned.Uri.Query, '[?&]error_description=([^&]+)').Groups[1].Value
+        throw "AD FS returned to the API reference without a code$(if ($reason) { ": $([uri]::UnescapeDataString($reason))" } else { '.' })"
+    }
+
+    $token = Invoke-WebRequest -Method POST -Uri $settings.TokenUrl -Headers @{ Origin = $origin } -SkipHttpErrorCheck -Body @{
+        grant_type = 'authorization_code'; code = [uri]::UnescapeDataString($code); redirect_uri = $redirectUri
+        client_id = $settings.ClientId; code_verifier = $verifier
+    }
+    if ([int]$token.StatusCode -ne 200) { throw "AD FS refused Try It's token request: $([int]$token.StatusCode) $($token.Content)" }
+    $allowedOrigin = if ($token.Headers.ContainsKey('Access-Control-Allow-Origin')) { [string]@($token.Headers['Access-Control-Allow-Origin'])[0] } else { $null }
+
+    return [pscustomobject]@{
+        Settings = $settings; Origin = $origin; AllowedOrigin = $allowedOrigin
+        AccessToken = [string]($token.Content | ConvertFrom-Json).access_token
+    }
+}
+
+function Get-BearerApiResult {
+    <#
+    .SYNOPSIS
+        Who JIM says a bearer token's holder is (GET /api/v1/userinfo), and the status an Administrator-only API
+        (GET /api/v1/security/roles) answers it with.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$JimUrl,
+        [Parameter(Mandatory)][string]$AccessToken
+    )
+
+    $headers = @{ Authorization = "Bearer $AccessToken" }
+    $userInfo = Invoke-WebRequest -Uri "$JimUrl/api/v1/userinfo" -Headers $headers -SkipHttpErrorCheck
+    if ([int]$userInfo.StatusCode -ne 200) { throw "GET /api/v1/userinfo answered $([int]$userInfo.StatusCode) to Try It's token." }
+    $roles = Invoke-WebRequest -Uri "$JimUrl/api/v1/security/roles" -Headers $headers -SkipHttpErrorCheck
+    return [pscustomobject]@{ UserInfo = ($userInfo.Content | ConvertFrom-Json); AdministratorApiStatus = [int]$roles.StatusCode }
+}
+
 Export-ModuleMember -Function @(
     'ConvertFrom-HtmlForm', 'Find-AdfsSignInForm', 'Get-AdfsSignInError', 'New-AdfsSignInFields', 'Resolve-SignInUri',
     'Test-LoopbackCallback', 'Invoke-SignInRequest', 'Invoke-SignInRedirects', 'Complete-AdfsSignIn', 'Invoke-PortalSignIn',
-    'Get-PortalUserInfo', 'Get-PortalAdministratorApiStatus', 'Complete-BrowserSignIn'
+    'Get-PortalUserInfo', 'Get-PortalAdministratorApiStatus', 'Complete-BrowserSignIn', 'Get-TryItSignInSetting',
+    'Invoke-TryItSignIn', 'Get-BearerApiResult'
 )

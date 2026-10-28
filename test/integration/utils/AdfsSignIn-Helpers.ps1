@@ -106,7 +106,7 @@ function Invoke-AdfsSignInCheck {
         Runs one sign-in check in the toolbox (Invoke-AdfsSignInCheck.ps1) as a person, and returns its result.
 
     .PARAMETER Check
-        Portal or ConnectJim.
+        Portal, ConnectJim or TryIt.
 
     .PARAMETER JimUrl
         JIM's address as the toolbox reaches it (Get-ActiveDirectoryLabJimUrl).
@@ -120,7 +120,7 @@ function Invoke-AdfsSignInCheck {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'A throwaway lab account''s password, handed to the container through its environment.')]
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][ValidateSet('Portal', 'ConnectJim')][string]$Check,
+        [Parameter(Mandatory)][ValidateSet('Portal', 'ConnectJim', 'TryIt')][string]$Check,
         [Parameter(Mandatory)][string]$JimUrl,
         [Parameter(Mandatory)][string]$UserName,
         [Parameter(Mandatory)][string]$Password

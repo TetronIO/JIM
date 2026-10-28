@@ -17,7 +17,8 @@
          command that is not the one being released;
       2. opens a PowerShell Direct session to the AD FS server as the domain Administrator, and runs that module's
          Register-JIMIdentityProvider in this host's PowerShell 7 with -Session, so the AD FS cmdlets run in the
-         guest's Windows PowerShell;
+         guest's Windows PowerShell, then turns CORS on for -Url, as the AD FS SSO guide tells administrators to, so
+         the API reference's Try It can sign in (#2594);
       3. prints one JSON object (ConvertTo-LabIdentityProviderRegistration): authority, clientId, clientSecret,
          publicClientId, apiScope, claimType, mvAttribute, changes and moduleDigest.
 
@@ -107,6 +108,15 @@ try {
 
     Import-Module (Join-Path $jimModule 'JIM.psd1') -Force
     $registration = Register-JIMIdentityProvider -Provider ADFS -Url $Url -Session $session -Confirm:$false -WarningAction SilentlyContinue
+
+    # The API reference's Try It exchanges its code from the browser, which AD FS answers only with CORS on for JIM's
+    # origin (#2594). That is farm-wide, so the command leaves it to the administrator, and this does it the way the AD
+    # FS SSO guide tells them to: keeping any origins already trusted. -Url is an origin already (no path).
+    Invoke-Command -Session $session -ScriptBlock {
+        Set-AdfsResponseHeaders -EnableCORS $true
+        $origins = @(@((Get-AdfsResponseHeaders).CORSTrustedOrigins) + $using:Url | Where-Object { $_ } | Select-Object -Unique)
+        Set-AdfsResponseHeaders -CORSTrustedOrigins $origins
+    }
 
     ConvertTo-LabIdentityProviderRegistration -Registration $registration -ModuleDigest $deployedDigest | ConvertTo-Json -Depth 4 -Compress
 }

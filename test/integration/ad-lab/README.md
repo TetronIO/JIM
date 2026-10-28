@@ -348,7 +348,10 @@ It takes 30 to 45 minutes and is safe to re-run after a failure. It costs 4 GB o
      the sign-in checks reach it, `https://jim.web:8443` (`Get-ActiveDirectoryLabJimUrl`). The registration is made from
      the copy of the JIM PowerShell module that `Install-LabScripts.ps1` put on the host, and refuses to run unless that
      copy's digest is the commit's (`Get-LabModuleDigest`): **after any change to `src/JIM.PowerShell`, run
-     `Install-LabScripts.ps1` on the host again before the next run**, or the AD FS scenarios fail, saying so;
+     `Install-LabScripts.ps1` on the host again before the next run**, or the AD FS scenarios fail, saying so. The same
+     script then turns CORS on for that address, with the commands the AD FS SSO guide gives administrators, so the API
+     reference's Try It can sign in (#2594). The script runs from the host's copy too, so a change to it reaches the
+     lab only once the host is redeployed;
    - creates the account that signs in as JIM's initial administrator, `jim-sso-admin` in `dc-primary`'s `CN=Users`,
      with a password drawn for the run (never the domain Administrator, whose password the control plane depends on);
    - recreates `jim.web` with all of it, through its own process environment: the client IDs, the API scope, `oid`
@@ -368,8 +371,10 @@ administrator's workstation: it resolves `jim.web` and the AD FS server's name, 
 PowerShell (`AdfsSignIn-Helpers.ps1`, `AdfsSignInClient.psm1`). There is no browser: the client follows JIM's redirect
 to AD FS, fills in AD FS's forms sign-in page, posts the `form_post` reply back to JIM, and stands in for the browser
 `Connect-JIM` opens. It checks the portal sign-in, the initial administrator provisioned from `oid`, a bearer token on
-`/api`, `Connect-JIM` through PKCE, the same person from both, the employee renamed in Active Directory, and the
-employee's `User`-only access.
+`/api`, `Connect-JIM` through PKCE, the same person from both, the employee renamed in Active Directory, the
+employee's `User`-only access, and the API reference's Try It: the client, endpoints and scope its page and OpenAPI
+document give, PKCE back to `/api/reference`, the code exchanged with JIM's origin (which AD FS must allow), and its
+token on `/api`.
 The runner does not give JIM the certificate: the scenario trusts it the way an administrator would, with
 `Add-JIMCertificate -FromIdentityProvider`. It reads the certificate off the wire rather than copying
 `adfs-primary-ca.cer` from the guest, the same way it reads the domain controllers'.
