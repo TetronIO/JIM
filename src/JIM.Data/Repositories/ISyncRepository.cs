@@ -1321,10 +1321,9 @@ public interface ISyncRepository
     /// <summary>
     /// Narrows a set of Connected System Object ids to those whose Pending Export holds a change written with an
     /// interim value until an Initial Password is delivered (<see cref="PendingExportAttributeValueChange.AwaitsInitialPassword"/>,
-    /// still <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039). Drift Detection skips
-    /// those objects entirely, because a correction staged for any of their attributes
-    /// would replace the Pending Export holding the change, and the synchronisation preview skips them too so it
-    /// proposes no correction the run will not make. Answered from a partial index, so it costs nothing where no change
+    /// still <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2039). Drift Detection
+    /// reads those objects' Pending Exports, so its correction neither restates the held change nor drops it when it
+    /// replaces the Pending Export holding it (#2501), and the synchronisation preview proposes the same corrections. Answered from a partial index, so it costs nothing where no change
     /// carries the flag.
     /// </summary>
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);

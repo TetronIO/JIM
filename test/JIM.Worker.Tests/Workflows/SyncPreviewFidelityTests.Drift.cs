@@ -104,39 +104,18 @@ public partial class SyncPreviewFidelityTests
     }
 
     /// <summary>
-    /// The run leaves an object holding a change until its Initial Password is delivered out of Drift Detection entirely
-    /// (#2039), because a correction for any attribute would replace the Pending Export holding the change. The preview
-    /// proposes no correction for it either, or an administrator reads a correction the run will not make.
+    /// Drift on the attribute an object holds a change for until its Initial Password is delivered is no correction
+    /// where the held change already asserts what the Metaverse Object wants (#2039, #2501): the run stages nothing that
+    /// would supersede it and re-send the value the target refuses. The preview proposes no correction either, or an
+    /// administrator reads a correction the run will not make.
     /// </summary>
     [Test]
-    public async Task PreviewSyncForCsoAsync_OfADriftedTargetObjectHoldingAChangeAwaitingInitialPassword_ProposesNoCorrectionTheRunDoesNotMakeAsync()
+    public async Task PreviewSyncForCsoAsync_OfATargetObjectDriftedOnlyOnTheAttributeItHoldsAChangeFor_ProposesNoCorrectionTheRunDoesNotMakeAsync()
     {
         var ctx = await SetUpDriftAsync(enforceState: true);
         var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
         var displayNameAttribute = targetCso.AttributeValues.Single(v => v.Attribute.Name == "DisplayName").Attribute;
-        SyncRepo.SeedPendingExport(new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = ctx.Target.Id,
-            ConnectedSystemObjectId = targetCso.Id,
-            ChangeType = PendingExportChangeType.Update,
-            Status = PendingExportStatus.Exported,
-            CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges =
-            [
-                new PendingExportAttributeValueChange
-                {
-                    Id = Guid.NewGuid(),
-                    AttributeId = displayNameAttribute.Id,
-                    Attribute = displayNameAttribute,
-                    ChangeType = PendingExportAttributeChangeType.Update,
-                    StringValue = "John Smith",
-                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
-                    ExportAttemptCount = 1,
-                    AwaitsInitialPassword = true
-                }
-            ]
-        });
+        SeedHeldChange(ctx, targetCso, displayNameAttribute, "John Smith");
 
         var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Target.Id, targetCso.Id);
         var activity = await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
@@ -145,13 +124,67 @@ public partial class SyncPreviewFidelityTests
         {
             Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
                     .Any(i => i.ConnectedSystemObjectId == targetCso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
-                Is.False, "arrange: the run makes no drift correction for an object holding a change");
+                Is.False, "arrange: the run makes no correction restating the held change");
             Assert.That(preview.DriftCorrections, Is.Empty, "the preview proposes no correction the run does not make");
             Assert.That(preview.Outbound.ProposedExports, Is.Empty);
             Assert.That(preview.OutcomeTree.Select(n => n.OutcomeType),
                 Has.No.Member(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection));
         }
     }
+
+    /// <summary>
+    /// An object holding a change until its Initial Password is delivered has its other attributes' drift corrected at
+    /// once (#2501), so the preview proposes that correction as the run makes it, and nothing for the held change.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_OfADriftedTargetObjectHoldingAChangeForAnotherAttribute_ProposesTheCorrectionTheRunMakesAsync()
+    {
+        var ctx = await SetUpDriftAsync(enforceState: true);
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Target.Id);
+        var otherAttribute = ctx.ExportRule.ConnectedSystemObjectType!.Attributes.First(a => a.Name != "DisplayName" && !a.IsExternalId);
+        SeedHeldChange(ctx, targetCso, otherAttribute, "interim");
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Target.Id, targetCso.Id);
+        var activity = await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                    .Any(i => i.ConnectedSystemObjectId == targetCso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+                Is.True, "arrange: the run corrects the drift although the object holds a change");
+            Assert.That(preview.DriftCorrections.Select(c => c.AttributeName), Is.EqualTo(new[] { "DisplayName" }));
+            Assert.That(preview.Outbound.ProposedExports.SelectMany(pe => pe.AttributeValueChanges).Select(c => c.AttributeId),
+                Is.EqualTo(new[] { targetCso.AttributeValues.Single(v => v.Attribute.Name == "DisplayName").AttributeId }),
+                "the preview proposes the correction alone: the held change is not proposed again");
+            Assert.That(preview.OutcomeTree.Select(n => n.OutcomeType),
+                Has.Member(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection));
+        }
+    }
+
+    private void SeedHeldChange(DriftContext ctx, ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string value) =>
+        SyncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ctx.Target.Id,
+            ConnectedSystemObjectId = cso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = attribute.Id,
+                    Attribute = attribute,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    StringValue = value,
+                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    ExportAttemptCount = 1,
+                    AwaitsInitialPassword = true
+                }
+            ]
+        });
 
     /// <summary>
     /// Where the enforced export expression fails, or Fail this mapping stops it, the run records the error against the

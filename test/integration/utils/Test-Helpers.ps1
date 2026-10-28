@@ -5837,8 +5837,7 @@ function Remove-ContainerWithMissingNetwork {
 # ─────────────────────────────────────────────────────────────────────────────
 # Initial Password delivery (#2039, #2064). Shared by the scenarios that provision accounts with an Initial Password:
 # on real Active Directory each is created disabled and enabled by the delivery, and until its password is delivered
-# JIM holds its userAccountControl change and Drift Detection skips the account, so a step that expects the accounts
-# settled must wait for this first.
+# JIM holds its userAccountControl change, so a step that expects the accounts settled must wait for this first.
 # ─────────────────────────────────────────────────────────────────────────────
 function Wait-ForInitialPasswordDelivery {
     <#

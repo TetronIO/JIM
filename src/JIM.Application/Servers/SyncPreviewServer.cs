@@ -1304,11 +1304,11 @@ public class SyncPreviewServer
     /// Proposes the corrections the run's drift detection would stage for <paramref name="cso"/> (#1530), through the
     /// run's own detection (<see cref="DriftDetectionService.EvaluateDrift"/>, which stages nothing itself). A
     /// correction for an object the export evaluation already proposes an update for is folded into that update, as
-    /// the run merges the two Pending Exports for one object. An object holding a change until its Initial Password is
-    /// delivered is skipped, as the run skips it (#2039; <c>SyncTaskProcessorBase.EvaluateQueuedDriftAsync</c>).
+    /// the run merges the two Pending Exports for one object. For an object holding a change until its Initial Password
+    /// is delivered, no correction restating the held change is proposed, as the run stages none (#2039, #2501;
+    /// <see cref="DriftDetectionService.DropCorrectionsRestatingHeldChanges"/>).
     /// </summary>
-    /// <returns>How many attributes have drifted; zero when nothing enforces state in this Connected System, or the
-    /// run would skip the object.</returns>
+    /// <returns>How many attributes the run would correct; zero when nothing enforces state in this Connected System.</returns>
     private async Task<int> ProposeDriftCorrectionsAsync(SyncPreviewResult result, ConnectedSystemObject cso, MetaverseObject workingMvo,
         CsoPreviewContext context)
     {
@@ -1364,16 +1364,16 @@ public class SyncPreviewServer
         if (!drift.HasDrift)
             return 0;
 
-        // The run leaves an object holding a change until its Initial Password is delivered out of Drift Detection
-        // entirely, since a correction for any attribute would replace the Pending Export holding the change. Asked only
-        // once drift is found, so an object with nothing to correct costs no lookup; the run's own per-page lookup reads
-        // the same partial index.
+        // For an object holding a change until its Initial Password is delivered, the run stages no correction restating
+        // the held change, and corrects everything else (#2501). Asked only once drift is found, so an object with nothing
+        // to correct costs no lookup; the run's own per-page lookup reads the same partial index.
         if (cso.Id != Guid.Empty &&
-            (await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(context.ConnectedSystemId, [cso.Id])).Count > 0)
+            (await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(context.ConnectedSystemId, [cso.Id])).Count > 0 &&
+            await context.GuardedRepository.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id) is { } heldPendingExport)
         {
-            Log.Debug("ProposeDriftCorrectionsAsync: CSO {CsoId} holds a change until its Initial Password is delivered; " +
-                "the run skips Drift Detection for it, so no correction is proposed", cso.Id);
-            return 0;
+            DriftDetectionService.DropCorrectionsRestatingHeldChanges(drift, heldPendingExport);
+            if (!drift.HasDrift)
+                return 0;
         }
 
         // Detection stages each change by attribute id alone, which is all the run persists; the preview names the
