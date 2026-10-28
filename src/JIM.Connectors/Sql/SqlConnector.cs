@@ -27,7 +27,7 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorCatalogue, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -480,6 +480,176 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         var schema = new SqlConnectorSchema(provider, connection, configuration, BuildTypeMappingOptions(settings), logger);
         return await schema.GetSchemaAsync();
     }
+    #endregion
+
+    #region IConnectorCatalogue members
+    /// <summary>
+    /// The catalogue helps write the Object Types document, so that is the setting the portal's catalogue-driven
+    /// editor stands in for.
+    /// </summary>
+    public ConnectorCatalogueDeclaration Catalogue { get; } = new(SqlConnectorConstants.SettingObjectTypes);
+
+    /// <summary>
+    /// The tables and views the configured account can see. Tables first, then views, each in the order the
+    /// database reports them.
+    /// </summary>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    public async Task<List<ConnectorCatalogueObject>> GetCatalogueObjectsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        logger.Verbose($"GetCatalogueObjectsAsync() called for {Name}");
+
+        var (provider, connection) = await OpenCatalogueConnectionAsync(settings, logger);
+        using (connection)
+        {
+            var objects = await ReadCatalogueObjectsAsync(provider, connection, cancellationToken);
+            logger.Debug("GetCatalogueObjectsAsync: the database account can see {ObjectCount} table(s) and view(s)", objects.Count);
+            return [.. objects.Select(o => new ConnectorCatalogueObject { SchemaName = o.Object.SchemaName, Name = o.Object.ObjectName, Kind = o.Kind })];
+        }
+    }
+
+    /// <summary>
+    /// One table or view's columns and keys. A name is matched as schema discovery matches it, ignoring case, so
+    /// what the catalogue finds is what discovery will find.
+    /// </summary>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    /// <exception cref="ArgumentException">No schema was given and the name is in more than one.</exception>
+    public async Task<ConnectorCatalogueObjectDetail?> GetCatalogueObjectAsync(List<ConnectedSystemSettingValue> settings, string? schemaName, string objectName, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectName);
+        logger.Verbose($"GetCatalogueObjectAsync() called for {Name}");
+
+        var (provider, connection) = await OpenCatalogueConnectionAsync(settings, logger);
+        using (connection)
+        {
+            var candidates = (await ReadCatalogueObjectsAsync(provider, connection, cancellationToken))
+                .Where(candidate => string.Equals(candidate.Object.ObjectName, objectName, StringComparison.OrdinalIgnoreCase))
+                .Where(candidate => string.IsNullOrWhiteSpace(schemaName) || string.Equals(candidate.Object.SchemaName, schemaName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (candidates.Count == 0)
+                return null;
+
+            if (candidates.Count > 1)
+                throw new ArgumentException(
+                    $"'{objectName}' exists in more than one schema ({string.Join(", ", candidates.Select(candidate => candidate.Object.SchemaName))}). Say which schema to read it from.",
+                    nameof(schemaName));
+
+            // Everything below is read with the names as the database spells them, which is what its catalogue
+            // queries compare against.
+            var (resolved, kind) = candidates[0];
+            var columns = await SqlCatalogueReader.ReadColumnsAsync(provider, connection, resolved.SchemaName, resolved.ObjectName, cancellationToken);
+
+            // Views declare no keys, so they are not asked.
+            var primaryKey = kind == ConnectorCatalogueObjectKind.Table
+                ? await SqlCatalogueReader.ReadPrimaryKeyColumnsAsync(provider, connection, resolved.SchemaName, resolved.ObjectName, cancellationToken)
+                : [];
+            var foreignKeys = kind == ConnectorCatalogueObjectKind.Table
+                ? await SqlCatalogueReader.ReadForeignKeysAsync(provider, connection, resolved.SchemaName, resolved.ObjectName, cancellationToken)
+                : [];
+
+            return new ConnectorCatalogueObjectDetail
+            {
+                SchemaName = resolved.SchemaName,
+                Name = resolved.ObjectName,
+                Kind = kind,
+                Columns = [.. columns.Select(ToCatalogueColumn)],
+                PrimaryKey = primaryKey,
+                ForeignKeys = GroupForeignKeys(foreignKeys)
+            };
+        }
+    }
+
+    /// <summary>
+    /// The columns a query would return, learnt from the database without reading a row. The statement is held
+    /// to the same rule as an Object Type's 'select', and checked against it before anything is connected to.
+    /// </summary>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    /// <exception cref="ArgumentException">The statement is not a single query, or the database would not accept it.</exception>
+    public async Task<ConnectorCatalogueObjectDetail> DescribeStatementAsync(List<ConnectedSystemSettingValue> settings, string statement, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentException.ThrowIfNullOrWhiteSpace(statement);
+        logger.Verbose($"DescribeStatementAsync() called for {Name}");
+
+        switch (SqlSchemaConfiguration.CheckSelectStatement(statement))
+        {
+            case SqlSchemaConfiguration.SelectStatementProblem.NotAQuery:
+                throw new ArgumentException("The statement does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.", nameof(statement));
+            case SqlSchemaConfiguration.SelectStatementProblem.MoreThanOneStatement:
+                throw new ArgumentException("The statement contains a semicolon. It must be a single statement, with no terminator.", nameof(statement));
+        }
+
+        var (provider, connection) = await OpenCatalogueConnectionAsync(settings, logger);
+        using (connection)
+        {
+            List<SqlDiscoveredColumn> columns;
+            try
+            {
+                columns = await SqlCatalogueReader.ReadStatementColumnsAsync(provider, connection, statement.Trim(), cancellationToken);
+            }
+            catch (DbException ex)
+            {
+                throw new ArgumentException($"The database would not accept the statement: {ex.Message}", nameof(statement), ex);
+            }
+
+            return new ConnectorCatalogueObjectDetail
+            {
+                Kind = ConnectorCatalogueObjectKind.Statement,
+                Columns = [.. columns.Select(ToCatalogueColumn)]
+            };
+        }
+    }
+
+    /// <summary>
+    /// Opens a connection for a catalogue read, as schema discovery does: on the thread pool, because opening is
+    /// synchronous all the way down and this is asked from a Blazor Server circuit.
+    /// </summary>
+    private async Task<(ISqlProvider Provider, DbConnection Connection)> OpenCatalogueConnectionAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+    {
+        var provider = TryResolveProvider(settings)
+            ?? throw new InvalidSettingValuesException($"Choose a {SqlConnectorConstants.SettingDatabaseType} before browsing the database.");
+        var connectionSettings = BuildConnectionSettings(settings);
+
+        var connection = await Task.Run(() => OpenConnection(provider, connectionSettings, settings, logger));
+        return (provider, connection);
+    }
+
+    private static async Task<List<(SqlCatalogueObject Object, ConnectorCatalogueObjectKind Kind)>> ReadCatalogueObjectsAsync(
+        ISqlProvider provider, DbConnection connection, CancellationToken cancellationToken)
+    {
+        var tables = await SqlCatalogueReader.ReadCatalogueObjectsAsync(provider, connection, provider.TablesCommandText, cancellationToken);
+        var views = await SqlCatalogueReader.ReadCatalogueObjectsAsync(provider, connection, provider.ViewsCommandText, cancellationToken);
+
+        return [.. tables.Select(table => (table, ConnectorCatalogueObjectKind.Table)), .. views.Select(view => (view, ConnectorCatalogueObjectKind.View))];
+    }
+
+    private static ConnectorCatalogueColumn ToCatalogueColumn(SqlDiscoveredColumn column) => new()
+    {
+        Name = column.Name,
+        DataTypeName = column.ColumnType.TypeName,
+        MaxLength = column.ColumnType.MaxLength,
+        Precision = column.ColumnType.Precision,
+        Scale = column.ColumnType.Scale,
+        IsNullable = column.IsNullable
+    };
+
+    /// <summary>
+    /// The catalogue reports a foreign key one column per row; a composite key is one constraint, so it is one
+    /// entry, its columns kept in key order and paired with the columns they reference.
+    /// </summary>
+    private static List<ConnectorCatalogueForeignKey> GroupForeignKeys(List<SqlDiscoveredForeignKey> foreignKeyColumns) =>
+        [.. foreignKeyColumns
+            .GroupBy(column => column.ConstraintName, StringComparer.Ordinal)
+            .Select(constraint => new ConnectorCatalogueForeignKey
+            {
+                ConstraintName = constraint.Key,
+                Columns = [.. constraint.Select(column => column.ColumnName)],
+                ReferencedSchemaName = constraint.First().ReferencedSchema,
+                ReferencedObjectName = constraint.First().ReferencedTable,
+                ReferencedColumns = [.. constraint.Select(column => column.ReferencedColumn)]
+            })];
     #endregion
 
     #region IConnectorImportUsingCalls members

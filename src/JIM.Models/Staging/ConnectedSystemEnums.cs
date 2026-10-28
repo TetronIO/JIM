@@ -559,3 +559,18 @@ public enum DateTimeResolution
     /// <summary>One day, for example a SQL <c>date</c> column.</summary>
     Day = 9
 }
+
+/// <summary>
+/// What kind of object a Connector's catalogue describes.
+/// </summary>
+public enum ConnectorCatalogueObjectKind
+{
+    /// <summary>A table.</summary>
+    Table,
+
+    /// <summary>A view.</summary>
+    View,
+
+    /// <summary>A query, described by the columns it would return.</summary>
+    Statement
+}
