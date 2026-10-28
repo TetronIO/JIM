@@ -92,7 +92,9 @@ function Invoke-InContainer {
     #>
     param([string]$Script)
 
-    $output = docker exec $containerName bash -c "set -e`n$Script" 2>&1
+    # .gitattributes checks *.ps1 out with CRLF, so every line of a here-string ends in a CR, which bash reads as
+    # part of the line ("/dev/null\r: Permission denied"). Strip it rather than rely on how this file was checked out.
+    $output = docker exec $containerName bash -c ("set -e`n$Script" -replace "`r", '') 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Command in $containerName failed: $($output | Out-String)"
     }
