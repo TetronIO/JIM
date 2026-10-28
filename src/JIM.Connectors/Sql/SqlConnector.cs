@@ -317,7 +317,6 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 // nobody has said exists.
                 Name = SqlConnectorConstants.SettingDeltaImportMode,
                 Description = DeltaImportModeSettingDescription,
-                Example = SqlConnectorConstants.DeltaConfigurationExample,
                 Category = ConnectedSystemSettingCategory.Schema,
                 Type = ConnectedSystemSettingType.DropDown,
                 DropDownValues = new List<string> { SqlConnectorConstants.DeltaImportModeChangeLogTable, SqlConnectorConstants.DeltaImportModeWatermarkColumn }
@@ -346,24 +345,23 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         "Every other column is discovered and typed automatically. The example below is a complete document to start from.";
 
     /// <summary>
-    /// The Delta Import Mode setting's description: what each mode reads, what each one can and cannot
-    /// observe, and what each needs adding to the Object Types document.
+    /// The Delta Import Mode setting's description: what each mode reads, and what each one can and cannot
+    /// observe. What a mode needs of each Object Type is set on that Object Type (on its card in the portal, or
+    /// in the Object Types document), so the description names it without showing a document.
     /// </summary>
     /// <remarks>
-    /// The example is the setting's Example, from <see cref="SqlConnectorConstants.DeltaConfigurationExample"/>,
-    /// shown as a code block beneath the field. It is parsed by the Connector's own unit tests, so it cannot
-    /// drift out of step with what the parser accepts.
+    /// It carried a JSON example until the portal's Object Types editor (#2570): beneath a drop-down, a document
+    /// read as something to paste into the drop-down, which is the confusion the editor exists to remove. The
+    /// document fields are named once, at the end, for anyone writing it through REST or PowerShell.
     /// </remarks>
     private static string DeltaImportModeSettingDescription =>
-        "How a Delta Import finds out what has changed. Leave this unanswered where this Connected System only runs Full Imports. " +
-        $"'{SqlConnectorConstants.DeltaImportModeChangeLogTable}' reads a table or view your database maintains, holding one row per change with the object's anchor, " +
-        "a change type and a monotonic sequence or timestamp. It is the recommended mode, and the only one that observes a deletion. " +
-        "Add a 'changeLog' to every object type naming that table, the columns carrying the anchor, the sequence column, the change type column, " +
-        "and which of your own change-type values mean a create, an update and a deletion. " +
-        $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn', " +
-        "and one on each of its related tables, named the same way, so that a phone number or a group membership changing is detected as a change to the object it belongs to. " +
-        "It needs nothing extra in the database, but it detects creates and updates only: a row that has been deleted has no column left to move, " +
-        "so deletions are found only by a Full Import. The example below shows both, added to an Object Types document.";
+        "How a Delta Import finds out what has changed. Leave it unset where this Connected System only runs Full Imports. " +
+        $"'{SqlConnectorConstants.DeltaImportModeChangeLogTable}' reads a table or view your database keeps, with one row per change. " +
+        "It is the recommended mode, and the only one that sees a deletion. " +
+        $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on each table. " +
+        "It needs nothing added to the database, but sees only creates and updates, so deletions are found by a Full Import. " +
+        "Each Object Type then names its change-log table or its watermark columns, on its card above " +
+        "(in the Object Types document, 'changeLog' or 'watermarkColumn').";
 
     /// <summary>
     /// Validates SqlConnector setting values using custom business logic. Whether the configured Delta Import

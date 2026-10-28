@@ -394,7 +394,34 @@ public class SqlObjectTypesEditorModelTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(references, Has.Count.EqualTo(1), "Person's own MANAGER_ID goes with it, so it is not a reference to warn about");
-            Assert.That(references.Single(), Does.Contain("Group").And.Contain("Members"));
+            var reference = references.Single();
+            Assert.That(reference.ObjectTypeName, Is.EqualTo("Group"));
+            Assert.That(reference.Name, Is.EqualTo("Members"));
+            Assert.That(reference.IsMultiValuedAttribute, Is.True, "a related table, not a column");
+        }
+    }
+
+    [Test]
+    public void IsBlank_AnObjectTypeJustAdded_IsBlank()
+    {
+        SqlObjectTypesEditorModel.TryLoad(PersonAndGroup, out var model, out _);
+
+        var index = model!.AddObjectType();
+
+        Assert.That(SqlObjectTypesEditorModel.IsBlank(model.ObjectTypes[index]), Is.True);
+    }
+
+    [Test]
+    public void IsBlank_AnObjectTypeWithAnythingConfigured_IsNotBlank()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SqlObjectTypesEditorModel.IsBlank(new SqlObjectTypeDocument { Name = "Person" }), Is.False);
+            Assert.That(SqlObjectTypesEditorModel.IsBlank(new SqlObjectTypeDocument { Table = "EMPLOYEES" }), Is.False);
+            Assert.That(SqlObjectTypesEditorModel.IsBlank(new SqlObjectTypeDocument { Select = "SELECT 1" }), Is.False);
+            Assert.That(SqlObjectTypesEditorModel.IsBlank(new SqlObjectTypeDocument { AnchorColumns = ["ID"] }), Is.False);
+            Assert.That(SqlObjectTypesEditorModel.IsBlank(new SqlObjectTypeDocument { RelatedTables = [new SqlRelatedTableDocument()] }), Is.False);
+            Assert.That(SqlObjectTypesEditorModel.IsBlank(new SqlObjectTypeDocument { ChangeLog = new SqlChangeLogDocument() }), Is.False);
         }
     }
 

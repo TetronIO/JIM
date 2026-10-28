@@ -16,7 +16,14 @@
         <MudIcon Icon="@Icons.Material.Outlined.TableChart" Class="mr-3 mud-text-secondary" />
         <div class="jim-sql-object-type-card-title">
             <MudText Typo="Typo.h6" Inline="true">@(string.IsNullOrWhiteSpace(ObjectType.Name) ? "Unnamed Object Type" : ObjectType.Name)</MudText>
-            <MudText Inline="true" Class="mud-text-secondary ml-3">@SqlObjectTypesEditorModel.SourceOf(ObjectType)</MudText>
+            @if (IsSelect || string.IsNullOrWhiteSpace(ObjectType.Table))
+            {
+                <MudText Inline="true" Class="mud-text-secondary ml-3">@SqlObjectTypesEditorModel.SourceOf(ObjectType)</MudText>
+            }
+            else
+            {
+                <code class="jim-code-inline ml-3">@SqlObjectTypesEditorModel.SourceOf(ObjectType)</code>
+            }
         </div>
         @if (!Expanded)
         {
@@ -113,9 +120,15 @@
             </div>
             @if (PrimaryKeyAnchor.Count > 0)
             {
-                <MudAlert Severity="Severity.Info" Class="mt-3" data-testid="jim-sql-anchor-suggestion">
-                    The table's primary key is @string.Join(", ", PrimaryKeyAnchor), which identifies each row.
-                    <AlertButton Severity="Severity.Info" Class="ml-2" OnClick="UsePrimaryKeyAsync">Use the primary key</AlertButton>
+                <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-suggestion mt-3" data-testid="jim-sql-anchor-suggestion">
+                    <div class="jim-sql-suggestion-body">
+                        <span class="jim-sql-suggestion-text">
+                            The table's primary key is @ColumnList(PrimaryKeyAnchor), which identifies each row.
+                        </span>
+                        <span class="jim-sql-suggestion-actions">
+                            <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="UsePrimaryKeyAsync">Use the primary key</AlertButton>
+                        </span>
+                    </div>
                 </MudAlert>
             }
 
@@ -148,19 +161,32 @@
             }
             @foreach (var suggestion in Suggestions)
             {
-                <MudAlert Severity="Severity.Info" Class="mb-2" data-testid="jim-sql-reference-suggestion">
-                    @if (suggestion.Kind == SqlObjectTypeSuggestionKind.Reference)
-                    {
-                        <text>@suggestion.ColumnName has a foreign key to @suggestion.ReferencedObjectTypeName's anchor, so it looks like a reference to @suggestion.ReferencedObjectTypeName.</text>
-                        <AlertButton Severity="Severity.Info" Class="ml-2" OnClick="@(() => AcceptAsync(suggestion))"
-                                     data-testid="jim-sql-reference-suggestion-accept">Add reference</AlertButton>
-                    }
-                    else
-                    {
-                        <text>@suggestion.ColumnName has a foreign key to @Qualified(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName), which no Object Type reads from yet.</text>
-                        <AlertButton Severity="Severity.Info" Class="ml-2" OnClick="@(() => OnAddObjectType.InvokeAsync(suggestion))">Add an Object Type for it</AlertButton>
-                    }
-                    <AlertButton Severity="Severity.Info" Secondary="true" OnClick="@(() => DismissAsync(suggestion))">Dismiss</AlertButton>
+                <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-suggestion mb-2" data-testid="jim-sql-reference-suggestion">
+                    <div class="jim-sql-suggestion-body">
+                        @if (suggestion.Kind == SqlObjectTypeSuggestionKind.Reference)
+                        {
+                            <span class="jim-sql-suggestion-text">
+                                <code class="jim-code-inline">@suggestion.ColumnName</code> has a foreign key to
+                                @suggestion.ReferencedObjectTypeName's anchor, so it looks like a reference to @suggestion.ReferencedObjectTypeName.
+                            </span>
+                            <span class="jim-sql-suggestion-actions">
+                                <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="@(() => AcceptAsync(suggestion))"
+                                             data-testid="jim-sql-reference-suggestion-accept">Add reference</AlertButton>
+                                <AlertButton Severity="Severity.Info" Secondary="true" Size="Size.Small" OnClick="@(() => DismissAsync(suggestion))">Dismiss</AlertButton>
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="jim-sql-suggestion-text">
+                                <code class="jim-code-inline">@suggestion.ColumnName</code> has a foreign key to
+                                <code class="jim-code-inline">@Qualified(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName)</code>, which no Object Type reads from yet.
+                            </span>
+                            <span class="jim-sql-suggestion-actions">
+                                <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="@(() => OnAddObjectType.InvokeAsync(suggestion))">Add an Object Type for it</AlertButton>
+                                <AlertButton Severity="Severity.Info" Secondary="true" Size="Size.Small" OnClick="@(() => DismissAsync(suggestion))">Dismiss</AlertButton>
+                            </span>
+                        }
+                    </div>
                 </MudAlert>
             }
             <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="AddColumnAsync">Add reference</MudButton>
@@ -174,7 +200,7 @@
                 {
                     <div class="d-flex align-center gap-2 mb-2" @key="relatedTable" data-testid="jim-sql-related-table-row">
                         <div class="flex-grow-1">
-                            <MudText><strong>@(relatedTable.AttributeName ?? "Unnamed")</strong> @DescribeRelatedTable(relatedTable)</MudText>
+                            <MudText>@DescribeRelatedTable(relatedTable)</MudText>
                         </div>
                         <MudTooltip Text="Edit this multi-valued attribute" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" aria-label="Edit this multi-valued attribute"
@@ -264,7 +290,7 @@
 
             @* ─── Footer ─── *@
             <div class="d-flex align-center flex-wrap gap-3 mt-6">
-                @if (OtherColumnCount is int otherColumns)
+                @if (OtherColumnCount is int otherColumns and > 0)
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-sql-other-columns">
                         <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Class="mr-1" Style="vertical-align: text-bottom;" />
@@ -623,15 +649,42 @@
 
     private static string Qualified(string? schema, string name) => string.IsNullOrWhiteSpace(schema) ? name : $"{schema}.{name}";
 
-    private static string DescribeRelatedTable(SqlRelatedTableDocument relatedTable)
+    /// <summary>Column names as inline code, comma separated.</summary>
+    private static RenderFragment ColumnList(IEnumerable<string?> columns) => __builder =>
     {
-        var description = $"from {Qualified(relatedTable.Schema, relatedTable.Table ?? "?")}.{relatedTable.ValueColumn ?? "?"}, joined on {string.Join(", ", (relatedTable.JoinColumns ?? []).OfType<string>())}";
-        if (!string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType))
-            description += $", referencing {relatedTable.ReferencesObjectType}";
-        if (!string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
-            description += $", watermark {relatedTable.WatermarkColumn}";
-        return description;
-    }
+        var first = true;
+        foreach (var column in columns.OfType<string>())
+        {
+            if (!first)
+            {
+                <text>, </text>
+            }
+            <code class="jim-code-inline">@column</code>
+            first = false;
+        }
+    };
+
+    /// <summary>
+    /// A multi-valued attribute in one line: the attribute, where its values come from, how they join to the
+    /// parent, and what they reference. Names of attributes, tables and columns are inline code.
+    /// </summary>
+    private static RenderFragment DescribeRelatedTable(SqlRelatedTableDocument relatedTable) => __builder =>
+    {
+        <code class="jim-code-inline">@(relatedTable.AttributeName ?? "unnamed")</code>
+        <text> from </text>
+        <code class="jim-code-inline">@($"{Qualified(relatedTable.Schema, relatedTable.Table ?? "?")}.{relatedTable.ValueColumn ?? "?"}")</code>
+        <text>, joined on </text>
+        @ColumnList(relatedTable.JoinColumns ?? [])
+        @if (!string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType))
+        {
+            <text>, referencing @relatedTable.ReferencesObjectType</text>
+        }
+        @if (!string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
+        {
+            <text>, watermark </text>
+            <code class="jim-code-inline">@relatedTable.WatermarkColumn</code>
+        }
+    };
 
     private static Color ChipColour(SqlObjectTypeSummaryChipKind kind) => kind switch
     {

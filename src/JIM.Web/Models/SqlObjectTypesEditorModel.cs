@@ -294,27 +294,42 @@ public sealed class SqlObjectTypesEditorModel
     /// The references other Object Types hold to this one, described for a confirmation before removing it.
     /// Its references to itself go with it, so they are not listed.
     /// </summary>
-    public IReadOnlyList<string> ReferencesTo(int index)
+    public IReadOnlyList<SqlObjectTypeReference> ReferencesTo(int index)
     {
         if (index < 0 || index >= ObjectTypes.Count || string.IsNullOrWhiteSpace(ObjectTypes[index].Name))
             return [];
 
         var target = ObjectTypes[index];
-        var references = new List<string>();
+        var references = new List<SqlObjectTypeReference>();
 
         foreach (var other in ObjectTypes.Where(o => !ReferenceEquals(o, target)))
         {
             references.AddRange((other.Columns ?? [])
                 .Where(c => string.Equals(c.ReferencesObjectType, target.Name, StringComparison.OrdinalIgnoreCase))
-                .Select(c => $"{other.Name}: column {c.Name}"));
+                .Select(c => new SqlObjectTypeReference(other.Name, c.Name, false)));
 
             references.AddRange((other.RelatedTables ?? [])
                 .Where(r => string.Equals(r.ReferencesObjectType, target.Name, StringComparison.OrdinalIgnoreCase))
-                .Select(r => $"{other.Name}: multi-valued attribute {r.AttributeName}"));
+                .Select(r => new SqlObjectTypeReference(other.Name, r.AttributeName, true)));
         }
 
         return references;
     }
+
+    /// <summary>
+    /// Whether an Object Type has nothing configured at all, as one just added does. Removing it loses nothing,
+    /// so the editor removes it without asking.
+    /// </summary>
+    public static bool IsBlank(SqlObjectTypeDocument objectType) =>
+        string.IsNullOrWhiteSpace(objectType.Name) &&
+        string.IsNullOrWhiteSpace(objectType.Schema) &&
+        string.IsNullOrWhiteSpace(objectType.Table) &&
+        string.IsNullOrWhiteSpace(objectType.Select) &&
+        string.IsNullOrWhiteSpace(objectType.WatermarkColumn) &&
+        (objectType.AnchorColumns ?? []).All(string.IsNullOrWhiteSpace) &&
+        (objectType.Columns ?? []).Count == 0 &&
+        (objectType.RelatedTables ?? []).Count == 0 &&
+        objectType.ChangeLog == null;
 
     /// <summary>
     /// Removes an Object Type and the references other Object Types held to it. A referencing column goes back to

@@ -79,6 +79,38 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
+    public void RemovingABlankObjectType_RemovesItWithoutAsking()
+    {
+        var cut = Render<SqlObjectTypesEditor>(p => p.Add(c => c.SettingValue, ObjectTypesSetting(PersonAndGroup)));
+        cut.Find("[data-testid=jim-sql-object-types-add]").Click();
+        Assert.That(cut.FindComponents<SqlObjectTypeCard>(), Has.Count.EqualTo(3));
+
+        cut.Find("[data-testid=jim-sql-object-type-remove]").Click();
+
+        Assert.That(cut.FindComponents<SqlObjectTypeCard>(), Has.Count.EqualTo(2), "a card with nothing on it loses nothing, so there is nothing to confirm");
+    }
+
+    [Test]
+    public void EveryColumnOnTheCard_SaysNothingAboutOtherColumns()
+    {
+        var catalogue = new FakeCatalogueSource();
+        catalogue.Tables["HR.EMPLOYEES"] = new ConnectorCatalogueObjectDetail
+        {
+            SchemaName = "HR",
+            Name = "EMPLOYEES",
+            Kind = ConnectorCatalogueObjectKind.Table,
+            Columns = [Column("EMPLOYEE_ID")],
+            PrimaryKey = ["EMPLOYEE_ID"]
+        };
+
+        var cut = Render<SqlObjectTypesEditor>(p => p
+            .Add(c => c.SettingValue, ObjectTypesSetting(PersonOnly))
+            .Add(c => c.Catalogue, catalogue));
+
+        Assert.That(cut.FindAll("[data-testid=jim-sql-other-columns]"), Is.Empty, "there are no other columns to tell the administrator about");
+    }
+
+    [Test]
     public void OpeningTheEditor_LeavesTheStoredDocumentAsItWasWritten()
     {
         var settingValue = ObjectTypesSetting(PersonAndGroup);

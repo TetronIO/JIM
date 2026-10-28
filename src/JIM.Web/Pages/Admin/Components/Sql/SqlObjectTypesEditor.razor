@@ -1,3 +1,4 @@
+@using System.Net
 @using JIM.Connectors.Sql
 @using JIM.Models.Staging
 @using JIM.Web.Models
@@ -285,19 +286,35 @@
         if (index < 0)
             return;
 
-        var name = string.IsNullOrWhiteSpace(objectType.Name) ? "this Object Type" : $"Object Type '{objectType.Name}'";
-        var references = _model.ReferencesTo(index);
-        var message = references.Count == 0
-            ? $"Remove {name}? Its objects stop being imported once the settings are saved."
-            : $"Remove {name}? These references to it are removed with it: {string.Join("; ", references)}.";
-
-        var confirmed = await DialogService.ShowMessageBoxAsync("Remove Object Type?", message, yesText: "Remove", cancelText: "Cancel");
-        if (confirmed != true)
-            return;
+        // A card with nothing on it loses nothing, so it goes without asking: typically one just added by mistake.
+        if (!SqlObjectTypesEditorModel.IsBlank(objectType))
+        {
+            var confirmed = await DialogService.ShowMessageBoxAsync("Remove Object Type?", RemovalMessage(objectType.Name, _model.ReferencesTo(index)),
+                yesText: "Remove", cancelText: "Cancel");
+            if (confirmed != true)
+                return;
+        }
 
         _model.RemoveObjectType(index);
         _expanded.Remove(objectType);
         await WriteBackAsync();
+    }
+
+    /// <summary>
+    /// What removing an Object Type takes with it, naming every reference to it so none is lost unseen. Names
+    /// are encoded: they are the administrator's own text, rendered as markup to show them as code.
+    /// </summary>
+    private static MarkupString RemovalMessage(string? name, IReadOnlyList<SqlObjectTypeReference> references)
+    {
+        static string Code(string? text) => $"<code class=\"jim-code-inline\">{WebUtility.HtmlEncode(text ?? "unnamed")}</code>";
+
+        var subject = string.IsNullOrWhiteSpace(name) ? "this Object Type" : $"Object Type <strong>{WebUtility.HtmlEncode(name)}</strong>";
+        if (references.Count == 0)
+            return new MarkupString($"Remove {subject}? Its objects stop being imported once the settings are saved.");
+
+        var items = string.Concat(references.Select(r =>
+            $"<li>{WebUtility.HtmlEncode(r.ObjectTypeName ?? "Unnamed Object Type")}: {(r.IsMultiValuedAttribute ? "multi-valued attribute" : "column")} {Code(r.Name)}</li>"));
+        return new MarkupString($"Remove {subject}? These references to it are removed with it:<ul class=\"mt-2 ml-5\">{items}</ul>");
     }
 
     /// <summary>

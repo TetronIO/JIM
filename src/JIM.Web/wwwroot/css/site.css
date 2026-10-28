@@ -1759,6 +1759,45 @@ a.jim-system-rule-chip-part:focus-visible {
     max-width: 420px;
 }
 
+/* A suggestion strip (a foreign key, a primary key): the sentence on the left, its actions together on the
+   right, all on one centre line. The site-wide alert rule anchors the icon to the first text line, which
+   suits a paragraph; this is a single row whose button is taller than the text, so icon, text and buttons
+   centre on the row instead. html[lang] because MudBlazor's own alert layout loads after this sheet. */
+html[lang] .jim-sql-suggestion .mud-alert-position {
+    align-items: center;
+}
+
+html[lang] .jim-sql-suggestion .mud-alert-icon {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+html[lang] .jim-sql-suggestion .mud-alert-message {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-block: 6px;
+}
+
+.jim-sql-suggestion-body {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+}
+
+.jim-sql-suggestion-text {
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.jim-sql-suggestion-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
 /* A Connector setting's example, beneath its field. Long examples scroll within the block rather than
    pushing the rest of the form a screen further down. */
 .jim-setting-example .jim-code-block {

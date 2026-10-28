@@ -377,14 +377,15 @@ public class SqlConnectorTests
     }
 
     [Test]
-    public void GetSettings_DeltaImportMode_CarriesItsExampleSeparatelyFromItsDescription()
+    public void GetSettings_DeltaImportMode_CarriesNoDocumentExample()
     {
         var setting = GetSetting(SqlConnectorConstants.SettingDeltaImportMode);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(setting.Example, Is.EqualTo(SqlConnectorConstants.DeltaConfigurationExample));
-            Assert.That(setting.Description, Does.Not.Contain(SqlConnectorConstants.DeltaConfigurationExample));
+            Assert.That(setting.Example, Is.Null,
+                "the setting is a choice of mode; what each mode needs is set on each Object Type, so a JSON document beneath a drop-down only confuses (#2570)");
+            Assert.That(setting.Description, Does.Not.Contain("{"));
         }
     }
 
