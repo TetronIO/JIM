@@ -4,6 +4,7 @@
 - **Created:** 2026-10-28
 - **Author:** Jay
 - **Issue:** #2570
+- **Plan:** [`SQL_OBJECT_TYPES_EDITOR.md`](../plans/SQL_OBJECT_TYPES_EDITOR.md)
 
 ## Problem Statement
 
