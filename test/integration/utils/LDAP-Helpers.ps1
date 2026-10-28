@@ -1164,11 +1164,12 @@ function Get-LDAPGroupList {
         return @()
     }
 
-    $groups = @()
+    # A List, not `$groups += ...`, which copies the whole array on every add and goes quadratic at scale.
+    $groups = [System.Collections.Generic.List[string]]::new()
     $lines = Expand-LDIFFoldedLine -RawLdif ($result -join "`n")
     foreach ($line in $lines) {
         if ($line -match "^cn:\s*(.+)$") {
-            $groups += $matches[1].Trim()
+            $groups.Add($matches[1].Trim())
         }
     }
 

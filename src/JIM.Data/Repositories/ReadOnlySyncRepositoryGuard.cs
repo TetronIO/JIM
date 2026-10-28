@@ -324,6 +324,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
         => _inner.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
 
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+        => _inner.GetReferenceAnchorsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+
     public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
         => _inner.GetAttributeAsync(id);
 
@@ -343,8 +346,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
         => _inner.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
 
-    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
-        => _inner.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
+    public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        => _inner.GetRemainingDeferredExportIdsAsync(connectedSystemId, afterCreatedAt, afterId);
+
+    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+        => _inner.GetDeferredExportsByIdsAsync(pendingExportIds);
 
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _inner.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
@@ -580,6 +586,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(UpdatePendingExportsAsync));
+
+    public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports, IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+        => throw new PreviewWriteAttemptedException(nameof(PersistResolvedReferencesAsync));
 
     public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportsByConnectedSystemObjectIdsAsync));

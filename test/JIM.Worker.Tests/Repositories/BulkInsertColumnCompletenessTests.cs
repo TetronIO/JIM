@@ -333,7 +333,8 @@ public class BulkInsertColumnCompletenessTests
         AssertUpdateListsCoverInsertList(
             "PendingExportAttributeValueChanges",
             PendingExportBulkColumns.PendingExportAttributeValueChanges,
-            [PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate, PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate],
+            [PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate, PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate,
+             PendingExportBulkColumns.PendingExportAttributeValueChangesReferenceResolutionUpdate],
             PendingExportBulkColumns.PendingExportAttributeValueChangesUpdateExclusions);
     }
 

@@ -233,7 +233,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                         break;
                     }
 
-                    await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
+                    using (Diagnostics.Sync.StartSpan("ProcessObsoleteCsoTeardown"))
+                        await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
                 }
 
                 // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been
@@ -250,7 +251,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                             break;
                         }
 
-                        await ProcessActiveConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+                        using (Diagnostics.Sync.StartSpan("ProcessActiveCso"))
+                            await ProcessActiveConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
 
                         _activity.ObjectsProcessed++;
                         processedInPage++;
@@ -267,7 +269,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // Reference attributes (e.g., group members) may point to CSOs that are processed later in the same page.
             // By deferring reference attributes, we ensure all MVOs exist before resolving references.
             // This enables a single sync run to fully reconcile all objects including references.
-            ProcessDeferredReferenceAttributes();
+            using (Diagnostics.Sync.StartSpan("ProcessDeferredReferenceAttributes"))
+                ProcessDeferredReferenceAttributes();
 
             // Disable AutoDetectChangesEnabled for the page flush sequence.
             // Without this, every SaveChangesAsync call below triggers DetectChanges() which
@@ -315,8 +318,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // with the fresh one about to be inserted for the same request; see FlushGeneratedValueAssignmentDeletionsAsync's
                 // doc comment. Both are no-ops for a run with no generated mappings, or a page with nothing to
                 // commit/delete.
-                await FlushGeneratedValueAssignmentDeletionsAsync();
-                await CommitGeneratedValueAssignmentsAsync();
+                using (Diagnostics.Sync.StartSpan("FlushGeneratedValueAssignmentDeletions"))
+                    await FlushGeneratedValueAssignmentDeletionsAsync();
+                using (Diagnostics.Sync.StartSpan("CommitGeneratedValueAssignments"))
+                    await CommitGeneratedValueAssignmentsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
@@ -335,19 +340,23 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // per-object processing (e.g. groups processed before their member users on this page).
                 // Must run after FlushPendingExportOperationsAsync (CSOs now in DB) and before
                 // FlushRpeisAsync (RPEIs with snapshots persisted).
-                await ResolvePendingExportReferenceSnapshotsAsync();
+                using (Diagnostics.Sync.StartSpan("ResolvePendingExportReferenceSnapshots"))
+                    await ResolvePendingExportReferenceSnapshotsAsync();
 
                 // batch delete obsolete CSOs
-                await FlushObsoleteCsoOperationsAsync();
+                using (Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations"))
+                    await FlushObsoleteCsoOperationsAsync();
 
                 // batch delete MVOs marked for immediate deletion (0-grace-period)
                 await FlushPendingMvoDeletionsAsync();
 
                 // Flush this page's RPEIs via bulk insert before updating progress
-                await FlushRpeisAsync();
+                using (Diagnostics.Sync.StartSpan("FlushRpeis"))
+                    await FlushRpeisAsync();
 
                 // Persist MVO change records via raw SQL before clearing the change tracker
-                await FlushPendingMvoChangesAsync();
+                using (Diagnostics.Sync.StartSpan("FlushPendingMvoChanges"))
+                    await FlushPendingMvoChangesAsync();
 
                 // Clear the change tracker (and the page identity map, #1612) unconditionally at every page
                 // boundary to prevent memory accumulation from tracked entities across pages. Without this,
@@ -402,7 +411,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             await ResolveCrossPageReferencesAsync(activeSyncRules);
 
             // Flush any RPEIs from cross-page resolution
-            await FlushRpeisAsync();
+            using (Diagnostics.Sync.StartSpan("FlushRpeis"))
+                await FlushRpeisAsync();
 
             // Emit the deduplicated reference-recall Pending Export RPEIs accumulated across all page
             // deletions (one per referencing group CSO, not one per page-flush that touched it).

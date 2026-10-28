@@ -228,6 +228,7 @@
         'Export-JIMCertificate',
         'Get-JIMIdentityProviderTrust',
         'Register-JIMIdentityProvider',
+        'Get-JIMSignInDiagnostic',
 
         # Security
         'Get-JIMRole',

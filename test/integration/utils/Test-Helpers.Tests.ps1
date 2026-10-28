@@ -1274,6 +1274,70 @@ Describe 'Assert-ActivitySuccess -AllowedWarningMessagePattern' {
     }
 }
 
+Describe 'Assert-ActivitySuccess with a Worker memory warning' {
+    # The Worker's memory guard warns on an Activity when the host is short of memory while it runs. That says
+    # nothing about whether the run was right, and at the Scale templates a host sits close enough to the line that
+    # a gigabyte of unrelated activity decides it, so the harness reports the warning rather than failing on it.
+    BeforeAll {
+        function Get-JIMActivity { param([string]$Id, [switch]$ExecutionItems) }
+        function Get-JIMActivityStats { param([string]$ActivityId) }
+
+        $script:memoryLine = 'Memory was low while this ran: 55 GB of 64 GB in use, 35 GB of it by the Worker. At 92% the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.'
+        $script:probeLine = "JIM couldn't probe Panoply AD for values already in use. Connecting to it failed: x. JIM chose 1 value using its own records only."
+    }
+
+    BeforeEach {
+        $script:activityWarning = $script:memoryLine
+        $script:objectErrors = 0
+        $script:warningsPath = Join-Path $TestDrive "memory-warnings-$([guid]::NewGuid().ToString('N')).log"
+        $env:JIM_MEMORY_WARNINGS_PATH = $script:warningsPath
+        Mock Get-JIMActivity -ParameterFilter { -not $ExecutionItems } {
+            [PSCustomObject]@{ id = $Id; status = 'CompleteWithWarning'; warningMessage = $script:activityWarning; errorMessage = $null; message = $null }
+        }
+        Mock Get-JIMActivity -ParameterFilter { $ExecutionItems } { @() }
+        Mock Get-JIMActivityStats { [PSCustomObject]@{ totalObjectErrors = $script:objectErrors } }
+        Mock Write-Host {}
+    }
+
+    AfterEach {
+        Remove-Item Env:JIM_MEMORY_WARNINGS_PATH -ErrorAction SilentlyContinue
+    }
+
+    It 'passes when the memory warning is the only warning and no object failed, and records it for the summary' {
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'Target Export' } | Should -Not -Throw
+
+        $recorded = Get-Content -Path $script:warningsPath -Raw
+        $recorded | Should -Match 'Target Export'
+        $recorded | Should -Match '55 GB of 64 GB'
+    }
+
+    It 'still throws when another warning sits beside the memory warning' {
+        $script:activityWarning = "$($script:memoryLine)`n`nSomething else went wrong."
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'Target Export' } | Should -Throw '*did not complete successfully*'
+    }
+
+    It 'still throws when an object failed beside the memory warning' {
+        $script:objectErrors = 3
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'Target Export' } | Should -Throw '*did not complete successfully*'
+    }
+
+    It 'checks only the remaining lines against an allowed warning pattern' {
+        $script:activityWarning = "$($script:probeLine)`n`n$($script:memoryLine)"
+        $pattern = Get-UniquenessProbeWarningPattern -ConnectedSystemName 'Panoply AD'
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' -AllowedWarningMessagePattern $pattern } | Should -Not -Throw
+    }
+
+    It 'passes without a summary file when the runner has not asked for one' {
+        Remove-Item Env:JIM_MEMORY_WARNINGS_PATH
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'Target Export' } | Should -Not -Throw
+        Test-Path $script:warningsPath | Should -BeFalse
+    }
+}
+
 Describe 'Expected error declarations' {
     # A scenario step that provokes an Error line on purpose (a target refusing a value, an export JIM parks for a
     # decision) declares it, by pattern, for the duration of the step; the live error watcher and the end-of-run log

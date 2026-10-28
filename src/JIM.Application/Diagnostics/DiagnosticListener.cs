@@ -19,6 +19,23 @@ public sealed class DiagnosticListener : IDisposable
     private readonly double _slowOperationThresholdMs;
 
     /// <summary>
+    /// The custom property each span's <see cref="SpanBreakdown"/> is kept under, unique to this listener so that two
+    /// listeners on the same spans (the Worker's and a test's) never count a descendant twice.
+    /// </summary>
+    private readonly string _breakdownPropertyName = $"JIM.SpanBreakdown.{Guid.NewGuid():N}";
+
+    /// <summary>
+    /// How many levels above a span its duration is totalled into. Deep enough to reach from a per-object step to its
+    /// page (FullSync &gt; ProcessCsoLoop &gt; AttemptJoin and the like), shallow enough to keep the cost per span small.
+    /// </summary>
+    private const int BreakdownDepth = 4;
+
+    /// <summary>
+    /// How many paths a breakdown line lists before summarising the rest as a count.
+    /// </summary>
+    private const int BreakdownMaxEntries = 15;
+
+    /// <summary>
     /// Creates a new diagnostic listener that logs span completions to Serilog.
     /// </summary>
     /// <param name="sourcePrefix">Only listen to sources starting with this prefix (e.g., "JIM.").</param>
@@ -66,6 +83,8 @@ public sealed class DiagnosticListener : IDisposable
     {
         var durationMs = activity.Duration.TotalMilliseconds;
         var isSlowOperation = durationMs >= _slowOperationThresholdMs;
+
+        RecordInAncestorBreakdowns(activity, durationMs);
 
         // Build tags list including parent ID for accurate tree reconstruction.
         // IMPORTANT: use TagObjects, not Tags. Activity.Tags only yields KeyValuePair<string, string?>
@@ -137,6 +156,18 @@ public sealed class DiagnosticListener : IDisposable
             durationMs,
             tagsSuffix);
 
+        // A slow span also says where its time went, totalled over descendants too quick to be logged one by one
+        // (#2492). Its own line, without "completed in", so parsers that read span timings skip it.
+        if (isSlowOperation && activity.GetCustomProperty(_breakdownPropertyName) is SpanBreakdown breakdown)
+        {
+            Log.Write(
+                logLevel,
+                "DiagnosticListener: {HierarchyPrefix:l}{SpanName:l} breakdown: {Breakdown:l}",
+                hierarchyPrefix,
+                activity.DisplayName,
+                breakdown.Describe(durationMs, BreakdownMaxEntries));
+        }
+
         // Log errors specially
         if (activity.Status == ActivityStatusCode.Error)
         {
@@ -145,6 +176,37 @@ public sealed class DiagnosticListener : IDisposable
                 "DiagnosticListener: {SpanName} failed: {ErrorMessage}",
                 activity.DisplayName,
                 errorMessage);
+        }
+    }
+
+    /// <summary>
+    /// Adds a completed span to the breakdown of each of its nearest ancestors, under its path below that ancestor.
+    /// </summary>
+    private void RecordInAncestorBreakdowns(Activity activity, double durationMs)
+    {
+        var path = activity.DisplayName;
+        var ancestor = activity.Parent;
+
+        for (var level = 0; level < BreakdownDepth && ancestor != null; level++)
+        {
+            GetOrCreateBreakdown(ancestor).Record(path, durationMs);
+            path = $"{ancestor.DisplayName}/{path}";
+            ancestor = ancestor.Parent;
+        }
+    }
+
+    private SpanBreakdown GetOrCreateBreakdown(Activity activity)
+    {
+        // Children of one span can complete on several threads (parallel export batches), so creation is serialised
+        // on the span itself; the breakdown synchronises its own recording.
+        lock (activity)
+        {
+            if (activity.GetCustomProperty(_breakdownPropertyName) is SpanBreakdown existing)
+                return existing;
+
+            var created = new SpanBreakdown();
+            activity.SetCustomProperty(_breakdownPropertyName, created);
+            return created;
         }
     }
 

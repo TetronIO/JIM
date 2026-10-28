@@ -338,12 +338,19 @@ try
             // intercept the user login when a token is received and validate we can map them to a JIM user
             options.Events.OnTicketReceived = async ctx =>
             {
-                var user = await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
+                var (user, problem) = await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext, SignInProblemSource.Portal);
                 if (user != null)
                 {
                     // One security audit Activity per session establishment (not per request), attributed to the
                     // signed-in user. Non-blocking: a failed audit write must never fail the sign-in it instruments.
                     RecordSuccessfulSignInEvent(ctx.HttpContext, user);
+                }
+                else if (problem != null)
+                {
+                    // JIM cannot tell who signed in (#2443): rather than a session with no access, show the page naming
+                    // the setting involved.
+                    ctx.Response.Redirect(SignInProblemDiagnosis.PagePathFor(problem));
+                    ctx.HandleResponse();
                 }
             };
 
@@ -352,6 +359,12 @@ try
             options.Events.OnRemoteFailure = ctx =>
             {
                 RecordFailedSignInEvent(ctx.HttpContext, CategoriseOidcFailure(ctx.Failure));
+
+                // A failure a setting explains (an ID token for another client, a client secret the identity provider
+                // refuses, ...) shows the page naming the setting, the value JIM expected and the value it received
+                // (#2443), instead of the error page.
+                if (SignInProblemDiagnosis.TryHandleRemoteFailure(ctx))
+                    return Task.CompletedTask;
 
                 // Failures a fresh attempt recovers completely (a replayed callback whose single-use code is
                 // already spent, a lost correlation cookie) restart the sign-in instead of surfacing an
@@ -402,7 +415,7 @@ try
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
             JimJwtBearerOptions.Configure(options, authority, apiAudience, validIssuers, async ctx =>
             {
-                await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
+                await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext, SignInProblemSource.Api);
             }));
 
     // Both handlers reach the identity provider through one back-channel, which also accepts a chain the JIM certificate
@@ -422,6 +435,10 @@ try
     // never accepts requests.
     builder.Services.AddApiRateLimiting();
     } // end of !isOpenApiGenerateMode auth block
+
+    // The sign-in problems JIM has met (#2443), for the log, the page explaining a failed portal sign-in, and
+    // Get-JIMSignInDiagnostic. Outside the authentication block, since the page is registered in every mode.
+    builder.Services.AddSingleton(new SignInProblemLog(TimeProvider.System));
 
     // Add services to the container.
     builder.Services.AddRazorPages();
@@ -982,20 +999,23 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
 /// </summary>
 /// <returns>The resolved MetaverseObject, or null if no JIM identity could be established. The cookie flow
 /// (<c>OnTicketReceived</c>) uses a non-null result to record an interactive sign-in success security audit event;
-/// the bearer-token flow (<c>OnTokenValidated</c>) discards it, since bearer calls are per-request, not per-session.</returns>
-static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, HttpContext httpContext)
+/// the bearer-token flow (<c>OnTokenValidated</c>) discards it, since bearer calls are per-request, not per-session.
+/// With no user, the sign-in problem a setting explains, when there is one (#2443): the sign-in carried no claim of the
+/// type JIM identifies people by. Someone JIM simply does not know is not a problem.</returns>
+static async Task<(MetaverseObject? User, SignInProblem? Problem)> ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, HttpContext httpContext,
+    SignInProblemSource source)
 {
     if (principal?.Identity == null)
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: Request has no principal or identity.");
-        return null;
+        return (null, null);
     }
 
     var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
     if (factory == null)
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: Could not resolve IJimApplicationFactory.");
-        return null;
+        return (null, null);
     }
 
     using var jim = factory.Create();
@@ -1005,15 +1025,15 @@ static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrinc
     if (string.IsNullOrEmpty(serviceSettings.SSOUniqueIdentifierClaimType))
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: ServiceSettings.SSOUniqueIdentifierClaimType is not configured.");
-        return null;
+        return (null, null);
     }
 
     var uniqueId = principal.FindFirstValue(serviceSettings.SSOUniqueIdentifierClaimType);
     if (string.IsNullOrEmpty(uniqueId))
     {
-        Log.Warning("ResolveAndAttachJimIdentityAsync: User '{Name}' has no '{ClaimType}' claim; cannot identify them.",
-            LogSanitiser.Sanitise(principal.Identity.Name), serviceSettings.SSOUniqueIdentifierClaimType);
-        return null;
+        // Recorded and logged, naming the claim types the sign-in did carry, never their values.
+        var report = SignInProblemDiagnosis.MissingClaim(source, serviceSettings.SSOUniqueIdentifierClaimType, principal.Claims);
+        return (null, httpContext.RequestServices.GetRequiredService<SignInProblemLog>().Record(report));
     }
 
     // Hand a provider-agnostic identity to the application layer to resolve or provision.
@@ -1033,7 +1053,7 @@ static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrinc
         // Not a known user and not the initial admin: no roles are added, so they cannot access JIM.
         Log.Debug("ResolveAndAttachJimIdentityAsync: No JIM identity for '{ClaimType}'='{UniqueId}'.",
             serviceSettings.SSOUniqueIdentifierClaimType, LogSanitiser.Sanitise(uniqueId));
-        return null;
+        return (null, null);
     }
 
     // Build a JIM-specific identity carrying the user's role claims and MetaverseObject id, and add it
@@ -1049,7 +1069,7 @@ static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrinc
     var jimIdentity = new ClaimsIdentity(roleClaims, authenticationType: null, nameType: null, roleType: Constants.BuiltInRoles.RoleClaimType) { Label = "JIM" };
     principal.AddIdentity(jimIdentity);
 
-    return user;
+    return (user, null);
 }
 
 /// <summary>
