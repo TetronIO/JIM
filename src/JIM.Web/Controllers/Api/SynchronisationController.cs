@@ -3155,7 +3155,7 @@ public class SynchronisationController(
     /// <returns>The outcome, including the certificate as it now sits in the store.</returns>
     /// <response code="201">The certificate was added to the JIM certificate store.</response>
     /// <response code="200">The certificate was already in the store, so there was nothing to do.</response>
-    /// <response code="400">No thumbprint was supplied, the Connected System is not configured to make an encrypted connection, a certificate authority in the server's chain cannot be relied on (outcome <c>InvalidChain</c>), or the connection does not use the JIM certificate store, as Oracle Database over TCPS does not (outcome <c>NotUsedByThisConnection</c>).</response>
+    /// <response code="400">No thumbprint was supplied, the Connected System is not configured to make an encrypted connection, a certificate authority in the server's chain cannot be relied on (outcome <c>InvalidChain</c>), or the connection accepts only the root of the chain, as Oracle Database over TCPS does, and something else was chosen (outcome <c>RootRequired</c>).</response>
     /// <response code="404">No Connected System with that identifier exists.</response>
     /// <response code="409">The server is presenting a different certificate from the one named, so nothing was trusted.</response>
     /// <response code="502">The server could not be reached to read its certificate again, so nothing was trusted.</response>

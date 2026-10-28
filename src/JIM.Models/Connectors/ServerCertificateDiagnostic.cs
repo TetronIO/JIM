@@ -102,11 +102,11 @@ public class ServerCertificateDiagnostic
     public string? Remediation { get; set; }
 
     /// <summary>
-    /// Whether the connection uses a certificate added to the JIM certificate store. False where the driver takes no
-    /// trust anchor from JIM (Oracle Database over TCPS), so the certificate has to be one the operating system already
-    /// trusts, and trusting it in JIM is not offered: it would report success and change nothing.
+    /// Whether only the root of the chain can be trusted to make this connection work. False for most connections,
+    /// which accept any certificate in the chain. True for Oracle Database over TCPS, whose driver accepts the chain only
+    /// when it ends at a root certificate authority trusted in JIM, so only the root is offered.
     /// </summary>
-    public bool AcceptsJimTrustedCertificates { get; set; } = true;
+    public bool TrustAnchorMustBeRoot { get; set; }
 
     public bool IsExpired => ValidTo.HasValue && ValidTo.Value < DateTime.UtcNow;
 

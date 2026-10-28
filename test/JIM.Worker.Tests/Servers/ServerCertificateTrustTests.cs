@@ -320,20 +320,39 @@ public class ServerCertificateTrustTests
         }
     }
 
-    [Test]
-    public async Task TrustServerCertificateAsync_WhenTheConnectionCannotUseTheJimStore_TrustsNothingAsync()
+    [TestCase("intermediate")]
+    [TestCase("server")]
+    public async Task TrustServerCertificateAsync_WhenTheConnectionNeedsARootAndSomethingElseIsChosen_TrustsNothingAsync(string chosenTier)
     {
-        // Oracle Database over TCPS: storing the certificate would report "trusted" and the next connection would be
-        // refused exactly as before, so the trust is refused instead, saying what does work.
-        GivenTheConnectedSystemIs(StubConnector.StoreIgnoringConnectorName);
+        // Oracle Database over TCPS: its driver accepts the chain only when it ends at a root trusted in JIM, so storing
+        // an intermediate or the server's own certificate would report "trusted" and the next connection would be refused
+        // exactly as before. The trust is refused instead, naming the root that does work.
+        GivenTheConnectedSystemIs(StubConnector.RootOnlyConnectorName);
+        var (_, intermediate, leaf) = GivenTheServerPresentsAThreeTierChain(ServerCertificateChainElementSource.SentByServer);
 
-        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _issuer.Thumbprint, _testUser);
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId,
+            chosenTier == "server" ? leaf.Thumbprint : intermediate.Thumbprint, _testUser);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.NotUsedByThisConnection));
-            Assert.That(result.Message, Does.Contain("operating system"));
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.RootRequired));
+            Assert.That(result.Message, Does.Contain("Corp Root CA"));
             _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task TrustServerCertificateAsync_WhenTheConnectionNeedsARootAndTheRootIsChosen_TrustsItAsync()
+    {
+        GivenTheConnectedSystemIs(StubConnector.RootOnlyConnectorName);
+        var (root, _, _) = GivenTheServerPresentsAThreeTierChain(ServerCertificateChainElementSource.SentByServer);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, root.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
+            Assert.That(result.Certificate!.Thumbprint, Is.EqualTo(root.Thumbprint));
         }
     }
 
@@ -636,20 +655,20 @@ public class ServerCertificateTrustTests
             return connectorName switch
             {
                 StubConnector.PlainConnectorName => new StubPlainConnector(),
-                StubConnector.StoreIgnoringConnectorName => new StubConnector(acceptsJimTrustedCertificates: false),
+                StubConnector.RootOnlyConnectorName => new StubConnector(trustAnchorMustBeRoot: true),
                 _ => new StubConnector()
             };
         }
     }
 
-    private class StubConnector(bool acceptsJimTrustedCertificates = true) : IConnector, IConnectorSecureEndpoint
+    private class StubConnector(bool trustAnchorMustBeRoot = false) : IConnector, IConnectorSecureEndpoint
     {
         public const string SecureConnectorName = "Stub Secure Connector";
         public const string PlainConnectorName = "Stub Plain Connector";
-        public const string StoreIgnoringConnectorName = "Stub Store-Ignoring Connector";
+        public const string RootOnlyConnectorName = "Stub Root-Only Connector";
         public const string SettingBaseUrl = "Base URL";
 
-        public string Name => acceptsJimTrustedCertificates ? SecureConnectorName : StoreIgnoringConnectorName;
+        public string Name => trustAnchorMustBeRoot ? RootOnlyConnectorName : SecureConnectorName;
 
         public string? Description => null;
 
@@ -662,7 +681,7 @@ public class ServerCertificateTrustTests
                 return null;
 
             return new SecureEndpoint(uri.Host, uri.IsDefaultPort ? 443 : uri.Port, TimeSpan.FromSeconds(10), "test server", "HTTPS",
-                AcceptsJimTrustedCertificates: acceptsJimTrustedCertificates);
+                TrustAnchorMustBeRoot: trustAnchorMustBeRoot);
         }
     }
 

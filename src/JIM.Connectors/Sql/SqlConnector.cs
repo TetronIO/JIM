@@ -74,7 +74,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     /// one connection's: a Connector opens several over its life (a settings test, a schema discovery, a
     /// run), and each of them needs the file again.
     /// </summary>
-    private SqlTrustedServerCertificateFile? _trustedServerCertificateFile;
+    private SqlTrustedServerCertificates? _trustedServerCertificates;
 
     /// <summary>
     /// How a provider is obtained for a database type. Tests substitute the dialect seam here so that
@@ -248,7 +248,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             {
                 Name = SqlConnectorConstants.SettingOracleEncryption,
                 DefaultStringValue = SqlConnectorConstants.DefaultOracleEncryption,
-                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate the operating system already trusts: the Oracle driver accepts no additional trust anchors, so a certificate added in Admin > Certificates does not help here.",
+                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate. One from your own certificate authority works once the root of its chain is trusted in Admin > Certificates: the Oracle driver accepts only the root, not an intermediate or the server's own certificate.",
                 Category = ConnectedSystemSettingCategory.Connectivity,
                 Type = ConnectedSystemSettingType.DropDown,
                 DropDownValues =
@@ -767,7 +767,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         var timeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds;
 
         return new SecureEndpoint(host, port, TimeSpan.FromSeconds(timeoutSeconds), "database server", provider.SecureTransportName, provider.SecureHandshakeFraming,
-            AcceptsJimTrustedCertificates: provider.SupportsPinnedServerCertificate);
+            TrustAnchorMustBeRoot: provider.TrustAnchorMustBeRoot);
     }
     #endregion
 
@@ -842,7 +842,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             // A driver reports a refused certificate as an ordinary connection failure, so before
             // reporting one, go and look at what the server actually presented. No further check that
             // TLS is in use is needed here: ResolveSecureEndpoint returns nothing unless it is.
-            byte[]? vouchedForCertificate = null;
+            List<byte[]>? toHandOver = null;
 
             var rejection = ServerCertificateDiagnosis.Describe(this, settingValues, _certificateProvider, ex, logger,
                 (endpoint, trustedCertificates) =>
@@ -854,7 +854,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                     // bundle, and the driver only knows about the latter.
                     if (reading is { Diagnostic.FailureReason: ServerCertificateFailureReason.None, Chain: { } chain } &&
                         IsVouchedForByJimCertificateStore(chain, trustedCertificates))
-                        vouchedForCertificate = chain.Leaf.Data;
+                        toHandOver = WhatToHandTheDriver(provider, chain, trustedCertificates);
 
                     return reading?.Diagnostic;
                 });
@@ -862,39 +862,62 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             if (rejection != null)
                 throw rejection;
 
-            // Nothing to add to what the driver already decided: no certificate JIM vouches for, no way
-            // to tell this driver about one, or this attempt was already the retry.
-            if (vouchedForCertificate == null || !provider.SupportsPinnedServerCertificate || connectionSettings.PinnedServerCertificatePath != null)
+            // Nothing to add to what the driver already decided: nothing JIM can vouch for in a form this
+            // driver accepts, or this attempt was already the retry.
+            if (toHandOver == null || connectionSettings.PinnedTrustPath != null)
                 throw;
 
             // A failure to prepare the file is reported as the connection failure it accompanies, rather
             // than replacing the driver's account of what went wrong with a filesystem one.
-            if (!TryPrepareTrustedServerCertificateFile(vouchedForCertificate, logger))
+            if (!TryPrepareTrustedServerCertificates(provider, toHandOver, logger))
                 throw;
 
-            logger.Information("The {Transport} connection to {Host} was refused by the driver, but the server's certificate is one the JIM certificate store vouches for, so it is being supplied to the driver as an additional trust anchor",
+            logger.Information("The {Transport} connection to {Host} was refused by the driver, but the server's certificate chain is one the JIM certificate store vouches for, so it is being supplied to the driver as an additional trust anchor",
                 provider.SecureTransportName, LogSanitiser.Sanitise(connectionSettings.Host));
 
-            return Open(provider, connectionSettings with { PinnedServerCertificatePath = _trustedServerCertificateFile!.FilePath });
+            return Open(provider, connectionSettings with { PinnedTrustPath = _trustedServerCertificates!.Path });
         }
     }
 
     /// <summary>
-    /// Materialises the certificate for the driver, which will only take a trust anchor as a path.
+    /// The certificates to hand the driver for a chain the JIM certificate store vouches for, or null where this
+    /// driver could not be satisfied by anything the store holds.
     /// </summary>
-    /// <returns>Whether the file is ready to be handed to a connection.</returns>
-    private bool TryPrepareTrustedServerCertificateFile(byte[] derEncodedCertificate, ILogger logger)
+    /// <remarks>
+    /// A driver that matches exactly gets the server's own certificate, whichever certificate in the chain the store
+    /// vouches through. One that accepts only a root (Oracle Database) builds the chain from what it is handed, ignoring
+    /// what the server sends, so it gets the trusted root and every intermediate beneath it, and nothing at all unless
+    /// the root itself is trusted: an intermediate alone would be refused again.
+    /// </remarks>
+    private static List<byte[]>? WhatToHandTheDriver(ISqlProvider provider, PresentedServerCertificateChain chain, IReadOnlyCollection<X509Certificate2> trustedCertificates)
+    {
+        if (!provider.TrustAnchorMustBeRoot)
+            return [chain.Leaf.Data];
+
+        if (chain.Root == null || !trustedCertificates.Any(c => string.Equals(c.Thumbprint, chain.Root.Thumbprint, StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        return [chain.Root.Data, .. chain.Intermediates.Select(intermediate => intermediate.Data)];
+    }
+
+    /// <summary>
+    /// Materialises the certificates for the driver, which will only take a trust anchor as a path.
+    /// </summary>
+    /// <returns>Whether they are ready to be handed to a connection.</returns>
+    private bool TryPrepareTrustedServerCertificates(ISqlProvider provider, List<byte[]> derEncodedCertificates, ILogger logger)
     {
         try
         {
-            _trustedServerCertificateFile?.Dispose();
-            _trustedServerCertificateFile = SqlTrustedServerCertificateFile.Create(derEncodedCertificate, logger);
+            _trustedServerCertificates?.Dispose();
+            _trustedServerCertificates = provider.TrustAnchorMustBeRoot
+                ? SqlTrustedServerCertificates.CreateWallet(derEncodedCertificates, logger)
+                : SqlTrustedServerCertificates.CreateFile(derEncodedCertificates[0], logger);
             return true;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException or NotSupportedException or System.Security.SecurityException or CryptographicException)
         {
-            _trustedServerCertificateFile = null;
-            logger.Warning(ex, "Could not prepare the server certificate from the JIM certificate store for this connection. The connection will use the operating system trust anchors only");
+            _trustedServerCertificates = null;
+            logger.Warning(ex, "Could not prepare the certificates from the JIM certificate store for this connection. The connection will use the operating system trust anchors only");
             return false;
         }
     }
@@ -909,7 +932,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     internal virtual ServerCertificateReading? ReadServerCertificate(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates, ILogger logger)
     {
         return ServerCertificateProbe.Read(endpoint.Host, endpoint.Port, trustedCertificates, endpoint.Timeout,
-            logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming, endpoint.AcceptsJimTrustedCertificates);
+            logger, endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming, endpoint.TrustAnchorMustBeRoot);
     }
 
     /// <summary>
@@ -1293,8 +1316,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             _probeConnection = null;
             _uniquenessProbe = null;
 
-            _trustedServerCertificateFile?.Dispose();
-            _trustedServerCertificateFile = null;
+            _trustedServerCertificates?.Dispose();
+            _trustedServerCertificates = null;
         }
 
         _disposed = true;

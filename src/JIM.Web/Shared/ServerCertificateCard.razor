@@ -133,6 +133,16 @@
                                     will need trusting again when it is renewed.
                                 </text>
                             }
+                            else if (Diagnostic.TrustAnchorMustBeRoot)
+                            {
+                                <text>
+                                    This connection accepts only the root of the chain, so that is what JIM offers.
+                                    Trusting it keeps working through renewals of everything beneath it. JIM reads the
+                                    chain from the server again first, adds the root to
+                                    <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>, and records who
+                                    trusted it and why.
+                                </text>
+                            }
                             else if (HasAChoice)
                             {
                                 <text>
@@ -208,15 +218,15 @@
     private bool _trusting;
 
     /// <summary>
-    /// Offered only where trusting the certificate is what fixes the failure, and only where the caller supplied the
-    /// context needed to act on it. A connection that takes nothing from the JIM certificate store is never fixed by
-    /// trusting, so it is never offered there.
+    /// Offered only where trusting the certificate is what fixes the failure, there is something in the chain that
+    /// would fix it, and the caller supplied the context needed to act on it. A connection that accepts only a root
+    /// offers nothing where JIM could not find the root: its remediation says where to get it.
     /// </summary>
     private bool ShowTrustAction =>
         ConnectedSystemId.HasValue &&
         Diagnostic?.FailureReason == ServerCertificateFailureReason.UntrustedIssuer &&
-        Diagnostic.AcceptsJimTrustedCertificates &&
-        !string.IsNullOrEmpty(Diagnostic.Thumbprint);
+        !string.IsNullOrEmpty(Diagnostic.Thumbprint) &&
+        ChainFromTheTop.Count > 0;
 
     /// <summary>
     /// The certificates in the chain, the root first, as the trust dialog will offer them.

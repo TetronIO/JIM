@@ -497,25 +497,26 @@ public class SqlConnectorTests
     }
 
     [Test]
-    public void ResolveSecureEndpoint_OracleTcps_SaysTheJimCertificateStoreDoesNotApply()
+    public void ResolveSecureEndpoint_OracleTcps_SaysOnlyARootCanBeTrusted()
     {
-        // The Oracle driver takes no trust anchor from JIM, so a certificate trusted in JIM changes nothing about
-        // a TCPS connection; the endpoint says so, and every place that offers trust honours it.
+        // The Oracle driver accepts a wallet's chain only when it ends at a root trusted there, so trusting an
+        // intermediate or the server's own certificate would change nothing; the endpoint says so, and every place
+        // that offers trust honours it.
         var settingValues = CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps);
 
         var endpoint = _connector.ResolveSecureEndpoint(settingValues);
 
-        Assert.That(endpoint!.AcceptsJimTrustedCertificates, Is.False);
+        Assert.That(endpoint!.TrustAnchorMustBeRoot, Is.True);
     }
 
     [Test]
-    public void ResolveSecureEndpoint_SqlServerEncrypted_SaysTheJimCertificateStoreApplies()
+    public void ResolveSecureEndpoint_SqlServerEncrypted_AcceptsAnyCertificateInTheChain()
     {
         var settingValues = CreateSqlServerSettingValues(encrypt: true);
 
         var endpoint = _connector.ResolveSecureEndpoint(settingValues);
 
-        Assert.That(endpoint!.AcceptsJimTrustedCertificates, Is.True);
+        Assert.That(endpoint!.TrustAnchorMustBeRoot, Is.False);
     }
 
     [Test]
@@ -706,7 +707,7 @@ public class SqlConnectorTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.BuiltConnectionSettings[0].Encryption, Is.EqualTo(SqlConnectionEncryption.None));
-            Assert.That(provider.BuiltConnectionSettings[0].PinnedServerCertificatePath, Is.Null);
+            Assert.That(provider.BuiltConnectionSettings[0].PinnedTrustPath, Is.Null);
         }
     }
 

@@ -573,6 +573,38 @@ public class OracleProviderTests
     }
 
     [Test]
+    public void ConfigureConnection_TcpsWithTrustHandedOver_PointsTheWalletLocationAtIt()
+    {
+        // The retry after a refusal: JIM wrote the root it trusts and the intermediates beneath it as a wallet, and
+        // ODP.NET reads it from the folder this connection's WalletLocation names (#2581).
+        var settings = new SqlConnectionSettings
+        {
+            Host = "oracle.example.local",
+            ServiceName = "HRPDB",
+            Encryption = SqlConnectionEncryption.Tls,
+            PinnedTrustPath = "/tmp/jim-sql-trust-wallet"
+        };
+        using var connection = (OracleConnection)_provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        _provider.ConfigureConnection(connection, settings);
+
+        Assert.That(connection.WalletLocation, Is.EqualTo("/tmp/jim-sql-trust-wallet"));
+    }
+
+    [Test]
+    public void ConfigureConnection_TcpsOnTheFirstAttempt_SetsNoWallet()
+    {
+        // The operating system's trust anchors always get the first say: no wallet until a refusal and a chain the JIM
+        // certificate store vouches for.
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.Tls };
+        using var connection = (OracleConnection)_provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        _provider.ConfigureConnection(connection, settings);
+
+        Assert.That(connection.WalletLocation, Is.Null.Or.Empty);
+    }
+
+    [Test]
     public void ConfigureConnection_NoEncryption_LeavesTheNativeNetworkEncryptionSettingsUntouched()
     {
         // Unset means the driver's own default, which accepts encryption a server insists on rather than

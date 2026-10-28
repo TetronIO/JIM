@@ -89,31 +89,54 @@ public class ServerCertificateProbeChainTests
     }
 
     [Test]
-    public void Read_ByDefault_SaysTheJimStoreAppliesToTheConnection()
+    public void Read_ByDefault_AcceptsAnyCertificateInTheChainAsTheAnchor()
     {
         using var server = new TlsServer(_leaf, _intermediate);
 
         var reading = Read(server, trusted: [TestPki.PublicOnly(_root)]);
 
-        Assert.That(reading.Diagnostic.AcceptsJimTrustedCertificates, Is.True);
+        Assert.That(reading.Diagnostic.TrustAnchorMustBeRoot, Is.False);
     }
 
     [Test]
-    public void Read_RootInTheJimStoreButTheConnectionCannotUseIt_ReportsAnUntrustedIssuerTheStoreCannotFix()
+    public void Read_RootRequiredButOnlyTheIntermediateIsInTheStore_ReportsAnUntrustedIssuerNamingTheRoot()
     {
-        // Oracle Database over TCPS: its driver takes no trust anchor from JIM, so a root in the JIM store changes
-        // nothing about the connection. Reporting it trusted would tell the administrator a refused connection is fine.
-        using var server = new TlsServer(_leaf, _intermediate);
+        // Oracle Database over TCPS: its driver builds the chain from its wallet and accepts it only when it ends at a
+        // self-signed certificate there, so an intermediate in the JIM store cannot make the connection work.
+        // Reporting the chain trusted would tell the administrator a refused connection is fine.
+        using var server = new TlsServer(_leaf, _intermediate, _root);
 
-        var reading = Read(server, trusted: [TestPki.PublicOnly(_root)], acceptsJimTrustedCertificates: false);
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_intermediate)], trustAnchorMustBeRoot: true);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.UntrustedIssuer));
-            Assert.That(reading.Diagnostic.AcceptsJimTrustedCertificates, Is.False);
-            Assert.That(reading.Diagnostic.Remediation, Does.Not.Contain("Admin > Certificates"));
-            Assert.That(reading.Diagnostic.Remediation, Does.Contain("operating system"));
+            Assert.That(reading.Diagnostic.TrustAnchorMustBeRoot, Is.True);
+            Assert.That(reading.Diagnostic.Remediation, Does.Contain("Corp Root CA"));
+            Assert.That(reading.Diagnostic.Remediation, Does.Contain("only the root"));
         }
+    }
+
+    [Test]
+    public void Read_RootRequiredAndTheRootIsInTheStore_FindsNothingWrong()
+    {
+        using var server = new TlsServer(_leaf, _intermediate);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_root)], trustAnchorMustBeRoot: true);
+
+        Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.None));
+    }
+
+    [Test]
+    public void Read_RootRequiredAndTheIntermediateLinkingItIsStoredAlongside_FindsNothingWrong()
+    {
+        // JIM stores the intermediates it downloaded beside a trusted root, because the server does not send them. They
+        // still link the chain; they just do not count as its anchor.
+        using var server = new TlsServer(_leaf);
+
+        var reading = Read(server, trusted: [TestPki.PublicOnly(_root), TestPki.PublicOnly(_intermediate)], trustAnchorMustBeRoot: true);
+
+        Assert.That(reading.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.None));
     }
 
     [Test]
@@ -217,10 +240,10 @@ public class ServerCertificateProbeChainTests
         }
     }
 
-    private ServerCertificateReading Read(TlsServer server, X509Certificate2[] trusted, bool acceptsJimTrustedCertificates = true)
+    private ServerCertificateReading Read(TlsServer server, X509Certificate2[] trusted, bool trustAnchorMustBeRoot = false)
     {
         var reading = ServerCertificateProbe.Read(HostName, server.Port, trusted, TimeSpan.FromSeconds(10), _logger,
-            "database server", "TLS", SecureHandshakeFraming.DirectTls, acceptsJimTrustedCertificates);
+            "database server", "TLS", SecureHandshakeFraming.DirectTls, trustAnchorMustBeRoot);
 
         Assert.That(reading, Is.Not.Null, "The server answered, so the probe must have seen its certificate.");
         return reading!;

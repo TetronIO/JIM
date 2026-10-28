@@ -12,7 +12,7 @@ What the [SQL Connector](jim-sql-connector.md)'s database account needs, how its
 ```jim-diagram
 archetype: comparison
 title: How each database's connection is protected
-desc: "A Microsoft SQL Server connection is encrypted with TLS by default, and fails rather than fall back to plain text. Its certificate is always validated, and a certificate from an authority JIM does not yet trust can be trusted from the card the failed connection test shows. It runs unencrypted only if Encrypt Connection is turned off. An Oracle Database connection uses Native Network Encryption by default (AES, with SHA-2 integrity checking), which needs no certificate. Over TCPS (TLS) instead, the server's certificate must be one the operating system already trusts, because the Oracle driver accepts no additional trust anchors. Its None setting sends data unencrypted, for a lab only. For both, the password is stored encrypted and never logged, and the account needs no db_owner, DBA or SELECT ANY TABLE."
+desc: "A Microsoft SQL Server connection is encrypted with TLS by default, and fails rather than fall back to plain text. Its certificate is always validated, and a certificate from an authority JIM does not yet trust can be trusted from the card the failed connection test shows. It runs unencrypted only if Encrypt Connection is turned off. An Oracle Database connection uses Native Network Encryption by default (AES, with SHA-2 integrity checking), which needs no certificate. Over TCPS (TLS) instead, a certificate from an authority JIM does not yet trust can be trusted from the same card, by trusting the root of its chain. Its None setting sends data unencrypted, for a lab only. For both, the password is stored encrypted and never logged, and the account needs no db_owner, DBA or SELECT ANY TABLE."
 columns:
   - { label: Microsoft SQL Server }
   - { label: Oracle Database }
@@ -24,7 +24,7 @@ rows:
   - label: Certificate
     cells:
       - { text: always validated, sub: "an unknown authority: trust it from the failed test's card" }
-      - { text: "none needed, except over TCPS", sub: "TCPS: one the operating system already trusts" }
+      - { text: "none needed, except over TCPS", sub: "TCPS: trust the chain's root from the card" }
   - label: Unencrypted
     cells:
       - { text: only with Encrypt Connection off }
@@ -90,7 +90,7 @@ SQL Server sends only its own certificate, not the authorities above it. JIM fet
 
 An expired certificate, or one issued for a different name from the host you connect to, is still refused; renew it, or connect by a name the certificate carries. So is a chain through a certificate authority that has expired or is not marked as one; that has to be fixed on the server.
 
-For Oracle over TCPS, JIM shows the same detail and refuses a certificate issued for a different name in the same way, but the certificate must be one your operating system already trusts; the Oracle driver does not accept additional trust anchors, so JIM does not offer to trust the certificate, and judges it against the operating system alone. Native Network Encryption needs no certificate at all, which is one reason it is the default.
+For Oracle over TCPS, JIM shows the same detail and refuses a certificate issued for a different name in the same way, but only the root of the chain can be trusted: the Oracle driver accepts the chain only when it ends at a root JIM hands it, so trusting an intermediate or the server's own certificate would not make the connection work, and the card offers the root alone. Oracle usually sends its whole chain, root included; where it does not, get the root from whoever runs your PKI, add it under **Admin > Certificates**, and test again. Native Network Encryption needs no certificate at all, which is one reason it is the default.
 
 ## :material-shield-lock-outline: Credentials and logging
 

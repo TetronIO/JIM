@@ -59,19 +59,17 @@ internal class OracleProvider : SqlProviderBase
     public override string SecureTransportName => "TCPS";
 
     /// <summary>
-    /// False for now, pending verification against a real server rather than as a settled conclusion.
-    /// ODP.NET exposes no server certificate validation callback and no per-connection trust anchor; its
-    /// only trust configuration is an Oracle wallet (<c>WalletLocation</c>), or the Microsoft Certificate
-    /// Store on Windows. Whether JIM can supply that wallet from managed code is genuinely open: the
-    /// driver's wallet reader takes a wallet password and has a PEM code path, which points at ordinary
-    /// PKCS#12 rather than only the auto-login wallets Oracle's own native tooling produces, and .NET can
-    /// write both. Settling it needs a live TCPS listener, so it is a question for the integration test
-    /// phase. Until then a TCPS connection validates against the operating system's bundle alone, and JIM
-    /// reports exactly which certificate was refused and why, so an administrator knows what to install.
-    /// Native Network Encryption is unaffected: it uses no certificate at all, which is one reason it is
-    /// the default Oracle encryption mode JIM offers.
+    /// True. ODP.NET exposes no server certificate validation callback; its trust configuration is an
+    /// Oracle wallet, set per connection through <c>WalletLocation</c>. JIM writes that wallet as a plain
+    /// <c>ewallet.pem</c> (no Oracle tooling and no password), and verified against Oracle Database Free
+    /// 23ai with ODP.NET 23.26.400 (#2581) the driver builds the chain from the wallet alone, ignoring the
+    /// intermediates the server sends, and accepts it only when it ends at a self-signed certificate there.
+    /// A root alone is refused when an intermediate stands between it and the server's certificate, and so
+    /// is an intermediate or the server's own certificate alone; the root and the intermediates together
+    /// connect. Native Network Encryption is unaffected: it uses no certificate at all, which is one reason
+    /// it is the default Oracle encryption mode JIM offers.
     /// </summary>
-    public override bool SupportsPinnedServerCertificate => false;
+    public override bool TrustAnchorMustBeRoot => true;
 
     public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => SqlGeneratedKeyRetrieval.OutputParameter;
 
@@ -200,7 +198,7 @@ internal class OracleProvider : SqlProviderBase
     /// preference to their equivalents on <c>OracleConfiguration</c>, which are static: setting those
     /// would let one Connected System's choice decide how every other one connects. Nothing is written
     /// for the other encryption modes, so TCPS keeps the transport it already has and a system configured
-    /// for no encryption is left alone.
+    /// for no encryption is left alone. A TCPS connection is handed its wallet here too, where JIM has one.
     /// </para>
     /// </summary>
     public override void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings)
@@ -208,10 +206,19 @@ internal class OracleProvider : SqlProviderBase
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(settings);
 
+        var oracleConnection = (OracleConnection)connection;
+
+        // TCPS on the retry after a refusal: the wallet JIM wrote of the root it trusts and the intermediates
+        // beneath it. Per connection, deliberately, as below: OracleConfiguration.WalletLocation is static and would
+        // let one Connected System's trust decide every other's.
+        if (settings.Encryption == SqlConnectionEncryption.Tls && !string.IsNullOrEmpty(settings.PinnedTrustPath))
+        {
+            oracleConnection.WalletLocation = settings.PinnedTrustPath;
+            return;
+        }
+
         if (settings.Encryption != SqlConnectionEncryption.OracleNativeNetworkEncryption)
             return;
-
-        var oracleConnection = (OracleConnection)connection;
 
         // REQUIRED rather than REQUESTED: a system an administrator has configured for encryption should
         // fail to connect rather than quietly fall back to plain text against a server that will not.

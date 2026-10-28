@@ -45,15 +45,6 @@ internal class SqlServerProvider : SqlProviderBase
     /// </summary>
     public override SecureHandshakeFraming SecureHandshakeFraming => SecureHandshakeFraming.TdsPreLogin;
 
-    /// <summary>
-    /// <c>Microsoft.Data.SqlClient</c> takes a path to a certificate file and accepts the server's
-    /// certificate when it is an exact match for it, which is the only mechanism it offers for trusting
-    /// a certificate the operating system's bundle does not already vouch for. There is no validation
-    /// callback to install, and <c>TrustServerCertificate</c> is never an acceptable substitute: it
-    /// accepts whatever is presented, now and in future.
-    /// </summary>
-    public override bool SupportsPinnedServerCertificate => true;
-
     public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => SqlGeneratedKeyRetrieval.ResultSet;
 
     protected override char OpenQuote => '[';
@@ -185,8 +176,8 @@ internal class SqlServerProvider : SqlProviderBase
         // supplied only after an ordinary attempt was refused and only for a certificate the JIM
         // certificate store vouches for. SqlClient matches it exactly, so a server that later presents
         // a different certificate is refused again rather than silently trusted.
-        if (!string.IsNullOrEmpty(settings.PinnedServerCertificatePath))
-            builder.ServerCertificate = settings.PinnedServerCertificatePath;
+        if (!string.IsNullOrEmpty(settings.PinnedTrustPath))
+            builder.ServerCertificate = settings.PinnedTrustPath;
 
         return builder.ConnectionString;
     }

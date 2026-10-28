@@ -11,7 +11,9 @@ namespace JIM.Web.Models;
 /// <remarks>
 /// JIM accepts a server when any certificate in its chain is in the JIM certificate store, so every certificate in
 /// the chain is a working choice (#1914). What differs is how long the decision lasts: the higher the certificate,
-/// the more renewals it survives, which is why the options are ordered from the top.
+/// the more renewals it survives, which is why the options are ordered from the top. The exception is a connection
+/// that accepts only a root (Oracle Database over TCPS, #2581), which is offered the root alone, or nothing where JIM
+/// could not find it.
 /// </remarks>
 public class ServerCertificateTrustOption
 {
@@ -67,7 +69,9 @@ public class ServerCertificateTrustOption
             });
         }
 
-        return options;
+        return diagnostic.TrustAnchorMustBeRoot
+            ? options.Where(option => option.Role == ServerCertificateChainRole.Root).ToList()
+            : options;
     }
 
     /// <summary>

@@ -524,18 +524,6 @@ public class CertificateServer : ICertificateProvider
         if (endpoint == null || connectedSystem == null)
             return new ServerCertificateTrustResult { Outcome = ToTrustOutcome(readOutcome), Message = message };
 
-        // A connection that takes no trust anchor from JIM (Oracle Database over TCPS) would be refused exactly as
-        // before, so storing the certificate would report success and change nothing.
-        if (!endpoint.AcceptsJimTrustedCertificates)
-        {
-            return new ServerCertificateTrustResult
-            {
-                Outcome = ServerCertificateTrustOutcome.NotUsedByThisConnection,
-                ExpectedThumbprint = expected,
-                Message = $"This connection to the {endpoint.ServerDescription} does not use the JIM certificate store, so trusting the certificate here would not make it work, and nothing was trusted. Its certificate must be issued by an authority the operating system already trusts."
-            };
-        }
-
         var reading = await ReadEndpointAsync(endpoint);
         if (reading?.Chain == null)
         {
@@ -585,6 +573,23 @@ public class CertificateServer : ICertificateProvider
         }
 
         var chosen = chainCertificates[chosenIndex];
+
+        // A connection whose driver accepts only a root (Oracle Database over TCPS) would be refused exactly as before
+        // with an intermediate or the server's own certificate in the store, so storing one would report success and
+        // change nothing. A self-signed server certificate is its own root.
+        if (endpoint.TrustAnchorMustBeRoot && (chain.Root == null || !MatchesThumbprint(chain.Root, expected)))
+        {
+            return new ServerCertificateTrustResult
+            {
+                Outcome = ServerCertificateTrustOutcome.RootRequired,
+                ExpectedThumbprint = expected,
+                PresentedThumbprint = chosen.Thumbprint,
+                Message = chain.Root != null
+                    ? $"This connection to the {endpoint.ServerDescription} accepts only the root of the certificate chain, so trusting '{chosen.CommonName}' would not make it work, and nothing was trusted. Trust '{chain.Root.CommonName}' instead."
+                    : $"This connection to the {endpoint.ServerDescription} accepts only the root of the certificate chain, and JIM could not find it, so nothing was trusted. Get the root certificate from whoever runs your PKI and add it under Admin > Certificates."
+            };
+        }
+
         var reason = string.IsNullOrWhiteSpace(changeReason)
             ? $"Trusted the certificate presented by {endpoint.Host}:{endpoint.Port} for the '{connectedSystem.Name}' Connected System."
             : changeReason;

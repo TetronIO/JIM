@@ -58,10 +58,10 @@ internal abstract class SqlProviderBase : ISqlProvider
     public virtual SecureHandshakeFraming SecureHandshakeFraming => SecureHandshakeFraming.DirectTls;
 
     /// <summary>
-    /// Off unless a dialect's driver genuinely offers the mechanism. Answering true without one would
-    /// have JIM prepare a certificate the driver then ignores, and report trust it does not have.
+    /// False by default: the driver is handed the server's own certificate, which works whichever certificate
+    /// in the chain the JIM store vouches for it through.
     /// </summary>
-    public virtual bool SupportsPinnedServerCertificate => false;
+    public virtual bool TrustAnchorMustBeRoot => false;
 
     public abstract SqlGeneratedKeyRetrieval GeneratedKeyRetrieval { get; }
 
