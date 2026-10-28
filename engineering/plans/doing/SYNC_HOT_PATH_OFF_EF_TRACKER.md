@@ -1,6 +1,6 @@
 # Synchronisation Hot Path Off EF Core's Change Tracker
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0: spans in place and the attach measured; awaiting a scale run with the new spans)
 - **Issue:** [#2598](https://github.com/TetronIO/JIM/issues/2598)
 - **Last Updated:** 2026-10-28
 
@@ -31,7 +31,7 @@ From Scale750k40kGroups on 2026-10-28, with #2492 and its join lookup fix in pla
 | Target-side Full Synchronisation (join) | 11 min 26 s |
 | Target-side Full Confirming Synchronisation | 15 min 10 s |
 
-The attach costing orders of magnitude more per value on a giant group than at Large suggests it grows faster than linearly with a group's size; one candidate is EF Core's relationship fix-up checking a list-backed collection for each value it adds. That is a hypothesis for Phase 0 to confirm, not a finding. An earlier run's 148 s page load was not reproduced once the join lookup was fixed, so page load is no longer a priority. The target-side figures have no breakdown yet; Phase 0 provides it.
+The attach costing orders of magnitude more per value on a giant group than at Large suggests it grows faster than linearly with a group's size; Phase 0 confirmed it and found the cause (below). An earlier run's 148 s page load was not reproduced once the join lookup was fixed, so page load is no longer a priority. The target-side figures have no breakdown yet; Phase 0 provides it.
 
 ## Technical Architecture
 
@@ -54,6 +54,19 @@ What stays on EF: portal and API reads, configuration create/update/delete, and 
 
 - Spans inside `EvaluateExportRules` around the work outside its rule loop, and on the join path (match lookup, join match load, join count, join-state write), so breakdown lines cover the large-group export evaluation and the target-side Full Synchronisation and confirming synchronisation.
 - A `RequiresPostgres` measurement of the tracker attach against group size (1,000, 10,000, 100,000 values) to establish whether it is linear, and why if not.
+
+**As found (2026-10-28):** spans now cover the join path (`Join.MatchLookup`, `Join.LoadMatch` with the loaded object's value count, `Join.ExistingJoinCount`; the join-state write already had `UpdateCsoJoinStates`) and the work after export evaluation's rule loop (`ResolveExportGeneratedValues`, and `SnapshotPendingExportChanges` with `Snapshot.ResolveReferences`, `Snapshot.LoadReferencedObjects` and `Snapshot.Build`). The snapshot is the likely home of the 15.5 s: it records every change a Pending Export carries and looks up the target system's object for every referenced member. A scale run with these spans confirms or refutes that.
+
+The attach, measured on one Metaverse Object written through `CreateMetaverseObjectsAsync` against real PostgreSQL, with members the writing context does not track:
+
+| Values | Bulk write | Tracker attach |
+|---|---|---|
+| 1,000 | 62 ms | 16 ms |
+| 10,000 | 495 ms | 296 ms |
+| 50,000 | 2.1 s | 4.2 s |
+| 100,000 | 5.3 s | 13.9 s |
+
+So the attach grows roughly with the square of a group's size, and overtakes the write itself above about 30,000 values. A CPU profile of the 100,000 case puts all of it in EF Core's change tracker: identity-map hashing as each value is tracked (about 5.4 s), relationship fix-up scanning the list-backed `AttributeValues` before adding each value (4.6 s), and fix-up of each value's reference to a member the context does not track (4.8 s). Attaching the values before the object, which avoids the list scans, cut it by a third and left it superlinear. There is therefore no cheap fix to the attach itself: Phase 1 removes it, as planned, and needs no interim step.
 
 ### Phase 1: Remove the tracker bridge
 

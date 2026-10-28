@@ -3514,7 +3514,8 @@ public abstract class SyncTaskProcessorBase
             // (ProcessScopeReviewPendingMetaverseObjectsAsync) and cross-page reference resolution
             // (ResolveCrossPageReferences) all reach Pending Exports through EvaluatePendingExportsAsync, which
             // calls this method once per changed Metaverse Object.
-            await ResolveExportGeneratedValuesAsync(mvo, result);
+            using (Diagnostics.Sync.StartSpan("ResolveExportGeneratedValues"))
+                await ResolveExportGeneratedValuesAsync(mvo, result);
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
@@ -6749,8 +6750,9 @@ public abstract class SyncTaskProcessorBase
         ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule, ImportMatch match)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
-        var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
-            _connectedSystem.Id, mvo.Id);
+        int existingCsoJoinCount;
+        using (Diagnostics.Sync.StartSpan("Join.ExistingJoinCount"))
+            existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(_connectedSystem.Id, mvo.Id);
 
         // Account for CSOs that have been disconnected in-memory but not yet flushed to the database.
         if (existingCsoJoinCount > 0 && _pendingDisconnectedMvoIds.Contains(mvo.Id))
@@ -6922,6 +6924,9 @@ public abstract class SyncTaskProcessorBase
         if (!_csoChangeTrackingEnabled || pendingExport.AttributeValueChanges.Count == 0)
             return;
 
+        using var snapshotSpan = Diagnostics.Sync.StartSpan("SnapshotPendingExportChanges")
+            .SetTag("changeCount", pendingExport.AttributeValueChanges.Count);
+
         // Collect MVO GUIDs from reference attribute changes so we can resolve them
         // to stub CSOs in the target Connected System
         Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
@@ -6929,6 +6934,7 @@ public abstract class SyncTaskProcessorBase
 
         if (mvoGuids.Count > 0)
         {
+            using var resolveSpan = Diagnostics.Sync.StartSpan("Snapshot.ResolveReferences").SetTag("referenceCount", mvoGuids.Count);
             // First, check the in-memory batch of provisioning CSOs that haven't been persisted yet.
             // During sync, provisioning CSOs are collected for batch creation (FlushPendingExportOperationsAsync)
             // and won't be in the database when this snapshot runs.
@@ -6978,7 +6984,9 @@ public abstract class SyncTaskProcessorBase
 
             if (notYetLookedUp.Count > 0)
             {
-                var dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
+                Dictionary<Guid, ConnectedSystemObject> dbResolved;
+                using (Diagnostics.Sync.StartSpan("Snapshot.LoadReferencedObjects").SetTag("count", notYetLookedUp.Count))
+                    dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
                 foreach (var mvoGuid in notYetLookedUp)
                 {
                     var found = dbResolved.GetValueOrDefault(mvoGuid);
@@ -6995,6 +7003,7 @@ public abstract class SyncTaskProcessorBase
             }
         }
 
+        using var buildSpan = Diagnostics.Sync.StartSpan("Snapshot.Build");
         var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
             pendingExport,
             _activity.InitiatedByType,
