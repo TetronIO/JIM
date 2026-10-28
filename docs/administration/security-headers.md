@@ -46,7 +46,7 @@ script-src 'self' 'unsafe-inline';
 style-src 'self' 'unsafe-inline';
 img-src 'self' data:;
 font-src 'self';
-connect-src 'self' wss: ws:;
+connect-src 'self';
 frame-ancestors 'none';
 base-uri 'self';
 form-action 'self'
@@ -59,8 +59,8 @@ depends on a third-party host, CDN, or external font provider.
 `'unsafe-inline'` is present for `script-src` and `style-src` because the portal's reconnection handling and its
 component styling rely on inline `<script>` and `style="..."` usage.
 
-`connect-src` allows both `ws:` and `wss:` so the WebSocket connection that keeps the portal live works whether
-JIM is reached over plain HTTP or HTTPS.
+`connect-src 'self'` covers the WebSocket connection that keeps the portal live, over plain HTTP (`ws:`) and HTTPS
+(`wss:`) alike, and allows no WebSocket connection to any other host.
 
 ## :material-lan: Reverse proxies and corporate networks
 
