@@ -657,6 +657,51 @@ public class OracleProviderTests
             "ODP.NET binds positionally by default, so a named parameter reused twice in one statement would bind to the wrong value.");
     }
 
+    // The exception shape below is what ODP.NET 23.26.400 throws against Oracle Database Free 23ai whose
+    // sqlnet.ora sets SQLNET.ENCRYPTION_SERVER = REJECTED, with Native Network Encryption required: an
+    // OracleException and a NetworkException both saying ORA-50201, around a NetworkException carrying
+    // the cause and Oracle's help link on a second line.
+    private const string GenericConnectFailure = "ORA-50201: Oracle Communication: Failed to connect to server or failed to parse connect string";
+
+    [Test]
+    public void DescribeConnectionFailure_CauseBeneathTheGenericError_LeadsWithTheCause()
+    {
+        var failure = new FakeDbException(GenericConnectFailure,
+            new Exception(GenericConnectFailure,
+                new Exception("ORA-12660: Encryption or crypto-checksumming parameters incompatible\nhttps://docs.oracle.com/error-help/db/ora-12660/")));
+
+        var description = _provider.DescribeConnectionFailure(failure);
+
+        Assert.That(description, Is.EqualTo(
+            "ORA-12660: Encryption or crypto-checksumming parameters incompatible (reported by the driver as " + GenericConnectFailure + ")"));
+    }
+
+    [Test]
+    public void DescribeConnectionFailure_InnerErrorsRepeatTheSameCode_ReturnsTheDriversMessage()
+    {
+        // An unreachable host: every level says ORA-12545, so there is nothing more specific to report.
+        const string unreachable = "ORA-12545: Connect failed because target host or object does not exist";
+        var failure = new FakeDbException(unreachable, new Exception(unreachable + "\nhttps://docs.oracle.com/error-help/db/ora-12545/"));
+
+        Assert.That(_provider.DescribeConnectionFailure(failure), Is.EqualTo(unreachable));
+    }
+
+    [Test]
+    public void DescribeConnectionFailure_InnerErrorIsNotAnOracleError_ReturnsTheDriversMessage()
+    {
+        var failure = new FakeDbException(GenericConnectFailure, new IOException("Unable to read data from the transport connection."));
+
+        Assert.That(_provider.DescribeConnectionFailure(failure), Is.EqualTo(GenericConnectFailure));
+    }
+
+    [Test]
+    public void DescribeConnectionFailure_NoInnerError_ReturnsTheDriversMessage()
+    {
+        var failure = new FakeDbException("ORA-01017: invalid credential or not authorized; logon denied");
+
+        Assert.That(_provider.DescribeConnectionFailure(failure), Is.EqualTo("ORA-01017: invalid credential or not authorized; logon denied"));
+    }
+
     #endregion
 
     #region GUID byte order
