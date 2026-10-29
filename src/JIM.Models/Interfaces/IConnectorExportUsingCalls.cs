@@ -24,7 +24,7 @@ public interface IConnectorExportUsingCalls
     /// The run's cancellation (#2083). Observe it only between Pending Exports: once you start writing one, finish it and
     /// do not hand the token to that write. Report every Pending Export you did not start as
     /// <see cref="ConnectedSystemExportResult.NotAttempted"/>, and always return exactly one result per Pending Export:
-    /// JIM reads a missing result as a success. Throw <see cref="OperationCanceledException"/> only before anything in the
+    /// JIM counts a missing result as a failed attempt and sends that change again (#2197). Throw <see cref="OperationCanceledException"/> only before anything in the
     /// batch has been written, because JIM records nothing from a batch that throws, so anything it had written is sent
     /// again by the next run. Finishing the whole batch regardless of the token is also compliant.
     /// </param>
