@@ -460,11 +460,28 @@ public static class ConfigurationChangeClassifier
         if (!diff.HasChanges || diff.Root == null)
             return ConfigurationChangeClass.NotClassified;
 
+        return ClassifyNode(diff.ObjectType, diff.Root, objectKey);
+    }
+
+    /// <summary>
+    /// Classifies one part of a diff (a top-level section of the configuration, say) by the highest class among the
+    /// properties in it that actually changed. <see cref="ConfigurationChangeClass.NotClassified"/> when none did. How
+    /// <see cref="Classify"/> judges the whole, applied to a branch, so the part and the whole cannot be graded by two
+    /// different rules.
+    /// </summary>
+    /// <param name="objectType">The snapshot's object type.</param>
+    /// <param name="node">The diff node to classify, with everything beneath it.</param>
+    /// <param name="objectKey">The Service Setting's key, required only for a Service Setting; ignored otherwise.</param>
+    public static ConfigurationChangeClass ClassifyNode(string objectType, ConfigurationDiffNode node, string? objectKey = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(objectType);
+        ArgumentNullException.ThrowIfNull(node);
+
         // Projected rather than mapped inside the loop, and lazily, so the break below still stops the
         // enumeration at the first Destructive key.
         var highest = ConfigurationChangeClass.NotClassified;
-        foreach (var nodeClass in CollectChangedKeys(diff.Root)
-                     .Select(node => ClassifyKey(diff.ObjectType, node.Key, objectKey, node.ChangeType)))
+        foreach (var nodeClass in CollectChangedKeys(node)
+                     .Select(changed => ClassifyKey(objectType, changed.Key, objectKey, changed.ChangeType)))
         {
             if (nodeClass > highest)
                 highest = nodeClass;

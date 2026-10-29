@@ -45,6 +45,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordSynchronisation> ConnectedSystemPasswordSynchronisations { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangeSynchronisation> ConfigurationChangeSynchronisations { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     public virtual DbSet<ConnectedSystemSettingValue> ConnectedSystemSettingValues { get; set; } = null!;
     public virtual DbSet<ConnectorSpaceClearJoinRecord> ConnectorSpaceClearJoinRecords { get; set; } = null!;
@@ -571,6 +572,8 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemPasswordSynchronisation>()
             .HasIndex(ps => ps.Enabled)
             .HasDatabaseName("IX_ConnectedSystemPasswordSynchronisations_Enabled");
+
+        ConfigureConfigurationChangeSynchronisations(modelBuilder);
 
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)
@@ -1842,6 +1845,45 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<GeneratedValueRevisionPending>()
             .HasIndex(r => r.Created)
             .HasDatabaseName("IX_GeneratedValueRevisionsPending_Created");
+    }
+
+    /// <summary>
+    /// Configuration changes awaiting synchronisation (#2615): one row per saved change per Connected System Object
+    /// Type that the Connected System's next synchronisation must apply by processing every object of the type.
+    /// <para>
+    /// Both ownership foreign keys cascade, so the rows go with their Connected System and with the type they are
+    /// about (removed from the schema); a type with no objects has nothing left to process. The three references to
+    /// history (the saving Activity, the claiming Activity and the Synchronisation Rule) are SetNull: the row records
+    /// that a change was applied, and outlives what it names, with <c>Reason</c> carrying the snapshot (#1990). Left to
+    /// convention an optional foreign key is NO ACTION, which would refuse deleting any rule or Activity a change had
+    /// ever named.
+    /// </para>
+    /// <para>
+    /// Declared without navigations: see <see cref="ConfigurationChangeSynchronisation"/>.
+    /// </para>
+    /// </summary>
+    private static void ConfigureConfigurationChangeSynchronisations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ConfigurationChangeSynchronisation>(change =>
+        {
+            change.HasOne<ConnectedSystem>().WithMany().HasForeignKey(c => c.ConnectedSystemId).OnDelete(DeleteBehavior.Cascade);
+            change.HasOne<ConnectedSystemObjectType>().WithMany().HasForeignKey(c => c.ConnectedSystemObjectTypeId).OnDelete(DeleteBehavior.Cascade);
+            change.HasOne<Activity>().WithMany().HasForeignKey(c => c.ConfigurationChangeActivityId).OnDelete(DeleteBehavior.SetNull);
+            change.HasOne<Activity>().WithMany().HasForeignKey(c => c.ClaimedByActivityId).OnDelete(DeleteBehavior.SetNull);
+            change.HasOne<SyncRule>().WithMany().HasForeignKey(c => c.SyncRuleId).OnDelete(DeleteBehavior.SetNull);
+
+            // Every synchronisation claims and counts its system's changes awaiting synchronisation first thing, and a
+            // Delta Synchronisation with nothing else to do must find that there are none cheaply. The rows are
+            // few and short-lived; the applied ones are history and are never read by the run.
+            change.HasIndex(c => c.ConnectedSystemId)
+                .HasFilter("\"AppliedAt\" IS NULL")
+                .HasDatabaseName("IX_ConfigurationChangeSynchronisations_ConnectedSystemId_Awaiting");
+
+            // The history of a type's changes, and the cascade from the Connected System, which the filtered index above
+            // cannot serve (it holds no applied row).
+            change.HasIndex(c => new { c.ConnectedSystemId, c.ConnectedSystemObjectTypeId })
+                .HasDatabaseName("IX_ConfigurationChangeSynchronisations_ConnectedSystemId_ObjectTypeId");
+        });
     }
 
     /// <summary>

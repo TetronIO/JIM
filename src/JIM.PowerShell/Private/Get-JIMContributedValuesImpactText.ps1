@@ -22,7 +22,7 @@ function Get-JIMContributedValuesImpactText {
         provenance and can never be recalled, instead of describing the recall.
 
     .PARAMETER DeferredRecall
-        The recall happens at the next Full Synchronisation of the contributing system (Attribute Flow mapping
+        The recall happens at the next synchronisation of the contributing system, Delta or Full (Attribute Flow mapping
         deletions) rather than via a queued Worker task (Synchronisation Rule deletions).
 
     .OUTPUTS
@@ -53,7 +53,7 @@ function Get-JIMContributedValuesImpactText {
     }
 
     if ($DeferredRecall) {
-        return "$counts will be recalled at the next Full Synchronisation of the contributing system"
+        return "$counts will be recalled at the next synchronisation of the contributing system, Delta or Full"
     }
 
     return "$counts will be recalled"

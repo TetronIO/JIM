@@ -92,6 +92,12 @@ public class MetaverseObjectTypeDetailDto
     public List<DeletionSourceGap> DeletionSourceWarnings { get; set; } = new();
 
     /// <summary>
+    /// How many Metaverse Objects of this type are flagged for review against every export Synchronisation Rule, which the
+    /// next synchronisation of any Connected System carries out. Zero when none are.
+    /// </summary>
+    public int ExportReviewPendingCount { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a MetaverseObjectType entity.
     /// </summary>
     public static MetaverseObjectTypeDetailDto FromEntity(MetaverseObjectType entity)

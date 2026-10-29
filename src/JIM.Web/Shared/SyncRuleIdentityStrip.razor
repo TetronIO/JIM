@@ -28,10 +28,34 @@
     @(IsOutbound ? ConnectedSystemChip : MetaverseChip)
     <MudDivider Vertical="true" FlexItem="true" />
     <span class="mud-text-secondary">in</span>
-    <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}")" Class="jim-identity-strip-system">
+    <MudLink Href="@ConnectedSystemHref" Class="jim-identity-strip-system">
         <MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Small" />
         @ConnectedSystemName
     </MudLink>
+    @* ─── What the rule is waiting on (#2615) ─── *@
+    @* An import rule whose Object Type has saved changes waiting: the next synchronisation of its Connected System
+       processes every object of the type. An export rule: Metaverse Objects of its type flagged for review against every
+       export rule. Each appears only while there is something waiting, and only on the rule it is about. *@
+    @if (ShowAwaitingSynchronisation)
+    {
+        <MudDivider Vertical="true" FlexItem="true" />
+        <MudTooltip Arrow="true" Placement="Placement.Top">
+            <TooltipContent>
+                <TooltipText Text="@AwaitingSynchronisationTooltip" />
+            </TooltipContent>
+            <ChildContent>
+                <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Href="@ConnectedSystemHref" Class="ma-0"
+                         data-testid="jim-awaiting-synchronisation-chip">
+                    Awaiting synchronisation
+                </MudChip>
+            </ChildContent>
+        </MudTooltip>
+    }
+    @if (ShowExportReviewPending)
+    {
+        <MudDivider Vertical="true" FlexItem="true" />
+        <ExportReviewPendingChip Count="@ExportReviewPendingCount" Class="ma-0" />
+    }
 </MudPaper>
 
 @code {
@@ -67,7 +91,39 @@
     [Parameter, EditorRequired]
     public string ConnectedSystemName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// For an import rule, how many saved changes are waiting for the Connected System's next synchronisation to process
+    /// every object of the rule's Connected System Object Type. Zero shows nothing, and so does any other direction.
+    /// </summary>
+    [Parameter]
+    public int AwaitingSynchronisationChangeCount { get; set; }
+
+    /// <summary>
+    /// For an export rule, how many Metaverse Objects of the rule's Metaverse Object Type are flagged for review against
+    /// every export rule. Zero shows nothing, and so does any other direction.
+    /// </summary>
+    [Parameter]
+    public int ExportReviewPendingCount { get; set; }
+
     private bool IsOutbound => Direction != SyncRuleDirection.Import;
+
+    private bool ShowAwaitingSynchronisation => !IsOutbound && AwaitingSynchronisationChangeCount > 0;
+
+    private bool ShowExportReviewPending => IsOutbound && ExportReviewPendingCount > 0;
+
+    private string ConnectedSystemHref => $"/admin/connected-systems/{ConnectedSystemId}";
+
+    private string AwaitingSynchronisationTooltip
+    {
+        get
+        {
+            var changes = AwaitingSynchronisationChangeCount == 1
+                ? "1 saved change reaches"
+                : $"{AwaitingSynchronisationChangeCount:N0} saved changes reach";
+            var objects = string.IsNullOrWhiteSpace(ConnectedSystemObjectTypeName) ? "object" : $"{ConnectedSystemObjectTypeName} object";
+            return $"{changes} existing objects at the next synchronisation of {ConnectedSystemName}, which processes every {objects}.";
+        }
+    }
 
     private string DirectionLabel => IsOutbound ? "Outbound" : "Inbound";
 

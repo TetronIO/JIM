@@ -4,6 +4,7 @@
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -693,13 +694,24 @@ public class ActivityDetailDto
     public ImportReadRange? ImportReadRange { get; set; }
 
     /// <summary>
+    /// Saving an import Synchronisation Rule or an Object Matching Rule makes the Connected System's next synchronisation,
+    /// Delta or Full, process every object of the Connected System Object Type, because the change can alter what existing
+    /// objects produce. For a configuration change Activity, one entry per Object Type it saved changes for, saying whether a
+    /// synchronisation has applied them yet or the next one will. For a synchronisation run, one entry per Object Type it
+    /// processed in full because of changes saved before it started, with the number of objects processed and whether it
+    /// applied them. Empty for every other Activity, and for a change that needs none.
+    /// </summary>
+    public List<ActivityObjectTypeSynchronisationDto> ConfigurationChangeSynchronisations { get; set; } = new();
+
+    /// <summary>
     /// Creates a detail DTO from an Activity entity.
     /// </summary>
     public static ActivityDetailDto FromEntity(
         Activity activity,
         ActivityRunProfileExecutionStats? stats = null,
         IReadOnlyList<ActivityPhase>? phases = null,
-        ImportReadRange? importReadRange = null)
+        ImportReadRange? importReadRange = null,
+        IReadOnlyList<ActivityObjectTypeSynchronisation>? configurationChangeSynchronisations = null)
     {
         return new ActivityDetailDto
         {
@@ -762,7 +774,9 @@ public class ActivityDetailDto
 
             ImportWatermarkFrom = activity.ImportWatermarkFrom,
             ImportWatermarkTo = activity.ImportWatermarkTo,
-            ImportReadRange = importReadRange
+            ImportReadRange = importReadRange,
+            ConfigurationChangeSynchronisations = (configurationChangeSynchronisations ?? [])
+                .Select(ActivityObjectTypeSynchronisationDto.FromGroup).ToList()
         };
     }
 }

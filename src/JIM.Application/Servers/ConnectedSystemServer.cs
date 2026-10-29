@@ -81,17 +81,17 @@ public partial class ConnectedSystemServer
     // type-specific snapshot builders.
     // -----------------------------------------------------------------------------------------------------------------
 
-    private async Task CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
+    private async Task<ConfigurationChangeCaptureOutcome> CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
     {
-        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+        return await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.ConnectedSystem, connectedSystem.Id,
             async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey),
             $"Connected System {connectedSystem.Id}");
     }
 
-    private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    private async Task<ConfigurationChangeCaptureOutcome> CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
-        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+        return await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.SynchronisationRule, syncRule.Id,
             async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(syncRule, hashKey),
             $"Synchronisation Rule {syncRule.Id}");
@@ -102,14 +102,30 @@ public partial class ConnectedSystemServer
     // snapshot reflects persisted truth rather than the caller's partial in-memory sub-entity graph; without this the
     // rule's captured history drifts from reality and a later whole-rule save reports pre-existing children as "added".
     // The supplied Activity is already SyncRule-targeted, so capturing onto it surfaces the change in the rule's history.
-    internal async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
+    //
+    // The change is also recorded as awaiting synchronisation (#2615) when it can change what an import produces, which
+    // covers every granular endpoint that routes through here: an Attribute Flow mapping, an Advanced Mode Object
+    // Matching Rule, a schema refresh disabling a flow. A caller whose change cannot affect a synchronisation says so
+    // with recordsAwaitingSynchronisation: false (a configuration test case is the one such caller). Defaulting to
+    // recording is the safe way round: a new caller that forgets the flag processes a type needlessly rather than
+    // leaving its objects wrong.
+    internal async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId, bool recordsAwaitingSynchronisation = true)
     {
         if (syncRuleId <= 0)
             return;
 
         var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
-        if (rule != null)
-            await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
+        if (rule == null)
+            return;
+
+        var outcome = await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
+        if (recordsAwaitingSynchronisation)
+        {
+            // A granular endpoint flags no export review (only a whole-rule save can move a rule's scope), so an export
+            // Attribute Flow edit made here is left for a Full Synchronisation.
+            RecordWhetherFullSynchronisationIsNeeded(activity, rule, outcome, flaggedExportReview: false);
+            await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, rule, outcome, isNew: false);
+        }
     }
 
     // A configuration change can take away the reason a queued Pending Export change exists: an export Synchronisation
@@ -149,17 +165,13 @@ public partial class ConnectedSystemServer
     // System provisions and deprovisions them against the rule as it now stands (#1925, #1970). Disabling a rule or
     // switching provisioning off flags nothing: neither destroys what already exists. A save that leaves scope and the
     // Deprovisioning Action alone (a rename, an Attribute Flow edit) flags nothing either; a changed Attribute Flow
-    // reaches existing objects through the target's drift detection instead.
-    private async Task FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
+    // reaches existing objects through the target's drift detection instead. Returns whether it flagged, which the save
+    // records with the change for the drift indicator (what the review carries is not left for a Full Synchronisation).
+    private async Task<bool> FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
     {
-        if (syncRule.Direction != SyncRuleDirection.Export || !syncRule.Enabled)
-            return;
-
-        // A stored state that cannot be read (the rule vanished between the read and the save) is treated as a
-        // change: a needless review costs time, a missed one leaves objects wrongly provisioned.
-        if (!isNewRule && storedState != null && !storedState.ExportScopeMovedBy(syncRule) &&
-            !storedState.DeprovisioningActionChangedBy(syncRule))
-            return;
+        // The decision is the policy's, which the acknowledgement before the save asks too, so the two cannot disagree.
+        if (!ConfigurationChangeSynchronisationPolicy.FlagsExportReview(syncRule, isNewRule, storedState))
+            return false;
 
         var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
         var newlyFlagged = await Application.SyncRepo.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);
@@ -167,19 +179,28 @@ public partial class ConnectedSystemServer
             "or what it does to those leaving its scope; flagged {Count} Metaverse Object(s) of type {TypeId} for export scope review " +
             "at the next synchronisation (#1925, #1970)",
             syncRule.Id, LogSanitiser.Sanitise(syncRule.Name), newlyFlagged, metaverseObjectTypeId);
+        return true;
     }
+
+    // Records on the save's Activity whether anything in the change is left for a Full Synchronisation (#2615): the
+    // judgement the acknowledgement before the save stated, asked of the policy with the same outcome and the same two
+    // decisions, kept where the drift indicator reads it so a change synchronisation applies by itself is not counted as
+    // drift. Nothing is recorded when the capture compared nothing, and the Activity then counts as it always did.
+    private static void RecordWhetherFullSynchronisationIsNeeded(
+        Activity activity, SyncRule syncRule, ConfigurationChangeCaptureOutcome outcome, bool flaggedExportReview) =>
+        activity.ConfigurationChangeNeedsFullSynchronisation = ConfigurationChangeSynchronisationPolicy.NeedsFullSynchronisation(
+            outcome, ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation(syncRule, outcome), flaggedExportReview);
 
     // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
     // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
     // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
-    internal async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
+    internal async Task<ConfigurationChangeCaptureOutcome?> CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
     {
         if (connectedSystemId <= 0)
-            return;
+            return null;
 
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-        if (connectedSystem != null)
-            await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        return connectedSystem == null ? null : await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
     }
 
     // Routes an Object Matching Rule change to the configuration history of whichever object owns the rule: the
@@ -202,8 +223,16 @@ public partial class ConnectedSystemServer
             connectedSystemId = objectType?.ConnectedSystemId;
         }
 
-        if (connectedSystemId is > 0)
-            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId.Value);
+        if (connectedSystemId is not > 0)
+            return;
+
+        var outcome = await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId.Value);
+
+        // The capture above is of the whole Connected System and names no Object Type, so the type the rule is on is
+        // carried through here for the change awaiting synchronisation (#2615).
+        var objectTypeId = rule.ConnectedSystemObjectTypeId ?? rule.ConnectedSystemObjectType?.Id;
+        if (outcome != null && objectTypeId is > 0)
+            await RecordSimpleModeMatchingRuleChangeAwaitingSynchronisationAsync(activity, connectedSystemId.Value, objectTypeId.Value, outcome);
     }
 
     /// <summary>
@@ -978,7 +1007,8 @@ public partial class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
-        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        await RecordMatchingModeSwitchAwaitingSynchronisationAsync(activity, connectedSystem, newMode, captureOutcome);
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
@@ -8161,7 +8191,7 @@ public partial class ConnectedSystemServer
     /// <param name="parentActivityId">An optional parent Activity when the deletion is part of a larger decision.</param>
     /// <param name="keepContributedValues">True to keep the values the mapping contributed (their provenance is
     /// severed before the row deletion, permanently exempting them from the orphan recall); false (the default
-    /// on every surface) to leave them to be recalled at the next Full Synchronisation of the contributing system.</param>
+    /// on every surface) to leave them to be recalled at the next synchronisation of the contributing system, Delta or Full.</param>
     public Task<SyncRuleMappingDeletionResult> DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy, Guid? parentActivityId = null, bool keepContributedValues = false)
         => DeleteSyncRuleMappingCoreAsync(mapping, initiatedBy, initiatedByApiKey: null, parentActivityId, keepContributedValues);
 
@@ -8179,8 +8209,8 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// The shared heart of an Attribute Flow mapping deletion (#1537). The default (recall) is exactly the
     /// long-shipped behaviour: nothing queues, the deletion stamps the configuration watermark, and the orphan
-    /// recall withdraws the mapping's contributed values at the next Full Synchronisation of the contributing
-    /// system. Choosing keep severs the values' Synchronisation Rule provenance BEFORE the row is deleted
+    /// recall withdraws the mapping's contributed values at the next synchronisation of the contributing
+    /// system, Delta or Full (the deletion records the rule's Object Type as awaiting synchronisation). Choosing keep severs the values' Synchronisation Rule provenance BEFORE the row is deleted
     /// (null-provenance values are never recalled, so the exemption is permanent) and records the choice on
     /// the deletion Activity. Only meaningful for import mappings: an export mapping, or one with no target
     /// Metaverse attribute, has contributed nothing and there is nothing to sever.
@@ -8684,7 +8714,22 @@ public partial class ConnectedSystemServer
                 Message = parentActivity.TargetName
             };
             await createChildActivityAsync(childActivity);
-            await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+            var captureOutcome = await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+
+            // A reorder changes which import rule wins an attribute for the objects of every rule it touches, so each
+            // affected rule's type is recorded as awaiting synchronisation (#2615). If a row cannot be recorded the
+            // child has failed itself; the reorder it belongs to must not be left in progress behind it.
+            try
+            {
+                RecordWhetherFullSynchronisationIsNeeded(childActivity, rule, captureOutcome, flaggedExportReview: false);
+                await RecordConfigurationChangeAwaitingSynchronisationAsync(childActivity, rule, captureOutcome, isNew: false);
+            }
+            catch (ConfigurationChangeSynchronisationNotRecordedException ex)
+            {
+                await FailActivityOfUnrecordedChangeAsync(parentActivity, ex);
+                throw;
+            }
+
             await Application.Activities.CompleteActivityAsync(childActivity);
         }
     }
@@ -9966,9 +10011,15 @@ public partial class ConnectedSystemServer
         // Cases whose new result the save accepted expect it from now on: written before the capture, so they are in
         // this change's Configuration History version.
         await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
-        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
-        await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        var flaggedExportReview = await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        RecordWhetherFullSynchronisationIsNeeded(activity, syncRule, captureOutcome, flaggedExportReview);
+        // Last, and after the rule has been written: a change recorded as awaiting synchronisation is claimed by the next
+        // synchronisation as soon as it is committed, and that claim assumes the rule it describes is already stored. This
+        // is the portal's and the REST API's whole-rule save, so it also covers enabling and disabling, projection, the
+        // Inbound Out-of-Scope Action and every Scoping Criteria endpoint (#2615).
+        await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, syncRule, captureOutcome, isNewRule);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -10195,9 +10246,15 @@ public partial class ConnectedSystemServer
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
-        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
-        await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        var flaggedExportReview = await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        RecordWhetherFullSynchronisationIsNeeded(activity, syncRule, captureOutcome, flaggedExportReview);
+        // Last, and after the rule has been written: a change recorded as awaiting synchronisation is claimed by the next
+        // synchronisation as soon as it is committed, and that claim assumes the rule it describes is already stored. This
+        // is the portal's and the REST API's whole-rule save, so it also covers enabling and disabling, projection, the
+        // Inbound Out-of-Scope Action and every Scoping Criteria endpoint (#2615).
+        await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, syncRule, captureOutcome, isNewRule);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -10409,7 +10466,7 @@ public partial class ConnectedSystemServer
     /// pair contributed values, their Synchronisation Rule provenance is severed FIRST (permanently exempting
     /// them from the orphan recall) and the choice is recorded on the save's Activity; then the mapping row and
     /// its sources are deleted properly. Without a keep, provenance stays intact and the shipped orphan recall
-    /// withdraws the values at the next Full Synchronisation of the contributing system.
+    /// withdraws the values at the next synchronisation of the contributing system, Delta or Full.
     /// <para>
     /// A staged removal NOT named in the choices still deletes its row: the mapping's Synchronisation Rule
     /// foreign key is required (#1550), so severing the relationship deletes the orphaned row at save. What the
@@ -10444,7 +10501,8 @@ public partial class ConnectedSystemServer
 
         // The rows themselves are NOT deleted here: the required foreign key guarantees the save's own flush
         // deletes every severed row (and cascades its sources), and the rule save advances the configuration
-        // watermark, so the #1536 orphan recall re-evaluates every object at the next Full Synchronisation.
+        // watermark, so the #1536 orphan recall re-evaluates every object at the next synchronisation (the save records the
+        // rule's Object Type as awaiting synchronisation, so a Delta processes the whole type).
         var keepMessages = new List<string>();
         foreach (var (choice, removedMapping) in removedMappings)
         {

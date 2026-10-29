@@ -31,6 +31,12 @@ function Get-JIMConnectedSystem {
         TrackingDisabled, LastFullSynchronisation, MostRecentChange, ChangeCount and HighestChangeClass.
         HasPendingChanges is also $false when JIM cannot tell, so test IsDeterminable first.
 
+        ConfigurationDrift also carries AwaitingSynchronisation: the Object Types whose objects the next
+        synchronisation, Delta or Full, will all process because of Synchronisation Rule or Object Matching Rule
+        changes saved since it last did so, each with its ChangeCount, ObjectCount and the Changes behind it. Those
+        changes are not counted in ChangeCount and do not set HasPendingChanges, as an ordinary synchronisation
+        applies them.
+
     .EXAMPLE
         Get-JIMConnectedSystem
 

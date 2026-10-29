@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ Saving a Synchronisation Rule now says when the change takes effect and, for an import rule, how many objects the next synchronisation will process and about how long that takes; the REST API and PowerShell report the same. (#2615)
+- ✨ The Connected System page lists changes awaiting synchronisation with **Run now**, and Activities say which run applied each change and why it processed a whole Object Type. (#2615)
+
+### Changed
+
+- 🔄 Saving a change to an import Synchronisation Rule, Attribute Flow or Object Matching Rule now takes effect at the Connected System's next synchronisation, Delta or Full, which processes every object of the affected Object Type, instead of waiting for a Full Synchronisation. (#2615)
+- 🔄 The indicator for changes pending a Full Synchronisation no longer counts what a synchronisation applies by itself: import rule changes, and an export rule's scope or Deprovisioning Action. (#2615)
+
 ### Fixed
 
 - 🐛 Typing a column name into an SQL Object Type's **Add column** anchor picker now works: it no longer adds a column named after the first letter typed. Every name picker in the Object Types editor takes a name once you choose it from the list, press Enter or move on, instead of on every keystroke. (#2570)

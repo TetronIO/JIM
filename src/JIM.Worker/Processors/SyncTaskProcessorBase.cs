@@ -288,6 +288,27 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected TypeOrderedCsoPager? _csoPager;
 
+    /// <summary>
+    /// The configuration changes awaiting synchronisation that this run claimed as it started (#2615): saved changes to
+    /// an import Synchronisation Rule or an Object Matching Rule that this run must apply by processing every object of
+    /// the Object Type each names. Empty until <see cref="ClaimConfigurationChangesAwaitingSynchronisationAsync"/> runs,
+    /// and when nothing was awaiting synchronisation.
+    /// </summary>
+    private IReadOnlyList<ClaimedConfigurationChangeSynchronisation> _claimedConfigurationChanges = [];
+
+    /// <summary>
+    /// The only configuration changes awaiting synchronisation this run may claim: the ids the worker read before it
+    /// loaded anything the run uses (#2615). Empty for a processor constructed without them, which claims nothing.
+    /// </summary>
+    private readonly IReadOnlyCollection<long> _configurationChangeIdsEligibleToClaim;
+
+    /// <summary>
+    /// The Object Types whose every object this run processes because configuration changes awaiting synchronisation
+    /// were claimed for them (#2615). A Full Synchronisation processes everything anyway; a Delta Synchronisation uses
+    /// this to page these types in full and the others by modification.
+    /// </summary>
+    protected IReadOnlySet<int> _objectTypeIdsToProcessInFull = new HashSet<int>();
+
     // Summary stats are accumulated incrementally during each FlushRpeisAsync call via
     // Worker.AccumulateActivitySummaryStats, so RPEIs can be released immediately without
     // keeping them in memory for a final calculation.
@@ -523,7 +544,8 @@ public abstract class SyncTaskProcessorBase
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null,
+        IReadOnlyCollection<long>? configurationChangeIdsEligibleToClaim = null)
     {
         _syncEngine = syncEngine;
         _syncServer = syncServer;
@@ -541,6 +563,7 @@ public abstract class SyncTaskProcessorBase
         // run-scoped set of its own, which is exactly as safe: nothing else shares it.
         _uniqueValueReservations = uniqueValueReservations ?? new UniqueValueReservationSet();
         _uniquenessProbeSessionHost = uniquenessProbeSessionHost;
+        _configurationChangeIdsEligibleToClaim = configurationChangeIdsEligibleToClaim ?? [];
     }
 
     /// <summary>
@@ -1080,6 +1103,64 @@ public abstract class SyncTaskProcessorBase
         _mvoIdToRpei.Clear();
         _mvoIdsChangedByExportEvaluation.Clear();
         _deferredMvoRpeiMappings.Clear();
+    }
+
+    /// <summary>
+    /// Claims the configuration changes awaiting synchronisation that the worker offered this run (#2615), and records
+    /// which Object Types the run must therefore process in full. Call it first, as the run starts: before the progress
+    /// count and before any Synchronisation Rule is loaded.
+    /// <para>
+    /// The guarantee: the worker read the ids it offers before it loaded the Connected System with its Object Types and
+    /// their Simple Mode Object Matching Rules, and this run loads the Synchronisation Rules after the claim. A change's
+    /// row is written only after the change is saved, so every change claimed here is already in all of those. A change
+    /// saved after the worker's read is not offered, however soon after it commits, and waits for the next run (see
+    /// <see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>).
+    /// </para>
+    /// </summary>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected async Task ClaimConfigurationChangesAwaitingSynchronisationAsync(string runKind)
+    {
+        _claimedConfigurationChanges = await _syncRepo.ClaimConfigurationChangeSynchronisationsAsync(_connectedSystem.Id, _configurationChangeIdsEligibleToClaim, _activity.Id);
+        _objectTypeIdsToProcessInFull = _claimedConfigurationChanges.Select(c => c.ConnectedSystemObjectTypeId).ToHashSet();
+
+        if (_claimedConfigurationChanges.Count == 0)
+            return;
+
+        // Which types, and how many changes are behind each, so the run's log explains why it processed a type in full.
+        var summary = string.Join(", ", _claimedConfigurationChanges
+            .GroupBy(c => c.ConnectedSystemObjectTypeId)
+            .OrderBy(g => g.Key)
+            .Select(g => $"{LogSanitiser.Sanitise(_connectedSystem.ObjectTypes?.FirstOrDefault(t => t.Id == g.Key)?.Name ?? g.Key.ToString(CultureInfo.InvariantCulture))} ({g.Count()})"));
+        Log.Information("{RunKind}: {Count} configuration change(s) awaiting synchronisation claimed; processing every object of {ObjectTypeCount} Object Type(s) in full, with the changes behind each in brackets: {ObjectTypes}",
+            runKind, _claimedConfigurationChanges.Count, _objectTypeIdsToProcessInFull.Count, summary);
+    }
+
+    /// <summary>
+    /// Marks the configuration changes this run claimed as applied (#2615). Call it only where the run has completed and
+    /// advanced the Delta Synchronisation watermark: a cancelled run, or one that failed, never gets here and so applies
+    /// nothing, leaving the changes for the next run to claim again.
+    /// <para>
+    /// A run that completes with errors on individual objects still applies them, consistently with the watermark
+    /// advancing: both record that the run completed, and the errors are reported on the objects' own execution items.
+    /// </para>
+    /// </summary>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected async Task ApplyClaimedConfigurationChangesAsync(string runKind)
+    {
+        if (_claimedConfigurationChanges.Count == 0)
+            return;
+
+        var applied = await _syncRepo.ApplyClaimedConfigurationChangeSynchronisationsAsync(_activity.Id);
+        if (applied == _claimedConfigurationChanges.Count)
+        {
+            Log.Information("{RunKind}: applied {Count} configuration change(s) that were awaiting synchronisation", runKind, applied);
+            return;
+        }
+
+        // Only reachable when another synchronisation of this Connected System claimed some of them after this run did,
+        // which overwrote this run's claim. That run applies them. Safe, since this run processed the types in full too.
+        Log.Warning("{RunKind}: applied {Applied} of the {Claimed} configuration change(s) it claimed; a synchronisation of the same Connected System that overlapped this one holds the claim on the rest and applies them",
+            runKind, applied, _claimedConfigurationChanges.Count);
     }
 
     /// <summary>

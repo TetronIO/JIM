@@ -103,8 +103,8 @@ public static class GeneratedValuePreviewHelpers
 
     /// <summary>
     /// The existing-object count line for an import-mode generated mapping on a saved Synchronisation Rule
-    /// (plan Phase 3 point 2): "1,245 existing Metaverse Objects have no Account Name and would receive one on
-    /// the next full synchronisation." Handles zero gracefully rather than reading as "nothing counted yet".
+    /// (plan Phase 3 point 2): "1,245 existing Metaverse Objects have no Account Name and would receive one at
+    /// the next synchronisation." Handles zero gracefully rather than reading as "nothing counted yet".
     /// </summary>
     public static string DescribeExistingObjectCount(int count, string attributeName)
     {
@@ -112,7 +112,7 @@ public static class GeneratedValuePreviewHelpers
             return $"Every existing Metaverse Object already has a value for {attributeName}.";
 
         var noun = count == 1 ? "Metaverse Object has" : "Metaverse Objects have";
-        return $"{count:N0} existing {noun} no {attributeName} and would receive one on the next full synchronisation.";
+        return $"{count:N0} existing {noun} no {attributeName} and would receive one at the next synchronisation.";
     }
 
     /// <summary>

@@ -57,6 +57,14 @@
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
+    /// <summary>
+    /// A Connected System to open the dialog on, with its Delta Synchronisation Run Profile preselected (its Full
+    /// Synchronisation where it has none): the "Run now" on a Connected System's changes awaiting synchronisation (#2615).
+    /// Both stay changeable. Null opens the dialog with nothing chosen.
+    /// </summary>
+    [Parameter]
+    public int? ConnectedSystemId { get; set; }
+
     private Dictionary<int, string>? _connectedSystemNames;
     private List<ConnectedSystemRunProfile>? _runProfiles;
     private int? _selectedConnectedSystemId;
@@ -67,6 +75,13 @@
     {
         using var jim = JimFactory.Create();
         _connectedSystemNames = await jim.ConnectedSystems.GetConnectedSystemNamesAsync();
+
+        // A Connected System that is no longer there is simply not preselected.
+        if (ConnectedSystemId is { } connectedSystemId && _connectedSystemNames.ContainsKey(connectedSystemId))
+        {
+            await HandleConnectedSystemChangedAsync(connectedSystemId);
+            _selectedRunProfile = AwaitingSynchronisationRunProfile.Preferred(_runProfiles);
+        }
     }
 
     private bool CanQueue() => !_queueing && _selectedConnectedSystemId != null && _selectedRunProfile != null;
@@ -110,11 +125,15 @@
         MudDialog.Close(DialogResult.Ok(true));
     }
 
-    /// <summary>Opens the dialog; true when a run was queued.</summary>
-    public static async Task<bool> ShowAsync(IDialogService dialogService)
+    /// <summary>
+    /// Opens the dialog; true when a run was queued. With a Connected System, the dialog opens on it with the Run Profile
+    /// that applies its changes awaiting synchronisation chosen (see <see cref="ConnectedSystemId"/>).
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, int? connectedSystemId = null)
     {
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var dialog = await dialogService.ShowAsync<QueueRunProfileDialog>("Queue a Run Profile", options);
+        var parameters = new DialogParameters<QueueRunProfileDialog> { { queueDialog => queueDialog.ConnectedSystemId, connectedSystemId } };
+        var dialog = await dialogService.ShowAsync<QueueRunProfileDialog>("Queue a Run Profile", parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };
     }

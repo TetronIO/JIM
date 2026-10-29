@@ -3840,6 +3840,9 @@ public class SynchronisationController(
             .ApplySortAndFilter(pagination)
             .ToPaginatedResponse(pagination);
 
+        // What each rule on the page is waiting on: two reads for the whole page, not one per rule.
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync(result.Items.ToList());
+
         return Ok(result);
     }
 
@@ -3859,7 +3862,9 @@ public class SynchronisationController(
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
-        return Ok(SyncRuleHeader.FromEntity(rule));
+        var header = SyncRuleHeader.FromEntity(rule);
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([header]);
+        return Ok(header);
     }
 
     /// <summary>
@@ -3872,7 +3877,9 @@ public class SynchronisationController(
     /// <returns>The created Synchronisation Rule details.</returns>
     /// <response code="201">Synchronisation Rule created successfully. <c>deletionSourceWarning</c> is set when the new rule projects into a
     /// Metaverse Object Type deleted When Authoritative Source Disconnected from a Connected System that is not one of its
-    /// authoritative sources; the rule was created regardless.</response>
+    /// authoritative sources; the rule was created regardless. <c>awaitingSynchronisation</c> names the Connected System
+    /// Object Type an enabled import rule makes its Connected System's next synchronisation process in full, with how many
+    /// objects that is and about how long it takes.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules", Name = "CreateSyncRule")]
@@ -3949,11 +3956,16 @@ public class SynchronisationController(
 
         _logger.LogInformation("Created Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
+        // What the save recorded as awaiting synchronisation, with what processing it costs (#2615).
+        var awaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+
         // Retrieve the created Synchronisation Rule. A new rule had no prior projection, so any projection it carries is
         // new and may need the deletion source warning (#1256).
         var created = await _application.ConnectedSystems.GetSyncRuleAsync(syncRule.Id);
         var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore: null);
-        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleSaveResponse.FromSave(created!, syncRule, deletionSourceWarning));
+        var createdResponse = SyncRuleSaveResponse.FromSave(created!, syncRule, deletionSourceWarning, awaitingSynchronisation);
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([createdResponse]);
+        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, createdResponse);
     }
 
     /// <summary>
@@ -3967,7 +3979,9 @@ public class SynchronisationController(
     /// attribute that the update left with a missing input, for example by disabling the rule; <c>deletionSourceWarning</c>
     /// is set when the update takes the rule into projecting into a Metaverse Object Type deleted When Authoritative Source
     /// Disconnected from a Connected System that is not one of its authoritative sources (the update goes ahead
-    /// regardless).</response>
+    /// regardless); <c>awaitingSynchronisation</c> names each Connected System Object Type an import rule's change makes its
+    /// Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how
+    /// long it takes (empty when the change needs none).</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -4051,10 +4065,17 @@ public class SynchronisationController(
 
         _logger.LogInformation("Updated Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
+        // What the save recorded as awaiting synchronisation, with what processing it costs (#2615).
+        var awaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+
         // Retrieve the updated Synchronisation Rule; the save's warnings and dependants travel on the instance it saved.
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore);
-        return Ok(SyncRuleSaveResponse.FromSave(updated!, syncRule, deletionSourceWarning));
+        var updatedResponse = SyncRuleSaveResponse.FromSave(updated!, syncRule, deletionSourceWarning, awaitingSynchronisation);
+
+        // The save itself may have made the rule's type await synchronisation; say so in the response to it.
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([updatedResponse]);
+        return Ok(updatedResponse);
     }
 
     /// <summary>
@@ -4136,6 +4157,10 @@ public class SynchronisationController(
     /// This matters because both toggles are silently destructive. Flipping the Deprovisioning Action to Delete
     /// converts every future scope exit into a deletion in the target system; flipping the Out-of-Scope Action to
     /// Disconnect can mass-disconnect joined objects, recalling what they contributed to the Metaverse.
+    ///
+    /// Saving the change takes effect at the next synchronisation: an import rule's Connected System processes every
+    /// object of the rule's Object Type in its next Delta or Full Synchronisation, and an export rule's change is
+    /// applied by the review the save flags, at the next synchronisation of any Connected System.
     ///
     /// An omitted or null field previews the stored rule's value, matching the update endpoint's semantics
     /// exactly. Apply the previewed change through <c>PUT sync-rules/{id}</c>.
@@ -4955,7 +4980,9 @@ public class SynchronisationController(
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The mapping creation request.</param>
     /// <returns>The created Attribute Flow Mapping.</returns>
-    /// <response code="201">Mapping created successfully. The response's <c>warnings</c> lists any non-blocking warnings the save raised.</response>
+    /// <response code="201">Mapping created successfully. The response's <c>warnings</c> lists any non-blocking warnings the save raised,
+    /// and its <c>awaitingSynchronisation</c> the Connected System Object Type an import mapping makes its Connected System's next
+    /// synchronisation process in full, with how many objects that is and about how long it takes.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule or referenced Attributes not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -5135,9 +5162,13 @@ public class SynchronisationController(
 
             _logger.LogInformation("Created mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mapping.Id, syncRuleId);
 
+            // What the save recorded as awaiting synchronisation, with what processing it costs (#2615).
+            var awaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+
             // Retrieve the created mapping to get all populated fields
             var created = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mapping.Id);
             var dto = SyncRuleMappingDto.FromEntity(created!);
+            dto.AwaitingSynchronisation = awaitingSynchronisation;
             // The reloaded copy carries no in-memory state, so a save-time sequence skip (plan decision 3) is
             // reported from the original, saved instance the server stamped it on.
             if (dto.Generation != null)
@@ -5193,7 +5224,9 @@ public class SynchronisationController(
     /// <returns>The updated mapping.</returns>
     /// <response code="200">Returns the updated mapping; its <c>warnings</c> lists any non-blocking warnings the save raised,
     /// and its <c>dependentDerivedFlows</c> any Attribute Flow deriving a Metaverse attribute that the update left with a
-    /// missing input (the update goes ahead regardless).</response>
+    /// missing input (the update goes ahead regardless). Its <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type an import mapping's change makes its Connected System's next synchronisation process in full, with how many
+    /// objects that is and about how long it takes.</response>
     /// <response code="400">The request named no setting, named one that does not apply to this mapping, carried an invalid Expression,
     /// or excluded a Connected System the generated value is not exported to unchanged (the message names it).</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
@@ -5247,6 +5280,8 @@ public class SynchronisationController(
 
             _logger.LogInformation("Updated mapping {MappingId} on Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
             var dto = SyncRuleMappingDto.FromEntity(updated);
+            // What the save recorded as awaiting synchronisation, with what processing it costs (#2615).
+            dto.AwaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
             await AttachGeneratedValueParticipantsAsync([dto], [updated], syncRule.ConnectedSystemId);
             await AttachGeneratedValueBuiltValuesAsync([dto], [updated], syncRule);
             if (DerivedFlowGraph.ReadsMetaverse(updated))
@@ -5268,8 +5303,8 @@ public class SynchronisationController(
     /// Delete an Attribute Flow Mapping
     /// </summary>
     /// <remarks>
-    /// By default, the Metaverse attribute values an import mapping contributed are recalled at the next Full
-    /// Synchronisation of the contributing system (surviving lower-priority contributors are re-elected). Pass
+    /// By default, the Metaverse attribute values an import mapping contributed are recalled at the next
+    /// synchronisation of the contributing system, Delta or Full (surviving lower-priority contributors are re-elected). Set
     /// <c>keepContributedValues=true</c> to leave them in place instead: their provenance is severed before the
     /// mapping is deleted, permanently exempting them from recall. Use the mapping's
     /// contributed-values-summary endpoint first to understand the impact. Export mappings contribute nothing,
@@ -5279,11 +5314,12 @@ public class SynchronisationController(
     /// <param name="mappingId">The unique identifier of the mapping to delete.</param>
     /// <param name="keepContributedValues">True to keep the Metaverse attribute values the mapping contributed
     /// (their provenance is severed, so nothing ever recalls them); false (the default) to leave them to be
-    /// recalled at the next Full Synchronisation of the contributing system.</param>
+    /// recalled at the next synchronisation of the contributing system, Delta or Full.</param>
     /// <returns>What the deletion affected.</returns>
     /// <response code="200">Mapping deleted. The body states the contributed values affected and, in
     /// <c>dependentDerivedFlows</c>, any Attribute Flow deriving a Metaverse attribute that the deletion left with a
-    /// missing input (the deletion goes ahead regardless).</response>
+    /// missing input (the deletion goes ahead regardless), and in <c>awaitingSynchronisation</c> the Connected System
+    /// Object Type an import mapping's deletion makes its Connected System's next synchronisation process in full.</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "DeleteSyncRuleMapping")]
@@ -5322,7 +5358,9 @@ public class SynchronisationController(
             AffectedValueCount = result.AffectedValueCount,
             AffectedObjectCount = result.AffectedObjectCount,
             ContributedValuesKept = result.ContributedValuesKept,
-            DependentDerivedFlows = result.DependentDerivedFlows
+            DependentDerivedFlows = result.DependentDerivedFlows,
+            // What the deletion recorded as awaiting synchronisation, with what processing it costs (#2615).
+            AwaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync()
         });
     }
 
@@ -6221,7 +6259,9 @@ public class SynchronisationController(
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="request">The rule creation request.</param>
     /// <returns>The created Object Matching Rule.</returns>
-    /// <response code="201">Object Matching Rule created successfully.</response>
+    /// <response code="201">Object Matching Rule created successfully. <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type the new rule makes its Connected System's next synchronisation process in full, with how many objects that is and
+    /// about how long it takes.</response>
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Connected System or referenced entities not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -6296,7 +6336,7 @@ public class SynchronisationController(
 
             return CreatedAtRoute("GetObjectMatchingRule",
                 new { connectedSystemId, ruleId = rule.Id },
-                ObjectMatchingRuleDto.FromEntity(rule));
+                await ObjectMatchingRuleSaveResponseAsync(rule));
         }
         catch (ArgumentException ex)
         {
@@ -6319,7 +6359,9 @@ public class SynchronisationController(
     /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <param name="request">The update request.</param>
     /// <returns>The updated Object Matching Rule.</returns>
-    /// <response code="200">Object Matching Rule updated successfully.</response>
+    /// <response code="200">Object Matching Rule updated successfully. <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type the change makes its Connected System's next synchronisation process in full, with how many objects that is and
+    /// about how long it takes.</response>
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Connected System or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -6406,7 +6448,7 @@ public class SynchronisationController(
 
             _logger.LogInformation("Updated Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
 
-            return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+            return Ok(await ObjectMatchingRuleSaveResponseAsync(rule));
         }
         catch (ConfigurationTestsRegressedException ex)
         {
@@ -6476,6 +6518,17 @@ public class SynchronisationController(
     #endregion
 
     #region Synchronisation Rule Object Matching Rules (Advanced Mode)
+
+    /// <summary>
+    /// The response to a create or update of an Object Matching Rule: the rule, with the Connected System Object Types the save
+    /// recorded as awaiting synchronisation and what processing them costs (#2615).
+    /// </summary>
+    private async Task<ObjectMatchingRuleDto> ObjectMatchingRuleSaveResponseAsync(ObjectMatchingRule rule)
+    {
+        var dto = ObjectMatchingRuleDto.FromEntity(rule);
+        dto.AwaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+        return dto;
+    }
 
     /// <summary>
     /// Builds an Object Matching Rule's sources from a request. Each source names exactly one of a Connected System
@@ -6578,7 +6631,9 @@ public class SynchronisationController(
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The rule creation request.</param>
     /// <returns>The created Object Matching Rule.</returns>
-    /// <response code="201">Object Matching Rule created successfully.</response>
+    /// <response code="201">Object Matching Rule created successfully. <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type the new rule makes its Connected System's next synchronisation process in full, with how many objects that is and
+    /// about how long it takes.</response>
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Synchronisation Rule or referenced entities not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -6643,7 +6698,7 @@ public class SynchronisationController(
 
             return CreatedAtRoute("GetSyncRuleObjectMatchingRule",
                 new { syncRuleId, ruleId = rule.Id },
-                ObjectMatchingRuleDto.FromEntity(rule));
+                await ObjectMatchingRuleSaveResponseAsync(rule));
         }
         catch (ArgumentException ex)
         {
@@ -6666,7 +6721,9 @@ public class SynchronisationController(
     /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <param name="request">The update request.</param>
     /// <returns>The updated Object Matching Rule.</returns>
-    /// <response code="200">Object Matching Rule updated successfully.</response>
+    /// <response code="200">Object Matching Rule updated successfully. <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type the change makes its Connected System's next synchronisation process in full, with how many objects that is and
+    /// about how long it takes.</response>
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Synchronisation Rule or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -6741,7 +6798,7 @@ public class SynchronisationController(
 
             _logger.LogInformation("Updated Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
-            return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+            return Ok(await ObjectMatchingRuleSaveResponseAsync(rule));
         }
         catch (ConfigurationTestsRegressedException ex)
         {

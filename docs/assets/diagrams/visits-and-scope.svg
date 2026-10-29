@@ -1,0 +1,65 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- What a synchronisation visits and where scope is checked (Configuration > Scoping Criteria): the objects a Delta or Full Synchronisation visits, the import and export scope checks, and the objects a Delta never reaches. -->
+<!-- Two layouts in the generated-diagram language (docs/hooks/diagrams.py classes), wide and narrow, -->
+<!-- inside the .jim-dg wrapper the site's CSS uses to show one per breakpoint. Themed by the -->
+<!-- .jimdg-* classes in docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the wrapper; it is inlined -->
+<!-- into markdown via pymdownx.snippets, and python-markdown ends the raw-HTML block at either. -->
+<div class="jim-dg jim-dg-concept">
+<svg class="jim-diagram jim-dg-wide" viewBox="0 0 800 364" role="img" aria-labelledby="jimdg-visits-and-scope-w-t jimdg-visits-and-scope-w-d" xmlns="http://www.w3.org/2000/svg">
+<title id="jimdg-visits-and-scope-w-t">What a synchronisation visits, and where scope is checked</title>
+<desc id="jimdg-visits-and-scope-w-d">Connected System Objects in the Connector Space are visited by a Delta Synchronisation when they have changed since the last synchronisation, or when their Object Type is awaiting synchronisation, in which case every object of the type is visited. A Full Synchronisation visits every Connected System Object. Each visited object is checked against the Scoping Criteria of the import rules, which is the import scope check. The Metaverse Objects it is joined to are then evaluated by the export rules, as are Metaverse Objects flagged for review, at the end of the run; each is checked against the Scoping Criteria of the export rules, which is the export scope check, and accounts in the target systems follow. Connected System Objects a Delta does not visit are never checked, and Metaverse Objects nothing reached are left as they are.</desc>
+<text class="jimdg-dg-title" x="102" y="22">Connector Space</text>
+<text class="jimdg-dg-note" x="102" y="40">Connected System Objects</text>
+<text class="jimdg-dg-title" x="450" y="22">Metaverse</text>
+<text class="jimdg-dg-note" x="450" y="40">Metaverse Objects</text>
+<rect class="jimdg-hub" x="8" y="54" width="188" height="197" rx="8"/>
+<text class="jimdg-dg-title jimdg-anchor-start" x="20" y="74">Delta and Full visit</text>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="88" width="164" height="62" rx="8"/><text class="jimdg-dg-label" x="102" y="115">Changed since the</text><text class="jimdg-dg-label" x="102" y="132">last synchronisation</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="160" width="164" height="79" rx="8"/><text class="jimdg-dg-label" x="102" y="187">Object Type awaiting</text><text class="jimdg-dg-label" x="102" y="204">synchronisation</text><text class="jimdg-dg-sub" x="102" y="221">every object of it</text></g>
+<rect class="jimdg-hub" x="356" y="54" width="188" height="180" rx="8"/>
+<text class="jimdg-dg-title jimdg-anchor-start" x="368" y="74">Export rules evaluate</text>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="368" y="88" width="164" height="62" rx="8"/><text class="jimdg-dg-label" x="450" y="115">Joined to an</text><text class="jimdg-dg-label" x="450" y="132">object visited</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="368" y="160" width="164" height="62" rx="8"/><text class="jimdg-dg-label" x="450" y="187">Flagged for review</text><text class="jimdg-dg-sub" x="450" y="204">at the end of the run</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-core" x="220" y="113" width="112" height="79" rx="8"/><text class="jimdg-dg-label-on" x="276" y="140">Import scope</text><text class="jimdg-dg-sub-on" x="276" y="157">each rule's</text><text class="jimdg-dg-sub-on" x="276" y="174">criteria</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-core" x="568" y="104.5" width="112" height="79" rx="8"/><text class="jimdg-dg-label-on" x="624" y="131.5">Export scope</text><text class="jimdg-dg-sub-on" x="624" y="148.5">each rule's</text><text class="jimdg-dg-sub-on" x="624" y="165.5">criteria</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-system" x="704" y="113" width="88" height="62" rx="8"/><text class="jimdg-dg-label" x="748" y="140">Accounts</text><text class="jimdg-dg-sub" x="748" y="157">in targets</text></g>
+<polyline class="jimdg-flow" fill="none" points="196,152.5 214,152.5"/>
+<polygon class="jimdg-flow-arrow" points="220,152.5 212,148 212,157"/>
+<polyline class="jimdg-flow" fill="none" points="332,152.5 350,152.5"/>
+<polygon class="jimdg-flow-arrow" points="356,152.5 348,148 348,157"/>
+<polyline class="jimdg-flow" fill="none" points="544,144 562,144"/>
+<polygon class="jimdg-flow-arrow" points="568,144 560,139.5 560,148.5"/>
+<polyline class="jimdg-flow" fill="none" points="680,144 698,144"/>
+<polygon class="jimdg-flow-arrow" points="704,144 696,139.5 696,148.5"/>
+<g class="jimdg-dg-node"><rect class="jimdg-dg-terminal" x="8" y="277" width="188" height="79" rx="8"/><text class="jimdg-dg-label" x="102" y="304">Not visited by a Delta</text><text class="jimdg-dg-sub" x="102" y="321">a Full Synchronisation</text><text class="jimdg-dg-sub" x="102" y="338">visits it</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-dg-terminal" x="356" y="277" width="188" height="62" rx="8"/><text class="jimdg-dg-label" x="450" y="304">Not reached</text><text class="jimdg-dg-sub" x="450" y="321">left as it is</text></g>
+</svg>
+<svg class="jim-diagram jim-dg-narrow" viewBox="0 0 360 741" role="img" aria-labelledby="jimdg-visits-and-scope-n-t jimdg-visits-and-scope-n-d" xmlns="http://www.w3.org/2000/svg">
+<title id="jimdg-visits-and-scope-n-t">What a synchronisation visits, and where scope is checked</title>
+<desc id="jimdg-visits-and-scope-n-d">Connected System Objects in the Connector Space are visited by a Delta Synchronisation when they have changed since the last synchronisation, or when their Object Type is awaiting synchronisation, in which case every object of the type is visited. A Full Synchronisation visits every Connected System Object. Each visited object is checked against the Scoping Criteria of the import rules, which is the import scope check. The Metaverse Objects it is joined to are then evaluated by the export rules, as are Metaverse Objects flagged for review, at the end of the run; each is checked against the Scoping Criteria of the export rules, which is the export scope check, and accounts in the target systems follow. Connected System Objects a Delta does not visit are never checked, and Metaverse Objects nothing reached are left as they are.</desc>
+<rect class="jimdg-hub" x="12" y="8" width="336" height="163" rx="8"/>
+<text class="jimdg-dg-title jimdg-anchor-start" x="24" y="28">Connector Space: Delta and Full visit</text>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="24" y="42" width="312" height="45" rx="8"/><text class="jimdg-dg-label" x="180" y="69">Changed since the last synchronisation</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="24" y="97" width="312" height="62" rx="8"/><text class="jimdg-dg-label" x="180" y="124">Object Type awaiting synchronisation</text><text class="jimdg-dg-sub" x="180" y="141">every object of it</text></g>
+<polyline class="jimdg-flow" fill="none" points="180,171 180,193"/>
+<polygon class="jimdg-flow-arrow" points="180,199 175.5,191 184.5,191"/>
+<g class="jimdg-dg-node"><rect class="jimdg-core" x="12" y="199" width="336" height="62" rx="8"/><text class="jimdg-dg-label-on" x="180" y="226">Import scope</text><text class="jimdg-dg-sub-on" x="180" y="243">each import rule's Scoping Criteria</text></g>
+<polyline class="jimdg-flow" fill="none" points="180,261 180,283"/>
+<polygon class="jimdg-flow-arrow" points="180,289 175.5,281 184.5,281"/>
+<rect class="jimdg-hub" x="12" y="289" width="336" height="163" rx="8"/>
+<text class="jimdg-dg-title jimdg-anchor-start" x="24" y="309">Metaverse: export rules evaluate</text>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="24" y="323" width="312" height="45" rx="8"/><text class="jimdg-dg-label" x="180" y="350">Joined to an object visited</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="24" y="378" width="312" height="62" rx="8"/><text class="jimdg-dg-label" x="180" y="405">Flagged for review</text><text class="jimdg-dg-sub" x="180" y="422">at the end of the run</text></g>
+<polyline class="jimdg-flow" fill="none" points="180,452 180,474"/>
+<polygon class="jimdg-flow-arrow" points="180,480 175.5,472 184.5,472"/>
+<g class="jimdg-dg-node"><rect class="jimdg-core" x="12" y="480" width="336" height="62" rx="8"/><text class="jimdg-dg-label-on" x="180" y="507">Export scope</text><text class="jimdg-dg-sub-on" x="180" y="524">each export rule's Scoping Criteria</text></g>
+<polyline class="jimdg-flow" fill="none" points="180,542 180,564"/>
+<polygon class="jimdg-flow-arrow" points="180,570 175.5,562 184.5,562"/>
+<g class="jimdg-dg-node"><rect class="jimdg-system" x="12" y="570" width="336" height="62" rx="8"/><text class="jimdg-dg-label" x="180" y="597">Accounts</text><text class="jimdg-dg-sub" x="180" y="614">in target systems</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-dg-terminal" x="12" y="654" width="162" height="79" rx="8"/><text class="jimdg-dg-label" x="93" y="681">Not visited by a Delta</text><text class="jimdg-dg-sub" x="93" y="698">a Full Synchronisation</text><text class="jimdg-dg-sub" x="93" y="715">visits it</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-dg-terminal" x="186" y="654" width="162" height="62" rx="8"/><text class="jimdg-dg-label" x="267" y="681">Not reached</text><text class="jimdg-dg-sub" x="267" y="698">left as it is</text></g>
+</svg>
+</div>

@@ -1,0 +1,54 @@
+@using JIM.Models.Staging.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What became of a configuration change that makes a Connected System's synchronisation process a whole Object Type
+   (#2615), on the Activity that saved it: one line per type, saying that a synchronisation has applied it (linking the run,
+   with when) or that it is awaiting the next synchronisation of the Connected System (linking the system). Nothing for an
+   Activity that saved no such change. *@
+@if (Groups.Count > 0)
+{
+    <MudText Typo="Typo.h5" Class="mt-5">Applying this change</MudText>
+    <MudStack Spacing="1" Class="mt-2" data-testid="jim-change-application">
+        @foreach (var group in Groups)
+        {
+            @* A div rather than the paragraph MudText renders by default: the object chip is a block inside. *@
+            <MudText Typo="Typo.body1" HtmlTag="div" @key="group.ConnectedSystemObjectTypeId" data-testid="jim-change-application-line">
+                <strong>@group.ObjectTypeName</strong>:
+                @if (group.IsApplied)
+                {
+                    @* Composed here so the comma sits tight against what it follows. *@
+                    var appliedAt = group.AppliedAt;
+                    var appliedSuffix = appliedAt is { } applied ? $", {applied.ToLocalTime().ToFriendlyDate()}" : string.Empty;
+                    <span data-testid="jim-change-application-applied">
+                        Applied by
+                        @if (group.AppliedByActivityId is { } runId)
+                        {
+                            <ObjectChip Kind="ObjectChipKind.Activity" Name="Synchronisation" Href="@($"/activity/{runId}")" Class="ma-0" />@appliedSuffix
+                        }
+                        else
+                        {
+                            @($"a synchronisation{appliedSuffix}")
+                        }
+                    </span>
+                }
+                else
+                {
+                    <span data-testid="jim-change-application-awaiting">
+                        Awaiting the next synchronisation of
+                        <MudLink Href="@($"/admin/connected-systems/{group.ConnectedSystemId}")">@group.ConnectedSystemName</MudLink>
+                    </span>
+                }
+            </MudText>
+        }
+    </MudStack>
+}
+
+@code {
+    /// <summary>
+    /// The Object Types the Activity's changes are for, with whether each has been applied.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ActivityObjectTypeSynchronisation> Groups { get; set; } = [];
+}

@@ -325,6 +325,14 @@ public interface IMetaverseRepository
     public Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId);
 
     /// <summary>
+    /// For each of the given Metaverse Object Types, how many of its Metaverse Objects are flagged for review against
+    /// every export rule at the next synchronisation of any Connected System (<c>ScopeReviewPending</c>). Types with none
+    /// flagged are absent from the dictionary. One read however many types are asked about, served by the partial index on
+    /// the flag.
+    /// </summary>
+    public Task<Dictionary<int, int>> GetExportReviewPendingCountsAsync(IReadOnlyCollection<int> metaverseObjectTypeIds);
+
+    /// <summary>
     /// Gets the count of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
     /// Optimised for fast counting without loading entity data.
     /// </summary>

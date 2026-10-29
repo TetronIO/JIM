@@ -118,7 +118,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 001: Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection, InitialExportOnly
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-002-CrossDomainSync" -Step Provision  # Scenario 002: Provision, ForwardSync, ReverseSync, Conflict
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-007-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 007: DeleteHistory, KeepHistory, EdgeCases
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-008-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 008: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-008-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 008: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only), ImportRuleChange
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-010-SyncRuleScoping" -Step InboundEnterScope  # Scenario 010: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators/ExpressionCriterion
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-011-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 011: filter to cells using a single operator
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-014-AttributePriority" -Step BaselineResolution  # Scenario 014: BaselineResolution, RecallReElection, IdenticalValueHandOver, WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor, NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion (OpenLDAP only)
@@ -950,6 +950,7 @@ Two further entitlement scenarios are designed but **deferred**, both blocked on
 | 5 | **NewGroup** | New group created in AD1 -> provisioned to AD2 |
 | 6 | **DeleteGroup** | Group deleted from AD1 -> deleted from AD2 |
 | 7 | **LeaverCohort** | *(OpenLDAP only; skipped with a message on Samba AD)* Date-driven leaver deprovisioning at scale via the Temporal Scope Reconciler; see [LeaverCohort details](#leavercohort-temporal-scope-reconciliation-at-scale-908) below |
+| 8 | **ImportRuleChange** | An Attribute Flow added to the Source user import Synchronisation Rule is recorded as awaiting synchronisation for the user Object Type only, and one Delta Synchronisation with no import applies it to every user; removing it is applied the same way; see [ImportRuleChange details](#importrulechange-an-import-rule-change-applied-by-a-delta-synchronisation-2615) below |
 
 **Diagnostic step** (runs a partial pipeline; does not participate in `-Step All`):
 
@@ -970,6 +971,7 @@ Two further entitlement scenarios are designed but **deferred**, both blocked on
 ./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step NewGroup -Template Small
 ./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step DeleteGroup -Template Small
 ./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step LeaverCohort -Template Small   # OpenLDAP runs only; skipped on Samba AD
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step ImportRuleChange -Template Medium   # Medium or above, so the users span more than one synchronisation page
 
 # Run all steps sequentially
 ./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step All -Template Small
@@ -1006,6 +1008,24 @@ The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/9
 **Design constraint**: the membership removals must be JIM-driven. OpenLDAP has no referential-integrity overlay in this stack, so deleting a Target account never strips member values; any removal observed in Target groups can only have come from JIM's export path.
 
 **Step-specific parameter**: `-LeaverWindowSeconds <int>` (default 180) sets how far in the future the cohort's end dates are placed, i.e. the margin the pre-boundary delta cycle must complete within. Raise it on slow hosts if that cycle overruns before the boundary is crossed.
+
+##### ImportRuleChange: An Import Rule Change Applied by a Delta Synchronisation (#2615)
+
+The **ImportRuleChange** step (issue [#2615](https://github.com/TetronIO/JIM/issues/2615)) proves that saving a change to an import Synchronisation Rule reaches objects that already exist at the Connected System's next Delta Synchronisation, without a Full Synchronisation and without any change in Source. It is the last step in the `-Step All` sequence, after `LeaverCohort`, so it cannot leave a change awaiting synchronisation ahead of that step's negative control (a Delta Synchronisation with no data changes must process only changed objects). Run it at Medium or above: the worker synchronises in pages (500 users by default), and a template that fits one page does not exercise the code between them. The step prints a warning when it is run at a smaller template. Under `-Step All` it is left out at the Scale templates, where its two Delta Synchronisations each process every user and add nothing those runs measure; ask for it by name to run it there.
+
+**Probe**: a constant Attribute Flow (`Office = "ImportRuleChange"`) on the Source user import rule. No other mapping in the scenario reads or writes the Metaverse `Office` attribute, so the change moves every user's Metaverse value without touching Source and gives Target nothing to export.
+
+**Step flow**:
+
+1. Baseline: remove a probe Attribute Flow an earlier run left behind, apply anything already awaiting synchronisation, and assert nothing is awaiting and no user has the value.
+2. Save the Attribute Flow. The save response, the Connected System (`Get-JIMConnectedSystem`, `ConfigurationDrift.AwaitingSynchronisation`) and the Synchronisation Rule (`Get-JIMSyncRule`, `AwaitingSynchronisationChangeCount`) must all show the user Object Type awaiting synchronisation, and the group Object Type not.
+3. Run the Source Delta Synchronisation on its own, with no import. The Activity must succeed and list the user Object Type, with the change applied, in `ConfigurationChangeSynchronisations`; it must have processed at least every Source user (`ObjectsProcessed`) but not every group.
+4. Every joined user has the value (counted across the whole Metaverse, so users on every synchronisation page are covered), and the two ends of the Metaverse's creation order are read in full to check the value and the contributing Synchronisation Rule. Nothing is awaiting synchronisation afterwards.
+5. Remove the Attribute Flow (in a `finally`, so a failed assertion still restores the rule). The removal is awaiting synchronisation for the user Object Type again, a second Delta Synchronisation applies it the same way, no user has the value, and nothing is awaiting synchronisation.
+
+**Idempotent**: a repeat of the step, or one that follows an interrupted run, starts by removing the leftover Attribute Flow and applying whatever is awaiting synchronisation.
+
+**Expected counts**: the users expected to carry the value are Source's user Connected System Objects less those not joined, which is how the users `LeaverCohort` leaves out of scope in Source are left out. The step reports the Pending Exports the first run staged; none are expected, and a non-zero count is shown in yellow rather than failing the step.
 
 ---
 
@@ -2548,7 +2568,7 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 005 | ✅ Complete | Matching rules: 5 tests passing (Projection, Join, DuplicatePrevention, JoinConflict, CaseSensitivity); MultipleRules run separately |
 | Scenario 006 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
 | Scenario 007 | ✅ Complete | Clear Connected System Objects (DeleteHistory, KeepHistory, EdgeCases) |
-| Scenario 008 | ✅ Complete | All 7 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)) plus ImportToMV diagnostic step |
+| Scenario 008 | ✅ Complete | All 8 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only), ImportRuleChange) plus ImportToMV diagnostic step |
 | Scenario 009 | ✅ Complete | Partition-scoped import Run Profiles |
 | Scenario 010 | ✅ Complete | Synchronisation Rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
 | Scenario 011 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |

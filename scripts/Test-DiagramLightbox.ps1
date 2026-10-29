@@ -92,20 +92,22 @@ const CONTROL = '(tall control 800x4000)';
 const control = '<svg class="jim-diagram" viewBox="0 0 800 4000" role="img" aria-labelledby="jimdg-control">' +
   '<title id="jimdg-control">Tall control</title>' +
   '<rect class="jimdg-stage" x="10" y="10" width="780" height="3980"/></svg>';
-const all = names.concat([CONTROL]);
-
+// Each file sits in a wrapper naming it, so a trigger is matched to its file by where it is rather than by its
+// position: a file can hold more than one layout (wide and narrow, of which the site shows one per breakpoint).
+const wrap = (name, svg) => `<div data-jim-file="${name}">${svg}</div>`;
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 ${css}
 body { margin: 0; }
 .md-typeset { padding: 12px; }
 .jim-diagram { width: 100%; height: auto; }
 </style></head><body data-md-color-scheme="default"><div class="md-typeset">
-${svgs.join('\n')}${control}
+${names.map((n, i) => wrap(n, svgs[i])).join('\n')}${wrap(CONTROL, control)}
 </div><script>${js}<\/script></body></html>`;
 
 (async () => {
   const browser = await chromium.launch();
   const findings = [];
+  const checkedFiles = new Set();
   let checks = 0;
 
   for (const [width, height] of viewports) {
@@ -115,16 +117,23 @@ ${svgs.join('\n')}${control}
     await page.evaluate(() => document.fonts && document.fonts.ready);
     await page.waitForTimeout(150);
 
-    for (let i = 0; i < all.length; i++) {
+    const triggerCount = await page.evaluate(() => document.querySelectorAll('.jim-dgz-trigger').length);
+    for (let i = 0; i < triggerCount; i++) {
       const r = await page.evaluate(async (i) => {
         const trigger = document.querySelectorAll('.jim-dgz-trigger')[i];
         if (!trigger) return null;
+        const file = trigger.closest('[data-jim-file]');
+        const svg = trigger.querySelector('svg.jim-diagram');
+        if (!file || !svg) return null;
+        const layouts = file.querySelectorAll('svg.jim-diagram').length;
+        const layout = layouts > 1 ? (svg.classList.contains('jim-dg-narrow') ? ' (narrow)' : ' (wide)') : '';
+        // A layout the site does not show at this width cannot be opened by a reader.
+        if (trigger.getClientRects().length === 0) return { name: file.dataset.jimFile, layout, hidden: true };
         trigger.click();
         await new Promise(r => setTimeout(r, 150));
         const overlaySvg = document.querySelector('.jim-dgz__svg');
         const view = overlaySvg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
-        const base = document.querySelectorAll('.jim-dgz-trigger svg.jim-diagram')[i]
-          .getAttribute('viewBox').split(/[\s,]+/).map(Number);
+        const base = svg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
         const stage = document.querySelector('.jim-dgz__stage').getBoundingClientRect();
         // Half a user unit of slack absorbs the float maths in the view fit.
         const whole = view[0] <= base[0] + 0.5 && view[1] <= base[1] + 0.5 &&
@@ -134,17 +143,20 @@ ${svgs.join('\n')}${control}
         document.querySelector('.jim-dgz__close').click();
         await new Promise(r => setTimeout(r, 100));
         return {
+          name: file.dataset.jimFile,
+          layout,
           whole,
           pctHeight: Math.round((shownH / base[3]) * 100),
           aspect: +(base[2] / base[3]).toFixed(2),
           stageAspect: +(stage.width / stage.height).toFixed(2)
         };
       }, i);
-      if (!r) continue;
+      if (!r || r.hidden) continue;
       checks++;
+      checkedFiles.add(r.name);
 
-      const name = all[i];
-      const label = `${width}x${height} ${name}`;
+      const name = r.name;
+      const label = `${width}x${height} ${name}${r.layout}`;
       if (name === CONTROL) {
         // Only meaningful where the stage is wider than the control; on a tall
         // phone stage there is nothing to fall back from.
@@ -156,6 +168,10 @@ ${svgs.join('\n')}${control}
       }
     }
     await context.close();
+  }
+
+  for (const name of names) {
+    if (!checkedFiles.has(name)) findings.push(`${name}: no layout of it showed at any viewport, so it was never checked`);
   }
 
   await browser.close();

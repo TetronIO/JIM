@@ -57,6 +57,11 @@
     }
 </AuthorizeView>
 
+@* Flagged for review against every export rule (#2615), above the tabs for the same reason: JIM will act on this person's
+   accounts at the next synchronisation. Administrators only; the banner enforces that itself, and the flag is read only
+   for an administrator (ApplyExportReview). *@
+<ExportReviewPendingBanner Pending="_object.ExportReviewPending" ChangedAttributeNames="_object.ExportReviewChangedAttributeNames" />
+
 @if (MetaverseObject != null)
 {
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChanged"
@@ -759,6 +764,22 @@
             await LoadQueuedPasswordChangesAsync(jim, state);
             state.GeneratedValueDecisions = await jim.GeneratedValueDecisions.GetDecisionsForMetaverseObjectAsync(state.ObjectId);
         }
+
+        // Export review (#2615): the flag is on the object already loaded; what is read from it beyond the flag is read
+        // only for an administrator, through the callback. The names come from the Metaverse Attributes rather than from the
+        // object's values, which hold nothing for an attribute whose only change was a removal; the attributes are read only
+        // when there is a record to name, so the common flagged object (an export rule changed) costs nothing extra.
+        var unsynchronisedChangesJson = MetaverseObject.UnsynchronisedChangesJson;
+        Dictionary<int, string> attributeNamesById = [];
+        if (_isAdministrator && MetaverseObject.ScopeReviewPending && !string.IsNullOrWhiteSpace(unsynchronisedChangesJson))
+        {
+            var attributeHeaders = await jim.Metaverse.GetMetaverseAttributeHeadersAsync();
+            attributeNamesById = (attributeHeaders ?? []).ToDictionary(attribute => attribute.Id, attribute => attribute.Name);
+        }
+        state.ApplyExportReview(
+            MetaverseObject.ScopeReviewPending,
+            _isAdministrator,
+            () => MetaverseObjectViewState.ChangedAttributeNamesFrom(unsynchronisedChangesJson, attributeId => attributeNamesById.GetValueOrDefault(attributeId)));
 
         if (MetaverseObject.NameOrId != null)
             _breadcrumbs = new List<BreadcrumbItem>

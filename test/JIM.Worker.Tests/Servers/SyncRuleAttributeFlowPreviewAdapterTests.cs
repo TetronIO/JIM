@@ -295,7 +295,7 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         Assert.That(finding, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(finding!.Message, Does.Contain("recalled at the next Full Synchronisation"));
+            Assert.That(finding!.Message, Does.Contain("recalled at the next synchronisation"));
             Assert.That(finding!.Message, Does.Not.Contain("left in place"));
             Assert.That(finding!.MetaverseAttributeName, Is.EqualTo("Email"),
                 "the finding names its attribute so the portal can render the standard Metaverse attribute chip");
@@ -317,7 +317,7 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         {
             Assert.That(finding!.Message, Does.Contain("keep the values"));
             Assert.That(finding!.Message, Does.Contain("ever recall them"));
-            Assert.That(finding!.Message, Does.Not.Contain("recalled at the next Full Synchronisation"));
+            Assert.That(finding!.Message, Does.Not.Contain("recalled at the next synchronisation"));
             Assert.That(finding!.MetaverseAttributeName, Is.EqualTo("Email"));
         }
     }

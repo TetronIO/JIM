@@ -91,6 +91,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConfigurationChangeClass")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("ConfigurationChangeNeedsFullSynchronisation")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ConfigurationChangeSnapshot")
                         .HasColumnType("jsonb");
 
@@ -3405,6 +3408,59 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("AuxiliaryClassDiscoveryRuns");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConfigurationChangeSynchronisation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClaimedByActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ConfigurationChangeActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConnectedSystemObjectTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClaimedByActivityId");
+
+                    b.HasIndex("ConfigurationChangeActivityId");
+
+                    b.HasIndex("ConnectedSystemId")
+                        .HasDatabaseName("IX_ConfigurationChangeSynchronisations_ConnectedSystemId_Awaiting")
+                        .HasFilter("\"AppliedAt\" IS NULL");
+
+                    b.HasIndex("ConnectedSystemObjectTypeId");
+
+                    b.HasIndex("SyncRuleId");
+
+                    b.HasIndex("ConnectedSystemId", "ConnectedSystemObjectTypeId")
+                        .HasDatabaseName("IX_ConfigurationChangeSynchronisations_ConnectedSystemId_ObjectTypeId");
+
+                    b.ToTable("ConfigurationChangeSynchronisations");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystem", b =>
                 {
                     b.Property<int>("Id")
@@ -6312,6 +6368,36 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
 
                     b.Navigation("ConnectedSystem");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConfigurationChangeSynchronisation", b =>
+                {
+                    b.HasOne("JIM.Models.Activities.Activity", null)
+                        .WithMany()
+                        .HasForeignKey("ClaimedByActivityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Activities.Activity", null)
+                        .WithMany()
+                        .HasForeignKey("ConfigurationChangeActivityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Logic.SyncRule", null)
+                        .WithMany()
+                        .HasForeignKey("SyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystem", b =>

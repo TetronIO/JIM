@@ -81,7 +81,10 @@ function Set-JIMSyncRule {
 
     .OUTPUTS
         With -PassThru, the rule as changed; otherwise nothing. Its warnings are written to the warning stream
-        either way.
+        either way. AwaitingSynchronisation lists each Connected System Object Type an import rule's change makes its
+        Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about
+        how long it takes; it is empty for an export rule and for a change that needs none, and a line for each type
+        saying the same is written to the warning stream.
 
     .EXAMPLE
         Set-JIMSyncRule -Id 1 -Name "Updated Rule Name"
@@ -256,6 +259,9 @@ function Set-JIMSyncRule {
                 if ($result.deletionSourceWarning) {
                     Write-Warning $result.deletionSourceWarning
                 }
+
+                # The Object Types the save made the next synchronisation process in full (#2615): advised, never blocking.
+                Write-JIMAwaitingSynchronisationWarning -AwaitingSynchronisation $result.AwaitingSynchronisation
 
                 if ($PassThru) {
                     $result

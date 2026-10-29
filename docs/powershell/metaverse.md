@@ -147,6 +147,8 @@ Get-JIMMetaverseObject -All [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-S
 
 By default, one page of matching objects, each in summary. With `-Id`, the Metaverse Object in full: its values, where each came from, and the Connected System Objects joined to it. With `-Count`, the number of matching objects.
 
+The object in full also carries ExportReviewPending: whether it is flagged for review against every export Synchronisation Rule, which the next synchronisation of any Connected System carries out.
+
 **By default, or with `-All`**: properties as under [Search-JIMMetaverseObject](#search-jimmetaverseobject).
 
 **With `-Id`**:
@@ -167,6 +169,7 @@ By default, one page of matching objects, each in summary. With `-Id`, the Metav
 | `Origin` | `string` | How the Metaverse Object came to exist: Projected from a Connected System Object, or Internal, created in JIM itself. JIM never deletes an Internal object automatically. One of `Projected` or `Internal`. |
 | `LastConnectorDisconnectedDate` | `datetime` | When the last Connected System Object was disconnected from the Metaverse Object (UTC); empty while one is still joined. |
 | `IsPendingDeletion` | `bool` | Whether the Metaverse Object is due to be deleted under its Object Type's deletion rule. |
+| `ExportReviewPending` | `bool` | Whether the Metaverse Object is flagged for review against every export Synchronisation Rule. The next synchronisation of any Connected System carries the review out, whichever Connected System it is for. |
 | `DeletionEligibleDate` | `datetime` | When the Metaverse Object becomes due for deletion, once its grace period ends (UTC); empty when it is not pending deletion. |
 | `DeletionTriggeredBySystemName` | `string` | The Connected System whose disconnection made the Metaverse Object pending deletion. Empty when it is not pending deletion, when no single system triggered it (its last connection went without one), or when the deletion was scheduled before JIM recorded the trigger. |
 | `Type` | `object` | The Metaverse Object Type, with its Id and Name. It has `Id` and `Name`. |

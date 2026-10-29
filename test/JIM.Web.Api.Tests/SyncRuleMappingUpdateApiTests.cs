@@ -249,6 +249,42 @@ public class SyncRuleMappingUpdateApiTests
     }
 
     [Test]
+    public async Task UpdateSyncRuleMappingAsync_ImportMapping_ReportsTheTypeItRecordedWithItsCostAsync()
+    {
+        // #2615: an Attribute Flow change on an import rule makes the system's next synchronisation process every object of
+        // the rule's type, and the response says how many that is.
+        _expressionMapping.SyncRule!.ConnectedSystemId = 100;
+        _expressionMapping.SyncRule.Enabled = true;
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemHeaderAsync(100)).ReturnsAsync(new JIM.Models.Staging.DTOs.ConnectedSystemHeader { Id = 100, Name = "HR" });
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(100, ObjectTypeId, null)).ReturnsAsync(75);
+
+        var result = await _controller.UpdateSyncRuleMappingAsync(ImportRuleId, ExpressionMappingId,
+            new UpdateSyncRuleMappingRequest { NullIsValue = true });
+
+        var dto = (SyncRuleMappingDto)((OkObjectResult)result).Value!;
+        var awaiting = dto.AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(awaiting.ConnectedSystemObjectTypeId, Is.EqualTo(ObjectTypeId));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(75));
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_ExportMapping_ReportsNothingAwaitingSynchronisationAsync()
+    {
+        _exportMapping.SyncRule!.ConnectedSystemId = 100;
+        _exportMapping.SyncRule.Enabled = true;
+
+        var result = await _controller.UpdateSyncRuleMappingAsync(ExportRuleId, ExportMappingId,
+            new UpdateSyncRuleMappingRequest { InitialExportOnly = true });
+
+        var dto = (SyncRuleMappingDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.AwaitingSynchronisation, Is.Empty, "an export rule's change reaches existing objects through the review the save flags");
+    }
+
+    [Test]
     public async Task UpdateSyncRuleMappingAsync_ExportSetting_IsAppliedAsync()
     {
         var result = await _controller.UpdateSyncRuleMappingAsync(ExportRuleId, ExportMappingId,

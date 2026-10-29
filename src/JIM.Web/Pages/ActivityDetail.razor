@@ -299,6 +299,22 @@
         }
     }
 
+    @* ─── Configuration changes a synchronisation applies (#2615) ─── *@
+    @* A synchronisation run that processed Object Types in full says why and whether it applied the changes; the
+       configuration change Activity that saved them says whether a synchronisation has applied them yet. *@
+    @if (_configurationChangeSynchronisations.Count > 0)
+    {
+        @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
+        {
+            <ActivityProcessedInFullSections Groups="_configurationChangeSynchronisations" RunStatus="_activity.Status"
+                                             RunType="_activity.ConnectedSystemRunType" />
+        }
+        else
+        {
+            <ActivityConfigurationChangeApplication Groups="_configurationChangeSynchronisations" />
+        }
+    }
+
     @if (_configChangeDetail != null)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Configuration Change</MudText>
@@ -1210,6 +1226,10 @@
     private Activity? _informingPreviewActivity;
     private IReadOnlyList<PreviewVerdictLine> _informingPreviewLines = [];
     private ConfigurationChangeDetail? _configChangeDetail;
+
+    // The Object Types a synchronisation processes in full because of saved configuration changes (#2615): for a run, the
+    // ones it claimed; for a configuration change Activity, the ones it saved changes to.
+    private IReadOnlyList<ActivityObjectTypeSynchronisation> _configurationChangeSynchronisations = [];
     private ImportReadRange? _importReadRange;
     private bool _isAdministrator;
     private VirtualisedDataGrid<Activity>? _childActivitiesGrid;
@@ -1345,6 +1365,7 @@
         _parentActivity = null;
         _activityRunProfileExecutionStats = null;
         _configChangeDetail = null;
+        _configurationChangeSynchronisations = [];
         _importReadRange = null;
         _childActivityCount = 0;
         _selectedObjectTypes = new List<string>();
@@ -1394,6 +1415,9 @@
             _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(_activity.ConnectedSystemId.Value);
 
         _importReadRange = await jim.ConnectedSystems.GetImportReadRangeAsync(_activity);
+
+        // Nothing is read for an Activity of a kind that can have none.
+        _configurationChangeSynchronisations = await jim.ConnectedSystems.GetConfigurationChangeSynchronisationsForActivityAsync(_activity);
 
         if (_activity.TargetType is ActivityTargetType.MetaverseObject or ActivityTargetType.ConnectedSystemRunProfile && _activity.MetaverseObjectId != null)
             _metaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.MetaverseObjectId.Value);
@@ -1909,6 +1933,10 @@
             _lastRefreshUtc = DateTime.UtcNow;
             if (watermarksChanged)
                 _importReadRange = await jim.ConnectedSystems.GetImportReadRangeAsync(updated);
+
+            // A run applies the changes it claimed as it completes, so how they stand is read again once it has ended.
+            if (runEnded)
+                _configurationChangeSynchronisations = await jim.ConnectedSystems.GetConfigurationChangeSynchronisationsForActivityAsync(updated);
             UpdateEtaEstimate(updated);
 
             // Refresh child activities and stats alongside the activity itself

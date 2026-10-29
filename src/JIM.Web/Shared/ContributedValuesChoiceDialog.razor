@@ -135,7 +135,7 @@
         return ShowAsync(dialogService, "Remove Attribute Mapping", new DialogParameters<ContributedValuesChoiceDialog>
         {
             { x => x.ImpactText, $"This Attribute Flow contributed the current values of {attributeName} on {totalObjects:N0} Metaverse Objects." },
-            { x => x.RecallHelperText, "The values are recalled at the next Full Synchronisation of the contributing Connected System, with any other contributing Attribute Flow taking over." },
+            { x => x.RecallHelperText, "The values are recalled at the next synchronisation of the contributing Connected System, Delta or Full, with any other contributing Attribute Flow taking over." },
             { x => x.KeepHelperText, "The values remain in place with no record of where they came from. JIM will never recall them; a new inbound Attribute Flow, or manual or automated removal, would be needed to change them later." },
             { x => x.KeepWarningText, "Kept values become permanently unmanaged. This cannot be reversed once the mapping is removed." },
             { x => x.InfoText, "Your choice takes effect when you save the Synchronisation Rule." },
