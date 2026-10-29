@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 2.2
+> **Document Version**: 2.3
 >
-> **Last Updated**: 2026-10-11
+> **Last Updated**: 2026-10-29
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -24,7 +24,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker or Podman containers, HTTPS by default, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | Active development, v0.16.0 released |
+| **Status** | Active development, v0.17.0 released |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -88,8 +88,8 @@ JIM is a self-hosted, on-premises identity management platform that synchronises
 
 | Component | Role | Technology |
 |-----------|------|------------|
-| **JIM.Web** | UI + REST API (at `/api/`) | Blazor Server |
-| **JIM.Worker** | Background task processor; also hosts the Password Delivery Service | .NET Console |
+| **JIM.Web** | UI + REST API (at `/api/`) + SCIM 2.0 Service Provider endpoints (at `/scim/v2/{connectedSystemId}`) | Blazor Server |
+| **JIM.Worker** | Background task processor; also hosts the Password Delivery Service, and stops its running work before memory is exhausted | .NET Console |
 | **JIM.Scheduler** | Scheduled job execution | .NET Console |
 | **JIM.Database** | Data persistence | PostgreSQL 18 |
 | **JIM.PowerShell** | Automation module | PowerShell 7+ |
@@ -123,13 +123,14 @@ Properties on MVOs and CSOs with typed values:
 | Text | "John Smith" |
 | Number | 42 |
 | LongNumber | 9223372036854775807 |
+| Decimal | 1234.56 |
 | DateTime | 2026-01-23T10:30:00Z |
 | Boolean | true/false |
 | Binary | byte[] |
 | Reference | Pointer to another MVO |
 | Guid | UUID |
 
-Attributes can be single-valued or multi-valued.
+Attributes can be single-valued or multi-valued, except Boolean, which is always single-valued. Dates are held in UTC to the microsecond, and each Connected System date attribute has a Date Resolution (the finest step its system keeps), at which JIM exports and compares it. A Connected System attribute can be declared case-exact; every other identifier ignores case.
 
 ### Attribute Flows
 
@@ -138,7 +139,12 @@ Rules defining how attributes map between CSOs and MVOs:
 - **Inbound** (Import): CSO attribute → MVO attribute
 - **Outbound** (Export): MVO attribute → CSO attribute
 
-Flows can include transformations using expressions.
+Flows can include transformations using expressions. Two further kinds of flow exist:
+
+- **Generated Value**: generates a unique value once (adding a number only if a value is taken, a forward-only sequence, or a random token) and keeps it; retired values are never reissued by default. Before choosing a value JIM can probe the target systems for it, and when a target refuses one as already in use, Collision Remediation corrects it or waits for an administrator's decision.
+- **Derived Attribute Flow**: an import flow whose expression reads `mv["..."]` derives one Metaverse attribute from others (Email from Account Name), evaluated in dependency order within one synchronisation; a loop is refused when saved.
+
+Attribute Flows, Generated Values, Scoping Criteria and Object Matching Rules can each be tried against sample or real objects before saving, and saved configuration test cases warn when a change would stop one passing.
 
 ### Object Lifecycle
 
@@ -188,8 +194,9 @@ Grace periods allow time before actual deletion (e.g., 30 days).
 |-----------|--------|--------|-------|
 | **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD, SSL/TLS, container creation |
 | **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel imports, delta import from OpenLDAP's accesslog or a changelog (389 Directory Server's Retro Changelog, deletions and renames included), partition-scoped imports |
-| **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters, auto-confirm export |
+| **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters, multi-valued columns split by the Multi-Value Delimiter, auto-confirm export |
 | **SCIM 2.0 Client** | ✓ | ✓ | Any RFC 7643/7644 service provider; last-modified delta import, optional bulk operations, rate-limit aware |
+| **SCIM 2.0 Service Provider** (Preview) | ✓ | | Identity providers push Users and Groups to JIM's own SCIM endpoint with a key scoped to one Connected System; JIM keeps what arrives in a SCIM store and imports it on a Schedule (full and delta import), journalling every request |
 | **SQL** | ✓ | ✓ | Microsoft SQL Server and Oracle Database through managed ADO.NET drivers; one Connected System per database with an Object Types document naming tables/views, anchors, references and related tables; keyset-paged full import; delta import from a change-log table or a watermark column; transactional export with generated-key capture; auto-confirm export |
 
 ### Planned Connectors
@@ -212,6 +219,7 @@ IConnectorExportUsingCalls    // Push data via API calls (async with Cancellatio
 IConnectorExportUsingFiles    // Write to files (async with CancellationToken)
 IConnectorPasswordManagement  // Set a password over the password channel (LDAP today)
 IConnectorPhases              // Declare the sub-phases a run goes through
+IConnectorUniquenessProbe     // Ask the target whether a generated value is already in use (LDAP, SCIM, SQL)
 ```
 
 All four interaction interfaces take a never-null `IConnectorProgress`, which connectors use to move between the sub-phases they declared through `IConnectorPhases`, narrate within a phase ("Querying root DSE...", "Fetching User objects (page 3)...") and report object counts. See `engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md`.
@@ -240,33 +248,43 @@ Synchronisation Rules define the relationship between Connected Systems and the 
 
 ### Expression Language
 
-Attribute Flows can use expressions for transformations:
+Attribute Flows, Generated Values, Object Matching Rules and Scoping Criteria can use expressions. An expression reads the Connected System Object's attributes as `cs["..."]` and the Metaverse Object's as `mv["..."]`:
 
 ```
 // Simple mapping
-employeeId
+cs["employeeId"]
 
 // Concatenation
-firstName + " " + lastName
+cs["firstName"] + " " + cs["lastName"]
 
 // Conditional
-IIF(department == "IT", "tech-" + username, username)
+IIF(Eq(cs["department"], "IT"), "tech-" + cs["username"], cs["username"])
 
 // Functions
-Left(employeeId, 4) + "-" + Right(employeeId, 4)
-ToUpper(countryCode)
-FormatDateTime(hireDate, "yyyy-MM-dd")
+Left(cs["employeeId"], 4) + "-" + Right(cs["employeeId"], 4)
+Upper(cs["countryCode"])
+FormatDate(mv["Hire Date"], "yyyy-MM-dd")
+RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")
+Where(cs["proxyAddresses"], "starts with", "SMTP:")
 ```
+
+Expressions read every value of a multi-valued attribute, compare text character by character, read dates in UTC (text only in ISO 8601, or through `ParseDate` with a format), and refuse .NET reflection both when saved and when run. A save is refused for an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold.
 
 ### Built-in Functions
 
-| Category | Examples |
-|----------|----------|
-| String | `Left`, `Right`, `Mid`, `Trim`, `ToUpper`, `ToLower`, `Replace` |
-| Date | `FormatDateTime`, `DateAdd`, `DateDiff` |
-| Logic | `IIF`, `IsNull`, `Coalesce` |
-| Reference | `ResolveReference`, `GetReferencedValue` |
-| Conversion | `ToString`, `ToNumber`, `ToBoolean` |
+| Category | Functions |
+|----------|-----------|
+| Text | `Trim`, `Upper`, `Lower`, `Capitalise`, `Left`, `Right`, `Substring`, `Length`, `Replace`, `StartsWith`, `EndsWith`, `Contains`, `HasValue`, `IsNullOrEmpty`, `IsNullOrWhitespace` |
+| Pattern | `IsMatch`, `RegexReplace`, `RegexExtract` (patterns checked and time-limited) |
+| Conditional | `IIF`, `Eq`, `Coalesce` |
+| Multi-valued | `Count`, `Min`, `Max`, `Where`, `Join`, `Split` |
+| Date | `FormatDate`, `ParseDate`, `Now`, `Today`, `ToFileTime`, `FromFileTime` |
+| Conversion | `ToString`, `ToInt`, `ToDecimal` |
+| Account control | `EnableUser`, `DisableUser`, `HasBit`, `SetBit`, `ClearBit` |
+| Distinguished name | `EscapeDN` |
+| Password | `RandomPassword`, `RandomPassphrase` |
+
+The catalogue, with each function's signature, parameters and an example, is available over REST (`/api/v1/synchronisation/expression-functions`) and `Get-JIMExpressionFunction`, and the portal's expression editor suggests functions and attribute names as you type.
 
 ---
 
@@ -279,11 +297,11 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | **JWT Bearer** | Interactive applications, SSO |
 | **API Key** | Automation, CI/CD, scripts |
 
-Both are sent as a bearer token in the `Authorization` header (`Authorization: Bearer <credential>`); an API key is recognised by its `jim_ak_` prefix.
+Both are sent as a bearer token in the `Authorization` header (`Authorization: Bearer <credential>`); an API key is recognised by its `jim_ak_` prefix, and no custom key header is accepted. A key can instead be scoped to one Connected System, for a SCIM 2.0 client pushing to that system's SCIM endpoint: a scoped key carries no roles and opens nothing outside `/scim`, and must expire (365 days by default, 730 at most).
 
 ### Key Endpoints (v1)
 
-22 API controllers. Key examples:
+25 API controllers. Key examples:
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -303,12 +321,16 @@ Both are sent as a bearer token in the `Authorization` header (`Authorization: B
 | `GET /api/v1/metaverse/objects/{id}/sync-preview` | Sync Preview: what synchronising an object would do |
 | `GET /api/v1/previews/{activityId}` | Configuration Change Preview results |
 | `GET /api/v1/features` | Feature flags (list, enable and disable Preview features) |
+| `GET /api/v1/synchronisation/expression-functions` | The expression function catalogue |
+| `GET /api/v1/generated-values/decisions` | Generated values waiting for a decision (allow the rename, try again) |
+| `GET /api/v1/configuration-tests` | Saved configuration test cases |
+| `GET /api/v1/synchronisation/connected-systems/{id}/scim/keys` | Scoped SCIM keys for a SCIM 2.0 Service Provider Connected System |
 
 Full interactive Scalar API reference available at `/api/reference` in all environments, including air-gapped deployments. The OpenAPI document is pre-generated at build time and served as a static file at `/api/openapi/v1.json`.
 
 ### PowerShell Module
 
-175 cmdlets for automation:
+210 cmdlets for automation:
 
 ```powershell
 # Connect interactively (opens browser for SSO)
@@ -339,7 +361,10 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 - **SSO/OIDC Required**: No local accounts
 - **PKCE Flow**: Enhanced security for web auth
-- **IdP Agnostic**: Works with any OIDC-compliant identity provider
+- **IdP Agnostic**: Works with any OIDC-compliant identity provider; `Register-JIMIdentityProvider` registers JIM with AD FS or Keycloak in one command
+- **Internal Certificate Authorities**: an identity provider whose HTTPS certificate comes from the organisation's own certificate authority is trusted through JIM's certificate store; each Trusted Certificate is trusted for Connectors, for sign-in, or both
+- **Signing Key Rollover**: a key the identity provider publishes without notice is accepted on first use, and a token signed by a retired key is refused at once
+- **API Credentials**: SSO access tokens and API keys are both bearer tokens; SCIM 2.0 clients use keys scoped to one Connected System
 
 ### Authorisation
 
@@ -349,6 +374,8 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 ### Data Protection
 
 - **Credential Encryption**: AES-256-GCM at rest
+- **No Credential Flows**: Credential attributes (`unicodePwd`, `userPassword`, `password` and the rest) cannot be imported or exported through an Attribute Flow; passwords travel only through the password channel, and a password pushed over SCIM is refused
+- **Portal Hardening**: a Content Security Policy limits the portal's connections, WebSockets included, to JIM's own origin
 - **No Cloud Dependencies**: All secrets stored locally
 - **Air-Gapped Support**: Works without internet
 
@@ -358,7 +385,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ### Core Platform (Complete)
 
-- ✅ Connector framework with LDAP (Active Directory, OpenLDAP, 389 Directory Server), File, SQL (SQL Server, Oracle) and SCIM 2.0 Client connectors (import and export)
+- ✅ Connector framework with LDAP (Active Directory, OpenLDAP, 389 Directory Server), File, SQL (SQL Server, Oracle) and SCIM 2.0 Client connectors (import and export), and the SCIM 2.0 Service Provider Connector (import, Preview)
 - ✅ Full inbound sync (join, project, Attribute Flow)
 - ✅ Full outbound sync (provisioning, export)
 - ✅ LDAP/AD export (create, update, delete, container creation)
@@ -368,14 +395,35 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Scheduler service with cron/interval triggers and multi-step execution
 - ✅ Admin UI (operations, config, monitoring)
 - ✅ Dashboard home page with system overview
-- ✅ API with JWT and API key auth (22 controllers)
-- ✅ PowerShell module (175 cmdlets)
+- ✅ API with JWT and API key auth (25 controllers)
+- ✅ PowerShell module (210 cmdlets)
 - ✅ Docker and Podman deployment (rootful or rootless, systemd, Ansible) with air-gapped bundles and HTTPS by default
-- ✅ Integration testing framework (24 scenarios, Scenarios 001-002 and 004-025, including an Active Directory lab)
+- ✅ Integration testing framework (31 scenarios, Scenarios 001-002 and 004-032, including an Active Directory lab with an AD FS server)
 - ✅ Credential encryption
 - ✅ Change history/audit with timeline UI and deleted objects view
 - ✅ Real-time progress indication on Operations page
 - ✅ Unified log viewer (application + PostgreSQL logs)
+
+### Recent Enhancements (v0.17.0)
+
+- ✅ **Unique Value Generation** (#242) - Generated Value Attribute Flows for account names, employee numbers and badge codes, with a retired values register, probing of target systems before a value is chosen, and Collision Remediation with a Needs Decision state, across portal, REST and PowerShell
+- ✅ **Metaverse-Derived Attribute Flows** (#1750) - Import flows reading `mv["..."]` derive one Metaverse attribute from others, in dependency order, with loops refused when saved
+- ✅ **SCIM 2.0 Service Provider** (#124, Preview) - Identity providers push Users and Groups to JIM's own SCIM endpoint with keys scoped to one Connected System; requests are journalled and summarised per key, and the SCIM 2.0 Service Provider Connector imports them on a Schedule
+- ✅ **Configuration Test Harness** (#2055) - Try an Attribute Flow, Generated Value, Scope or Object Matching Rule against typed values or a real object, save test cases, and be asked before a save stops one passing
+- ✅ **Expression Function Library** (#2053) - Pattern, multi-valued and date functions, an editor that suggests functions and attributes, syntax highlighting, every value of a multi-valued attribute read, and the catalogue over REST and PowerShell
+- ✅ **Object Matching on Expressions** (#2052) - Match on an expression, list every candidate behind an Ambiguous Match, and name the rule and value behind every join
+- ✅ **Case and Data Type Fidelity** (#2051, #2153) - Case-exact declarations on Connected System attributes, multi-valued dates and Booleans kept whole, dates held in UTC to the microsecond, and a Date Resolution per date attribute
+- ✅ **Explaining Outcomes** (#399, #348, #2100, #959) - Value provenance in the Inspect view, why a Metaverse Object is or is not connected, the Causality Explorer, and unresolved references listed with their likely cause
+- ✅ **Previews Before Change** (#1530, #134) - Preview a Connected System's Full Synchronisation, or its deletion, before running it
+- ✅ **Object Changes Search** (#1901, #2460) - Find changes across every Metaverse Object by time, type, name and attribute value
+- ✅ **Pending Exports Never Give Up** (#2119) - The Failed status, retry limit and backoff are gone; a refused export is attempted again at every export run and reported until fixed
+- ✅ **Full Synchronisation Evaluates Every Object** (#891) - Delta Synchronisation is the fast path; Full Synchronisation is the complete one, correcting anything a delta missed
+- ✅ **Large Group Performance** (#2492, #2496, #2498) - Object Types synchronised in dependency order, export batch reads that cost the same at any queue size, and very large groups opened and changed without loading every member
+- ✅ **Memory Guard** (#2487) - Service memory reported in Service Health, and the Worker stops its running work near memory exhaustion with the reason recorded, instead of being killed part-way
+- ✅ **Single Sign-On Hardening** (#2363, #2364, #2442, #2088) - Identity providers behind internal certificate authorities, one-command registration with AD FS and Keycloak, signing key rollover handled, and API keys sent only as bearer tokens
+- ✅ **SQL Connector Object Types Editor** - Configure a SQL Connected System's Object Types in the portal from the database's own tables, columns and keys, and browse its catalogue over REST and PowerShell; Oracle TCPS can trust a root from JIM's certificate store and checks the certificate names the host
+- ✅ **Operations Activity Tab** (#2549) - Queued, running and finished work in one time-ordered view, with progress for parallel Schedule steps and estimated start and finish times
+- ✅ **Leaner Worker Start-Up** (#2246) - The process-wide Connected System Object cache and its start-up load are gone; import matching uses a per-run lookup
 
 ### Recent Enhancements (v0.16.0)
 
@@ -490,7 +538,7 @@ Development follows sequenced milestones (see [GitHub Milestones](https://github
 |-----------|-------|
 | **v0.9-STABILISATION** | Configuration controls, identity fusing, lifecycle state management (JML triggers), sync engine refinement, architectural foundation for extensibility |
 | **v1.0-ILM-COMPLETE** | First production-ready release: robust Synchronisation Rules, lifecycle automation, scheduling, error handling, operational monitoring |
-| **v1.x-CONNECTORS** | Expanding connector coverage: SQL Connector shipped for SQL Server and Oracle (PostgreSQL and MySQL dialects next), SCIM 2.0 Client shipped, HR systems, connector framework improvements |
+| **v1.x-CONNECTORS** | Expanding connector coverage: SQL Connector shipped for SQL Server and Oracle (PostgreSQL and MySQL dialects next), SCIM 2.0 Client shipped, SCIM 2.0 Service Provider in Preview, HR systems, connector framework improvements |
 | **v2.0-IGA-FOUNDATION** | Direct in-JIM management of MVOs (no longer dependent on Source-of-Record systems): Entitlement Management (group management + governance: reviews/attestation, delegated admin, dynamic & time-based memberships, self-service, approvals, etc.), Identity Lifecycle Management (user management, self-service for locally-managed attributes, lifecycle workflows), and fine-grained RBAC for custom permission models |
 
 ---
@@ -563,7 +611,7 @@ JIM/
 |   +-- JIM.Data/            # Repository interfaces
 |   +-- JIM.PostgresData/    # EF Core data access
 |   +-- JIM.Connectors/      # Connector implementations
-|   +-- JIM.Scim/            # SCIM 2.0 wire-protocol library
+|   +-- JIM.Scim/            # SCIM 2.0 wire-protocol library (client and server)
 |   +-- JIM.Utilities/       # Shared utilities
 |   +-- JIM.Worker/          # Background processor
 |   +-- JIM.Scheduler/       # Scheduled tasks
@@ -587,6 +635,7 @@ JIM/
 | **CSO** | ConnectedSystemObject - external system's identity representation |
 | **Deprovisioning** | Removing/disabling accounts in target systems |
 | **Expression** | Formula for transforming attribute values |
+| **Generated Value** | An Attribute Flow that generates a unique value once (account name, employee number) and keeps it |
 | **Grace Period** | Time before scheduled deletion executes |
 | **Join** | Linking a CSO to an existing MVO |
 | **Metaverse** | Central authoritative identity repository |
@@ -595,6 +644,7 @@ JIM/
 | **Partition** | Logical division within a Connected System (e.g., OU) |
 | **Pending Export** | Queued change waiting to be sent to target system |
 | **Projection** | Creating a new MVO when no match found |
+| **SCIM Store** | JIM-owned store of what SCIM clients push to the SCIM 2.0 Service Provider, imported by its Connector |
 | **Provisioning** | Creating accounts in target systems |
 | **Run Profile** | Configured operation (Full Import, Full Sync, Export) |
 | **Synchronisation Rule** | Complete mapping configuration between systems and metaverse |
