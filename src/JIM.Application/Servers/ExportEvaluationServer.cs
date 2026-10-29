@@ -736,8 +736,9 @@ public class ExportEvaluationServer
                 await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
                 workingSet.RecordDisconnection(new OutboundDisconnection(cso.Id, cso.ConnectedSystemId, mvo.Id, exportRule.Id, exportRule.Name));
 
-                // Was that the last connector? (Asked after the removal above, per the engine's contract.)
-                if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
+                // Was that the last connector? Counted from what is still joined, now the disconnect is written, not
+                // from mvo.ConnectedSystemObjects, which holds only the connectors this run loaded (#2598).
+                if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo, await CountRemainingConnectorsAsync(mvo)))
                 {
                     mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
                     Log.Information("HandleOutboundDeprovisioningAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",
@@ -765,6 +766,13 @@ public class ExportEvaluationServer
                 return null;
         }
     }
+
+    /// <summary>
+    /// How many Connected System Objects are still joined to <paramref name="mvo"/> in the store. Asked once a
+    /// disconnect or deletion has been written, it is the number of connectors the object has left.
+    /// </summary>
+    private async Task<int> CountRemainingConnectorsAsync(MetaverseObject mvo)
+        => (await SyncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvo.Id)).Count;
 
     /// <summary>
     /// Scope-out form of the never-exported cancellation. The CSO here comes from the per-page cache, which also
@@ -803,8 +811,8 @@ public class ExportEvaluationServer
         Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: Cancelled never-exported provisioning of CSO {CsoId} in system {SystemId} for MVO {MvoId}: removed unsent Create Pending Export {PendingExportId} and the CSO; nothing was exported",
             cso.Id, cso.ConnectedSystemId, mvo.Id, existingPe.Id);
 
-        // Was that the last connector? (Asked after the removal above, per the engine's contract.)
-        if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
+        // Was that the last connector? Counted from what is still joined, now the object is deleted (#2598).
+        if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo, await CountRemainingConnectorsAsync(mvo)))
         {
             mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
             Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",

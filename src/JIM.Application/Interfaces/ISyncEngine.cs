@@ -319,12 +319,13 @@ public interface ISyncEngine
 
     /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
-    /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
-    /// CSO from the object's collection. Only a Projected object whose Type's Deletion Rule is
-    /// WhenLastConnectorDisconnected qualifies.
+    /// LastConnectorDisconnectedDate, starting the deletion grace period. Only a Projected object whose Type's
+    /// Deletion Rule is WhenLastConnectorDisconnected qualifies.
     /// </summary>
     /// <param name="mvo">The Metaverse Object the CSO was just disconnected from.</param>
-    bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo);
+    /// <param name="remainingConnectorCount">How many Connected System Objects are still joined to it once the
+    /// disconnect is written, counted from the store rather than the object's in-memory collection.</param>
+    bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo, int remainingConnectorCount);
 
     /// <summary>
     /// Decides what kind of export, if any, a Metaverse Object change stages against one export

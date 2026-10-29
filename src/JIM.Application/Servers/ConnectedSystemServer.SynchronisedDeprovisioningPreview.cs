@@ -381,7 +381,7 @@ public partial class ConnectedSystemServer
             return null;
 
         // A probe carrying no connectors, so the engine is asked the question it asks itself after the removal.
-        if (!pass.SyncEngine.ShouldMarkLastConnectorDisconnected(new MetaverseObject { Origin = mvo.Origin, Type = mvo.Type }))
+        if (!pass.SyncEngine.ShouldMarkLastConnectorDisconnected(new MetaverseObject { Origin = mvo.Origin, Type = mvo.Type }, remainingConnectorCount: 0))
             return null;
 
         progress.EligibilityReported.Add(mvo.Id);
