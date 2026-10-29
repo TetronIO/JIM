@@ -83,7 +83,7 @@ Sync is the core phase, where JIM reconciles each Connector Space with the Metav
 
 Inbound sync processes Connected System Objects from source systems and updates the Metaverse. For each one in scope:
 
-1. **Scoping**<br /> JIM evaluates the Synchronisation Rule's scoping to decide whether the object should be processed. An object that falls out of scope is disconnected from its Metaverse Object.
+1. **Scoping**<br /> JIM evaluates the Synchronisation Rule's scoping to decide whether the object should be processed. An object that falls out of scope is disconnected from its Metaverse Object, unless the rule's Out-of-Scope Action keeps the join.
 
 2. **Matching**<br /> JIM looks for the Metaverse Object the object belongs to, using the [Object Matching Rules](../configuration/object-matching-rules.md), which correlate it with an existing Metaverse Object on, say, an employee ID, an email address, or a combination of attributes.
 
@@ -113,10 +113,10 @@ What prevents this from looping is value-level change detection, not a special c
 
 ### Full Sync vs Delta Sync
 
-- **Full Synchronisation** re-evaluates every Connected System Object, changed or not. Use it for a new Connected System, after changing Synchronisation Rule configuration or upgrading JIM, and to correct anything a Delta Synchronisation missed. It is slower, so schedule Delta Synchronisation for routine runs.
-- **Delta Synchronisation** processes only the Connected System Objects that have changed since they were last synchronised. It is faster, and is the normal operational mode. A change an import commits while a synchronisation of the same Connected System is running, for example in the same Schedule parallel group, is never lost: if the running synchronisation does not process it, the next one does.
+- **Full Synchronisation** processes every Connected System Object, changed or not. Use it for a new Connected System, after upgrading JIM, after a change only a Full Synchronisation applies, and to correct anything a Delta Synchronisation missed. It is slower, so schedule Delta Synchronisation for routine runs.
+- **Delta Synchronisation** processes the Connected System Objects that have changed since they were last synchronised, and every object of an Object Type awaiting synchronisation. It is faster, and is the normal operational mode. A change an import commits while a synchronisation of the same Connected System is running, for example in the same Schedule parallel group, is never lost: if the running synchronisation does not process it, the next one does.
 
-One kind of configuration change does not wait for a Full Sync: an export rule change that moves objects into or out of its scope (a new or re-enabled rule, provisioning switched on, changed Scoping Criteria). JIM marks the affected Metaverse Objects, and the next synchronisation of any Connected System, Delta included, provisions and deprovisions them; see [When a change to an export rule takes effect](../configuration/deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
+Most saved configuration changes do not wait for a Full Synchronisation: the next synchronisation of the Connected System, Delta included, applies an import rule change, and the next synchronisation of any Connected System applies an export scope change. [When a change takes effect](../configuration/configuration-changes.md#when-a-change-takes-effect) says which waits for what.
 
 ## :material-export: Phase 3: Export
 
@@ -171,7 +171,7 @@ Before running the real cycle for one object, [Sync Preview](../configuration/sy
 
 ## :material-rocket-launch-outline: Initialising JIM
 
-Initialise JIM once in a new deployment, and again after any significant change to Synchronisation Rules, [Object Matching Rules](../configuration/object-matching-rules.md) or [Attribute Priority](attribute-priority.md). Initialising means running every Connected System through the pipeline in a fixed order before returning to delta cycles.
+Initialise JIM once in a new deployment, and again after a significant change to apply in order across Connected Systems, such as new [Object Matching Rules](../configuration/object-matching-rules.md) or [Attribute Priority](attribute-priority.md). Initialising means running every Connected System through the pipeline in a fixed order before returning to delta cycles.
 
 **The order:**
 

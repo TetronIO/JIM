@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Know when a configuration change takes effect: the confirmation says so, the Connected System lists changes awaiting synchronisation with **Run now**, and Activities say why a run processed a whole Object Type and which run applied each change. REST and PowerShell too. (#2615)
 - ✨ Configure a SQL Connected System's Object Types in the portal instead of writing a JSON document: a guided Add Object Type dialog and one card per Object Type, choosing tables, views and columns from the database itself, with its primary and foreign keys offered as anchors and references. (#2570)
 - ✨ See what a SQL Connected System's database contains before writing its Object Types: list its tables and views, or one table's columns, primary key and foreign keys, or the columns a SELECT statement would return, with `Get-JIMConnectedSystemCatalogue` or REST. (#2570)
 - ✨ When a value JIM is configured with does not match what the identity provider sends, sign-in says which: a portal sign-in stops on a page naming the setting, such as `JIM_SSO_CLIENT_ID`, the value JIM expected and the value it received, instead of **Something went wrong**. Covers the audience, issuer, client secret, scopes and the claim JIM identifies people by. An API token refused for its audience or issuer is logged the same way, and administrators see every problem with `Get-JIMSignInDiagnostic` or REST, with the redirect URIs to register. (#2443)
@@ -104,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 Saving a change to an import Synchronisation Rule or Object Matching Rule now takes effect at the Connected System's next synchronisation, Delta included, which processes every object of the affected Object Type, instead of waiting for a Full Synchronisation. (#2615)
 - 🔄 A misspelt field in the SQL Connector's Object Types document is now named with the field you most likely meant ("Did you mean 'anchorColumns'?"), in the portal, REST and PowerShell alike, instead of a message naming internal types. (#2570)
 - 🔄 The Connections tab names each object by its Secondary External ID where it has one, such as an LDAP distinguished name, with its External ID beneath. REST and `Get-JIMMetaverseObjectConnection` return both, plus pending values, in place of `displayName`.
 - 🔄 A Full Synchronisation now evaluates every Connected System Object on every run, whether or not it has changed, so it corrects anything a Delta Synchronisation missed and applies JIM upgrades to existing data. It takes longer on a large system; schedule Delta Synchronisation for routine runs. (#891)

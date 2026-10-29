@@ -63,7 +63,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
 
-**Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation, since a Delta Synchronisation processes only the objects that changed. The object's execution item records a join or a projection.
+**Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, the next synchronisation, Delta included, processes every object of its Object Type. The object's execution item records a join or a projection.
 
 ## :material-vector-link: **Ambiguous Provisioning Match**: `This Metaverse Object matches ... Connected System Objects in '...' on ...`
 
@@ -162,7 +162,7 @@ When an object stops contributing to a Metaverse Object and a surviving contribu
 
 For a value held under its old data type, run a Full Import of the Connected System the rule imports from; see [Moving an attribute to its new type](../configuration/connected-system-schema.md#moving-an-attribute-to-its-new-type).
 
-**Check.** After a changed pattern, run a Full Synchronisation; otherwise the next synchronisation, Delta included, retries the object. Its execution item no longer records Synchronisation Failed.
+**Check.** The next synchronisation, Delta included, retries the object, and after a changed pattern processes every object of the rule's type. Its execution item no longer records Synchronisation Failed.
 
 ## :material-calendar-alert: **Dates Merged**: `'...' holds ... dates, but target attribute '...' on '...' holds dates to the second, where some of them become the same date, so it is sent ... distinct values`
 
@@ -171,6 +171,14 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 **How to fix.** Nothing, if one value per step is what the Connected System should hold. If the dates must stay apart there, keep them further apart than its resolution at the source; if the Connected System keeps them more finely than JIM assumes, change the attribute's resolution on the Schema tab.
 
 **Check.** After the next synchronisation that changes the attribute, the object's execution item records the export with no Dates Merged item, or one naming the count you expect.
+
+## :material-timer-sand: **Failed with error**: `The change was saved, but JIM could not record that the next synchronisation of ... must process every ... object`
+
+**What it means.** JIM could not record that a saved import Synchronisation Rule or Object Matching Rule change needs the Connected System's next synchronisation to process every object of its Object Type, so it may not reach the objects that already exist. The change is saved and nothing is lost; the save's Activity fails so that it does not promise the change will take effect.
+
+**How to fix.** Run a Full Synchronisation of the Connected System the message names. It processes every object of every type, so it applies the change whatever was lost.
+
+**Check.** The Full Synchronisation's Activity ends **Complete**.
 
 ## :material-play-circle-outline: A run ends **Failed with error** before processing anything
 

@@ -70,7 +70,7 @@ Container Scope { #container-scope }
 :   How far beneath a selected Container objects are imported from: the whole subtree beneath it (the default), or only the objects held directly within it. Set per Container when configuring a Connected System's partitions.
 
 Delta Synchronisation { #delta-synchronisation }
-:   The Run Profile type that processes only the Connected System Objects that changed since the last Full Synchronisation or Delta Synchronisation, applying Object Matching Rules, Projection, Join and Attribute Flow. Faster than a Full Synchronisation, because it works only from changes already imported into the Connector Space.
+:   The Run Profile type that processes the Connected System Objects that changed since the last Full Synchronisation or Delta Synchronisation, and every object of an Object Type awaiting synchronisation after an import rule change, applying Object Matching Rules, Projection, Join and Attribute Flow. Faster than a Full Synchronisation, because it otherwise works only from changes already imported into the Connector Space.
 
 Deprovisioning { #deprovisioning }
 :   The process of removing or releasing accounts in target systems when an identity no longer meets the criteria for access. Deprovisioning ensures that stale or revoked accounts are cleaned up across all Connected Systems.
@@ -88,7 +88,7 @@ Expression { #expression }
 :   A formula for transforming attribute values during Attribute Flow. Expressions enable string manipulation, conditional logic, and value mapping so that data arriving from one system can be adapted to the format required by another.
 
 Full Synchronisation { #full-synchronisation }
-:   The Run Profile type that processes every Connected System Object in the Connector Space, applying Object Matching Rules, Projection, Join and Attribute Flow, whether or not the object has changed. Re-applies configuration changes and corrects anything a Delta Synchronisation does not pick up.
+:   The Run Profile type that processes every Connected System Object in the Connector Space, applying Object Matching Rules, Projection, Join and Attribute Flow, whether or not the object has changed. How an export Attribute Flow edit reaches existing objects, and the run that corrects anything a Delta Synchronisation does not pick up.
 
 Grace Period { #grace-period }
 :   The configurable time window before a scheduled deletion is executed. Grace periods provide a safety net, allowing administrators to recover objects that were marked for deletion before they are permanently removed.

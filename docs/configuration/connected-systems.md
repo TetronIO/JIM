@@ -89,29 +89,38 @@ The list filters by change type (**Create**, **Update** or **Delete**) and by st
 
 A Pending Export's detail page names two distinct things about each attribute change, side by side: **Attribute Flow** is the outbound Synchronisation Rule that staged the change, and **Value from** is where the underlying Metaverse value came from (a Connected System through an import Attribute Flow, a computed expression, or a Generated Value), linking into that attribute's inspector on the source Metaverse Object. Troubleshooting a wrong exported value usually needs both: which rule sent it, and which source put it on the Metaverse Object in the first place.
 
-## :material-database-clock-outline: Configuration changes pending a Full Synchronisation
+## :material-database-clock-outline: Changes awaiting synchronisation
 
-Most configuration changes do not take effect the moment you save them. Scoping criteria, Attribute Flow, Object
-Matching Rules and schema selection all describe what synchronisation *should* do; the change reaches your data only
-when synchronisation next runs over the objects it affects. Until then the portal and the configuration are ahead of
-reality.
+A saved configuration change reaches existing objects only when a synchronisation next runs over them, so for a while the portal and the configuration are ahead of your data. A Connected System shows that wait in two ways, because they ask different things of you: a change the next synchronisation applies, and a change that is pending a Full Synchronisation. [When a change takes effect](configuration-changes.md#when-a-change-takes-effect) says which change is which.
 
-JIM tracks this for you. A Connected System whose configuration has changed in a way that affects synchronisation
-outcomes shows an indicator in the Connected Systems list, and a notice on the Connected System page saying how many
-changes are waiting and when the last Full Synchronisation ran.
+### Changes the next synchronisation applies
 
-**Only consequential changes count.** Renaming a Connected System or editing a description changes nothing about what
-synchronisation does, so it never raises the indicator. Changes are classified as they are recorded, and only the two
-classes that alter outcomes are counted:
+Saving an import Synchronisation Rule or an Object Matching Rule records the change as awaiting synchronisation for the Connected System Object Type it affects. The Connected System's page shows one notice per Object Type, **Changes awaiting synchronisation: {Type}**, listing each change (linked to its Activity, with when it was saved and by whom). **Run now** opens the queue dialog with the Delta Synchronisation Run Profile chosen, or the Full Synchronisation one where the system has no Delta; you can pick another. The Connected Systems list marks the system with a chip showing how many changes are waiting, and the rule shows an **Awaiting synchronisation** chip.
+
+The Connected System's next synchronisation, Delta or Full, processes every object of that Object Type and only the changed objects of the others, then marks the changes applied:
+
+- **Several changes, one run**<br /> Every change saved before a run starts is applied by that run.
+- **A change saved during a run waits for the next one**<br /> The running synchronisation carries on with the rules it started with.
+- **A failed or cancelled run applies nothing**<br /> The next run processes the Object Type again, and the notice stays until a run completes.
+- **The cost is the whole Object Type**<br /> On a large Object Type the next Delta Synchronisation takes as long as processing every object of that type would. The notice gives the object count; run it in a quiet period, or choose **Run now** to have it over with.
+- **Export follows on its own**<br /> Every Metaverse Object the Object Type joins or projects is processed too, so export evaluation runs on them as usual.
+
+The synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind it and whether it applied them. Each change's own Activity says **Applied by** that run, or **Awaiting the next synchronisation** of the system.
+
+### Changes pending a Full Synchronisation
+
+Some changes no ordinary synchronisation applies by itself. A Connected System with such a change since its last Full Synchronisation shows an indicator in the Connected Systems list, and a notice on its page saying how many changes are waiting and when the last Full Synchronisation ran.
+
+**Only consequential changes count.** Renaming a Connected System or editing a description changes nothing about what synchronisation does, so it never raises the indicator. Changes are classified as they are recorded, and only the two classes that alter outcomes are counted:
 
 | Class | Examples | How it shows |
 |-------|----------|--------------|
-| Sync-affecting | Scoping criteria, Attribute Flow, Object Matching Rules, schema selection | Amber, with the number of changes |
-| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+| Sync-affecting | An export Attribute Flow, a Metaverse Attribute, schema selection, an export rule's scope | Amber, with the number of changes |
+| Destructive | An export rule's Deprovisioning Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
 
-**Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose
-Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises
-it on the system that rule belonged to.
+A change to an import Synchronisation Rule or an Object Matching Rule is not counted: the next synchronisation applies it. An export rule's scope or Deprovisioning Action is counted until a Full Synchronisation has run, although the next synchronisation of any Connected System already reviews every Metaverse Object against it.
+
+**Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises it on the system that rule belonged to.
 
 **Two states mean "JIM cannot tell", not "up to date":**
 
@@ -121,20 +130,18 @@ it on the system that rule belonged to.
   [Configuration Change History](activities.md#configuration-change-history)), so JIM holds no record of what changed.
 
 Both are shown distinctly rather than as a clean result, because reporting a settled configuration JIM cannot vouch
-for would be worse than reporting nothing.
+for would be worse than reporting nothing. Changes awaiting synchronisation are reported in both states.
 
 !!! note "The reference point is when the run started"
     A change made while a long Full Synchronisation was still running may not have been picked up by it, so it is
     counted as still pending. You may occasionally be prompted for a re-run you did not strictly need; the alternative
     would be hiding a change that really was missed.
 
-Read the same status from automation with `(Get-JIMConnectedSystem -Id <id>).ConfigurationDrift`, or from the
-`configurationDrift` object on the REST Connected System response. In both cases, check `IsDeterminable` before
-treating `HasPendingChanges` as `false`.
+Read both from automation with `(Get-JIMConnectedSystem -Id <id>).ConfigurationDrift`, or the `configurationDrift` object on the REST Connected System response. `AwaitingSynchronisation` lists the Object Types waiting, each with its changes and object count. Check `IsDeterminable` before treating `HasPendingChanges` as `false`.
 
 ## :material-eye-outline: Previewing a Full Synchronisation
 
-A Full Synchronisation is when configuration reaches your data: accounts provisioned, updated, disconnected or deleted
+A Full Synchronisation processes every object in the Connected System, and can provision, update, disconnect or delete accounts
 across every Connected System the run reaches. A **Full Synchronisation preview** works out what a Full Synchronisation
 of this Connected System would do, against the objects as they stand, changing nothing, so you can read the
 consequences before you run it.

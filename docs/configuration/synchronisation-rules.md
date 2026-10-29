@@ -44,7 +44,7 @@ A rule's Connected System Object Type must be selected on the Connected System's
 
 A saved rule's Object Types cannot be changed: its Scoping Criteria, Attribute Flows and Object Matching Rules name attributes of those types, and would read nothing on another. Neither the portal, the REST API nor PowerShell offers a way to change them once the rule is saved, and JIM refuses a save that would. To manage another Object Type, create a new Synchronisation Rule.
 
-A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. It reads left to right in the direction data flows: an import rule shows the Connected System Object Type, then the Metaverse Object Type; an export rule the reverse. The form that creates a rule orders its two Object Type pickers the same way. The Connected System's name links to it.
+A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. It reads left to right in the direction data flows: an import rule shows the Connected System Object Type, then the Metaverse Object Type; an export rule the reverse. The form that creates a rule orders its two Object Type pickers the same way. The Connected System's name links to it. An import rule whose Object Type has changes awaiting synchronisation shows an **Awaiting synchronisation** chip there, and an export rule with Metaverse Objects flagged for review shows **Export review pending: N**; see [When a change takes effect](configuration-changes.md#when-a-change-takes-effect).
 
 Where a tab introduces a term you might not already know (Projection, Scoping, Object Matching Rules, Attribute Flow and others across JIM's configuration pages), an info icon sits beside it. Selecting it shows a short definition and a link to the full entry in the [glossary](../reference/glossary.md).
 
@@ -80,7 +80,7 @@ A change made in the Connected System is not drift when it can flow back in: tha
 
 ## :material-filter-outline: Scoping criteria
 
-Scoping criteria decide which objects a rule applies to: only objects that match are processed. [Scoping Criteria](scoping-criteria.md) covers how criteria are evaluated, multi-valued attributes, relative dates, and previewing a scope change.
+Scoping criteria decide which objects a rule applies to: only objects that match are processed. [Scoping Criteria](scoping-criteria.md) covers where scope is checked, what happens to objects in and out of scope, how criteria are evaluated, relative dates, and previewing a scope change.
 
 ## :material-vector-link: Object Matching Rules
 
@@ -175,7 +175,7 @@ The same filters are available to automation: see `Get-JIMSyncRule`'s `-Directio
 Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit side by side on the same page: renaming a rule is beside the Deprovisioning Action that decides whether leavers' accounts are deleted. JIM judges each save by the properties that actually changed:
 
 - **Cosmetic changes** (name, description) save straight away with no prompt.
-- **Changes that affect synchronisation** (scope, mappings, Object Matching Rules, direction, enabling or disabling the rule) show a confirmation listing exactly what is changing, from which value to which, and remind you that a Full Synchronisation is what puts it into effect.
+- **Changes that affect synchronisation** (scope, mappings, Object Matching Rules, direction, enabling or disabling the rule) show a confirmation listing exactly what is changing, from which value to which, and when it takes effect; see [When a change takes effect](configuration-changes.md#when-a-change-takes-effect).
 - **Destructive changes** (Deprovisioning Action, Inbound Out-of-Scope Action) additionally state, in plain terms, what the change will do: which objects will be deleted rather than disconnected, or disconnected rather than left joined.
 
 The same rules apply across every configuration surface; see [Configuration changes](configuration-changes.md) for the full picture, including when JIM stays silent.
@@ -189,7 +189,7 @@ A rule contributing nothing deletes immediately after a plain confirmation. A ru
 - **Recall the attribute values** (the default): the rule is disabled immediately and the recall runs as a background operation. Where another Attribute Flow also contributes an attribute, its value takes over; where none does, the attribute is cleared, and resulting changes are staged as [Pending Exports](../concepts/synchronisation-pipeline.md) for mapped target systems. Where the recall takes an object out of an export Synchronisation Rule's scope, its account in that target system is deprovisioned according to the rule's [Deprovisioning Action](deprovisioning.md), exactly as a synchronisation would deprovision it. The confirmation links the recall's Activity so you can monitor progress from the Operations page; deleting the rule is the operation's final step.
 - **Keep the attribute values**: the rule is deleted at once and the values remain in place with no record of where they came from. Nothing will ever recall them; a new inbound Attribute Flow, or manual removal, is the only way to change them later. The choice is recorded on the deletion's Activity.
 
-Removing a single **Attribute Flow mapping** from the editor offers the same choice when the mapping contributed values, with one difference in timing: a recalled mapping's values are withdrawn at the next Full Synchronisation of the contributing Connected System rather than by a background operation (the rule survives, so the ordinary recall machinery covers it). The choice is made when you remove the mapping and takes effect when you save the rule.
+Removing a single **Attribute Flow mapping** from the editor offers the same choice when the mapping contributed values, with one difference in timing: a recalled mapping's values are withdrawn at the contributing Connected System's next synchronisation, Delta included, rather than by a background operation (the rule survives, so the ordinary recall machinery covers it). The choice is made when you remove the mapping and takes effect when you save the rule.
 
 The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-JIMSyncRuleMapping` take `-KeepContributedValues` and state the impact in their confirmations, and the REST delete endpoints take a `keepContributedValues` query parameter. A deletion that completes straight away answers `200 OK` with what it affected; a rule deletion that queues a recall answers `202 Accepted` with the recall Activity's id. Both name any [derived Attribute Flow](derived-attributes.md) the deletion leaves with a missing input. See the [PowerShell reference](../powershell/synchronisation-rules.md) and the [interactive API reference](../../api/reference/).
 
