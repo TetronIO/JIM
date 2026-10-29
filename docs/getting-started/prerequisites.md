@@ -3,7 +3,7 @@ title: Prerequisites
 description: "What you need before deploying JIM: container runtime, identity provider, and hardware requirements."
 type: reference
 audience: implementer
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Prerequisites
@@ -82,6 +82,8 @@ These figures are for the **host machine** (or VM) running JIM (on Docker or Pod
 
 !!! info "Large group memberships drive memory more than object count"
     A group is loaded with its full member list during processing, so a single large group can dominate memory use: a group with 495,000 members loads 495,000 member references. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
+
+If a host runs short anyway, JIM says so before the operating system steps in: the Operations page reports **Memory low** from 85% in use, and the Worker stops a run that would exhaust its memory, saying why on the run's Activity, rather than being killed part-way through it. See [Troubleshooting Worker Restarts and Memory](../administration/troubleshooting-worker.md).
 
 ## :material-lan: Network Requirements
 

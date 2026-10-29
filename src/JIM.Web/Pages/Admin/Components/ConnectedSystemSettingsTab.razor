@@ -117,6 +117,7 @@
                                                           SelectedObjectTypeNames="@SelectedObjectTypeNames"
                                                           Catalogue="@_catalogueSource"
                                                           ValueChanged="OnSettingValueChanged"
+                                                          HasProblemsChanged="OnCatalogueDocumentProblemsChangedAsync"
                                                           Class="@(j == categorySettings.Count - 1 ? "" : "mb-5")" />
                                     j++;
                                     continue;
@@ -271,7 +272,7 @@
     }
 
 </MudForm>
-<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _catalogueDocumentHasProblems || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync" data-testid="jim-settings-save">
     @if (_settingsBeingSaved)
     {
         <MudProgressCircular Class="ms-n1" Indeterminate="true" />
@@ -282,6 +283,13 @@
         <text>Save Settings</text>
     }
 </MudButton>
+@if (_catalogueDocumentHasProblems)
+{
+    @* Saving would be refused with the same problems, which the editor lists beside the document. *@
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2" data-testid="jim-settings-save-blocked">
+        Fix the problems shown with @_catalogueDeclaration?.DocumentSettingName before saving.
+    </MudText>
+}
 
 @code {
     /// <summary>
@@ -401,6 +409,9 @@
     /// has no catalogue. Asked once per the same reasoning as <see cref="_supportsCertificateFetch"/>.
     /// </summary>
     private ConnectorCatalogueDeclaration? _catalogueDeclaration;
+
+    /// <summary>Whether the editor of <see cref="_catalogueDeclaration"/>'s setting holds problems saving would be refused for.</summary>
+    private bool _catalogueDocumentHasProblems;
 
     /// <summary>
     /// Reads the catalogue with the settings on screen, for the editor of <see cref="_catalogueDeclaration"/>'s setting.
@@ -644,6 +655,18 @@
     {
         // no action needed; handling the child component's callback re-renders this component,
         // refreshing required-group feedback and the save button's enabled state
+    }
+
+    /// <summary>
+    /// Holds Save Settings while the catalogue-edited document has problems. When they clear, the form is validated
+    /// afresh: it is not a form field, so the form never re-evaluated itself while the document was the only thing
+    /// wrong, and its validity can still be the stale one from when the page opened on an empty document.
+    /// </summary>
+    private async Task OnCatalogueDocumentProblemsChangedAsync(bool hasProblems)
+    {
+        _catalogueDocumentHasProblems = hasProblems;
+        if (!hasProblems && _settingsForm != null)
+            await _settingsForm.ValidateAsync();
     }
 
     private async Task OnFileSelectedAsync()

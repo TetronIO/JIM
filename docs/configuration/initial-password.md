@@ -7,7 +7,7 @@ audience: administrator
 
 # Initial Password
 
-A Connected System Object a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** tab of an export Synchronisation Rule tells JIM to set one on every Connected System Object that rule creates.
+A Connected System Object a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Passwords** tab of an export Synchronisation Rule tells JIM to set one on every Connected System Object that rule creates.
 
 ```jim-diagram
 archetype: decision

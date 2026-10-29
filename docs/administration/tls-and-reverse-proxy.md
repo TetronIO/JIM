@@ -3,7 +3,7 @@ title: TLS and Reverse Proxy
 description: Give JIM its HTTPS certificate, renew or replace it, and run JIM behind a reverse proxy or load balancer.
 type: reference
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # TLS and Reverse Proxy
@@ -242,7 +242,7 @@ setsebool -P httpd_can_network_connect 1
 Set `JIM_TRUSTED_PROXIES` (in `.env` on Docker, `jim-config.yaml` on Podman) to the address the proxy connects to JIM from, so that JIM reads each client's real IP address, and the original scheme, from the proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers. Until you do:
 
 - The security audit log and API rate limiting see the proxy's address instead of each client's, so every client shares one rate limit.
-- **With plain HTTP to JIM only:** sign-in fails, because JIM sends your identity provider an `http://` callback address that does not match the `https://` one you registered, and JIM refuses every REST API request that carries a password, because it cannot confirm the connection is encrypted.
+- **With plain HTTP to JIM only:** sign-in fails, because JIM sends your identity provider an `http://` callback address that does not match the `https://` one you registered, and JIM refuses every REST API request that carries a password, and every request to its SCIM endpoints, because it cannot confirm the connection is encrypted.
 
 The address to trust depends on where the proxy runs:
 

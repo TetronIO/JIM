@@ -1,12 +1,14 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-10-06, JIM v0.16.0
+> Last updated: 2026-10-29, JIM v0.17.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
 Both Full Sync and Delta Sync use identical processing logic per-CSO. The only difference is CSO selection:
 - **Full Sync**: processes ALL CSOs in the Connected System, every run, whether or not they changed (#891). It does not read `LastSyncCompletedAt` or any mark to decide what to process, so it is the backstop for anything a Delta Sync missed
-- **Delta Sync**: processes only CSOs modified since `LastSyncCompletedAt`
+- **Delta Sync**: processes only CSOs marked `SynchronisationPending` (#2092), `DerivedInputChangePending` (#1750) or `ScopeReviewPending` (#892), or created or updated since `LastSyncCompletedAt`; see [Delta Sync Flow](DELTA_SYNC_FLOW.md)
+
+Both page the Connector Space one Object Type at a time, in dependency order (#2492): referenced types first, so a group's members have been projected by the time its page is processed and its member references resolve in the page loop rather than in the cross-page reference step.
 
 A Run Profile's partition (#353) scopes imports and their deletion detection only; synchronisation always works across the whole Connector Space.
 
@@ -19,10 +21,10 @@ Since v0.7.1, sync decisions are split across three layers:
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284]
+    Start([Start Sync]) --> Prepare[Prepare: count CSOs, the progress estimate only<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build the derived flow graph #1750:<br/>a cycle fails the run before any object<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284<br/>Prepare Unique Value Generation #242<br/>Order the Object Types in use by dependency #2492]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
-    PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance<br/>Keyset cursor on Id, Full and Delta #1858<br/>Seed page identity map #1612 with<br/>the page's joined MVOs]
+    PageLoop -->|Yes| LoadPage[Load the next page of CSOs<br/>one Object Type at a time, referenced<br/>types first #2492, each with its own<br/>keyset cursor on Id #1858, paged until<br/>a page comes back empty #2092, then<br/>a closing sweep of objects created<br/>mid-run behind a type already walked<br/>Capture each marked row's xmin<br/>Prefetch generated value assignments<br/>Seed page identity map #1612 with<br/>the page's joined MVOs]
     LoadPage --> CsoLoop{More CSOs<br/>in page?}
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
@@ -34,8 +36,9 @@ flowchart TD
     IncrProgress --> CsoLoop
 
     CsoLoop -->|No| DeferredRef[Process deferred reference attributes<br/>Second pass: resolve MVO references<br/>that depend on other CSOs in page]
-    DeferredRef --> PersistMvo[PersistPendingMetaverseObjectsAsync:<br/>bulk persist MVO creates + updates]
-    PersistMvo --> CreateMvoChanges[CreatePendingMvoChangeObjectsAsync:<br/>build in-memory MVO change records<br/>for audit trail]
+    DeferredRef --> PersistMvo[PersistPendingMetaverseObjectsAsync:<br/>bulk persist MVO creates + updates<br/>Flush the marks: one guarded clear,<br/>held-back objects kept marked #2343,<br/>then the scope flags cleared]
+    PersistMvo --> GeneratedValues[Delete generated value assignments<br/>that no longer belong, then commit<br/>the page's new ones #242]
+    GeneratedValues --> CreateMvoChanges[CreatePendingMvoChangeObjectsAsync:<br/>build in-memory MVO change records<br/>for audit trail]
     CreateMvoChanges --> EvalDrift[EvaluateQueuedDriftAsync:<br/>drift detection for queued CSOs,<br/>now that MVOs have real ids]
     EvalDrift --> EvalExports[EvaluatePendingExportsAsync:<br/>refresh the page's export cache,<br/>prefetch export matching candidates<br/>once per Object Matching Rule group,<br/>then evaluate outbound exports<br/>for each tracked MVO]
     EvalExports --> FlushPE[FlushPendingExportOperationsAsync:<br/>create/delete/update Pending Exports]
@@ -48,10 +51,11 @@ flowchart TD
     ClearCache --> UpdateProgress[Update activity progress<br/>in database]
     UpdateProgress --> PageLoop
 
-    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across pages<br/>Merge new attribute-flow rows under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
+    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>in batches of at most a page of objects<br/>and 100,000 reference values #2492<br/>progress counted in reference values<br/>Resolve MVO references across pages<br/>Merge new attribute-flow rows under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
     CrossPage --> DeferredRecall[FlushDeferredRecallRpeisAsync:<br/>one RPEI per referencing CSO whose<br/>reference-recall Pending Export was staged]
     DeferredRecall --> ScopeReview[ProcessScopeReviewPendingMetaverseObjectsAsync:<br/>re-evaluate export scope for flagged MVOs:<br/>the Temporal Scope Reconciler's #892, an<br/>export rule configuration change's #1925 and a<br/>write outside synchronisation's #2615, whose<br/>recorded changed and removed values are<br/>delivered to existing accounts too<br/>First clears the flags of types no enabled<br/>export rule covers, without loading them<br/>Batches of 500, change detection off as in the<br/>page flush; the clear keeps the flags and<br/>stops if an export rule changed since this run<br/>read its rules, and keeps any object written<br/>since it was loaded (row version), for the<br/>next run to review<br/>Keeps an execution item, named after the MVO,<br/>only for an object export evaluation changed]
-    ScopeReview --> Watermark[Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow]
+    ScopeReview --> Revisions[ProcessGeneratedValueRevisionsPendingAsync #242:<br/>carry generated values an export run<br/>corrected to the queued exports<br/>Return undrawn sequence numbers #2044]
+    Revisions --> Watermark[Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow<br/>Skipped, with every step after the<br/>page loop, when the run is cancelled]
     Watermark --> Sweep{Full Sync, and armed by<br/>a Connector Space clear?}
     Sweep -->|No| End([Sync Complete])
     Sweep -->|Yes| StrandedSweep[Stranded-value sweep #1549 #1605<br/>See Stranded-Value Sweep below]
@@ -72,13 +76,15 @@ flowchart TD
     CheckJoined -->|No, other JoinType| DeleteOrphan[Create Deleted RPEI<br/>Queue CSO for deletion]
     CheckJoined -->|Yes| CheckOosAction{ISyncEngine.DetermineOutOfScopeAction<br/>InboundOutOfScope<br/>Action?}
 
-    CheckOosAction -->|RemainJoined| KeepJoin[Delete CSO but preserve<br/>MVO join state<br/>Once managed always managed]
-    CheckOosAction -->|Disconnect| RemoveAttrs{RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type?<br/>The Deletion Rule is evaluated first,<br/>recall is skipped if the MVO<br/>will be deleted immediately}
+    CheckOosAction -->|RemainJoined| KeepJoin[Delete CSO but preserve<br/>MVO join state<br/>Once managed always managed<br/>An export rule provisioning here flags<br/>the MVO for export scope review #2318]
+    CheckOosAction -->|Disconnect| SurvivorScope{Recall enabled, and a<br/>surviving contributor's scope<br/>cannot be decided? #2336}
+    SurvivorScope -->|Yes| HeldBack[Held back: RPEI ScopingCriterionFailed<br/>CSO and MVO left exactly as they were<br/>kept marked so the next run,<br/>Delta included, retries #2343]
+    SurvivorScope -->|No| RemoveAttrs{RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type?<br/>The Deletion Rule is evaluated first,<br/>recall is skipped if the MVO<br/>will be deleted immediately}
 
     RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall + re-election:<br/>Mark MVO attributes where<br/>ContributedBySystemId = this system for removal<br/>Re-elect next-priority surviving contributor<br/>ReElectSurvivingContributorsAsync<br/>Attribute with no survivor is cleared,<br/>or frozen if a deletion is pending,<br/>or preserved if no import source remains #1570]
     RemoveAttrs -->|No| BreakJoin
     RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with recalled + re-elected values<br/>Targets receive removals or a<br/>change-of-value to the survivor]
-    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined<br/>Clear the joining rule]
+    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined<br/>Clear the joining rule<br/>MVO not being deleted and an export<br/>rule provisions here: flagged for the<br/>export scope review, which re-provisions<br/>it later in the run #2318]
     BreakJoin --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate]
     EvalDeletion --> DeletionRule{MVO deletion<br/>rule?}
 
@@ -132,7 +138,8 @@ flowchart TD
     Priority --> QueueRef[Queue CSO for deferred<br/>reference attribute processing<br/>Pass 2 at end of page]
     QueueRef --> Orphaned[ISyncEngine.RecallOrphanedContributions #1533:<br/>stage removal of values this system contributed<br/>through a mapping that has been deleted<br/>A disabled mapping or rule is dormant:<br/>its values are retained #1537]
     Orphaned --> Withdrawal[Withdrawal re-election:<br/>an attribute left with no value hands over<br/>to the next surviving contributor,<br/>or is cleared as a NoContributor outcome]
-    Withdrawal --> ApplyChanges[ISyncEngine.ApplyPendingAttributeChanges<br/>Apply pending attribute<br/>additions and removals to MVO]
+    Withdrawal --> Derived[Resolve generated values #242 and<br/>Metaverse-derived Attribute Flows #1750<br/>level by level, in dependency order<br/>Mark other systems whose derived flows<br/>read a changed attribute]
+    Derived --> ApplyChanges[ISyncEngine.ApplyPendingAttributeChanges<br/>Apply pending attribute<br/>additions and removals to MVO]
     ApplyChanges --> ValidateIntegrity[Data integrity validation<br/>on metaverse attribute operations]
     ValidateIntegrity --> QueueMvo[Queue MVO for batch<br/>persist and export evaluation]
     QueueMvo --> DriftDetect[Queue Drift Detection<br/>evaluated at the page flush, once MVOs<br/>are persisted: compare CSO values against<br/>expected MVO state, stage corrective<br/>Pending Exports for EnforceState export rules]
@@ -141,6 +148,7 @@ flowchart TD
     %% --- Error handling ---
     Entry -.->|SyncJoinException| JoinError[RPEI with specific error type<br/>AmbiguousMatch, ObjectMatchingRuleFailed,<br/>ExistingJoin, etc.]
     Entry -.->|Expression failed or<br/>missing input| ExpressionError[RPEI: ExpressionEvaluationError<br/>or ExpressionMissingInput<br/>MVO left untouched]
+    Entry -.->|Scoping criterion could<br/>not be evaluated #2053| ScopingError[RPEI: ScopingCriterionFailed<br/>neither brought into scope nor<br/>taken out, keeps any join<br/>MVO left untouched]
     Entry -.->|Unhandled Exception| UnhandledError[RPEI with UnhandledError<br/>+ stack trace<br/>Processing continues to next CSO]
 ```
 
@@ -178,11 +186,13 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 
 - **Export matching stops rather than guesses (#2052)**<br /> When a rule's values find more than one existing object in the target, or a rule cannot be worked out, the Metaverse Object is neither joined nor provisioned for that export rule: joining the lowest-id object handed identities accounts by accident, and provisioning on a failed rule created the duplicate matching exists to prevent. Export evaluation reports each case in `ExportEvaluationResult.ProvisioningMatchErrors`, and the worker records an `AmbiguousProvisioningMatch` (listing the objects found as match candidates) or `ObjectMatchingRuleFailed` item against the Metaverse Object. Its other export rules are unaffected. A won claim records the Object Matching Rule and the values it matched on, as an inbound join does.
 
-- **Drift detection**<br /> Inbound Attribute Flow queues each CSO for drift detection, and `EvaluateQueuedDriftAsync` runs it at the page flush once MVOs are persisted (a Metaverse Object projected on this page has no id until then, and a corrective Pending Export records it). `DriftDetectionService` checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective Pending Export is created. A divergence is left alone only when this system holds the winning import Attribute Flow for the attribute and that flow reads the diverged attribute, so the edit can flow back in (#1864); otherwise it is drift and is corrected. A generated export mapping (#242) is compared against its Connected System Object's export-mode assignment, prefetched for the page in one query before the drift loop. An expression mapping is evaluated and corrected through export staging's own code (#2180): Missing Input Behaviour, typed conversion and the target's plurality apply exactly as they do on export, a null result stages nothing, and an expression failure or a mapping-level error is recorded against the CSO as an error RPEI with nothing staged for it. A `DriftCorrection` RPEI is raised only where a correction was staged. A Connected System Object whose Pending Export holds a change awaiting an Initial Password (#2039) is skipped entirely, found for the page by one query answered from a partial index: a correction on any of its attributes would make the page flush replace the Pending Export holding that change, and the enabled value would be re-sent to an account Active Directory will not enable until it has a password. The synchronisation preview applies the same skip, so it proposes no correction the run will not make. The skip lasts only as long as the hold: every import judges the held change, returned or not, and confirms or releases it, and export evaluation withdraws it once the Metaverse Object wants what the target already holds.
+- **Drift detection**<br /> Inbound Attribute Flow queues each CSO for drift detection, and `EvaluateQueuedDriftAsync` runs it at the page flush once MVOs are persisted (a Metaverse Object projected on this page has no id until then, and a corrective Pending Export records it). `DriftDetectionService` checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective Pending Export is created. A divergence is left alone only when this system holds the winning import Attribute Flow for the attribute and that flow reads the diverged attribute, so the edit can flow back in (#1864); otherwise it is drift and is corrected. A generated export mapping (#242) is compared against its Connected System Object's export-mode assignment, prefetched for the page in one query before the drift loop. An expression mapping is evaluated and corrected through export staging's own code (#2180): Missing Input Behaviour, typed conversion and the target's plurality apply exactly as they do on export, a null result stages nothing, and an expression failure or a mapping-level error is recorded against the CSO as an error RPEI with nothing staged for it. A `DriftCorrection` RPEI is raised only where a correction was staged. A Connected System Object whose Pending Export holds a change awaiting an Initial Password (#2039), found for the page by one query answered from a partial index, is still corrected at once on its other attributes (#2501); it was skipped entirely before, so drift elsewhere on the account waited a synchronisation or more. Because the page flush replaces the object's Pending Export with its correction, a correction restating the held change is dropped (`DropCorrectionsRestatingHeldChanges`), so the enabled value Active Directory refuses without a password is never re-sent, and the held change is carried into the correction with its status and attempt count (`CarryOverReplacedPendingExport`), the correction continuing the export it replaces as export evaluation's merge does. The synchronisation preview applies the same rule, so it proposes what the run stages. Every import judges the held change, returned or not, and confirms or releases it, and export evaluation withdraws it once the Metaverse Object wants what the target already holds.
 
 - **Attribute recall, re-election and hand-over via ContributedBySystemId**<br /> Every MVO attribute value tracks which Connected System contributed it. When a CSO is obsoleted, attributes contributed by that system are recalled (marked for removal from the MVO) when **both** of the following hold: the CSO type has `RemoveContributedAttributesOnObsoletion` enabled, and the MVO is not slated for immediate deletion (the immediate-deletion check avoids nugatory work when the MVO is about to be deleted at page flush, per #390). A configured deletion grace period no longer skips recall wholesale (Attribute Priority, #91): before clearing, `ReElectSurvivingContributorsAsync` hands each recalled attribute to the next-priority still-joined contributor where one survives, a change-of-value rather than a clear. Only an attribute with no surviving contributor is affected by the freeze: it is preserved rather than cleared when a deletion is pending (for the grace window) or when no remaining joined system carries an enabled import Synchronisation Rule for the object's type (as the object's last known state, surfaced as a `ValuesPreserved` outcome, #1570), so identity-critical single-source values that feed expression-based exports (for example an LDAP Distinguished Name) are not cleared. While an import source remains, the departed system's leftovers are recalled. The recalled and re-elected values are queued for export evaluation so target systems receive the removals or the change-of-value; the only export-evaluation skip is for MVOs pending immediate deletion, whose Delete Pending Exports are created by `FlushPendingMvoDeletionsAsync` instead.
 
-- **Cross-page reference resolution**<br /> After all pages are processed, CSOs with unresolved reference attributes are reloaded from the database. At this point, all MVOs exist, so cross-page references can be resolved. The standard flush pipeline (persist MVOs, evaluate exports, flush PEs) runs again for the resolved references. Only a reference that could still resolve later in the run defers its object. One to an object whose Object Type has already been walked and that existed before the run began (less the sweep's clock-skew margin) is final: nothing later in the run can join it, so it flows nothing, defers nothing and does not hold back the attribute's removals. The run counts final references in one Information line instead of warning per reference, and the Activity's object counts are restored when the step ends.
+- **Object Types in dependency order (#2492)**<br /> `TypeOrderedCsoPager` hands the run its pages one Object Type at a time, in the order `SyncObjectTypeOrdering` computes from the reference mappings (and, for Full Synchronisation, the types references are observed to point at where the schema does not declare them), referenced types first; only types holding objects are paged. Paging in plain id order interleaved types, so a group's page usually arrived before its members were projected and every such group was deferred to the cross-page reference step, which then redid its work. Each type is walked with its own keyset cursor until a page comes back empty, and a closing sweep reloads the objects created at or after the run's start (less a clock-skew margin) that the type walks did not hand out. References within one type, such as managers and nested groups, can still need the cross-page step.
+
+- **Cross-page reference resolution**<br /> After all pages are processed, CSOs with unresolved reference attributes are reloaded from the database, in batches of at most a page of objects and `CrossPageReferenceBatchPlanner.DefaultValueBudget` (100,000) reference values, so several very large groups are never held in memory together; a group larger than the budget gets a batch of its own. The step counts its progress in reference values, not objects (#2492), and puts the run's object counts back when it ends. At this point, all MVOs exist, so cross-page references can be resolved. The standard flush pipeline (persist MVOs, evaluate exports, flush PEs) runs again for the resolved references. Only a reference that could still resolve later in the run defers its object. One to an object whose Object Type has already been walked and that existed before the run began (less the sweep's clock-skew margin) is final: nothing later in the run can join it, so it flows nothing, defers nothing and does not hold back the attribute's removals. The run counts final references in one Information line instead of warning per reference, and the Activity's object counts are restored when the step ends.
 
 - **Partition scope is an import concern (#353)**<br /> A Run Profile's partition filters which containers an import reads and scopes that import's deletion detection. Synchronisation does not filter by partition: CSO counting and page loading always cover the whole Connector Space.
 
@@ -194,11 +204,15 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 
 - **Stranded-value sweep (#1549, #1605)**<br /> A Connector Space clear bypasses obsoletion, so the next Full Synchronisation after a genuine Full Import recalls the values the cleared system stranded, applies Deletion Rules to objects that did not rejoin, and runs the metaverse-wide zero-join pass, subject to a re-join shortfall check that refuses the whole sweep when too many objects are missing.
 
+- **An undecidable survivor scope holds the object back (#2336, #2343)**<br /> When an object leaving a Metaverse Object (obsoleted, out of scope, or a value withdrawn) would hand an attribute to a surviving contributor whose Scoping Criteria cannot be evaluated, nothing acts on a guess: the object is errored as `ScopingCriterionFailed` and the Metaverse Object is left exactly as it was, Deletion Rule state included. The page flush keeps the object marked `SynchronisationPending`, because what would let it finish is a Full Import of the other system, which writes nothing of this one, so this system's next Delta Synchronisation retries it.
+
+- **Re-provisioning an account deleted in the target (#2318)**<br /> When an object disappears from a Connected System an enabled export Synchronisation Rule provisions its Metaverse Object Type to, and the Metaverse Object is neither being deleted nor pending deletion, the page flush flags the Metaverse Object for the export scope review before the departed object is deleted. The review at the end of the same run then stages a provisioning Create. A deliberate withdrawal (a Synchronisation Rule or Connected System deleted) does not.
+
 - **Error isolation**<br /> Each CSO is processed within its own try/catch. Errors create RPEIs but do not halt processing of remaining CSOs.
 
 - **Cancellation safety**<br /> `CheckCancel` completes the current page flush before stopping. This ensures all in-progress MVOs, Pending Exports, and RPEIs are persisted; no work is lost on cancellation.
 
-- **Keyset paging (#1858)**<br /> Full and Delta Synchronisation both page CSOs by a keyset cursor on `Id`. For Delta Synchronisation this is a correctness requirement: each page boundary deletes that page's obsolete CSOs, so OFFSET paging over the shrinking modified-since set skipped every other page.
+- **Keyset paging (#1858)**<br /> Full and Delta Synchronisation both page CSOs by a keyset cursor on `Id`, one per Object Type (#2492). For Delta Synchronisation this is a correctness requirement: each page boundary deletes that page's obsolete CSOs, so OFFSET paging over the shrinking modified-since set skipped every other page.
 
 - **Per-page cache loading**<br /> The export evaluation cache is loaded per-page and cleared at page boundaries. This keeps memory consumption bounded regardless of total CSO count, preventing out-of-memory conditions on large Connected Systems.
 

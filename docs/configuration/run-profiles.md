@@ -3,12 +3,12 @@ title: Run Profiles
 description: What each run type does, and the settings that scope a run, verify an import and stop a run becoming a mass change.
 type: object
 audience: administrator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Run Profiles
 
-A **Run Profile** defines a synchronisation operation that can be executed against a [Connected System](connected-systems.md). Each Run Profile specifies the type of operation (import, sync, or export), a batch size, and (where applicable) a target partition or file path.
+A **Run Profile** defines a synchronisation operation that can be executed against a [Connected System](connected-systems.md). Each Run Profile specifies the type of operation (import, sync, or export) and, for an import, its page size and any partition or file it reads.
 
 ```jim-diagram
 archetype: comparison
@@ -49,7 +49,7 @@ How many objects an import asks the Connected System for at a time: the page of 
 
 ## :material-folder-outline: Partition and file path
 
-For a Connector that exposes partitions (the LDAP Connector) or reads files (the File Connector), the Run Profile pins the operation to one partition or file. A Connected System can have several Run Profiles of the same run type, each scoped to a different partition or file.
+For a Connector that exposes partitions (the LDAP Connector) or reads files (the File Connector), an import Run Profile can read a single partition or file, so a Connected System can have several import Run Profiles of the same run type, each reading a different one. With no **File Path**, an import reads the Connected System's own **File Path**. Export and synchronisation Run Profiles take neither.
 
 A Run Profile that targets no partition reads from every partition currently selected on the Connected System, so it follows your selections automatically.
 
@@ -101,7 +101,7 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 12 -MaxDeletes $null
 
 A limit exists to stop a run nobody meant to be this big; it is not meant to be raised every time a genuine bulk operation comes along. If you know in advance that a run will legitimately exceed a limit (a planned bulk deprovisioning, a large onboarding batch), run a **second Export Run Profile against the same Connected System with no limit set**, and trigger it by hand rather than adding it to a Schedule. This gets the large, deliberate change through without touching the limited Run Profile that protects your regular scheduled runs. The same applies to an import's deletion limits: a second **Full Import** or **Delta Import** Run Profile with no deletion limit, run by hand, lets a deliberate bulk deletion through. For a Delta Import this is also how you let through deletions a limited run has withheld (see [Delta Import](#delta-import)).
 
-Raising or clearing the limited Run Profile's own limit works too, but is the weaker option: it is easy to forget to put the limit back afterwards, and until you do, the safeguard is gone for every run that Run Profile makes, scheduled or not. A second, unlimited Run Profile kept out of Schedules cannot be forgotten in the same way, because it is never run except when you choose to run it.
+Raising or clearing the limited Run Profile's own limit works too, but is the weaker option: it is easy to forget to put the limit back, and until you do, every run that Run Profile makes is unguarded. An unlimited Run Profile kept out of Schedules runs only when you choose.
 
 ### Full Import
 

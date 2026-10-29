@@ -3,7 +3,7 @@ title: Core Concepts
 description: The ideas JIM is built on, from the Metaverse and the synchronisation pipeline to Attribute Priority and expressions.
 type: landing
 audience: implementer
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Core Concepts
@@ -38,7 +38,7 @@ Where a Connector supports it and you have configured it, JIM can set passwords 
 
 ## :material-function-variant: Expressions
 
-JIM includes a built-in **expression language** for transforming and mapping identity attributes. Expressions let you build email addresses, control account states, handle missing values, and much more, all without writing code. See [Expressions](expressions.md) for syntax, functions, and examples.
+JIM includes a built-in **expression language** for transforming and mapping identity attributes. Expressions let you build email addresses, control account states, handle missing values, and much more, all without writing code. See [Expressions](expressions.md) for syntax, functions, and examples, and [Nulls and Missing Inputs](expression-nulls.md) for what an expression does with an attribute an object does not have.
 
 ## :material-tag-outline: Object Naming
 
@@ -46,4 +46,4 @@ Wherever JIM shows you an object, it names it the same way: an ordered list of n
 
 ## :material-format-letter-case: Case Sensitivity
 
-Whenever JIM compares text it is asking one of four questions, and each has one rule: whether a value has changed is exact, whether two values are the same thing ignores case, whether a value meets a condition is exact unless you say otherwise, and finding things ignores case. The [Case Sensitivity](case-sensitivity.md) page explains why, and lists every feature with the rule it follows.
+Whenever JIM compares text it is asking one of four questions, and each has one rule: whether a value has changed is exact, whether two values are the same thing ignores case unless an identifier is declared case-exact, whether a value meets a condition is exact unless you say otherwise, and finding things ignores case. The [Case Sensitivity](case-sensitivity.md) page explains why, and lists every feature with the rule it follows.
