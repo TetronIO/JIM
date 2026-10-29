@@ -58,7 +58,7 @@ Removing the override (resetting the value back to null so the effective value r
 
 ## :material-content-save-check-outline: Confirming a change
 
-Nearly every Service Setting is operational and saves in silence. The few that steer synchronisation are confirmed first, listing what is changing and when it takes effect. See [Configuration changes](configuration-changes.md).
+Nearly every Service Setting is operational and saves in silence. The few that steer synchronisation are confirmed first. The confirmation lists what is changing and reminds you that saving does not apply it to existing objects: run a Full Synchronisation of the Connected Systems concerned to put it into effect. See [Configuration changes](configuration-changes.md).
 
 ## :material-history: Change history
 

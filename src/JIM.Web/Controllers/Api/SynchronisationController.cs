@@ -4158,6 +4158,10 @@ public class SynchronisationController(
     /// converts every future scope exit into a deletion in the target system; flipping the Out-of-Scope Action to
     /// Disconnect can mass-disconnect joined objects, recalling what they contributed to the Metaverse.
     ///
+    /// Saving the change takes effect at the next synchronisation: an import rule's Connected System processes every
+    /// object of the rule's Object Type in its next Delta or Full Synchronisation, and an export rule's change is
+    /// applied by the review the save flags, at the next synchronisation of any Connected System.
+    ///
     /// An omitted or null field previews the stored rule's value, matching the update endpoint's semantics
     /// exactly. Apply the previewed change through <c>PUT sync-rules/{id}</c>.
     ///

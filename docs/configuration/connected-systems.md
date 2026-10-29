@@ -115,10 +115,10 @@ Some changes no ordinary synchronisation applies by itself. A Connected System w
 
 | Class | Examples | How it shows |
 |-------|----------|--------------|
-| Sync-affecting | An export Attribute Flow, a Metaverse Attribute, schema selection, an export rule's scope | Amber, with the number of changes |
-| Destructive | An export rule's Deprovisioning Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+| Sync-affecting | An export Attribute Flow, a Metaverse Attribute, schema selection | Amber, with the number of changes |
+| Destructive | Deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
 
-A change to an import Synchronisation Rule or an Object Matching Rule is not counted: the next synchronisation applies it. An export rule's scope or Deprovisioning Action is counted until a Full Synchronisation has run, although the next synchronisation of any Connected System already reviews every Metaverse Object against it.
+A change to an import Synchronisation Rule or an Object Matching Rule is not counted: the next synchronisation applies it. Nor is a change to an export rule's scope or Deprovisioning Action: the next synchronisation of any Connected System reviews every Metaverse Object against the rule as it now stands. Only what no synchronisation applies by itself counts, so a save that changes an export rule's scope and its Attribute Flow raises the indicator for the Attribute Flow edit alone.
 
 **Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises it on the system that rule belonged to.
 
