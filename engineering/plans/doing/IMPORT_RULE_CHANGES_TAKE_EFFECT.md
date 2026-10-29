@@ -1,6 +1,6 @@
 # Import Rule Changes Take Effect at the Next Synchronisation
 
-- **Status:** Doing (Phase 1 done; Phase 2 under way)
+- **Status:** Doing (Phases 1 and 2 done; Phase 3, the drift indicator, under way)
 - **Issue:** [#2615](https://github.com/TetronIO/JIM/issues/2615) (parts B and C; part A ships separately)
 - **Note:** Predicted against actual counts moved to [#2618](https://github.com/TetronIO/JIM/issues/2618): honest only when one change with an informing preview is behind the run.
 
@@ -46,7 +46,11 @@ One private method in `ConnectedSystemServer`, called after configuration change
 - matching mode switch (every type with an import rule);
 - schema refresh disabling a rule.
 
-Only import rules record changes awaiting synchronisation. The capture wrappers return the class they computed (today they return nothing). An empty diff requests nothing. A request that cannot be recorded fails the save's Activity with a message naming the remedy (run a Full Synchronisation), never silently.
+Only import rules record changes awaiting synchronisation. The capture wrappers return a `ConfigurationChangeCaptureOutcome` (what the capture found: Created, Changed with its class and the sections that changed, NoChange, NotTracked, or Failed), because the Activity cannot say it: its class stays unset for a create, and tracking off or a swallowed capture failure leave no trace on it. `ConfigurationChangeSynchronisationPolicy` decides from the outcome: Changed records unless Cosmetic; Created records when the rule is enabled; NotTracked and Failed record, even for a disabled rule, because nothing was compared; NoChange does not. An empty diff requests nothing. The row is written after the save has been written, last in the save, so the worker's claim can rely on every claimed row already being in the rules it loads.
+
+A Simple Mode Object Matching Rule belongs to a Connected System Object Type, so the type is carried through from the rule, and recorded only when an enabled import rule covers it (nothing else synchronises its objects). A matching mode switch records every type an enabled import rule covers. A configuration test case save opts out of recording (its saves capture history only), since with tracking off the capture could not grade it.
+
+A request that cannot be recorded fails the save's Activity with a message naming the remedy (run a Full Synchronisation) and throws `ConfigurationChangeSynchronisationNotRecordedException`, never silently. The configuration change itself has already been saved and stays.
 
 Deleting an import rule is out of scope: deletion recall already handles it.
 
@@ -80,7 +84,7 @@ Deleting an import rule is out of scope: deletion recall already handles it.
 ## Implementation Phases
 
 1. ✅ **Engine**: entity, migration, repositories (Postgres, in-memory, read-only guard), claim and apply, Delta and Full consumption, early exit, synchronisation preview. Workflow tests: a save leads to a Delta processing every object of that type and only changed objects of others; a save during a run is not consumed by it; ten saves mean the type is processed once, with ten changes listed; a failed run applies nothing. `RequiresPostgres`: claim and apply SQL, delete paths.
-2. **Requests**: every save path above, class-driven, Simple Mode type carried through, loud failure. Tests per path.
+2. ✅ **Requests**: every save path above, class-driven, Simple Mode type carried through, loud failure. Tests per path.
 3. **Drift indicator** rework.
 4. **Read surfaces**: portal notices and chips, Activity sections, DTOs, cmdlet output, Pester tests. Artefact screenshots.
 5. **Before saving**: dialog wording, estimate, save response.

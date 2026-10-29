@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Staging;
+using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories;
 
@@ -25,7 +26,21 @@ public partial class ConnectedSystemRepository
 
         // Add() on an entity with no navigations attaches only this row, so it is safe on the portal's NoTracking
         // context (it traverses nothing it could re-insert). The foreign keys are scalars on purpose.
-        Repository.Database.ConfigurationChangeSynchronisations.Add(change);
-        await Repository.Database.SaveChangesAsync();
+        var entry = Repository.Database.ConfigurationChangeSynchronisations.Add(change);
+        var saved = false;
+        try
+        {
+            await Repository.Database.SaveChangesAsync();
+            saved = true;
+        }
+        finally
+        {
+            // A row the database refused stays tracked as Added, and the next SaveChanges on this context sends it again.
+            // The save that asked for it then fails its Activity on this same context, so the retry would fail that
+            // write the same way and bury the Activity's failure under a second exception. The row is dropped here
+            // and the original failure propagates untouched.
+            if (!saved)
+                entry.State = EntityState.Detached;
+        }
     }
 }

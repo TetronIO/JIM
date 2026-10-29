@@ -81,17 +81,17 @@ public partial class ConnectedSystemServer
     // type-specific snapshot builders.
     // -----------------------------------------------------------------------------------------------------------------
 
-    private async Task CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
+    private async Task<ConfigurationChangeCaptureOutcome> CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
     {
-        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+        return await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.ConnectedSystem, connectedSystem.Id,
             async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey),
             $"Connected System {connectedSystem.Id}");
     }
 
-    private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    private async Task<ConfigurationChangeCaptureOutcome> CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
-        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+        return await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.SynchronisationRule, syncRule.Id,
             async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(syncRule, hashKey),
             $"Synchronisation Rule {syncRule.Id}");
@@ -102,14 +102,25 @@ public partial class ConnectedSystemServer
     // snapshot reflects persisted truth rather than the caller's partial in-memory sub-entity graph; without this the
     // rule's captured history drifts from reality and a later whole-rule save reports pre-existing children as "added".
     // The supplied Activity is already SyncRule-targeted, so capturing onto it surfaces the change in the rule's history.
-    internal async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
+    //
+    // The change is also recorded as awaiting synchronisation (#2615) when it can change what an import produces, which
+    // covers every granular endpoint that routes through here: an Attribute Flow mapping, an Advanced Mode Object
+    // Matching Rule, a schema refresh disabling a flow. A caller whose change cannot affect a synchronisation says so
+    // with recordsAwaitingSynchronisation: false (a configuration test case is the one such caller). Defaulting to
+    // recording is the safe way round: a new caller that forgets the flag processes a type needlessly rather than
+    // leaving its objects wrong.
+    internal async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId, bool recordsAwaitingSynchronisation = true)
     {
         if (syncRuleId <= 0)
             return;
 
         var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
-        if (rule != null)
-            await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
+        if (rule == null)
+            return;
+
+        var outcome = await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
+        if (recordsAwaitingSynchronisation)
+            await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, rule, outcome, isNew: false);
     }
 
     // A configuration change can take away the reason a queued Pending Export change exists: an export Synchronisation
@@ -172,14 +183,13 @@ public partial class ConnectedSystemServer
     // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
     // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
     // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
-    internal async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
+    internal async Task<ConfigurationChangeCaptureOutcome?> CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
     {
         if (connectedSystemId <= 0)
-            return;
+            return null;
 
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-        if (connectedSystem != null)
-            await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        return connectedSystem == null ? null : await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
     }
 
     // Routes an Object Matching Rule change to the configuration history of whichever object owns the rule: the
@@ -202,8 +212,16 @@ public partial class ConnectedSystemServer
             connectedSystemId = objectType?.ConnectedSystemId;
         }
 
-        if (connectedSystemId is > 0)
-            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId.Value);
+        if (connectedSystemId is not > 0)
+            return;
+
+        var outcome = await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId.Value);
+
+        // The capture above is of the whole Connected System and names no Object Type, so the type the rule is on is
+        // carried through here for the change awaiting synchronisation (#2615).
+        var objectTypeId = rule.ConnectedSystemObjectTypeId ?? rule.ConnectedSystemObjectType?.Id;
+        if (outcome != null && objectTypeId is > 0)
+            await RecordSimpleModeMatchingRuleChangeAwaitingSynchronisationAsync(activity, connectedSystemId.Value, objectTypeId.Value, outcome);
     }
 
     /// <summary>
@@ -978,7 +996,8 @@ public partial class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
-        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        await RecordMatchingModeSwitchAwaitingSynchronisationAsync(activity, connectedSystem, newMode, captureOutcome);
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
@@ -8684,7 +8703,21 @@ public partial class ConnectedSystemServer
                 Message = parentActivity.TargetName
             };
             await createChildActivityAsync(childActivity);
-            await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+            var captureOutcome = await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+
+            // A reorder changes which import rule wins an attribute for the objects of every rule it touches, so each
+            // affected rule's type is recorded as awaiting synchronisation (#2615). If a row cannot be recorded the
+            // child has failed itself; the reorder it belongs to must not be left in progress behind it.
+            try
+            {
+                await RecordConfigurationChangeAwaitingSynchronisationAsync(childActivity, rule, captureOutcome, isNew: false);
+            }
+            catch (ConfigurationChangeSynchronisationNotRecordedException ex)
+            {
+                await FailActivityOfUnrecordedChangeAsync(parentActivity, ex);
+                throw;
+            }
+
             await Application.Activities.CompleteActivityAsync(childActivity);
         }
     }
@@ -9966,9 +9999,14 @@ public partial class ConnectedSystemServer
         // Cases whose new result the save accepted expect it from now on: written before the capture, so they are in
         // this change's Configuration History version.
         await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
-        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
         await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        // Last, and after the rule has been written: a change recorded as awaiting synchronisation is claimed by the next
+        // synchronisation as soon as it is committed, and that claim assumes the rule it describes is already stored. This
+        // is the portal's and the REST API's whole-rule save, so it also covers enabling and disabling, projection, the
+        // Inbound Out-of-Scope Action and every Scoping Criteria endpoint (#2615).
+        await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, syncRule, captureOutcome, isNewRule);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -10195,9 +10233,14 @@ public partial class ConnectedSystemServer
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
-        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
         await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        // Last, and after the rule has been written: a change recorded as awaiting synchronisation is claimed by the next
+        // synchronisation as soon as it is committed, and that claim assumes the rule it describes is already stored. This
+        // is the portal's and the REST API's whole-rule save, so it also covers enabling and disabling, projection, the
+        // Inbound Out-of-Scope Action and every Scoping Criteria endpoint (#2615).
+        await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, syncRule, captureOutcome, isNewRule);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }

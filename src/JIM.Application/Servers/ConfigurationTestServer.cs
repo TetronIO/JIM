@@ -200,8 +200,11 @@ public class ConfigurationTestServer
         return activity;
     }
 
+    // A test case is stored beside the rule it covers but changes nothing a synchronisation does, so saving one captures
+    // the owner's history and does not record anything as awaiting synchronisation (#2615). That matters when tracking is
+    // off: the capture then cannot grade the change, and the rule's own saves record the ungraded ones.
     private Task CaptureAsync(Activity activity, Owner owner) => owner.TargetType == ActivityTargetType.SynchronisationRule
-        ? Application.ConnectedSystems.CaptureSyncRuleConfigurationChangeAsync(activity, owner.Id)
+        ? Application.ConnectedSystems.CaptureSyncRuleConfigurationChangeAsync(activity, owner.Id, recordsAwaitingSynchronisation: false)
         : Application.ConnectedSystems.CaptureConnectedSystemConfigurationChangeAsync(activity, owner.Id);
 
     /// <summary>

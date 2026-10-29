@@ -224,6 +224,31 @@ public class ConfigurationChangeSynchronisationDatabaseTests
     }
 
     [Test]
+    public async Task CreateConfigurationChangeSynchronisationAsync_RowRefusedByTheDatabase_LeavesNothingStagedForTheNextSaveAsync()
+    {
+        // The save that asked for the row then fails its Activity on this same context. A refused row left Added in the
+        // change tracker would be sent again by that write (and every later one on the context), failing it the same way
+        // and burying the Activity's failure under a second exception.
+        var s = await SeedAsync();
+        await using var ctx = NewContext(QueryTrackingBehavior.NoTracking);
+        var repository = new PostgresDataRepository(ctx).ConnectedSystems;
+        const int objectTypeThatDoesNotExist = int.MaxValue;
+
+        Assert.ThrowsAsync<DbUpdateException>(() => repository.CreateConfigurationChangeSynchronisationAsync(new ConfigurationChangeSynchronisation
+            { ConnectedSystemId = s.SystemId, ConnectedSystemObjectTypeId = objectTypeThatDoesNotExist, Reason = "refused" }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ctx.ChangeTracker.Entries<ConfigurationChangeSynchronisation>(), Is.Empty, "the refused row is no longer tracked");
+            Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing, "a later write on the context is not poisoned by it");
+        }
+
+        await repository.CreateConfigurationChangeSynchronisationAsync(new ConfigurationChangeSynchronisation
+            { ConnectedSystemId = s.SystemId, ConnectedSystemObjectTypeId = s.UserTypeId, Reason = "accepted" });
+        Assert.That((await ReadAllAsync()).Select(c => c.Reason), Is.EqualTo(new[] { "accepted" }));
+    }
+
+    [Test]
     public async Task CreateConfigurationChangeSynchronisationAsync_ChangeAlreadyClaimedOrApplied_IsRefusedAsync()
     {
         var s = await SeedAsync();

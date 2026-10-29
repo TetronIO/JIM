@@ -11,6 +11,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using Moq;
@@ -55,6 +56,10 @@ public class ConfigurationChangeCaptureCoverageTests
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repo.Setup(r => r.ServiceSettings).Returns(_settingsRepo.Object);
         _repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
+        // Which Object Types an enabled import rule covers, read when a matching mode switch is recorded as awaiting
+        // synchronisation (#2615): none here, as these tests are about the change history.
+        IList<SyncRuleHeader> noImportRules = [];
+        _csRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(noImportRules);
 
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
             .Callback<Activity>(a => _createdActivity = a)

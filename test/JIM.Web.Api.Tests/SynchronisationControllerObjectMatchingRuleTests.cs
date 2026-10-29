@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -77,6 +78,11 @@ public class SynchronisationControllerObjectMatchingRuleTests
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _connectedSystemRepo.Setup(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>())).Returns(Task.CompletedTask);
+
+        // Which Object Types an enabled import rule covers, read when a matching change is recorded as awaiting
+        // synchronisation (#2615): none here, as these tests are about the endpoints.
+        IList<SyncRuleHeader> noImportRules = [];
+        _connectedSystemRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(noImportRules);
 
         _csoType = new ConnectedSystemObjectType
         {

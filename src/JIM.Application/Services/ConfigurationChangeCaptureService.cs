@@ -43,10 +43,13 @@ public class ConfigurationChangeCaptureService
     /// null to skip capture, e.g. when the object cannot be reloaded. Runs inside the best-effort block, so a
     /// repository failure here is logged rather than propagated.</param>
     /// <param name="targetDescription">Short target description for log messages, e.g. "Connected System 5".</param>
-    public async Task CaptureChangeAsync(Activity activity, string? changeReason, ActivityTargetType targetType,
+    /// <returns>What the capture found (#2615): that nothing changed, that it changed (with its class and the sections
+    /// it touched), that there was no earlier version to compare with, or that JIM could not tell because tracking is
+    /// off or the capture failed. The capture never fails the save; a caller that must act on the change reads this.</returns>
+    public async Task<ConfigurationChangeCaptureOutcome> CaptureChangeAsync(Activity activity, string? changeReason, ActivityTargetType targetType,
         int targetObjectId, Func<byte[], Task<ConfigurationSnapshot?>> buildSnapshotAsync, string targetDescription)
     {
-        await CaptureChangeCoreAsync(activity, changeReason, buildSnapshotAsync,
+        return await CaptureChangeCoreAsync(activity, changeReason, buildSnapshotAsync,
             () => activity.SetConfigurationTargetId(targetType, targetObjectId),
             () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(targetType, targetObjectId),
             () => Application.Activities.GetNextConfigurationChangeVersionAsync(targetType, targetObjectId),
@@ -58,10 +61,11 @@ public class ConfigurationChangeCaptureService
     /// <see cref="CaptureChangeAsync(Activity,string?,ActivityTargetType,int,Func{byte[],Task{ConfigurationSnapshot?}},string)"/>,
     /// for configuration objects (e.g. a Schedule) whose database id is a Guid.
     /// </summary>
-    public async Task CaptureChangeAsync(Activity activity, string? changeReason, ActivityTargetType targetType,
+    /// <returns>What the capture found; see the integer-keyed overload.</returns>
+    public async Task<ConfigurationChangeCaptureOutcome> CaptureChangeAsync(Activity activity, string? changeReason, ActivityTargetType targetType,
         Guid targetObjectId, Func<byte[], Task<ConfigurationSnapshot?>> buildSnapshotAsync, string targetDescription)
     {
-        await CaptureChangeCoreAsync(activity, changeReason, buildSnapshotAsync,
+        return await CaptureChangeCoreAsync(activity, changeReason, buildSnapshotAsync,
             () => activity.SetConfigurationTargetId(targetType, targetObjectId),
             () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(targetType, targetObjectId),
             () => Application.Activities.GetNextConfigurationChangeVersionAsync(targetType, targetObjectId),
@@ -73,10 +77,11 @@ public class ConfigurationChangeCaptureService
     /// <see cref="CaptureChangeAsync(Activity,string?,ActivityTargetType,int,Func{byte[],Task{ConfigurationSnapshot?}},string)"/>,
     /// for configuration objects (e.g. a Service Setting) whose primary key is a string.
     /// </summary>
-    public async Task CaptureChangeAsync(Activity activity, string? changeReason, ActivityTargetType targetType,
+    /// <returns>What the capture found; see the integer-keyed overload.</returns>
+    public async Task<ConfigurationChangeCaptureOutcome> CaptureChangeAsync(Activity activity, string? changeReason, ActivityTargetType targetType,
         string targetObjectKey, Func<byte[], Task<ConfigurationSnapshot?>> buildSnapshotAsync, string targetDescription)
     {
-        await CaptureChangeCoreAsync(activity, changeReason, buildSnapshotAsync,
+        return await CaptureChangeCoreAsync(activity, changeReason, buildSnapshotAsync,
             () => activity.SetConfigurationTargetId(targetType, targetObjectKey),
             () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(targetType, targetObjectKey),
             () => Application.Activities.GetNextConfigurationChangeVersionAsync(targetType, targetObjectKey),
@@ -120,7 +125,7 @@ public class ConfigurationChangeCaptureService
 
     // The shared capture core. The key-shape-specific pieces (setting the Activity target column and the two
     // versioning lookups) are bound by the public overloads; everything else is identical across key shapes.
-    private async Task CaptureChangeCoreAsync(Activity activity, string? changeReason,
+    private async Task<ConfigurationChangeCaptureOutcome> CaptureChangeCoreAsync(Activity activity, string? changeReason,
         Func<byte[], Task<ConfigurationSnapshot?>> buildSnapshotAsync,
         Action setTargetId,
         Func<Task<string?>> getLatestSnapshotAsync,
@@ -134,12 +139,12 @@ public class ConfigurationChangeCaptureService
         try
         {
             if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
+                return ConfigurationChangeCaptureOutcome.NotTracked;
 
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             var snapshot = await buildSnapshotAsync(hashKey);
             if (snapshot == null)
-                return;
+                return ConfigurationChangeCaptureOutcome.Failed;
 
             // The target column is set before the dedupe guard so a skipped no-change save still deep-links the
             // Activity to the object it belongs to.
@@ -150,6 +155,7 @@ public class ConfigurationChangeCaptureService
             // changes in noise. The comparison must be semantic (via the diff engine), not textual: snapshots are
             // stored in a jsonb column, and PostgreSQL normalises the text (key ordering, spacing) so the string
             // read back never equals a fresh serialisation.
+            var outcome = ConfigurationChangeCaptureOutcome.Created;
             var latest = ConfigurationSnapshotService.Deserialise(await getLatestSnapshotAsync());
             if (latest != null)
             {
@@ -157,26 +163,41 @@ public class ConfigurationChangeCaptureService
                 if (!diff.HasChanges)
                 {
                     Log.Debug("CaptureChangeAsync: configuration of {Target} is unchanged from its latest snapshot; no new version recorded.", targetDescription);
-                    return;
+                    return ConfigurationChangeCaptureOutcome.NoChange;
                 }
 
                 // Classified from the diff that was computed anyway. A create (latest == null) has no prior state to
                 // diff, so nothing is at risk and the class stays NotClassified.
-                activity.ConfigurationChangeClass = ClassifyOrDefault(diff, snapshot.ObjectKey, targetDescription);
+                var changeClass = ClassifyOrDefault(diff, snapshot.ObjectKey, targetDescription);
+                activity.ConfigurationChangeClass = changeClass;
+                outcome = ConfigurationChangeCaptureOutcome.Changed(changeClass, ChangedSections(diff));
             }
 
             activity.ConfigurationChangeVersion = await getNextVersionAsync();
             activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+            return outcome;
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException or CryptographicException)
         {
             // Configuration change capture is best-effort secondary metadata recorded after the entity has already
             // been persisted; it must never fail or roll back the configuration operation that succeeded. On failure
             // the change history simply misses this snapshot. The failure is logged (never silent) so the gap is
-            // diagnosable.
+            // diagnosable. The outcome tells the caller it happened: a caller that acts on what changed (a save that
+            // must reach existing objects, #2615) cannot read that from the Activity, which then carries nothing.
             Log.Warning(ex, "CaptureChangeAsync: failed to capture configuration snapshot for {Target}; the change was saved but its history snapshot was not recorded.", targetDescription);
+            return ConfigurationChangeCaptureOutcome.Failed;
         }
     }
+
+    /// <summary>
+    /// The labels of the top-level sections of the configuration that changed, in the order the snapshot lists them
+    /// (for example "Scope", "Enabled"), so a reason can say where a change was made without dumping the diff.
+    /// </summary>
+    private static List<string> ChangedSections(ConfigurationDiff diff) =>
+        diff.Root?.Children?
+            .Where(section => section.ChangeType != ConfigurationDiffChangeType.Unchanged)
+            .Select(section => section.Label ?? section.Key)
+            .ToList() ?? [];
 
     /// <summary>
     /// Classifies the change, degrading to <see cref="ConfigurationChangeClass.NotClassified"/> rather than losing
