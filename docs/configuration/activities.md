@@ -3,12 +3,12 @@ title: Activities
 description: What an Activity records about each operation JIM performs, from a Run Profile execution to a configuration change, and how to find one.
 type: object
 audience: administrator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Activities
 
-An **activity** is a tracked operation in JIM. Every significant action creates an activity record with status, timing, and summary statistics: Run Profile executions, schema imports, data generation, certificate management, and configuration changes all produce activities. Example data generation is now its own distinct **Data Generation** activity type, separate from configuration changes to an Example Data Template.
+An **activity** is a tracked operation in JIM. Every significant action creates an activity record with status, timing, and summary statistics: Run Profile executions, schema imports, data generation, certificate management, and configuration changes all produce activities. Example data generation is its own **Data Generation** activity type, separate from configuration changes to an Example Data Template.
 
 ```jim-diagram
 archetype: anatomy
@@ -43,7 +43,7 @@ Activities move through a small set of statuses:
 
 ## :material-account-arrow-right-outline: Initiated by
 
-Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, the system itself, or an unidentified, unauthenticated caller (**Anonymous**) for a failed sign-in, API key or SSO access token attempt. This is the audit trail. An activity a Schedule produced names the Schedule, with **(Schedule)** beside it, and links the Schedule Execution while it is kept; **System** is JIM's own work, such as seeding and housekeeping. Each kind has one icon, the same on every page that shows it.
+Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, the system itself, or an unidentified, unauthenticated caller (**Anonymous**) for a failed sign-in, API key or SSO access token attempt. This is the audit trail. An activity a Schedule produced names the Schedule, and links the Schedule Execution while it is kept; **System** is JIM's own work, such as seeding and housekeeping. Each kind is shown as a chip of its own, the same on every page that shows it.
 
 ## :material-chart-box-outline: Summary statistics
 
@@ -105,7 +105,7 @@ A Schedule's steps are not grouped this way: each step's Activity carries its [S
 
 ## :material-calendar-clock-outline: Schedule context
 
-An Activity that a [Schedule](schedules.md) produced says so, naming the Schedule and which of its steps this was ("step 3 of 6") and linking back to the Schedule Execution it belonged to. It appears on the Activity's detail page and in the Operations History side panel, and is absent for work nobody scheduled.
+An Activity that a [Schedule](schedules.md) produced says so, naming the Schedule and which of its steps this was ("step 3 of 6") and linking back to the Schedule Execution it belonged to. It appears on the Activity's detail page and in the side panel of the Operations > Activity tab's Completed section, and is absent for work nobody scheduled.
 
 The attribution is recorded on the Activity itself rather than looked up through the execution, so it survives the Schedule later being renamed or deleted. Activities are a permanent audit record; deleting a Schedule does not rewrite the history of what it did.
 
@@ -119,9 +119,9 @@ On an activity's detail page, the Target links to where that object is managed: 
 
 The Activity page in the admin portal filters a busy list down to what you are reviewing:
 
-- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions), **System** (housekeeping, resets, data generation), **Security** ([interactive sign-in, API key and SSO access token authentication events](../administration/security-audit-events.md)), or **Password Synchronisation** ([a password change fanning out to the systems an identity has accounts in](../concepts/passwords.md), and what each of them did with it). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
+- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions, Temporal Scope Reconciliation and Scheduled Metaverse Object Deletion), **System** (history cleanup, seeding, resets, data generation), **Security** ([interactive sign-in, API key and SSO access token authentication events](../administration/security-audit-events.md)), or **Passwords** ([a password change fanning out to the systems an identity has accounts in](../concepts/passwords.md), and what each of them did with it). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
 - **Detail filters**<br /> Operation, outcome, type, status, initiator (user, API key, or system), a created date range, and a target/initiator search.
-- **Schedule filters**<br /> In the Completed section of the Operations > Activity tab, **Scheduled only** narrows the list to work a [Schedule](schedules.md) produced, and the Schedule filter narrows it to particular ones. Combined with the outcome filter, this answers whether a step has been failing repeatedly or only once: filter to the Schedule, set the outcome to the failure you saw, and read down the dates.
+- **Schedule filters**<br /> Under **Filters** on the Operations > Activity tab, **Scheduled only** narrows the list to work a [Schedule](schedules.md) produced, and **Schedule** narrows it to particular ones. Combined with **Result**, this answers whether a step has been failing repeatedly or only once: filter to the Schedule, set the Result to the failure you saw, and read down the Completed section's dates.
 - **Shareable URLs**<br /> The filter state is reflected in the page URL, so a filtered view can be bookmarked or shared; opening the link reproduces the same view. For example, reviewing user-made configuration changes over the last week is one URL an auditor can return to each review cycle.
 
 An Activity is a whole operation, such as a synchronisation run touching thousands of objects. To find changes to particular objects by how their attributes changed (everyone whose status changed to Disabled this month, say), use [Object Changes](object-changes.md) instead.

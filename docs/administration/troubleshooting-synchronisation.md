@@ -3,7 +3,7 @@ title: Troubleshooting Synchronisation
 description: What each synchronisation error and Activity message means, how to fix and check it, and what JIM keeps safe in the meantime.
 type: troubleshooting
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Troubleshooting Synchronisation
@@ -41,11 +41,13 @@ A run that ended because the Worker restarted, or ran short of memory, is covere
 
 ## :material-delete-alert-outline: `Deletion detection found ... no longer in the Connected System ... none were marked as deleted`
 
-**What it means.** A Full Import found more objects missing from the Connected System than the Run Profile's deletion detection limit allows, so JIM marked none of them as deleted and the run ended **Complete with warning**. The usual causes are a change of scope or filter, a connection that returned part of the data, or a file replaced by a smaller one; occasionally it is a genuine mass deletion. Nothing has been deleted: the Connected System Objects, and the Metaverse Objects they contribute to, are as they were before the run.
+A Delta Import's message begins `The Connected System reported ... as deleted` instead, and every Delta Import after it reports the same deletions until you act.
 
-**How to fix.** Find out why the objects are missing: check the Connected System's partitions and containers, the Connector's filters, and the source itself. If the absence is genuine, let one run through as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes, then run the Full Import again.
+**What it means.** A Full Import found more objects missing from the Connected System, or a Delta Import was told of more deletions, than the Run Profile's deletion detection limit allows, so JIM marked none of them as deleted and the run ended **Complete with warning**. The usual causes are a change of scope or filter, a connection that returned part of the data, or a file replaced by a smaller one; occasionally it is a genuine mass deletion. Nothing has been deleted: the Connected System Objects, and the Metaverse Objects they contribute to, are as they were before the run.
 
-**Check.** The next Full Import ends without the warning, and its Activity counts the deletions it detected.
+**How to fix.** Find out why the objects are missing: check the Connected System's partitions and containers, the Connector's filters, and the source itself. If the absence is genuine, let one run through as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes, then run the import again.
+
+**Check.** The next import ends without the warning, and its Activity counts the deletions it detected.
 
 ## :material-delete-clock-outline: `Max deletes is ..., but ... deletes were pending, so none were attempted`
 

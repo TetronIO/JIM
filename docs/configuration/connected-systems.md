@@ -3,7 +3,7 @@ title: Connected Systems
 description: What a Connected System is and holds, and where to configure its Connector Space, scope, schema, passwords and removal.
 type: object
 audience: administrator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Connected Systems
@@ -107,7 +107,7 @@ classes that alter outcomes are counted:
 | Class | Examples | How it shows |
 |-------|----------|--------------|
 | Sync-affecting | Scoping criteria, Attribute Flow, Object Matching Rules, schema selection | Amber, with the number of changes |
-| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+| Destructive | Deprovisioning Action, Deletion Rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
 
 **Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose
 Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises
@@ -171,7 +171,7 @@ and its Activity says the preview was out of date and what overtook it.
 
 **Automating it.** Scripts get the same evaluation:
 [`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -FullSynchronisation`](../powershell/previews.md#new-jimconfigurationchangepreview)
-in PowerShell, or `POST connected-systems/{id}/full-synchronisation/preview` in the [REST API](../../api/reference/).
+in PowerShell, or `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/full-synchronisation/preview` in the [REST API](../../api/reference/).
 The start result's estimated duration says roughly how long to wait, and `-Wait` waits that long by default. Pass the
 finished preview's Activity id to
 [`Start-JIMRunProfile -PreviewActivityId`](../powershell/run-profiles.md#start-jimrunprofile), or as `previewActivityId`

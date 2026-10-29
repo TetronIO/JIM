@@ -27,7 +27,7 @@ A release is refused unless the exact commit being tagged has a `success` commit
 
 ### Its AD FS gate
 
-The same `ad-lab.yml` run also signs people in to JIM through the lab's real AD FS server (portal sign-in, the initial administrator, `/api`, `Connect-JIM`, and an account renamed in Active Directory; #2441) and posts the result as a commit status of its own, `jim-ad-lab-adfs`, so a sign-in failure never turns the LDAP result red or the reverse. A release is refused unless the commit being tagged has a `success` `jim-ad-lab-adfs` status as well. The checks are Scenario 031, which the run reports apart from the LDAP scenarios; the gate starts switched off until they have passed for the first time.
+The same `ad-lab.yml` run also signs people in to JIM through the lab's real AD FS server (portal sign-in, the initial administrator, `/api`, `Connect-JIM`, an account renamed in Active Directory, an employee with no JIM role refused every Administrator API, and the API reference's Try It; #2441, #2594) and posts the result as a commit status of its own, `jim-ad-lab-adfs`, so a sign-in failure never turns the LDAP result red or the reverse. A release is refused unless the commit being tagged has a `success` `jim-ad-lab-adfs` status as well. The checks are Scenario 031, which the run reports apart from the LDAP scenarios; the gate starts switched off until they have passed for the first time.
 
 - **One run answers both gates.** The dispatched lab run on the release commit posts both statuses; there is nothing more to dispatch.
 - **It is enforced twice, behind its own switch:** the `/release` skill runs `scripts/Test-AdLabFederationReleaseGate.ps1` before it tags, and the `jim-ad-lab-adfs-gate` job in `release.yml` runs the same script, which `validate` needs. Both run only while the repository variable `JIM_AD_LAB_ADFS_GATE_ENFORCED` is `true`; set it after the checks' first green run (`gh variable set JIM_AD_LAB_ADFS_GATE_ENFORCED --body true`). Once set there is no override.
@@ -155,7 +155,7 @@ git push origin main --tags
 10. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
 11. **Verify the release**: Once complete, verify:
-   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, the installer, `setup.sh`, and the Podman files: `jim.yaml`, `jim-database.yaml`, `jim-config.yaml`, `jim-secrets.yaml`, `jim.kube`, `jim-database.kube` and `jim.network`)
+   - GitHub Release page has the bundle, its own checksum file (`jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped site can check the archive before carrying it in, #1942), the bundle's `checksums.sha256`, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, the installer, `setup.sh`, and the Podman files: `jim.yaml`, `jim-database.yaml`, `jim-config.yaml`, `jim-secrets.yaml`, `jim.kube`, `jim-database.kube` and `jim.network`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery
 
@@ -335,7 +335,7 @@ Then restart services:
 docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 ```
 
-Docker images are immutable; the previous version's images are still available locally (or in GHCR for online environments). This is the fastest rollback path.
+Docker images are immutable; the previous version's images are still available locally (or in GHCR for online environments). This is the fastest rollback path. An upgrade with the installer also keeps the PostgreSQL image the previous release ran, tagged `jim-previous` (`deploy/setup.sh`), so rolling back an air-gapped installation never needs to download it, including on Docker's containerd image store (#2299).
 
 ### 2. Restore the Database (If the Release Applied Migrations)
 
@@ -421,10 +421,13 @@ Nothing publishes unless Docker images build successfully; PSGallery publish wai
 
 ### Image Load Fails in Air-Gapped Environment
 
-1. Verify the `.tar` file wasn't corrupted during transfer:
+1. Verify the archive wasn't corrupted during transfer, before extracting it, then the files inside it:
    ```bash
+   sha256sum -c jim-release-X.Y.Z.tar.gz.sha256
+   # after extracting, from inside jim-release-X.Y.Z/
    sha256sum -c checksums.sha256
    ```
+   Every bundle up to v0.16.0 shipped a `checksums.sha256` that failed on every line, because each file was listed under the build machine's folders (#1942); the release workflow now runs both checks on the archive as published.
 
 2. Ensure sufficient disk space for Docker images
 

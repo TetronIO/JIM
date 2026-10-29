@@ -3,7 +3,7 @@ title: Troubleshooting Podman
 description: Fix a Podman installation of JIM that cannot be seen, started, reached or kept running, by the message it shows.
 type: troubleshooting
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Troubleshooting Podman
@@ -13,7 +13,7 @@ This page covers problems particular to running JIM on Podman, each titled by wh
 ```jim-diagram
 archetype: decision
 title: Finding the fix for a Podman installation of JIM
-desc: "Work down four questions. First, does jim.service start? Check it with systemctl, or for a rootless JIM with jim-systemctl. If a rootless jim.service is not found, remove the XDG folder settings made for every account; if it cannot expose privileged port 443, lower the unprivileged-port threshold. If it starts, does JIM become ready? Look at its containers as the account that runs JIM: sudo podman ps, or jim-podman ps. On Ubuntu, Permission denied in its logs means adding the AppArmor network rule. If it becomes ready, does it stay running? A rootless JIM that stops at log-out or after a reboot needs lingering enabled; on Ubuntu, services that keep restarting need the AppArmor signal rule, then a server restart. If it stays running but other machines cannot reach it, open its port in firewalld."
+desc: "Work down four questions. First, does jim.service start? Check it with systemctl, or for a rootless JIM with jim-systemctl. If a rootless jim.service is not found, remove the XDG folder settings made for every account; if it cannot expose privileged port 443, lower the unprivileged-port threshold. If it starts, does JIM become ready? Look at its containers as the account that runs JIM: sudo podman ps, or jim-podman ps. On Ubuntu, Resource temporarily unavailable or Permission denied in its logs means adding the AppArmor network rule. If it becomes ready, does it stay running? A rootless JIM that stops at log-out or after a reboot needs lingering enabled; on Ubuntu, services that keep restarting need the AppArmor signal rule, then a server restart. If it stays running but other machines cannot reach it, open its port in firewalld."
 start: { label: JIM is not working }
 questions:
   - { id: starts, label: "Does `jim.service` start?", sub: "rootless: ask `jim-systemctl`" }
@@ -31,7 +31,7 @@ answers:
   - { from: starts, to: xdg, label: "`not found`" }
   - { from: starts, to: port, label: privileged port 443 }
   - { from: starts, to: ready, label: "yes" }
-  - { from: ready, to: net, label: "`Permission denied`" }
+  - { from: ready, to: net, label: "network errors in its logs" }
   - { from: ready, to: up, label: "yes" }
   - { from: up, to: linger, label: "stops at log-out or reboot" }
   - { from: up, to: signal, label: keeps restarting }
@@ -75,7 +75,7 @@ The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=44
 
 ## :material-wrench-outline: On Ubuntu, JIM never becomes ready, and its logs show `Permission denied` or `Resource temporarily unavailable`
 
-**What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop a rootful JIM's containers using the network at all. `jim-web` logs `OIDC discovery attempt 1/5 failed: Permission denied`, `jim-worker` logs `The database is not reachable yet ... Resource temporarily unavailable`, and `sudo dmesg | grep DENIED` shows `profile="crun"` with `class="net"`.
+**What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop a rootful JIM's containers using the network at all. `jim-web`, `jim-worker` and `jim-scheduler` each log `The database is not reachable yet ... Resource temporarily unavailable` (or `Permission denied`), and `sudo dmesg | grep DENIED` shows `profile="crun"` with `class="net"`.
 
 **How to fix.** Allow the network in the profiles' local overrides, as [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, then restart JIM: `sudo systemctl restart jim-database.service jim.service`. The installer offers this; you need it by hand only on a host set up without the installer, or where the offer was declined.
 
@@ -86,6 +86,14 @@ JIM becomes ready, but `jim-web`, `jim-worker` or `jim-scheduler` restart now an
 **What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop the processes in a rootful JIM's containers signalling one another. JIM's runtime signals its own threads to reclaim memory, so a service aborts and Podman restarts it. `sudo podman inspect --format '{{.Name}} {{.RestartCount}}' jim-web jim-worker jim-scheduler` counts the restarts, and `sudo journalctl -k | grep DENIED` shows `operation="signal"` with a `peer` ending `//&crun`. A synchronisation running when the worker crashes stops there; the worker fails its Activity when it starts again, and the next run carries on from where JIM's data stands (see [Pausing work first](upgrading.md#pausing-work)).
 
 **How to fix.** Add the signal rule [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, then restart the server, which Podman needs to load its profile with the rule. The installer adds the rule; an installation made by the installer of v0.16.0 or earlier needs it adding by hand.
+
+## :material-wrench-outline: A rootful JIM loses its database after a firewalld reload or a restart
+
+JIM's services log `The database is not reachable yet` with `No route to host`, or `Resource temporarily unavailable`, and JIM stays down until you restart it.
+
+**What it means.** Something took a rootful JIM's database off JIM's network. A firewalld reload removes the rules Podman adds for the network, unless `netavark-firewalld-reload.service` is enabled to put them back; on RHEL and its derivatives, NetworkManager can unplug a pod from the network after a restart or reboot. The installer guards against both; an installation made by the installer of v0.16.0 or earlier, or by hand, may not. Your data is unaffected. [Troubleshooting](troubleshooting.md#a-service-logs-the-database-is-not-reachable-yet) shows how to tell which happened.
+
+**How to fix.** Make both host changes [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor) shows, then restart the database and JIM: `sudo systemctl stop jim.service jim-database.service && sudo systemctl start jim-database.service jim.service`.
 
 ## :material-wrench-outline: Other machines cannot reach JIM, but it answers on the server itself
 

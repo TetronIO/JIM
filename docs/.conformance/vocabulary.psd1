@@ -47,6 +47,7 @@
         @{ Anchor = 'export'; Home = 'concepts/synchronisation-pipeline.md'; TitleCase = $false }
         @{ Anchor = 'expression'; Home = 'concepts/expressions.md'; TitleCase = $false }
         @{ Anchor = 'full-synchronisation'; Home = 'concepts/synchronisation-pipeline.md'; TitleCase = $true }
+        @{ Anchor = 'generated-value'; Home = 'configuration/generated-values.md'; TitleCase = $false }
         @{ Anchor = 'grace-period'; Home = 'concepts/jml-lifecycle.md'; TitleCase = $false }
         @{ Anchor = 'identity'; Home = 'concepts/architecture.md'; TitleCase = $false }
         @{ Anchor = 'import'; Home = 'concepts/synchronisation-pipeline.md'; TitleCase = $false }

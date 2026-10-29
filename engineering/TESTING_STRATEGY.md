@@ -343,7 +343,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresActiveDirectory"
 
 **Directory types**: `-DirectoryType` selects the directory the scenarios run against: `SambaAD` (default), `OpenLDAP`, `DirectoryServer389`, and `ActiveDirectory`. `All` and `-PreRelease` cover the three container directories and never include `ActiveDirectory`.
 
-**Active Directory leg**: `-DirectoryType ActiveDirectory` runs the same scenarios against real Windows Server domain controllers in the Hyper-V lab (`test/integration/ad-lab/`, see its README for building and operating the lab). No Samba container runs; the runner reverts each domain controller a scenario uses to a Hyper-V production checkpoint over an SSH control plane (`baseline`, or `populated-<template>-<hash>` for Scenario 008's Source and Target, rebuilt when the populate scripts change), runs the LDAP client tools in the `jim-ldap-toolbox` container over LDAPS, trusts each domain controller's certificate in JIM, and records the guest OS build with the results. It needs the lab host and the `JIM_AD_LAB_*` environment variables, so it runs on the lab's own workflow rather than in the ordinary regression. The per-step behaviour is in `test/integration/README.md` ("Active Directory lab").
+**Active Directory leg**: `-DirectoryType ActiveDirectory` runs the same scenarios against real Windows Server domain controllers in the Hyper-V lab (`test/integration/ad-lab/`, see its README for building and operating the lab). No Samba container runs; the runner reverts each domain controller a scenario uses to a Hyper-V production checkpoint over an SSH control plane (`baseline`, or `populated-<template>-<hash>` for Scenario 008's Source and Target, rebuilt when the populate scripts change), runs the LDAP client tools in the `jim-ldap-toolbox` container over LDAPS, trusts each domain controller's certificate in JIM, and records the guest OS build with the results. It needs the lab host and the `JIM_AD_LAB_*` environment variables, so it runs on the lab's own workflow rather than in the ordinary regression. The lab also holds an AD FS server joined to one forest (`adfs-primary`): for Scenarios 030 and 031 the runner adds `test/integration/docker/docker-compose.ad-lab-adfs.yml`, which makes it JIM's identity provider, registers JIM on it with `Register-JIMIdentityProvider` as a customer would, and Scenario 031 signs people in through it (portal, bearer token, `Connect-JIM` and the API reference's Try It). Scenario 031 runs apart from the LDAP scenarios and posts its own commit status, `jim-ad-lab-adfs`, which a release also requires once that gate is switched on (`engineering/RELEASE_PROCESS.md`, "Its AD FS gate"). The per-step behaviour is in `test/integration/README.md` ("Active Directory lab").
 
 **What Integration Tests Are Good At**:
 - ✅ Testing the full system as users experience it
@@ -358,7 +358,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresActiveDirectory"
 
 ## Deployment Boot Tests
 
-Beside the five tiers, which test JIM's code, one check tests how JIM is deployed.
+Beside the seven tiers, which test JIM's code, one check tests how JIM is deployed.
 
 **Location**: `test/ci/deployment/`, run by the `deployment-boot` job in `.github/workflows/ci.yml` on every pull request and push to `main`.
 

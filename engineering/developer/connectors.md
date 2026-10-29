@@ -1,6 +1,6 @@
 # Writing Connectors
 
-JIM runs only the Connectors built into it: `ConnectorFactory` (`src/JIM.Connectors/ConnectorFactory.cs`) creates each built-in Connector by name and refuses any other, and `SeedingServer.BuiltInConnectors()` registers them. A new Connector is therefore written inside JIM's own source, beside the LDAP, File, SCIM and SQL Connectors, and added to both.
+JIM runs only the Connectors built into it: `ConnectorFactory` (`src/JIM.Connectors/ConnectorFactory.cs`) creates each built-in Connector by name and refuses any other, and `SeedingServer.BuiltInConnectors()` registers them. A new Connector is therefore written inside JIM's own source, beside the LDAP, File, SCIM 2.0 Client, SCIM 2.0 Service Provider and SQL Connectors, and added to both.
 
 > [!NOTE]
 > The guidance below on respecting scope, classifying Object Types and reporting progress and errors is complete; the guide to the capability interfaces and registration is still to be written.
@@ -199,7 +199,7 @@ results.Add(ConnectedSystemExportResult.Failed(
     ConnectedSystemExportErrorType.General));
 ```
 
-Each failure becomes a Run Profile Execution Item on the Activity, so the administrator can drill from "12 errors" to the twelve objects. `ConnectedSystemExportErrorType` classifies the failure for display and filtering; JIM decides whether to retry from its own attempt count and backoff, not from the type you choose, so classify for the human reading it.
+Each failure becomes a Run Profile Execution Item on the Activity, so the administrator can drill from "12 errors" to the twelve objects. `ConnectedSystemExportErrorType` classifies the failure for display and filtering, so classify for the human reading it. It does not decide whether the change is tried again: JIM attempts a failed Pending Export again at every export run, with no retry limit or backoff, and reports it on every run until the cause is fixed (#2119). The one type JIM acts on is `UniqueValueAlreadyInUse`, which starts Collision Remediation for a generated value; report it only where your Connected System says the value is already held by another object.
 
 Succeed with feedback too: `ConnectedSystemExportResult.Succeeded(externalId, secondaryExternalId)` is how a system-assigned identifier (an `objectGUID`, an autonumber primary key) gets back into JIM's Connected System Object, so it can confirm the export on the next import.
 
