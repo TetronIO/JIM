@@ -84,7 +84,7 @@ function Set-JIMSyncRule {
         either way. AwaitingSynchronisation lists each Connected System Object Type an import rule's change makes its
         Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about
         how long it takes; it is empty for an export rule and for a change that needs none, and a line for each type
-        saying the same is written to the information stream (shown with -InformationAction Continue).
+        saying the same is written to the warning stream.
 
     .EXAMPLE
         Set-JIMSyncRule -Id 1 -Name "Updated Rule Name"
@@ -260,8 +260,8 @@ function Set-JIMSyncRule {
                     Write-Warning $result.deletionSourceWarning
                 }
 
-                # The Object Types the save made the next synchronisation process in full (#2615): said, never blocking.
-                Write-JIMAwaitingSynchronisationInformation -AwaitingSynchronisation $result.AwaitingSynchronisation
+                # The Object Types the save made the next synchronisation process in full (#2615): advised, never blocking.
+                Write-JIMAwaitingSynchronisationWarning -AwaitingSynchronisation $result.AwaitingSynchronisation
 
                 if ($PassThru) {
                     $result

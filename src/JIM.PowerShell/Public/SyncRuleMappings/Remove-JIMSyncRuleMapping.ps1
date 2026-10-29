@@ -45,7 +45,7 @@ function Remove-JIMSyncRuleMapping {
         None. Derived Attribute Flows the deletion left with a missing input are written to the warning stream. When the
         mapping was on an import rule, a line saying that its Connected System's next synchronisation, Delta or Full,
         processes every object of the rule's Connected System Object Type, with how many objects that is and about how
-        long it takes, is written to the information stream (shown with -InformationAction Continue).
+        long it takes, is written to the warning stream.
 
     .EXAMPLE
         Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5
@@ -149,8 +149,8 @@ function Remove-JIMSyncRuleMapping {
                 # Derived flows the deletion left with a missing input (#1750, FR 3): reported, never blocking.
                 Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $result.DependentDerivedFlows
 
-                # The Object Types the save made the next synchronisation process in full (#2615): said, never blocking.
-                Write-JIMAwaitingSynchronisationInformation -AwaitingSynchronisation $result.AwaitingSynchronisation
+                # The Object Types the save made the next synchronisation process in full (#2615): advised, never blocking.
+                Write-JIMAwaitingSynchronisationWarning -AwaitingSynchronisation $result.AwaitingSynchronisation
             }
             catch {
                 Write-Error "Failed to remove Synchronisation Rule Mapping: $_"

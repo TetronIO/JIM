@@ -49,8 +49,7 @@ function New-JIMMatchingRule {
     .OUTPUTS
         With -PassThru, the rule created; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type
         the new rule makes its Connected System's next synchronisation, Delta or Full, process in full, with how many
-        objects that is and about how long it takes, and a line saying the same is written to the information stream
-        (shown with -InformationAction Continue).
+        objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
         JIM.ObjectTypeMatchingRule
         ConnectedSystemId (int): The ID of the Connected System the rule belongs to, so the rule can be piped to
@@ -149,8 +148,8 @@ function New-JIMMatchingRule {
 
                 Write-Verbose "Created Matching Rule ID: $($result.id)"
 
-                # The Object Types the save made the next synchronisation process in full (#2615): said, never blocking.
-                Write-JIMAwaitingSynchronisationInformation -AwaitingSynchronisation $result.AwaitingSynchronisation
+                # The Object Types the save made the next synchronisation process in full (#2615): advised, never blocking.
+                Write-JIMAwaitingSynchronisationWarning -AwaitingSynchronisation $result.AwaitingSynchronisation
 
                 if ($PassThru) {
                     $result | Add-Member -NotePropertyName 'ConnectedSystemId' -NotePropertyValue $ConnectedSystemId -PassThru -Force

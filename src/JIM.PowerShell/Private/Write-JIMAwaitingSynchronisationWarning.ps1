@@ -1,10 +1,10 @@
 # Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-function Write-JIMAwaitingSynchronisationInformation {
+function Write-JIMAwaitingSynchronisationWarning {
     <#
     .SYNOPSIS
-        Says which Connected System Object Types a save made the next synchronisation process in full (#2615).
+        Warns which Connected System Object Types a save made the next synchronisation process in full (#2615).
 
     .DESCRIPTION
         Saving a change to an import Synchronisation Rule, an Attribute Flow or an Object Matching Rule can alter what an
@@ -12,17 +12,18 @@ function Write-JIMAwaitingSynchronisationInformation {
         Connected System's next synchronisation, Delta or Full, then processes every object of the Connected System Object
         Type rather than only the changed ones. The API lists each such type in the response's AwaitingSynchronisation, with
         how many objects that is and, where the Connected System has completed a Full Synchronisation, about how long it
-        takes at that run's speed; this writes one line per type to the information stream.
+        takes at that run's speed; this writes one warning per type, as the module's cmdlets do for any advisory the save
+        raised.
 
-        It is information, not a warning: nothing is wrong, and the save has already been made. It never prompts and never
-        blocks. The line is shown with -InformationAction Continue, and the same facts are on the response's
-        AwaitingSynchronisation property for a caller that asks the cmdlet to return the saved object.
+        It is an advisory, not a failure: the save has already been made, and nothing here prompts or blocks. The same
+        facts are on the response's AwaitingSynchronisation property for a caller that asks the cmdlet to return the
+        saved object.
 
     .PARAMETER AwaitingSynchronisation
         The response's AwaitingSynchronisation list. Nothing is written when it is empty or absent.
 
     .OUTPUTS
-        None. Writes to the information stream only.
+        None. Writes to the warning stream only.
     #>
     [CmdletBinding()]
     param(
@@ -54,7 +55,7 @@ function Write-JIMAwaitingSynchronisationInformation {
             }
         }
 
-        Write-Information ("Awaiting synchronisation: the next synchronisation of $($entry.ConnectedSystemName), Delta or Full, " +
+        Write-Warning ("Awaiting synchronisation: the next synchronisation of $($entry.ConnectedSystemName), Delta or Full, " +
             "processes every $($entry.ObjectTypeName) object, not only the changed ones: $objects$duration.")
     }
 }
