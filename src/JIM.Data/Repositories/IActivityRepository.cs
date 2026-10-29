@@ -657,6 +657,10 @@ public interface IActivityRepository
     ///
     /// Unlike the per-object configuration history queries, this deliberately does not require a captured version:
     /// deletions are recorded without one and are precisely the changes that most need surfacing.
+    ///
+    /// A change recorded as awaiting synchronisation (#2615), applied or not, is left out: the Connected System's next
+    /// synchronisation applies it, so it is not a reason to run a Full Synchronisation. Those are reported separately, as
+    /// <see cref="IConnectedSystemRepository.GetConfigurationChangesAwaitingSynchronisationAsync"/>.
     /// </summary>
     public Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass);
 

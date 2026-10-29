@@ -2149,5 +2149,16 @@ public interface IConnectedSystemRepository
     /// and <see cref="ConfigurationChangeSynchronisation.AppliedAt"/> must be unset.</param>
     Task CreateConfigurationChangeSynchronisationAsync(ConfigurationChangeSynchronisation change);
 
+    /// <summary>
+    /// Returns, for each of the given Connected Systems, the Object Types whose objects its next synchronisation will all
+    /// process because of saved configuration changes that have not been applied yet, with how many changes wait behind
+    /// each and since when. Systems with nothing waiting have no entries. Backs the "changes awaiting synchronisation"
+    /// part of the configuration drift indicator, in one read however many systems are asked about.
+    /// <para>
+    /// A plain read: it claims nothing and marks nothing, so a page showing it never moves a change on.
+    /// </para>
+    /// </summary>
+    Task<List<ObjectTypeAwaitingSynchronisation>> GetConfigurationChangesAwaitingSynchronisationAsync(IList<int> connectedSystemIds);
+
     #endregion
 }

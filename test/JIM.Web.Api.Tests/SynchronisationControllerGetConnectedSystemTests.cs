@@ -58,7 +58,10 @@ public class SynchronisationControllerGetConnectedSystemTests
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockActivityRepo.Setup(r => r.GetLastFullSynchronisationStartsAsync(It.IsAny<IList<int>>()))
             .ReturnsAsync(new Dictionary<int, DateTime>());
-        _mockLogger = new Mock<ILogger<SynchronisationController>>();
+        // ...and the Object Types waiting for the system's next synchronisation (#2615): none here.
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangesAwaitingSynchronisationAsync(It.IsAny<IList<int>>()))
+            .ReturnsAsync([]);
+        _mockLogger =new Mock<ILogger<SynchronisationController>>();
         _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
         // Passed explicitly: JimApplication.SyncRepo comes from this constructor parameter rather than from

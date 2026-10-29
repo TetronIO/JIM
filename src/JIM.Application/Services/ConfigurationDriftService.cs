@@ -15,6 +15,12 @@ namespace JIM.Application.Services;
 /// Attribution is precise rather than blanket: a Metaverse Attribute edit raises the indicator only on the systems
 /// whose Synchronisation Rules actually reference that attribute. Flagging every system on every Metaverse-side edit
 /// would make the indicator noise, and an indicator administrators learn to ignore is worse than none.
+///
+/// What a synchronisation applies by itself is not drift. An import Synchronisation Rule or Object Matching Rule change
+/// is recorded as awaiting synchronisation (#2615) and carried to existing objects by the system's next Delta or Full
+/// Synchronisation, so it is left out of the drift count and reported on its own, as the Object Types waiting to be
+/// processed. What remains is what JIM does not apply by itself: an export Attribute Flow edit, a Metaverse Attribute
+/// or Object Type change.
 /// </summary>
 public class ConfigurationDriftService
 {
@@ -49,13 +55,28 @@ public class ConfigurationDriftService
         if (ids.Count == 0)
             return new Dictionary<int, ConfigurationDriftStatus>();
 
+        // The changes waiting for a system's next synchronisation (#2615), in one read for the whole batch. They are
+        // reported on every status below, however drift itself turns out: the changes are real whether or not JIM can say
+        // what else has moved since a Full Synchronisation.
+        var awaitingBySystem = (await Application.Repository.ConnectedSystems.GetConfigurationChangesAwaitingSynchronisationAsync(ids))
+            .GroupBy(awaiting => awaiting.ConnectedSystemId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<ObjectTypeAwaitingSynchronisation>)group
+                    .OrderBy(awaiting => awaiting.EarliestRequestedAt)
+                    .ThenBy(awaiting => awaiting.ObjectTypeName, StringComparer.OrdinalIgnoreCase)
+                    .ToList());
+        IReadOnlyList<ObjectTypeAwaitingSynchronisation> AwaitingFor(int id) =>
+            awaitingBySystem.TryGetValue(id, out var found) ? found : [];
+
         // With change tracking off nothing is recorded, so drift is unknowable. Reporting that honestly matters more
         // than reporting a comfortable answer: "no changes pending" here would be a claim JIM cannot support.
         if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
             return ids.ToDictionary(id => id, id => new ConfigurationDriftStatus
             {
                 ConnectedSystemId = id,
-                TrackingDisabled = true
+                TrackingDisabled = true,
+                AwaitingSynchronisation = AwaitingFor(id)
             });
 
         var lastFullSyncs = await Application.Repository.Activity.GetLastFullSynchronisationStartsAsync(ids);
@@ -65,7 +86,8 @@ public class ConfigurationDriftService
             .ToDictionary(id => id, id => new ConfigurationDriftStatus
             {
                 ConnectedSystemId = id,
-                NeverFullySynchronised = true
+                NeverFullySynchronised = true,
+                AwaitingSynchronisation = AwaitingFor(id)
             });
 
         if (synchronisedIds.Count == 0)
@@ -103,7 +125,8 @@ public class ConfigurationDriftService
                 ChangeCount = qualifying.Count,
                 HighestChangeClass = qualifying.Count > 0
                     ? qualifying.Max(i => i.Class)
-                    : ConfigurationChangeClass.NotClassified
+                    : ConfigurationChangeClass.NotClassified,
+                AwaitingSynchronisation = AwaitingFor(id)
             };
         }
 

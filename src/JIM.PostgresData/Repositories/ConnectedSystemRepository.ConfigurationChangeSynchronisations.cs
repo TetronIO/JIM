@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories;
@@ -12,6 +13,32 @@ namespace JIM.PostgresData.Repositories;
 /// </summary>
 public partial class ConnectedSystemRepository
 {
+    /// <inheritdoc />
+    public async Task<List<ObjectTypeAwaitingSynchronisation>> GetConfigurationChangesAwaitingSynchronisationAsync(IList<int> connectedSystemIds)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemIds);
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        // One grouped read, served by the partial index on the rows awaiting synchronisation. The Object Type's name is
+        // joined in, so the caller needs no second query for it however many systems it asks about.
+        return await (
+                from change in Repository.Database.ConfigurationChangeSynchronisations
+                join objectType in Repository.Database.ConnectedSystemObjectTypes on change.ConnectedSystemObjectTypeId equals objectType.Id
+                where change.AppliedAt == null && connectedSystemIds.Contains(change.ConnectedSystemId)
+                group change by new { change.ConnectedSystemId, change.ConnectedSystemObjectTypeId, ObjectTypeName = objectType.Name }
+                into awaiting
+                select new ObjectTypeAwaitingSynchronisation
+                {
+                    ConnectedSystemId = awaiting.Key.ConnectedSystemId,
+                    ConnectedSystemObjectTypeId = awaiting.Key.ConnectedSystemObjectTypeId,
+                    ObjectTypeName = awaiting.Key.ObjectTypeName,
+                    ChangeCount = awaiting.Count(),
+                    EarliestRequestedAt = awaiting.Min(c => c.RequestedAt)
+                })
+            .ToListAsync();
+    }
+
     /// <inheritdoc />
     public async Task CreateConfigurationChangeSynchronisationAsync(ConfigurationChangeSynchronisation change)
     {
