@@ -59,6 +59,8 @@ public class SynchronisationControllerUpdateSyncRuleTests
         // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
         _mockRepository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
+        _mockMetaverseRepo.StubExportReviewReads();
+        _mockConnectedSystemRepo.StubConfigurationChangeSynchronisationReads();
         _mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
         // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
         // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.

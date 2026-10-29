@@ -96,6 +96,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         dto.DeletionRuleAdvisory = DeletionRuleConfigurationAdvisor.GetAdvisory(
             objectType.DeletionRule, objectType.Id, await _application.ConnectedSystems.GetSyncRulesAsync());
         dto.DeletionSourceWarnings = [.. await _application.Metaverse.GetDeletionSourceGapsAsync(objectType)];
+        dto.ExportReviewPendingCount = await _application.Metaverse.GetExportReviewPendingCountAsync(objectType.Id);
         return dto;
     }
 

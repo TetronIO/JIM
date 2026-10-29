@@ -181,7 +181,12 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             importReadRange = await _application.ConnectedSystems.GetImportReadRangeAsync(activity);
         }
 
-        return Ok(ActivityDetailDto.FromEntity(activity, stats, phases, importReadRange));
+        // The configuration changes the Activity saved, or the synchronisation run claimed: whether each has been
+        // applied, or will be at the Connected System's next synchronisation. Nothing is read for an Activity of a
+        // kind that can have none.
+        var configurationChangeSynchronisations = await _application.ConnectedSystems.GetConfigurationChangeSynchronisationsForActivityAsync(activity);
+
+        return Ok(ActivityDetailDto.FromEntity(activity, stats, phases, importReadRange, configurationChangeSynchronisations));
     }
 
     /// <summary>

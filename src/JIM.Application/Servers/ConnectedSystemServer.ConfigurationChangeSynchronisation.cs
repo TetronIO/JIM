@@ -135,13 +135,54 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// The changes an Activity is part of (#2615): those it recorded, when it is a configuration change, and those a
-    /// synchronisation run claimed, when it is a run. Applied or not, grouped by Object Type name, oldest first within it,
-    /// and capped at <see cref="ObjectTypeAwaitingSynchronisation.MaxChangesListed"/>.
+    /// The changes an Activity is part of (#2615), grouped by the Connected System Object Type they are for: those it
+    /// recorded, when it is a configuration change, and those a synchronisation run claimed, when it is a run. Applied or
+    /// not. A run's groups also carry the number of objects of the type, which is how many it processed because of them.
+    /// The changes are capped at <see cref="ObjectTypeAwaitingSynchronisation.MaxChangesListed"/> across the Activity.
+    /// <para>
+    /// An Activity of a kind that can be neither (a password change, a housekeeping run) is answered without a query:
+    /// the Activity page and the Activity endpoint both ask for every Activity they show.
+    /// </para>
     /// </summary>
-    public Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationsForActivityAsync(Guid activityId) =>
-        Application.Repository.ConnectedSystems.GetConfigurationChangeSynchronisationSummariesForActivityAsync(
-            activityId, ObjectTypeAwaitingSynchronisation.MaxChangesListed);
+    public async Task<List<ActivityObjectTypeSynchronisation>> GetConfigurationChangeSynchronisationsForActivityAsync(Activity activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        if (activity.TargetType is not (ActivityTargetType.SynchronisationRule or ActivityTargetType.ConnectedSystem
+            or ActivityTargetType.ObjectMatchingRule or ActivityTargetType.ConnectedSystemRunProfile))
+            return [];
+
+        var changes = await Application.Repository.ConnectedSystems.GetConfigurationChangeSynchronisationSummariesForActivityAsync(
+            activity.Id, ObjectTypeAwaitingSynchronisation.MaxChangesListed);
+
+        var groups = new List<ActivityObjectTypeSynchronisation>();
+        foreach (var group in changes.GroupBy(change => (change.ConnectedSystemId, change.ConnectedSystemObjectTypeId)))
+            groups.Add(await BuildActivityObjectTypeSynchronisationAsync(activity.Id, group.ToList()));
+
+        return groups;
+    }
+
+    private async Task<ActivityObjectTypeSynchronisation> BuildActivityObjectTypeSynchronisationAsync(
+        Guid activityId, List<ConfigurationChangeSynchronisationSummary> changes)
+    {
+        var first = changes[0];
+
+        // Only a run has processed objects because of the changes, and only a run claims them. A configuration change
+        // Activity never does, so it is not charged a count it has no use for.
+        int? objectCount = changes.Any(change => change.ClaimedByActivityId == activityId)
+            ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(first.ConnectedSystemId, first.ConnectedSystemObjectTypeId, null)
+            : null;
+
+        return new ActivityObjectTypeSynchronisation
+        {
+            ConnectedSystemId = first.ConnectedSystemId,
+            ConnectedSystemName = first.ConnectedSystemName,
+            ConnectedSystemObjectTypeId = first.ConnectedSystemObjectTypeId,
+            ObjectTypeName = first.ObjectTypeName,
+            ObjectCount = objectCount,
+            Changes = changes
+        };
+    }
 
     /// <summary>
     /// Fills in what each Synchronisation Rule in a list is waiting on: for an import rule, how many saved changes wait for

@@ -145,18 +145,6 @@ public class SyncRuleReviewStateTests
     }
 
     [Test]
-    public async Task GetConfigurationChangeSynchronisationsForActivityAsync_AsksForTheListedMaximumAsync()
-    {
-        var activityId = Guid.NewGuid();
-        _connectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(activityId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
-            .ReturnsAsync([new ConfigurationChangeSynchronisationSummary { Id = 1, Reason = "HR Import: Scope changed" }]);
-
-        var changes = await _jim.ConnectedSystems.GetConfigurationChangeSynchronisationsForActivityAsync(activityId);
-
-        Assert.That(changes.Select(c => c.Reason), Is.EqualTo(new[] { "HR Import: Scope changed" }));
-    }
-
-    [Test]
     public async Task GetExportReviewPendingCountAsync_TypeWithFlaggedObjects_ReturnsHowManyAsync()
     {
         _metaverseRepo.Setup(r => r.GetExportReviewPendingCountsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 11 }))))

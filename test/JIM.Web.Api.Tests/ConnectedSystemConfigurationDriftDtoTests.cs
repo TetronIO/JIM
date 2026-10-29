@@ -3,9 +3,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
 using JIM.Web.Models.Api;
 using NUnit.Framework;
@@ -132,6 +134,63 @@ public class ConnectedSystemConfigurationDriftDtoTests
             Assert.That(drift.ChangeCount, Is.EqualTo(0));
             Assert.That(drift.HighestChangeClass, Is.EqualTo(ConfigurationChangeClass.NotClassified));
         }
+    }
+
+    [Test]
+    public void FromEntity_ChangesAwaitingSynchronisation_ListsEachTypeWithItsChanges()
+    {
+        var activityId = Guid.NewGuid();
+        var saved = new DateTime(2026, 10, 28, 9, 0, 0, DateTimeKind.Utc);
+        var status = new ConfigurationDriftStatus
+        {
+            ConnectedSystemId = 1,
+            LastFullSynchronisation = saved.AddDays(-3),
+            AwaitingSynchronisation =
+            [
+                new ObjectTypeAwaitingSynchronisation
+                {
+                    ConnectedSystemId = 1, ConnectedSystemObjectTypeId = 7, ObjectTypeName = "user", ChangeCount = 4,
+                    EarliestRequestedAt = saved.AddHours(-5), ObjectCount = 12_500,
+                    Changes =
+                    [
+                        new ConfigurationChangeSynchronisationSummary
+                        {
+                            Id = 1, Reason = "HR Inbound: Scope changed", RequestedAt = saved, ConfigurationChangeActivityId = activityId,
+                            InitiatedByType = ActivityInitiatorType.User, InitiatedByName = "Alice Adams"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var drift = ConnectedSystemDetailDto.FromEntity(CreateConnectedSystemEntity(), configurationDrift: status).ConfigurationDrift!;
+
+        var type = drift.AwaitingSynchronisation.Single();
+        var change = type.Changes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(drift.HasPendingChanges, Is.False, "the changes awaiting synchronisation are not drift");
+            Assert.That(type.ConnectedSystemObjectTypeId, Is.EqualTo(7));
+            Assert.That(type.ObjectTypeName, Is.EqualTo("user"));
+            Assert.That(type.ChangeCount, Is.EqualTo(4), "the true number, whatever the list holds");
+            Assert.That(type.EarliestSavedAt, Is.EqualTo(saved.AddHours(-5)));
+            Assert.That(type.ObjectCount, Is.EqualTo(12_500));
+            Assert.That(change.Reason, Is.EqualTo("HR Inbound: Scope changed"));
+            Assert.That(change.SavedAt, Is.EqualTo(saved));
+            Assert.That(change.ConfigurationChangeActivityId, Is.EqualTo(activityId));
+            Assert.That(change.InitiatedByName, Is.EqualTo("Alice Adams"));
+            Assert.That(change.AppliedAt, Is.Null);
+        }
+    }
+
+    [Test]
+    public void FromEntity_NothingAwaitingSynchronisation_ListsNoTypes()
+    {
+        var status = new ConfigurationDriftStatus { ConnectedSystemId = 1, NeverFullySynchronised = true };
+
+        var drift = ConnectedSystemDetailDto.FromEntity(CreateConnectedSystemEntity(), configurationDrift: status).ConfigurationDrift!;
+
+        Assert.That(drift.AwaitingSynchronisation, Is.Empty);
     }
 
     private static ConnectedSystem CreateConnectedSystemEntity()

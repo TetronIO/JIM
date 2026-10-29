@@ -3840,6 +3840,9 @@ public class SynchronisationController(
             .ApplySortAndFilter(pagination)
             .ToPaginatedResponse(pagination);
 
+        // What each rule on the page is waiting on: two reads for the whole page, not one per rule.
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync(result.Items.ToList());
+
         return Ok(result);
     }
 
@@ -3859,7 +3862,9 @@ public class SynchronisationController(
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
-        return Ok(SyncRuleHeader.FromEntity(rule));
+        var header = SyncRuleHeader.FromEntity(rule);
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([header]);
+        return Ok(header);
     }
 
     /// <summary>
@@ -3953,7 +3958,9 @@ public class SynchronisationController(
         // new and may need the deletion source warning (#1256).
         var created = await _application.ConnectedSystems.GetSyncRuleAsync(syncRule.Id);
         var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore: null);
-        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleSaveResponse.FromSave(created!, syncRule, deletionSourceWarning));
+        var createdResponse = SyncRuleSaveResponse.FromSave(created!, syncRule, deletionSourceWarning);
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([createdResponse]);
+        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, createdResponse);
     }
 
     /// <summary>
@@ -4054,7 +4061,11 @@ public class SynchronisationController(
         // Retrieve the updated Synchronisation Rule; the save's warnings and dependants travel on the instance it saved.
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore);
-        return Ok(SyncRuleSaveResponse.FromSave(updated!, syncRule, deletionSourceWarning));
+        var updatedResponse = SyncRuleSaveResponse.FromSave(updated!, syncRule, deletionSourceWarning);
+
+        // The save itself may have made the rule's type await synchronisation; say so in the response to it.
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([updatedResponse]);
+        return Ok(updatedResponse);
     }
 
     /// <summary>

@@ -54,6 +54,8 @@ public class SynchronisationControllerCreateSyncRuleTests
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
+        _mockMetaverseRepo.StubExportReviewReads();
+        _mockConnectedSystemRepo.StubConfigurationChangeSynchronisationReads();
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
