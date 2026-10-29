@@ -2,21 +2,40 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* A schema, table, view or column name: chosen from the catalogue where it could be read, typed where it could
-   not. One control for both, so a database JIM cannot reach never locks the field. *@
-<MudAutocomplete T="string"
+   not. One control for both, so a database JIM cannot reach never locks the field.
+   The autocomplete applies typed text as its value on every keystroke (CoerceValue, with MudBlazor's default
+   Immediate). Those values are held here, not passed on: passing them on added an anchor column named after the
+   first letter typed and read the catalogue for every prefix of a table's name. The name is passed on once finished:
+   - chosen from the list: on the item's click, since choosing the name already typed changes nothing the
+     autocomplete reports, and the item marks itself on mousedown, before the field's blur;
+   - Enter, on key-up, by which time the autocomplete has applied its highlighted name;
+   - leaving the field (Tab, or a click elsewhere), which takes what was typed. A blur that is the start of a click on
+     the list is not one of these: the click passes on the name clicked;
+   - the clear button, which passes on no name at once. *@
+<MudAutocomplete @ref="_autocomplete"
+                 T="string"
                  Label="@Label"
                  Value="@Value"
-                 ValueChanged="OnValueChangedAsync"
+                 ValueChanged="OnTypedOrChosenAsync"
+                 OnBlur="OnBlurAsync"
+                 OnKeyUp="OnKeyUpAsync"
                  SearchFunc="SearchAsync"
                  CoerceValue="true"
                  ResetValueOnEmptyText="true"
                  MaxItems="50"
+                 ListItemClass="jim-sql-catalogue-item"
                  Clearable="@Clearable"
+                 OnClearButtonClick="@(() => CommitAsync(null))"
                  HelperText="@HelperText"
                  Variant="Variant.Outlined"
                  Margin="Margin.Dense"
                  Class="@Class"
-                 data-testid="@TestId" />
+                 data-testid="@TestId">
+    <ItemTemplate>
+        @* The item's padding is moved onto this element (site.css) so a press anywhere on the item lands here. *@
+        <div class="jim-sql-catalogue-option" @onmousedown="@(() => _choosing = context)" @onclick="@(() => ChooseAsync(context))">@context</div>
+    </ItemTemplate>
+</MudAutocomplete>
 
 @code {
     [Parameter, EditorRequired]
@@ -46,16 +65,78 @@
     [Parameter]
     public string? TestId { get; set; }
 
-    private Task<IEnumerable<string>?> SearchAsync(string? text, CancellationToken cancellationToken)
+    private MudAutocomplete<string>? _autocomplete;
+
+    /// <summary>The value the autocomplete holds that has not been passed on yet: what is being typed.</summary>
+    private string? _pending;
+    private bool _hasPending;
+
+    /// <summary>The list item pressed, between its mousedown and the value it sets.</summary>
+    private string? _choosing;
+
+    /// <summary>Empties the field, keeping it where it is (and focused, where it was), ready for another name.</summary>
+    public async Task ClearAsync()
     {
-        IEnumerable<string> matches = string.IsNullOrWhiteSpace(text)
-            ? Options
-            : Options.Where(option => option.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase));
-        return Task.FromResult<IEnumerable<string>?>(matches);
+        Value = null;
+        _pending = null;
+        _hasPending = false;
+        _choosing = null;
+        if (_autocomplete != null)
+            await _autocomplete.ClearAsync();
     }
 
-    private async Task OnValueChangedAsync(string? value)
+    private Task<IEnumerable<string>?> SearchAsync(string? text, CancellationToken cancellationToken) =>
+        Task.FromResult<IEnumerable<string>?>(Matching(Options, text));
+
+    /// <summary>
+    /// The names containing what was typed: the name typed in full first, then names starting with it, then the
+    /// rest, so the highlighted name (the one Enter chooses) is the one typed wherever there is one. Every name
+    /// where nothing has been typed.
+    /// </summary>
+    public static IEnumerable<string> Matching(IEnumerable<string> options, string? text)
     {
+        if (string.IsNullOrWhiteSpace(text))
+            return options;
+
+        var typed = text.Trim();
+        return options
+            .Where(option => option.Contains(typed, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(option => string.Equals(option, typed, StringComparison.OrdinalIgnoreCase) ? 0
+                : option.StartsWith(typed, StringComparison.OrdinalIgnoreCase) ? 1 : 2);
+    }
+
+    private Task OnTypedOrChosenAsync(string? value)
+    {
+        _pending = value;
+        _hasPending = true;
+        return Task.CompletedTask;
+    }
+
+    private Task ChooseAsync(string name)
+    {
+        _choosing = null;
+        return CommitAsync(name);
+    }
+
+    private async Task OnBlurAsync(FocusEventArgs args)
+    {
+        // The start of a click on the list: the click passes on the name clicked.
+        if (_choosing != null)
+            return;
+
+        await CommitPendingAsync();
+    }
+
+    private Task OnKeyUpAsync(KeyboardEventArgs args) =>
+        args.Key == "Enter" ? CommitPendingAsync() : Task.CompletedTask;
+
+    private Task CommitPendingAsync() => _hasPending ? CommitAsync(_pending) : Task.CompletedTask;
+
+    private async Task CommitAsync(string? value)
+    {
+        _pending = null;
+        _hasPending = false;
+
         var trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         if (trimmed == Value)
             return;
