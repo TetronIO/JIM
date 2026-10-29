@@ -1854,6 +1854,20 @@ html[lang] .jim-sql-inline-alert .mud-alert-message {
     white-space: nowrap;
 }
 
+/* A catalogue name picker's list (<SqlCatalogueNameField />): the item's padding moves onto the option inside it,
+   so a press anywhere on the item lands on the option, which is what commits the name chosen. */
+html[lang] .mud-list-item.jim-sql-catalogue-item {
+    padding: 0;
+}
+
+html[lang] .jim-sql-catalogue-item .mud-list-item-text {
+    margin: 0;
+}
+
+.jim-sql-catalogue-option {
+    padding: 8px 16px;
+}
+
 /* ─── SQL Object Types JSON view (<SqlObjectTypesJsonView />) ───
    The ExpressionEditor's overlay (.jim-expression-editor-layer and friends) with three differences: lines never wrap,
    so each gutter number is a line of the document; the gutter scrolls vertically with the text and stays put

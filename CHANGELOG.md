@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Typing a column name into an SQL Object Type's **Add column** anchor picker now works: it no longer adds a column named after the first letter typed. Every name picker in the Object Types editor takes a name once you choose it from the list, press Enter or move on, instead of on every keystroke. (#2570)
 - 🐛 People JIM creates or changes outside synchronisation, such as the initial administrator at first sign-in, now reach their accounts at the next synchronisation, changed and removed values included; the run's review step is now called **Export Review**. (#2615)
 
 ## [0.17.0] - 2026-10-29

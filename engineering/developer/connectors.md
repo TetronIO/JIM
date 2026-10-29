@@ -74,6 +74,25 @@ Whatever your Connector returns as persisted connector data is stored on the Con
 - **A date you only compare against its own column is `Text`, not `Time`.** `Time` is shown in the reader's local time, which is right only for a real point in time.
 - **Never throw.** It runs while a page or an API response is being built; return null for anything you cannot read, including values recorded before your Connector kept a watermark. Cover each shape in `ConnectorImportWatermarkDescriptionTests` (JIM.Worker.Tests), whose shared case checks null, empty and unreadable data for every built-in Connector listed in it.
 
+## Describing what your source contains
+
+Implement `IConnectorCatalogue` when an administrator configures your Connected System by naming things in its source (tables, views, columns) that your Connector can list. JIM uses it to offer those names to choose from instead of making the administrator know and type each one, and to suggest anchors and references from the source's own keys. It is read-only: nothing it returns changes a setting, and the setting changes only by the administrator's own edit.
+
+| Member | What JIM asks |
+|--------|---------------|
+| `Catalogue` | Which setting the catalogue helps write, as a `ConnectorCatalogueDeclaration` naming it. A property of the Connector rather than of any Connected System, so JIM can read it before anything is configured. |
+| `GetCatalogueObjectsAsync` | Every table and view the configured account can see, as narrow `ConnectorCatalogueObject` rows (schema, name, kind). Called once per editing session and searched in memory, so keep it to one query; detail comes later, per object. |
+| `GetCatalogueObjectAsync` | One object's columns, primary key in key order, and foreign keys, as a `ConnectorCatalogueObjectDetail`. Return null where the account cannot see an object of that name. |
+| `DescribeStatementAsync` | The columns a query would return, learnt without reading a row (the SQL Connector uses `CommandBehavior.SchemaOnly`). |
+
+- **Read with the settings you are handed, not the saved ones.** The portal passes the settings as they stand on screen, so an administrator can browse the source while filling in the connection settings, before saving them. REST and PowerShell pass the saved settings.
+- **Throw `ArgumentException` for a request the administrator can correct** (a name in more than one schema with no schema given, a statement that is not a single query), with a message that says what to change. Anything else you throw (the source is unreachable, the credentials are refused) is shown as the reason the catalogue cannot be read, beside a Retry, and the administrator types names instead; configuration stays editable either way. Let cancellation propagate.
+- **Validate a statement before running it, by the same rule your parser applies to it.** The SQL Connector's `DescribeStatementAsync` and its Object Types parser share `CheckSelectStatement`, so the catalogue can never accept a statement that saving would then refuse.
+- **The declaration is what places the editor.** The settings tab renders its catalogue-driven editor for the setting `Catalogue` names, and nothing there knows which Connector it is. That editor today edits the SQL Connector's Object Types document, though: a second Connector whose document has another shape needs an editor of its own, chosen by the same declaration, before it can use this.
+- **The vocabulary is database-shaped on purpose.** Do not stretch it to describe a directory or a file; a Connector with a different kind of source needs a different interface.
+
+REST serves the same three reads at `/api/v1/synchronisation/connected-systems/{connectedSystemId}/catalogue`, `/api/v1/synchronisation/connected-systems/{connectedSystemId}/catalogue/object` and `/api/v1/synchronisation/connected-systems/{connectedSystemId}/catalogue/statement`, and PowerShell as `Get-JIMConnectedSystemCatalogue`; implementing the interface makes all three surfaces work for your Connector with nothing else to add.
+
 ## Reporting progress and errors
 
 A Connector is the only thing that knows what is happening inside a Connected System. JIM can count the objects you hand back and time how long you took, but everything else (which container you are reading, why one object could not be exported, that a Delta Import quietly became a Full Import) is invisible unless you report it.
