@@ -649,9 +649,9 @@ public static class Helpers
             ObjectChangeType.Created =>
                 "The Metaverse Object was created directly (e.g. via data generation or the admin interface) rather than through synchronisation.",
 
-            // Export scope review
+            // Export Review
             ObjectChangeType.ExportScopeReview =>
-                "A change to an export Synchronisation Rule had this Metaverse Object reviewed against the rule's scope, so it was provisioned or deprovisioned as the rule now requires.",
+                "This Metaverse Object was reviewed against the export Synchronisation Rules, because an export rule changed or the object was created or changed outside synchronisation. It was provisioned or deprovisioned as the rules now require, or had values changed outside synchronisation delivered to its accounts.",
 
             // Other
             ObjectChangeType.NoChange =>
@@ -693,7 +693,7 @@ public static class Helpers
             // Direct creation
             ObjectChangeType.Created => Icons.Material.Filled.AddCircleOutline,
 
-            // Export scope review
+            // Export Review
             ObjectChangeType.ExportScopeReview => Icons.Material.Filled.ManageSearch,
 
             // Other

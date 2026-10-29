@@ -649,7 +649,7 @@ public class ScopingExplanationSummariserTests
                 "Jane Smith is not provisioned to Learning Platform.\n" +
                 "Reason: in scope of the Synchronisation Rule \"Learning Platform Users Export\"; the next synchronisation stages its provisioning.\n" +
                 "What happens next:\n" +
-                "- This Metaverse Object is marked for an export scope review.\n" +
+                "- This Metaverse Object is awaiting its Export Review.\n" +
                 "- The next synchronisation of any Connected System reviews it and stages its provisioning to Learning Platform.\n" +
                 "Evaluated 4 Oct 2026 10:41 UTC."));
         }

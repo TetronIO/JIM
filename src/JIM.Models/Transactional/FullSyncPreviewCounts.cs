@@ -61,7 +61,7 @@ public class FullSyncPreviewCounts
     public int TotalAttributeChanges { get; set; }
 
     /// <summary>
-    /// Metaverse Objects flagged for export scope review (#892, #1925) that none of the system's own objects reached,
+    /// Metaverse Objects flagged for an Export Review (#892, #1925, #2615) that none of the system's own objects reached,
     /// reviewed after the walk as the run drains them. Their proposed exports are included in the outbound counters.
     /// </summary>
     public int ExportScopeReviewed { get; set; }
