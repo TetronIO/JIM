@@ -47,6 +47,7 @@ public class ConfigurationChangeEffectAgreementTests
     private JimApplication _jim = null!;
     private List<ConfigurationChangeSynchronisation> _recorded = null!;
     private List<int> _flaggedMetaverseObjectTypeIds = null!;
+    private List<Activity> _savedActivities = null!;
 
     [SetUp]
     public void SetUp()
@@ -55,6 +56,7 @@ public class ConfigurationChangeEffectAgreementTests
 
         _recorded = [];
         _flaggedMetaverseObjectTypeIds = [];
+        _savedActivities = [];
 
         _repo = new Mock<IRepository>();
         _repo.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
@@ -74,6 +76,7 @@ public class ConfigurationChangeEffectAgreementTests
             {
                 if (a.Id == Guid.Empty)
                     a.Id = Guid.NewGuid();
+                _savedActivities.Add(a);
             })
             .Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
@@ -110,57 +113,57 @@ public class ConfigurationChangeEffectAgreementTests
     {
         // Import rules: ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation.
         yield return Scenario("import: a consequential edit to a rule that is on",
-            stored: () => ImportRule(), edited: () => ImportRule(r => r.ProjectToMetaverse = false), records: true);
+            stored: () => ImportRule(), edited: () => ImportRule(r => r.ProjectToMetaverse = false), records: true, persisted: false);
         yield return Scenario("import: a rename",
-            stored: () => ImportRule(), edited: () => ImportRule(r => r.Name = "HR Import (renamed)"), records: false);
+            stored: () => ImportRule(), edited: () => ImportRule(r => r.Name = "HR Import (renamed)"), records: false, persisted: false);
         yield return Scenario("import: saved unchanged",
-            stored: () => ImportRule(), edited: () => ImportRule(), records: false);
+            stored: () => ImportRule(), edited: () => ImportRule(), records: false, persisted: null);
         yield return Scenario("import: switched off",
-            stored: () => ImportRule(), edited: () => ImportRule(r => r.Enabled = false), records: true);
+            stored: () => ImportRule(), edited: () => ImportRule(r => r.Enabled = false), records: true, persisted: false);
         yield return Scenario("import: switched on",
-            stored: () => ImportRule(r => r.Enabled = false), edited: () => ImportRule(), records: true);
+            stored: () => ImportRule(r => r.Enabled = false), edited: () => ImportRule(), records: true, persisted: false);
         yield return Scenario("import: edited while it stays off",
             stored: () => ImportRule(r => { r.Enabled = false; r.ProjectToMetaverse = true; }),
-            edited: () => ImportRule(r => { r.Enabled = false; r.ProjectToMetaverse = false; }), records: false);
+            edited: () => ImportRule(r => { r.Enabled = false; r.ProjectToMetaverse = false; }), records: false, persisted: true);
         yield return Scenario("import: created on",
-            stored: null, edited: () => ImportRule(r => r.Id = 0), records: true);
+            stored: null, edited: () => ImportRule(r => r.Id = 0), records: true, persisted: null);
         yield return Scenario("import: created off",
-            stored: null, edited: () => ImportRule(r => { r.Id = 0; r.Enabled = false; }), records: false);
+            stored: null, edited: () => ImportRule(r => { r.Id = 0; r.Enabled = false; }), records: false, persisted: null);
         yield return Scenario("import: change tracking off",
-            stored: () => ImportRule(), edited: () => ImportRule(r => r.ProjectToMetaverse = false), records: true, tracking: false);
+            stored: () => ImportRule(), edited: () => ImportRule(r => r.ProjectToMetaverse = false), records: true, tracking: false, persisted: null);
         yield return Scenario("import: change tracking off, rule off",
-            stored: () => ImportRule(r => r.Enabled = false), edited: () => ImportRule(r => r.Enabled = false), records: true, tracking: false);
+            stored: () => ImportRule(r => r.Enabled = false), edited: () => ImportRule(r => r.Enabled = false), records: true, tracking: false, persisted: null);
         yield return Scenario("import: no earlier version, rule on",
-            stored: () => ImportRule(), edited: () => ImportRule(r => r.ProjectToMetaverse = false), records: true, baseline: false);
+            stored: () => ImportRule(), edited: () => ImportRule(r => r.ProjectToMetaverse = false), records: true, baseline: false, persisted: null);
         yield return Scenario("import: no earlier version, rule off",
-            stored: () => ImportRule(r => r.Enabled = false), edited: () => ImportRule(r => r.Enabled = false), records: false, baseline: false);
+            stored: () => ImportRule(r => r.Enabled = false), edited: () => ImportRule(r => r.Enabled = false), records: false, baseline: false, persisted: null);
 
         // Export rules: ConfigurationChangeSynchronisationPolicy.FlagsExportReview. An export rule never records.
         yield return Scenario("export: Scoping Criteria changed",
-            stored: () => ExportRule(), edited: () => ExportRule(r => r.ObjectScopingCriteriaGroups.Add(EmployeesOnly())), records: false, flags: true);
+            stored: () => ExportRule(), edited: () => ExportRule(r => r.ObjectScopingCriteriaGroups.Add(EmployeesOnly())), records: false, flags: true, persisted: false);
         yield return Scenario("export: provisioning switched on",
-            stored: () => ExportRule(r => r.ProvisionToConnectedSystem = false), edited: () => ExportRule(), records: false, flags: true);
+            stored: () => ExportRule(r => r.ProvisionToConnectedSystem = false), edited: () => ExportRule(), records: false, flags: true, persisted: false);
         yield return Scenario("export: Deprovisioning Action changed",
-            stored: () => ExportRule(), edited: () => ExportRule(r => r.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete), records: false, flags: true);
+            stored: () => ExportRule(), edited: () => ExportRule(r => r.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete), records: false, flags: true, persisted: false);
         yield return Scenario("export: switched on",
-            stored: () => ExportRule(r => r.Enabled = false), edited: () => ExportRule(), records: false, flags: true);
+            stored: () => ExportRule(r => r.Enabled = false), edited: () => ExportRule(), records: false, flags: true, persisted: false);
         yield return Scenario("export: switched off",
-            stored: () => ExportRule(), edited: () => ExportRule(r => r.Enabled = false), records: false, flags: false);
+            stored: () => ExportRule(), edited: () => ExportRule(r => r.Enabled = false), records: false, flags: false, persisted: true);
         yield return Scenario("export: provisioning switched off",
-            stored: () => ExportRule(), edited: () => ExportRule(r => r.ProvisionToConnectedSystem = false), records: false, flags: false);
+            stored: () => ExportRule(), edited: () => ExportRule(r => r.ProvisionToConnectedSystem = false), records: false, flags: false, persisted: true);
         yield return Scenario("export: a rename",
-            stored: () => ExportRule(), edited: () => ExportRule(r => r.Name = "AD Export (renamed)"), records: false, flags: false);
+            stored: () => ExportRule(), edited: () => ExportRule(r => r.Name = "AD Export (renamed)"), records: false, flags: false, persisted: false);
         yield return Scenario("export: Enforce state changed",
-            stored: () => ExportRule(), edited: () => ExportRule(r => r.EnforceState = !r.EnforceState), records: false, flags: false);
+            stored: () => ExportRule(), edited: () => ExportRule(r => r.EnforceState = !r.EnforceState), records: false, flags: false, persisted: true);
         yield return Scenario("export: created on",
-            stored: null, edited: () => ExportRule(r => r.Id = 0), records: false, flags: true);
+            stored: null, edited: () => ExportRule(r => r.Id = 0), records: false, flags: true, persisted: null);
         yield return Scenario("export: created off",
-            stored: null, edited: () => ExportRule(r => { r.Id = 0; r.Enabled = false; }), records: false, flags: false);
+            stored: null, edited: () => ExportRule(r => { r.Id = 0; r.Enabled = false; }), records: false, flags: false, persisted: null);
     }
 
     [TestCaseSource(nameof(Scenarios))]
     public async Task Save_IsPromisedByTheAcknowledgementBeforeItAsync(
-        string scenario, Func<SyncRule>? stored, Func<SyncRule> edited, bool records, bool flags, bool tracking, bool baseline)
+        string scenario, Func<SyncRule>? stored, Func<SyncRule> edited, bool records, bool? persisted, bool flags, bool tracking, bool baseline)
     {
         SetupTrackingSetting(tracking);
         if (stored != null)
@@ -196,6 +199,17 @@ public class ConfigurationChangeEffectAgreementTests
 
         if (effect.FlagsExportReview)
             Assert.That(_flaggedMetaverseObjectTypeIds.Single(), Is.EqualTo(MetaverseObjectTypeId), $"{scenario}: the Metaverse Object Type flagged");
+
+        // What the save persists on its Activity for the drift indicator is the dialog's own judgement of whether anything is
+        // left for a Full Synchronisation: the same decision, recorded where the indicator reads it. Null where the save
+        // recorded no change to judge (a create, an unchanged save, a capture that did not compare).
+        var activity = _savedActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ConfigurationChangeNeedsFullSynchronisation, Is.EqualTo(persisted), $"{scenario}: the persisted judgement");
+            if (activity.ConfigurationChangeNeedsFullSynchronisation is { } needsFull)
+                Assert.That(needsFull, Is.EqualTo(effect.NeedsFullSynchronisation), $"{scenario}: persisted equals the dialog's 'left for a Full Synchronisation'");
+        }
     }
 
     // -- a failure reading the baseline degrades the acknowledgement as it degrades the capture ----------------------------
@@ -444,9 +458,9 @@ public class ConfigurationChangeEffectAgreementTests
 
     // -- helpers -------------------------------------------------------------------------------------------------------
 
-    private static TestCaseData Scenario(string name, Func<SyncRule>? stored, Func<SyncRule> edited, bool records, bool flags = false,
+    private static TestCaseData Scenario(string name, Func<SyncRule>? stored, Func<SyncRule> edited, bool records, bool? persisted, bool flags = false,
         bool tracking = true, bool baseline = true) =>
-        new TestCaseData(name, stored, edited, records, flags, tracking, baseline) { TestName = $"Save_IsPromisedByTheAcknowledgementBeforeItAsync({name})" };
+        new TestCaseData(name, stored, edited, records, persisted, flags, tracking, baseline) { TestName = $"Save_IsPromisedByTheAcknowledgementBeforeItAsync({name})" };
 
     private void SetupStoredRule(SyncRule stored, bool withBaseline = true)
     {

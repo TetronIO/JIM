@@ -186,4 +186,123 @@ public class ConfigurationChangeSynchronisationDecisionTests
         Assert.That(ConfigurationChangeSynchronisationPolicy.ExportReviewSectionKeys,
             Is.EquivalentTo(new[] { "enabled", "provisionToConnectedSystem", "objectScopingCriteriaGroups", "outboundDeprovisionAction" }));
     }
+
+    // -- SectionsLeftForFullSynchronisation and NeedsFullSynchronisation -----------------------------------------------
+
+    private static ConfigurationChangeCaptureOutcome Change(string[] labels, string[] keys, string[] consequentialKeys) =>
+        ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting, labels, keys, consequentialKeys);
+
+    [Test]
+    public void SectionsLeftForFullSynchronisation_ChangeThatIsRecorded_LeavesNothing()
+    {
+        // Processing a whole Object Type applies everything in the rule, whatever else was edited with it.
+        var outcome = Change(["Scope", "Enforce state"], ["objectScopingCriteriaGroups", "enforceState"], ["objectScopingCriteriaGroups", "enforceState"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: true, flagsExportReview: false), Is.Empty);
+    }
+
+    [Test]
+    public void SectionsLeftForFullSynchronisation_ScopeChangeTheExportReviewCarries_LeavesNothing()
+    {
+        var outcome = Change(["Scope"], ["objectScopingCriteriaGroups"], ["objectScopingCriteriaGroups"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: true), Is.Empty);
+    }
+
+    [Test]
+    public void SectionsLeftForFullSynchronisation_ExportAttributeFlowEdit_LeavesIt()
+    {
+        var outcome = Change(["Enforce state"], ["enforceState"], ["enforceState"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false),
+            Is.EqualTo(new[] { "Enforce state" }));
+    }
+
+    [Test]
+    public void SectionsLeftForFullSynchronisation_ReviewAndAnAttributeFlowEditTogether_LeavesOnlyWhatTheReviewDoesNotCarry()
+    {
+        var outcome = Change(["Scope", "Enforce state"], ["objectScopingCriteriaGroups", "enforceState"], ["objectScopingCriteriaGroups", "enforceState"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: true),
+            Is.EqualTo(new[] { "Enforce state" }));
+    }
+
+    [Test]
+    public void SectionsLeftForFullSynchronisation_ScopeChangeWhenNoReviewIsFlagged_LeavesIt()
+    {
+        // An export rule switched off flags nothing, so nothing carries a change made alongside it.
+        var outcome = Change(["Enabled", "Scope"], ["enabled", "objectScopingCriteriaGroups"], ["enabled", "objectScopingCriteriaGroups"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false),
+            Is.EqualTo(new[] { "Enabled", "Scope" }));
+    }
+
+    [Test]
+    public void SectionsLeftForFullSynchronisation_CosmeticSection_IsNotLeft()
+    {
+        var outcome = Change(["Name", "Enforce state"], ["name", "enforceState"], ["enforceState"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false),
+            Is.EqualTo(new[] { "Enforce state" }));
+    }
+
+    [Test]
+    public void SectionsLeftForFullSynchronisation_ChangeWithNoConsequentialSection_LeavesNothing()
+    {
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.Cosmetic, ["Name"], ["name"], []);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false), Is.Empty);
+    }
+
+    [Test]
+    public void SectionsLeftForFullSynchronisation_ChangedOutcomeBuiltWithoutSectionClasses_TreatsAClassifiedChangeAsConsequentialThroughout()
+    {
+        // The safe reading when the sections' own classes are not known: a change that is Sync-affecting overall leaves
+        // every section it touched, rather than none.
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting, ["Enforce state"], ["enforceState"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false),
+            Is.EqualTo(new[] { "Enforce state" }));
+    }
+
+    [TestCaseSource(nameof(OutcomesThatCompareNothing))]
+    public void SectionsLeftForFullSynchronisation_CaptureThatFoundNoChangeToJudge_LeavesNothing(ConfigurationChangeCaptureOutcome outcome)
+    {
+        Assert.That(ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false), Is.Empty);
+    }
+
+    [TestCaseSource(nameof(OutcomesThatCompareNothing))]
+    public void NeedsFullSynchronisation_CaptureThatFoundNoChangeToJudge_IsNotJudged(ConfigurationChangeCaptureOutcome outcome)
+    {
+        // Null, not false: the Activity then carries no judgement, and the indicator counts it as it always did.
+        Assert.That(ConfigurationChangeSynchronisationPolicy.NeedsFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false), Is.Null);
+    }
+
+    public static IEnumerable<ConfigurationChangeCaptureOutcome> OutcomesThatCompareNothing() =>
+    [
+        ConfigurationChangeCaptureOutcome.NoChange,
+        ConfigurationChangeCaptureOutcome.Created,
+        ConfigurationChangeCaptureOutcome.NotTracked,
+        ConfigurationChangeCaptureOutcome.Failed
+    ];
+
+    [Test]
+    public void NeedsFullSynchronisation_ChangeThatLeavesSomething_IsTrue()
+    {
+        var outcome = Change(["Enforce state"], ["enforceState"], ["enforceState"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.NeedsFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false), Is.True);
+    }
+
+    [Test]
+    public void NeedsFullSynchronisation_ChangeThatSynchronisationAppliesWhole_IsFalse()
+    {
+        var outcome = Change(["Scope"], ["objectScopingCriteriaGroups"], ["objectScopingCriteriaGroups"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ConfigurationChangeSynchronisationPolicy.NeedsFullSynchronisation(outcome, recordsAwaitingSynchronisation: true, flagsExportReview: false), Is.False, "recorded");
+            Assert.That(ConfigurationChangeSynchronisationPolicy.NeedsFullSynchronisation(outcome, recordsAwaitingSynchronisation: false, flagsExportReview: true), Is.False, "reviewed");
+        }
+    }
 }

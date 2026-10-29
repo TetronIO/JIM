@@ -19,8 +19,11 @@ namespace JIM.Application.Services;
 /// What a synchronisation applies by itself is not drift. An import Synchronisation Rule or Object Matching Rule change
 /// is recorded as awaiting synchronisation (#2615) and carried to existing objects by the system's next Delta or Full
 /// Synchronisation, so it is left out of the drift count and reported on its own, as the Object Types waiting to be
-/// processed. What remains is what JIM does not apply by itself: an export Attribute Flow edit, a Metaverse Attribute
-/// or Object Type change.
+/// processed. An export rule's scope or Deprovisioning Action change is applied by the review the save flags, at the next
+/// synchronisation of any Connected System, so the save judges it to need no Full Synchronisation and it is left out too
+/// (<see cref="JIM.Models.Activities.Activity.ConfigurationChangeNeedsFullSynchronisation"/>). What remains is what JIM does not apply by
+/// itself: an export Attribute Flow edit, a Metaverse Attribute or Object Type change, and a change recorded before that
+/// judgement existed.
 /// </summary>
 public class ConfigurationDriftService
 {

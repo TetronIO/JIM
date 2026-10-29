@@ -661,6 +661,10 @@ public interface IActivityRepository
     /// A change recorded as awaiting synchronisation (#2615), applied or not, is left out: the Connected System's next
     /// synchronisation applies it, so it is not a reason to run a Full Synchronisation. Those are reported separately, as
     /// <see cref="IConnectedSystemRepository.GetConfigurationChangesAwaitingSynchronisationAsync"/>.
+    ///
+    /// A change the save judged to need no Full Synchronisation (<see cref="Activity.ConfigurationChangeNeedsFullSynchronisation"/>
+    /// false, such as an export rule's scope change, which the export review applies) is left out too. A null judgement
+    /// counts.
     /// </summary>
     public Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass);
 

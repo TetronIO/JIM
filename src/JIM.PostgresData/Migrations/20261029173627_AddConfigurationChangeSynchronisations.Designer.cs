@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261029113844_AddConfigurationChangeSynchronisations")]
+    [Migration("20261029173627_AddConfigurationChangeSynchronisations")]
     partial class AddConfigurationChangeSynchronisations
     {
         /// <inheritdoc />
@@ -93,6 +93,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("ConfigurationChangeClass")
                         .HasColumnType("integer");
+
+                    b.Property<bool?>("ConfigurationChangeNeedsFullSynchronisation")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ConfigurationChangeSnapshot")
                         .HasColumnType("jsonb");
@@ -842,6 +845,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("TypeId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("UnsynchronisedChangesJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()

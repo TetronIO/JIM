@@ -130,6 +130,54 @@ internal static class ConfigurationChangeSynchronisationPolicy
     }
 
     /// <summary>
+    /// The labels of the changed sections that reach existing objects only at a Full Synchronisation: the consequential
+    /// ones, when nothing else applies them. Processing a whole Object Type (a change recorded as awaiting synchronisation)
+    /// applies everything in the rule; the export review carries the sections in <see cref="ExportReviewSectionKeys"/> and
+    /// nothing else; a change that was not compared (a create, an unchanged save, a capture that did not run) leaves
+    /// nothing to name. One decision, asked by the acknowledgement before a save (which names the sections) and by the save
+    /// (which records whether any are left, for the drift indicator), from the same outcome and the same two decisions above.
+    /// </summary>
+    /// <param name="outcome">What configuration change capture found for the save.</param>
+    /// <param name="recordsAwaitingSynchronisation">Whether the save records the rule's Object Type as awaiting synchronisation.</param>
+    /// <param name="flagsExportReview">Whether the save flags the rule's Metaverse Objects for export review.</param>
+    internal static IReadOnlyList<string> SectionsLeftForFullSynchronisation(
+        ConfigurationChangeCaptureOutcome outcome, bool recordsAwaitingSynchronisation, bool flagsExportReview)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        if (outcome.Kind != ConfigurationChangeCaptureKind.Changed || recordsAwaitingSynchronisation)
+            return [];
+
+        var left = new List<string>();
+        for (var i = 0; i < outcome.ChangedKeys.Count; i++)
+        {
+            var key = outcome.ChangedKeys[i];
+            if (!outcome.ConsequentialKeys.Contains(key))
+                continue;
+            if (flagsExportReview && ExportReviewSectionKeys.Contains(key))
+                continue;
+            left.Add(i < outcome.ChangedSections.Count ? outcome.ChangedSections[i] : key);
+        }
+
+        return left;
+    }
+
+    /// <summary>
+    /// Whether anything in a recorded change is left for a Full Synchronisation, to persist on the save's Activity (#2615).
+    /// Null when the capture compared nothing to judge, so the Activity carries no judgement and the drift indicator counts it
+    /// as it counts any change it was never told about. See <see cref="SectionsLeftForFullSynchronisation"/>.
+    /// </summary>
+    internal static bool? NeedsFullSynchronisation(
+        ConfigurationChangeCaptureOutcome outcome, bool recordsAwaitingSynchronisation, bool flagsExportReview)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        return outcome.Kind == ConfigurationChangeCaptureKind.Changed
+            ? SectionsLeftForFullSynchronisation(outcome, recordsAwaitingSynchronisation, flagsExportReview).Count > 0
+            : null;
+    }
+
+    /// <summary>
     /// The text recorded with the change so it still reads once the rule is gone: what was saved, and (where capture
     /// could tell) what changed in it and how consequential that is.
     /// </summary>

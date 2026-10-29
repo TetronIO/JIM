@@ -92,6 +92,12 @@ namespace JIM.PostgresData.Migrations
                 name: "IX_ConfigurationChangeSynchronisations_SyncRuleId",
                 table: "ConfigurationChangeSynchronisations",
                 column: "SyncRuleId");
+
+            migrationBuilder.AddColumn<bool>(
+                name: "ConfigurationChangeNeedsFullSynchronisation",
+                table: "Activities",
+                type: "boolean",
+                nullable: true);
         }
 
         /// <inheritdoc />
@@ -99,6 +105,10 @@ namespace JIM.PostgresData.Migrations
         {
             migrationBuilder.DropTable(
                 name: "ConfigurationChangeSynchronisations");
+
+            migrationBuilder.DropColumn(
+                name: "ConfigurationChangeNeedsFullSynchronisation",
+                table: "Activities");
         }
     }
 }

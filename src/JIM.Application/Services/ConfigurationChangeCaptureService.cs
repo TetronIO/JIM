@@ -209,7 +209,25 @@ public class ConfigurationChangeCaptureService
         return ConfigurationChangeCaptureOutcome.Changed(
             ClassifyOrDefault(diff, objectKey, targetDescription),
             changedSections.Select(section => section.Label ?? section.Key).ToList(),
-            changedSections.Select(section => section.Key).ToList());
+            changedSections.Select(section => section.Key).ToList(),
+            changedSections.Where(section => IsConsequential(diff.ObjectType, section, objectKey)).Select(section => section.Key).ToList());
+    }
+
+    /// <summary>
+    /// Whether a changed top-level section is Sync-affecting or Destructive in itself. A section that cannot be classified
+    /// is taken to be consequential: what a change leaves to a Full Synchronisation is decided from this, and a change
+    /// missed there is one the administrator is never told still needs one.
+    /// </summary>
+    private static bool IsConsequential(string objectType, ConfigurationDiffNode section, string? objectKey)
+    {
+        try
+        {
+            return ConfigurationChangeClassifier.ClassifyNode(objectType, section, objectKey) >= ConfigurationChangeClass.SyncAffecting;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
     }
 
     /// <summary>

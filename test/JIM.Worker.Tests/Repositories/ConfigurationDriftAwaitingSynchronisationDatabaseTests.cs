@@ -125,7 +125,7 @@ public class ConfigurationDriftAwaitingSynchronisationDatabaseTests
     /// <summary>
     /// A Sync-affecting change to a Synchronisation Rule, saved after the last Full Synchronisation.
     /// </summary>
-    private async Task<Activity> SaveChangeToRuleAsync(int syncRuleId, string name)
+    private async Task<Activity> SaveChangeToRuleAsync(int syncRuleId, string name, bool? needsFullSynchronisation = null)
     {
         await using var ctx = NewContext();
         var activity = new Activity
@@ -136,6 +136,7 @@ public class ConfigurationDriftAwaitingSynchronisationDatabaseTests
             TargetOperationType = ActivityTargetOperationType.Update,
             SyncRuleId = syncRuleId,
             ConfigurationChangeClass = ConfigurationChangeClass.SyncAffecting,
+            ConfigurationChangeNeedsFullSynchronisation = needsFullSynchronisation,
             Status = ActivityStatus.Complete,
             InitiatedByType = ActivityInitiatorType.System,
             InitiatedByName = "System",
@@ -210,6 +211,70 @@ public class ConfigurationDriftAwaitingSynchronisationDatabaseTests
             .GetConfigurationChangeImpactsSinceAsync(s.FullSynchronisationStart, ConfigurationChangeClass.SyncAffecting);
 
         Assert.That(impacts, Is.Empty, "an applied change is done: not drift, and not waiting either");
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeImpactsSinceAsync_ChangeJudgedNotToNeedAFullSynchronisation_IsLeftOutAsync()
+    {
+        // An export rule's scope change is applied by the review the save flags, at the next synchronisation of any Connected
+        // System, so the save judged that nothing was left for a Full Synchronisation. It has no recorded row to match, so the
+        // judgement on the Activity is what leaves it out; an export Attribute Flow edit is judged to need one and stays.
+        var s = await SeedAsync();
+        await SaveChangeToRuleAsync(s.ExportRuleId, "drift-export-scope", needsFullSynchronisation: false);
+        await SaveChangeToRuleAsync(s.ExportRuleId, "drift-export-flow", needsFullSynchronisation: true);
+
+        await using var ctx = NewContext(QueryTrackingBehavior.NoTracking);
+        var impacts = await new PostgresDataRepository(ctx).Activity
+            .GetConfigurationChangeImpactsSinceAsync(s.FullSynchronisationStart, ConfigurationChangeClass.SyncAffecting);
+
+        Assert.That(impacts, Has.Count.EqualTo(1), "only the change that still needs a Full Synchronisation is counted");
+        Assert.That(impacts.Single().SyncRuleId, Is.EqualTo(s.ExportRuleId));
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeImpactsSinceAsync_ChangeSavedBeforeTheJudgementWasRecorded_StillCountsAsBeforeAsync()
+    {
+        // Null is not false: an Activity captured before the judgement existed keeps counting, so an upgrade does not
+        // quietly drop a change that was pending.
+        var s = await SeedAsync();
+        await SaveChangeToRuleAsync(s.ExportRuleId, "drift-export-flow", needsFullSynchronisation: null);
+
+        await using var ctx = NewContext(QueryTrackingBehavior.NoTracking);
+        var impacts = await new PostgresDataRepository(ctx).Activity
+            .GetConfigurationChangeImpactsSinceAsync(s.FullSynchronisationStart, ConfigurationChangeClass.SyncAffecting);
+
+        Assert.That(impacts, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_ExportScopeChangeTheReviewCarries_IsNotDriftAsync()
+    {
+        var s = await SeedAsync();
+        await SaveChangeToRuleAsync(s.ExportRuleId, "drift-export-scope", needsFullSynchronisation: false);
+
+        var drift = await DriftAsync(s.SystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(drift.HasPendingChanges, Is.False, "the next synchronisation of any Connected System reviews every object against the rule");
+            Assert.That(drift.ChangeCount, Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_ExportScopeChangeAndAnAttributeFlowEditInOneSave_IsCountedOnceAsync()
+    {
+        // One save carrying both is one Activity, judged to need a Full Synchronisation for the part the review does not carry.
+        var s = await SeedAsync();
+        await SaveChangeToRuleAsync(s.ExportRuleId, "drift-export-scope-and-flow", needsFullSynchronisation: true);
+
+        var drift = await DriftAsync(s.SystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(drift.HasPendingChanges, Is.True);
+            Assert.That(drift.ChangeCount, Is.EqualTo(1));
+        }
     }
 
     [Test]

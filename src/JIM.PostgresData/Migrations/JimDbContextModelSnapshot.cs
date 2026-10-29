@@ -91,6 +91,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConfigurationChangeClass")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("ConfigurationChangeNeedsFullSynchronisation")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ConfigurationChangeSnapshot")
                         .HasColumnType("jsonb");
 

@@ -120,7 +120,12 @@ public partial class ConnectedSystemServer
 
         var outcome = await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
         if (recordsAwaitingSynchronisation)
+        {
+            // A granular endpoint flags no export review (only a whole-rule save can move a rule's scope), so an export
+            // Attribute Flow edit made here is left for a Full Synchronisation.
+            RecordWhetherFullSynchronisationIsNeeded(activity, rule, outcome, flaggedExportReview: false);
             await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, rule, outcome, isNew: false);
+        }
     }
 
     // A configuration change can take away the reason a queued Pending Export change exists: an export Synchronisation
@@ -160,12 +165,13 @@ public partial class ConnectedSystemServer
     // System provisions and deprovisions them against the rule as it now stands (#1925, #1970). Disabling a rule or
     // switching provisioning off flags nothing: neither destroys what already exists. A save that leaves scope and the
     // Deprovisioning Action alone (a rename, an Attribute Flow edit) flags nothing either; a changed Attribute Flow
-    // reaches existing objects through the target's drift detection instead.
-    private async Task FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
+    // reaches existing objects through the target's drift detection instead. Returns whether it flagged, which the save
+    // records with the change for the drift indicator (what the review carries is not left for a Full Synchronisation).
+    private async Task<bool> FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
     {
         // The decision is the policy's, which the acknowledgement before the save asks too, so the two cannot disagree.
         if (!ConfigurationChangeSynchronisationPolicy.FlagsExportReview(syncRule, isNewRule, storedState))
-            return;
+            return false;
 
         var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
         var newlyFlagged = await Application.SyncRepo.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);
@@ -173,7 +179,17 @@ public partial class ConnectedSystemServer
             "or what it does to those leaving its scope; flagged {Count} Metaverse Object(s) of type {TypeId} for export scope review " +
             "at the next synchronisation (#1925, #1970)",
             syncRule.Id, LogSanitiser.Sanitise(syncRule.Name), newlyFlagged, metaverseObjectTypeId);
+        return true;
     }
+
+    // Records on the save's Activity whether anything in the change is left for a Full Synchronisation (#2615): the
+    // judgement the acknowledgement before the save stated, asked of the policy with the same outcome and the same two
+    // decisions, kept where the drift indicator reads it so a change synchronisation applies by itself is not counted as
+    // drift. Nothing is recorded when the capture compared nothing, and the Activity then counts as it always did.
+    private static void RecordWhetherFullSynchronisationIsNeeded(
+        Activity activity, SyncRule syncRule, ConfigurationChangeCaptureOutcome outcome, bool flaggedExportReview) =>
+        activity.ConfigurationChangeNeedsFullSynchronisation = ConfigurationChangeSynchronisationPolicy.NeedsFullSynchronisation(
+            outcome, ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation(syncRule, outcome), flaggedExportReview);
 
     // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
     // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
@@ -8705,6 +8721,7 @@ public partial class ConnectedSystemServer
             // child has failed itself; the reorder it belongs to must not be left in progress behind it.
             try
             {
+                RecordWhetherFullSynchronisationIsNeeded(childActivity, rule, captureOutcome, flaggedExportReview: false);
                 await RecordConfigurationChangeAwaitingSynchronisationAsync(childActivity, rule, captureOutcome, isNew: false);
             }
             catch (ConfigurationChangeSynchronisationNotRecordedException ex)
@@ -9996,7 +10013,8 @@ public partial class ConnectedSystemServer
         await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
         var captureOutcome = await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
-        await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        var flaggedExportReview = await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        RecordWhetherFullSynchronisationIsNeeded(activity, syncRule, captureOutcome, flaggedExportReview);
         // Last, and after the rule has been written: a change recorded as awaiting synchronisation is claimed by the next
         // synchronisation as soon as it is committed, and that claim assumes the rule it describes is already stored. This
         // is the portal's and the REST API's whole-rule save, so it also covers enabling and disabling, projection, the
@@ -10230,7 +10248,8 @@ public partial class ConnectedSystemServer
         await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
         var captureOutcome = await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
-        await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        var flaggedExportReview = await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        RecordWhetherFullSynchronisationIsNeeded(activity, syncRule, captureOutcome, flaggedExportReview);
         // Last, and after the rule has been written: a change recorded as awaiting synchronisation is claimed by the next
         // synchronisation as soon as it is committed, and that claim assumes the rule it describes is already stored. This
         // is the portal's and the REST API's whole-rule save, so it also covers enabling and disabling, projection, the

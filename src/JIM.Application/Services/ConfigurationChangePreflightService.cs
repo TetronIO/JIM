@@ -54,7 +54,7 @@ public class ConfigurationChangePreflightService
             var created = await TryEffectOfSyncRuleSaveAsync(proposed, async () =>
                 await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync()
                     ? ConfigurationChangeCaptureOutcome.Created
-                    : ConfigurationChangeCaptureOutcome.NotTracked, diff: null);
+                    : ConfigurationChangeCaptureOutcome.NotTracked);
             return created == null ? ConfigurationChangePreflight.None : ConfigurationChangePreflight.None.WithEffect(created);
         }
 
@@ -66,7 +66,7 @@ public class ConfigurationChangePreflightService
             async hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey,
                 await Application.Repository.ConfigurationTests.GetTestCasesForSyncRuleAsync(proposed.Id)),
             $"Synchronisation Rule {proposed.Id}");
-        var effect = await TryEffectOfSyncRuleSaveAsync(proposed, () => Task.FromResult(evaluation.Outcome), evaluation.Diff);
+        var effect = await TryEffectOfSyncRuleSaveAsync(proposed, () => Task.FromResult(evaluation.Outcome));
         return effect == null ? evaluation.Preflight : evaluation.Preflight.WithEffect(effect);
     }
 
@@ -77,11 +77,11 @@ public class ConfigurationChangePreflightService
     /// capture treats as a failed read are absorbed; anything else is a defect and surfaces.
     /// </summary>
     private async Task<ConfigurationChangeEffect?> TryEffectOfSyncRuleSaveAsync(
-        SyncRule proposed, Func<Task<ConfigurationChangeCaptureOutcome>> outcomeAsync, ConfigurationDiff? diff)
+        SyncRule proposed, Func<Task<ConfigurationChangeCaptureOutcome>> outcomeAsync)
     {
         try
         {
-            return await EffectOfSyncRuleSaveAsync(proposed, await outcomeAsync(), diff);
+            return await EffectOfSyncRuleSaveAsync(proposed, await outcomeAsync());
         }
         catch (Exception ex) when (ConfigurationChangeCaptureService.IsCaptureFailure(ex))
         {
@@ -99,7 +99,7 @@ public class ConfigurationChangePreflightService
     /// <see cref="ConfigurationChangeSynchronisationPolicy"/>'s, which the save asks with the same inputs, and the outcome
     /// is the capture's own reading of the same comparison, so this cannot promise what the save then does not do.
     /// </summary>
-    private async Task<ConfigurationChangeEffect> EffectOfSyncRuleSaveAsync(SyncRule proposed, ConfigurationChangeCaptureOutcome outcome, ConfigurationDiff? diff)
+    private async Task<ConfigurationChangeEffect> EffectOfSyncRuleSaveAsync(SyncRule proposed, ConfigurationChangeCaptureOutcome outcome)
     {
         var connectedSystemId = proposed.ConnectedSystemId > 0 ? proposed.ConnectedSystemId : proposed.ConnectedSystem?.Id ?? 0;
         var objectTypeId = proposed.ConnectedSystemObjectTypeId > 0 ? proposed.ConnectedSystemObjectTypeId : proposed.ConnectedSystemObjectType?.Id ?? 0;
@@ -118,11 +118,10 @@ public class ConfigurationChangePreflightService
         var flagsExportReview = ConfigurationChangeSynchronisationPolicy.FlagsExportReview(proposed, isNewRule, storedState);
         var exportReviewTypeName = flagsExportReview ? await MetaverseObjectTypeNameOfAsync(proposed) : null;
 
-        // Processing a whole type applies everything in the rule, so nothing is left for a Full Synchronisation after it.
-        // Otherwise, what is left is whichever changed section is consequential and not what the export review carries.
-        var fullSynchronisationSections = processedInFull.Count > 0 || diff == null
-            ? []
-            : SectionsLeftForFullSynchronisation(diff, flagsExportReview);
+        // What is left for a Full Synchronisation is the policy's to say, from the outcome and the two decisions above: the
+        // save asks it the same way to record, for the drift indicator, whether anything is left.
+        var fullSynchronisationSections = ConfigurationChangeSynchronisationPolicy.SectionsLeftForFullSynchronisation(
+            outcome, processedInFull.Count > 0, flagsExportReview).ToList();
 
         return new ConfigurationChangeEffect
         {
@@ -134,18 +133,6 @@ public class ConfigurationChangePreflightService
                 : proposed.ConnectedSystem?.Name ?? (await Application.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId))?.Name
             ?? $"Connected System {connectedSystemId}"
         };
-    }
-
-    // The changed top-level sections that are consequential (Sync-affecting or Destructive) and that the export review
-    // does not carry: the ones the drift indicator goes on counting until a Full Synchronisation applies them.
-    private static List<string> SectionsLeftForFullSynchronisation(ConfigurationDiff diff, bool exportReviewCarriesScope)
-    {
-        return (diff.Root?.Children ?? [])
-            .Where(section => section.ChangeType != ConfigurationDiffChangeType.Unchanged)
-            .Where(section => !(exportReviewCarriesScope && ConfigurationChangeSynchronisationPolicy.ExportReviewSectionKeys.Contains(section.Key)))
-            .Where(section => ConfigurationChangeClassifier.ClassifyNode(diff.ObjectType, section) >= ConfigurationChangeClass.SyncAffecting)
-            .Select(section => section.Label ?? section.Key)
-            .ToList();
     }
 
     private async Task<string?> MetaverseObjectTypeNameOfAsync(SyncRule rule)
@@ -247,7 +234,7 @@ public class ConfigurationChangePreflightService
     /// What an evaluation found: the preflight the acknowledgement is composed from, and the capture's own reading of the
     /// same comparison, which is what the save's decisions are made from (#2615).
     /// </summary>
-    private sealed record Evaluation(ConfigurationChangePreflight Preflight, ConfigurationChangeCaptureOutcome Outcome, ConfigurationDiff? Diff);
+    private sealed record Evaluation(ConfigurationChangePreflight Preflight, ConfigurationChangeCaptureOutcome Outcome);
 
     private async Task<Evaluation> EvaluateCoreAsync(
         Func<Task<string?>> getBaselineSnapshotAsync,
@@ -261,12 +248,12 @@ public class ConfigurationChangePreflightService
             // were part of this save. "Unknown" is the honest answer, and it is the same answer the changed-since
             // indicator gives. The save's capture reads the same situation as "not tracked".
             if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.NotTracked, null);
+                return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.NotTracked);
 
             var baselineJson = await getBaselineSnapshotAsync();
             var baseline = baselineJson == null ? null : ConfigurationSnapshotService.Deserialise(baselineJson);
             if (baseline == null)
-                return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.Created, null);
+                return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.Created);
 
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             return Evaluate(baseline, await buildProposedSnapshotAsync(hashKey), targetDescription);
@@ -278,7 +265,7 @@ public class ConfigurationChangePreflightService
             // degrades the same way: nothing can be said about what changed, and the save is assumed to record, fail-safe.
             Log.Warning(ex, "EvaluateCoreAsync: could not read or compare the captured configuration of {Target}; the acknowledgement " +
                 "cannot say what changed, and treats the save as the capture would: unable to rule out a change.", targetDescription);
-            return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.Failed, null);
+            return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.Failed);
         }
     }
 
@@ -290,7 +277,7 @@ public class ConfigurationChangePreflightService
     {
         var diff = Application.ConfigurationDiffs.Diff(baseline, proposed);
         if (!diff.HasChanges)
-            return new Evaluation(ConfigurationChangePreflight.None, ConfigurationChangeCaptureOutcome.NoChange, diff);
+            return new Evaluation(ConfigurationChangePreflight.None, ConfigurationChangeCaptureOutcome.NoChange);
 
         // Started from the root's children rather than the root itself: the root's label names the object, not a
         // section within it, so it belongs to no property's path.
@@ -319,7 +306,7 @@ public class ConfigurationChangePreflightService
 
         // The capture's reading of the same diff, from the one place that makes it, so what a save then does about the
         // change (#2615) is decided from what this acknowledgement saw.
-        return new Evaluation(preflight, ConfigurationChangeCaptureService.OutcomeOf(diff, proposed.ObjectKey, targetDescription), diff);
+        return new Evaluation(preflight, ConfigurationChangeCaptureService.OutcomeOf(diff, proposed.ObjectKey, targetDescription));
     }
 
     /// <summary>
