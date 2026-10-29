@@ -108,7 +108,7 @@ $script:Detail = New-Object System.Collections.Generic.List[string]
 # The cmdlets Configure and Verify import from Exchange Remote PowerShell. Nothing else crosses the session.
 $script:ExchangeCommands = @(
     'Get-ExchangeServer', 'Get-OrganizationConfig', 'Test-ServiceHealth', 'Get-MailboxDatabase', 'New-MailboxDatabase',
-    'Mount-Database', 'Set-MailboxDatabase', 'Get-RoleGroupMember', 'Add-RoleGroupMember', 'Get-ExchangeCertificate',
+    'Mount-Database', 'Set-MailboxDatabase', 'Get-RoleGroupMember', 'Add-RoleGroupMember',
     'Enable-Mailbox', 'Get-Mailbox', 'Remove-Mailbox', 'Get-MailboxStatistics', 'Enable-MailContact', 'Get-MailContact',
     'Remove-MailContact'
 )
@@ -527,13 +527,18 @@ function Set-ExchangeCertificateTrust {
     # as the LDAPS and AD FS certificates are, and trusted on the server itself so Verify can reach it over HTTPS.
     param([object]$Info)
 
-    $certificate = @(Get-ExchangeCertificate -Server $Info.ComputerName | Where-Object {
-            $_.IsSelfSigned -and ([string]$_.Services -match '\bIIS\b') -and (@($_.CertificateDomains | ForEach-Object { [string]$_ }) -contains $Info.Fqdn)
-        } | Sort-Object -Property NotAfter -Descending | Select-Object -First 1)
-    if ($certificate.Count -eq 0) {
-        throw "Exchange holds no self-signed certificate bound to IIS for $($Info.Fqdn)."
+    # The certificate IIS serves on every address, read from the store: Get-ExchangeCertificate through Remote
+    # PowerShell loses the properties that would say which one it is.
+    Import-Module WebAdministration
+    $binding = @(Get-ChildItem -Path 'IIS:\SslBindings' | Where-Object { $_.Port -eq 443 -and [string]$_.IPAddress -eq '0.0.0.0' })
+    if ($binding.Count -eq 0) {
+        throw 'IIS has no certificate bound to port 443 on all addresses.'
     }
-    $thumbprint = [string]$certificate[0].Thumbprint
+    $thumbprint = [string]$binding[0].Thumbprint
+    $certificate = Get-Item -LiteralPath "Cert:\LocalMachine\My\$thumbprint" -ErrorAction SilentlyContinue
+    if ($null -eq $certificate -or -not (Test-LabExchangeIisCertificate -Certificate $certificate -Fqdn $Info.Fqdn)) {
+        throw "The certificate IIS serves on port 443 ($thumbprint) is not Exchange's self-signed one for $($Info.Fqdn)."
+    }
 
     $exportPath = Join-Path $LabRoot ("{0}-ca.cer" -f $VmName)
     $null = Export-Certificate -Cert "Cert:\LocalMachine\My\$thumbprint" -FilePath $exportPath -Type CERT -Force
@@ -755,7 +760,9 @@ function Invoke-VerifyPhase {
     }
 
     Add-Check "Remote PowerShell answers over HTTPS with Kerberos at $($info.PowerShellUri), as JIM connects" {
-        $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $info.PowerShellUri -Authentication Kerberos -Credential (Get-DomainCredential) -ErrorAction Stop
+        # Bounded: without timeouts an HTTPS connection that never completes held Verify for hours.
+        $options = New-PSSessionOption -OpenTimeout 120000 -OperationTimeout 300000 -CancelTimeout 60000
+        $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $info.PowerShellUri -Authentication Kerberos -Credential (Get-DomainCredential) -SessionOption $options -ErrorAction Stop
         try {
             $server = Invoke-Command -Session $session -ScriptBlock { Get-ExchangeServer } | Select-Object -First 1
             [pscustomobject]@{ Passed = ([string]$server.Name -ieq $info.ComputerName); Detail = "Get-ExchangeServer answered $($server.Name)" }

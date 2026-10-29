@@ -457,9 +457,34 @@ function Test-LabExchangeDatabaseLayout {
     return $problems.ToArray()
 }
 
+function Test-LabExchangeIisCertificate {
+    <#
+    .SYNOPSIS
+        Says whether a certificate from the server's own store is the self-signed one Setup makes for IIS: issued by
+        itself, and naming the server's full name.
+
+    .DESCRIPTION
+        Read from the certificate store, not from Get-ExchangeCertificate: through Remote PowerShell that returns a
+        plain certificate, without IsSelfSigned, Services or CertificateDomains.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Certificate,
+
+        [Parameter(Mandatory)]
+        [string]$Fqdn
+    )
+
+    $names = @($Certificate.DnsNameList | ForEach-Object { [string]$_.Unicode })
+    return ([string]$Certificate.Subject -eq [string]$Certificate.Issuer) -and ($names -contains $Fqdn)
+}
+
 Export-ModuleMember -Function @(
     'Get-LabExchangeServerInfo', 'Get-LabExchangeDatabasePath', 'ConvertFrom-LabExchangeSetting', 'Get-LabExchangePhaseArgument',
     'Get-LabExchangeWindowsFeature', 'Get-LabExchangePrerequisite', 'Test-LabExchangePrerequisiteInstalled',
     'Test-LabMicrosoftSignature', 'Get-LabExchangePageFileSize', 'Get-LabExchangeSetupInstallArgument',
-    'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Test-LabExchangeDatabaseLayout'
+    'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Test-LabExchangeDatabaseLayout',
+    'Test-LabExchangeIisCertificate'
 )

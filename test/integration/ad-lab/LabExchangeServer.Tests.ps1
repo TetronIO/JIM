@@ -398,3 +398,28 @@ Describe 'Test-LabExchangeDatabaseLayout' {
         @(Test-LabExchangeDatabaseLayout -Database $databases -Info $script:Info) | Should -Match 'EX2'
     }
 }
+
+Describe 'Test-LabExchangeIisCertificate' {
+    BeforeAll {
+        function Get-TestCertificate {
+            param([string]$Subject = 'CN=ex1', [string]$Issuer = 'CN=ex1', [string[]]$Name = @('ex1', 'ex1.PANOPLY.LOCAL'))
+            return [pscustomobject]@{
+                Subject     = $Subject
+                Issuer      = $Issuer
+                DnsNameList = @($Name | ForEach-Object { [pscustomobject]@{ Unicode = $_ } })
+            }
+        }
+    }
+
+    It 'accepts the self-signed certificate Setup makes, whatever the case of its domain name' {
+        Test-LabExchangeIisCertificate -Certificate (Get-TestCertificate) -Fqdn $script:Info.Fqdn | Should -BeTrue
+    }
+
+    It 'refuses a certificate a CA issued' {
+        Test-LabExchangeIisCertificate -Certificate (Get-TestCertificate -Issuer 'CN=PANOPLY-CA') -Fqdn $script:Info.Fqdn | Should -BeFalse
+    }
+
+    It 'refuses a certificate without the server''s full name' {
+        Test-LabExchangeIisCertificate -Certificate (Get-TestCertificate -Name 'ex1') -Fqdn $script:Info.Fqdn | Should -BeFalse
+    }
+}

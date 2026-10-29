@@ -217,13 +217,16 @@ function Write-Ok {
 function Measure-HostCpu {
     # Starts sampling the host's CPU in the background while a phase runs (Read-HostCpu reads it): all logical
     # processors' run time, and how long this VM's virtual processors wait to be scheduled, which is what an
-    # overcommitted host costs a guest.
+    # overcommitted host costs a guest. A job's output is serialised only one level deep, which would turn each
+    # counter sample into a string, so the job flattens the samples itself.
     $counters = @(
         '\Hyper-V Hypervisor Logical Processor(_Total)\% Total Run Time',
         "\Hyper-V Hypervisor Virtual Processor($($Name):*)\CPU Wait Time Per Dispatch"
     )
     return (Start-Job -ScriptBlock {
-            Get-Counter -Counter $using:counters -SampleInterval 10 -Continuous -ErrorAction SilentlyContinue
+            Get-Counter -Counter $using:counters -SampleInterval 10 -Continuous -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.CounterSamples } |
+                ForEach-Object { [pscustomobject]@{ Path = $_.Path; CookedValue = $_.CookedValue } }
         })
 }
 
@@ -231,7 +234,7 @@ function Read-HostCpu {
     param($Job)
     try {
         Stop-Job -Job $Job
-        $samples = @(Receive-Job -Job $Job -ErrorAction SilentlyContinue | ForEach-Object { $_.CounterSamples })
+        $samples = @(Receive-Job -Job $Job -ErrorAction SilentlyContinue)
         $run = @($samples | Where-Object { $_.Path -like '*logical processor(_total)*' } | ForEach-Object { $_.CookedValue })
         $wait = @($samples | Where-Object { $_.Path -like '*cpu wait time per dispatch*' } | ForEach-Object { $_.CookedValue })
         if ($run.Count -eq 0) { return 'host CPU not sampled' }
