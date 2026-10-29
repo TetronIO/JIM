@@ -5304,7 +5304,7 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// By default, the Metaverse attribute values an import mapping contributed are recalled at the next
-    /// synchronisation of the contributing system, Delta or Full (surviving lower-priority contributors are re-elected). Pass
+    /// synchronisation of the contributing system, Delta or Full (surviving lower-priority contributors are re-elected). Set
     /// <c>keepContributedValues=true</c> to leave them in place instead: their provenance is severed before the
     /// mapping is deleted, permanently exempting them from recall. Use the mapping's
     /// contributed-values-summary endpoint first to understand the impact. Export mappings contribute nothing,
