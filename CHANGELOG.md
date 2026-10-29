@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-29
+
 ### Added
 
 #### Generated Values and derived Attribute Flows
@@ -1697,7 +1699,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/TetronIO/JIM/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/TetronIO/JIM/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/TetronIO/JIM/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/TetronIO/JIM/compare/v0.13.0...v0.14.0
