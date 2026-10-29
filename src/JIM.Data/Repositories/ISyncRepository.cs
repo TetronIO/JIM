@@ -2232,7 +2232,7 @@ public interface ISyncRepository
     /// Connected System, in one statement, and returns what it claimed. A synchronisation calls this first, before it
     /// loads any Synchronisation Rule, and processes every object of the types returned.
     /// <para>
-    /// The guarantee: every row claimed was committed before the worker read the ids it passes here, and the worker reads
+    /// The guarantee: every row claimed was committed before the worker read the ids it hands over here, and the worker reads
     /// them before it loads anything the run uses (the Connected System with its Object Types and their Simple Mode Object
     /// Matching Rules, then the Synchronisation Rules). A row is only written after the configuration change it records
     /// has been saved, so every claimed change is already in everything the run loaded. A change saved after the ids were
@@ -2240,7 +2240,7 @@ public interface ISyncRepository
     /// </para>
     /// <para>
     /// A change claimed by an earlier run that failed or was cancelled is claimed again (the earlier claim is
-    /// overwritten), provided its id is among those passed.
+    /// overwritten), provided its id is among those handed over.
     /// </para>
     /// </summary>
     /// <param name="connectedSystemId">The Connected System being synchronised.</param>

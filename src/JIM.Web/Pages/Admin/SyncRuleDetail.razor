@@ -5,6 +5,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
 @using JIM.Models.Logic
+@using JIM.Models.Logic.DTOs
 @using JIM.Models.Preview
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Utility
@@ -57,7 +58,9 @@ else if (_syncRule != null)
                                    MetaverseObjectTypeName="@_syncRule.MetaverseObjectType?.Name"
                                    ConnectedSystemObjectTypeName="@_syncRule.ConnectedSystemObjectType?.Name"
                                    ConnectedSystemId="@_syncRule.ConnectedSystemId"
-                                   ConnectedSystemName="@_syncRule.ConnectedSystem.Name" />
+                                   ConnectedSystemName="@_syncRule.ConnectedSystem.Name"
+                                   AwaitingSynchronisationChangeCount="@(_reviewState?.AwaitingSynchronisationChangeCount ?? 0)"
+                                   ExportReviewPendingCount="@(_reviewState?.ExportReviewPendingCount ?? 0)" />
         </div>
     }
 
@@ -446,6 +449,8 @@ else if (_syncRule != null)
             // Counts only; the reasons behind them are the Passwords tab's own load.
             var attention = await _jim.InitialPasswords.GetAttentionBySyncRuleAsync([_syncRule.Id]);
             _parkedInitialPasswordCount = attention.TryGetValue(_syncRule.Id, out var parked) ? parked.ParkedCount : 0;
+
+            await LoadReviewStateAsync();
         }
         else
         {
@@ -457,6 +462,27 @@ else if (_syncRule != null)
             _connectedSystemNames = await _jim.ConnectedSystems.GetConnectedSystemNamesAsync();
             _metaverseObjectTypes = await _jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
+    }
+
+    /// <summary>
+    /// What the rule is waiting on (#2615), for the identity strip: for an import rule, the saved changes awaiting its
+    /// Connected System's next synchronisation; for an export rule, the Metaverse Objects flagged for export review. Read
+    /// when the rule is loaded and again after a save, which is what can make an import rule's type await synchronisation.
+    /// Null for a rule not yet saved.
+    /// </summary>
+    private SyncRuleHeader? _reviewState;
+
+    private async Task LoadReviewStateAsync()
+    {
+        if (_jim == null || _syncRule is not { Id: > 0 })
+        {
+            _reviewState = null;
+            return;
+        }
+
+        var header = SyncRuleHeader.FromEntity(_syncRule);
+        await _jim.ConnectedSystems.PopulateSyncRuleReviewStateAsync([header]);
+        _reviewState = header;
     }
 
     /// <summary>
@@ -920,6 +946,7 @@ else if (_syncRule != null)
                 _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
                 _persistedEnabled = _syncRule.Enabled;
                 _persistedProjectedTypeId = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(_syncRule);
+                await LoadReviewStateAsync();
                 Snackbar.Add("Changes saved.", Severity.Success);
                 ReportSequenceSkips();
                 ReportSaveWarnings();

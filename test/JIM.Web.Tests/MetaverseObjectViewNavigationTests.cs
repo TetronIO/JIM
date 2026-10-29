@@ -43,6 +43,7 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
 
     private static readonly Guid AlphaId = Guid.NewGuid();
     private static readonly Guid BravoId = Guid.NewGuid();
+    private static readonly Guid FlaggedId = Guid.NewGuid();
     private const int NotConnectedRuleId = 92;
 
     private Mock<IMetaverseRepository> _metaverse = null!;
@@ -70,6 +71,7 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
             .ReturnsAsync([]);
         SetupObject(AlphaId, connectorCount: 2, createdBy: "Alpha Administrator");
         SetupObject(BravoId, connectorCount: 1, createdBy: null);
+        SetupObject(FlaggedId, connectorCount: 1, createdBy: null, scopeReviewPending: true);
 
         sync.Setup(r => r.GetRetiredGeneratedValueHeadersForObjectAsync(It.IsAny<Guid>())).ReturnsAsync([]);
         sync.Setup(r => r.GetPendingPasswordChangeHeadersAsync(
@@ -123,7 +125,7 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
         _authorisation.SetRoles("User", "Administrator");
     }
 
-    private void SetupObject(Guid id, int connectorCount, string? createdBy)
+    private void SetupObject(Guid id, int connectorCount, string? createdBy, bool scopeReviewPending = false)
     {
         _metaverse
             .Setup(r => r.GetMetaverseObjectHeaderAsync(id))
@@ -136,7 +138,8 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
                 {
                     Id = id,
                     Type = new MetaverseObjectType { Id = 1, Name = "Person", PluralName = "People" },
-                    Created = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                    Created = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                    ScopeReviewPending = scopeReviewPending
                 },
                 ChangeCount = 1,
                 ConnectorCount = connectorCount,
@@ -392,6 +395,47 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
         ShowObject(page, BravoId, "properties");
 
         page.WaitForAssertion(() => Assert.That(page.Markup, Does.Not.Contain("Alpha Administrator")));
+    }
+
+    private const string ExportReviewBanner = "[data-testid='jim-export-review-banner']";
+
+    /// <summary>
+    /// An object flagged for review against every export rule says so above its tabs, to an administrator (#2615).
+    /// </summary>
+    [Test]
+    public void ExportReview_ObjectFlaggedForReview_IsShownToAnAdministrator()
+    {
+        var page = RenderObject(FlaggedId, "details");
+
+        page.WaitForAssertion(() => Assert.That(page.FindAll(ExportReviewBanner), Has.Count.EqualTo(1)));
+    }
+
+    [Test]
+    public void ExportReview_ObjectNotFlagged_ShowsNoBanner()
+    {
+        var page = RenderObject(AlphaId, "details");
+
+        page.WaitForAssertion(() => Assert.That(page.FindComponents<MudTabPanel>(), Is.Not.Empty));
+        Assert.That(page.FindAll(ExportReviewBanner), Is.Empty);
+    }
+
+    /// <summary>
+    /// The banner is for administrators, and the flag is not read for anyone else: the component the page places is told
+    /// nothing is pending, so nothing about the review reaches a reader who cannot see it.
+    /// </summary>
+    [Test]
+    public void ExportReview_ReaderWhoIsNotAnAdministrator_SeesNoBannerAndIsNotGivenTheFlag()
+    {
+        _authorisation.SetRoles("User");
+
+        var page = RenderObject(FlaggedId, "details");
+
+        page.WaitForAssertion(() => Assert.That(page.FindComponents<MudTabPanel>(), Is.Not.Empty));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.FindAll(ExportReviewBanner), Is.Empty);
+            Assert.That(page.FindComponent<ExportReviewPendingBanner>().Instance.Pending, Is.False);
+        }
     }
 
     private sealed class FakeJimApplicationFactory(IRepository repository, ISyncRepository syncRepository) : IJimApplicationFactory

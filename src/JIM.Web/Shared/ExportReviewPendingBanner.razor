@@ -1,0 +1,42 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A Metaverse Object flagged for review against every export rule (#2615), above the object's tabs. Administrators only:
+   it concerns what JIM will do to the accounts the person has, which is administrative information, so the gate is part of
+   the component rather than left to each page that places it, the way the generated value banner's is. The page also reads
+   the flag only for an administrator (MetaverseObjectViewState.ApplyExportReview), so a User never has it loaded.
+   mt-2 mb-6 per the notice-between-breadcrumbs-and-tabs rule. *@
+<AuthorizeView Roles="Administrator" Context="exportReviewAuth">
+    @if (Pending)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-2 mb-6" data-testid="jim-export-review-banner">
+            <MudText Typo="Typo.body1" Style="font-weight: 500;">Awaiting export review</MudText>
+            <MudText Typo="Typo.body2" Class="mt-1">
+                @if (ChangedAttributeNames.Count > 0)
+                {
+                    <span data-testid="jim-export-review-changed-attributes">Changed outside synchronisation: @string.Join(", ", ChangedAttributeNames).</span>
+                    @:The next synchronisation of any Connected System reviews this Metaverse Object against every export rule and sends the changed values to the accounts it already has.
+                }
+                else
+                {
+                    @:The next synchronisation of any Connected System reviews this Metaverse Object against every export rule.
+                }
+            </MudText>
+        </MudAlert>
+    }
+</AuthorizeView>
+
+@code {
+    /// <summary>
+    /// Whether the Metaverse Object is flagged for review against every export rule.
+    /// </summary>
+    [Parameter]
+    public bool Pending { get; set; }
+
+    /// <summary>
+    /// The attributes whose values were changed outside synchronisation and not yet sent on, when the object records
+    /// them. Empty when it records none, which shows the shorter explanation.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<string> ChangedAttributeNames { get; set; } = [];
+}

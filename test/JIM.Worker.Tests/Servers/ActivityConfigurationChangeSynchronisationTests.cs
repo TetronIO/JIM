@@ -159,6 +159,40 @@ public class ActivityConfigurationChangeSynchronisationTests
         }
     }
 
+    [TestCase(ActivityStatus.Complete)]
+    [TestCase(ActivityStatus.CompleteWithWarning)]
+    [TestCase(ActivityStatus.CompleteWithError)]
+    [TestCase(ActivityStatus.FailedWithError)]
+    [TestCase(ActivityStatus.Cancelled)]
+    [TestCase(ActivityStatus.InProgress)]
+    public void GetApplication_ChangesApplied_IsAppliedWhateverBecameOfTheRun(ActivityStatus runStatus)
+    {
+        var group = new ActivityObjectTypeSynchronisation
+        {
+            Changes = [Change(1, systemId: 3, typeId: 7, typeName: "user", claimedBy: Guid.NewGuid(), appliedAt: DateTime.UtcNow)]
+        };
+
+        Assert.That(group.GetApplication(runStatus), Is.EqualTo(ConfigurationChangeApplication.Applied));
+    }
+
+    [TestCase(ActivityStatus.FailedWithError)]
+    [TestCase(ActivityStatus.Cancelled)]
+    public void GetApplication_RunFailedOrWasCancelledBeforeApplying_IsNotApplied(ActivityStatus runStatus)
+    {
+        var group = new ActivityObjectTypeSynchronisation { Changes = [Change(1, systemId: 3, typeId: 7, typeName: "user", claimedBy: Guid.NewGuid())] };
+
+        Assert.That(group.GetApplication(runStatus), Is.EqualTo(ConfigurationChangeApplication.NotApplied));
+    }
+
+    [TestCase(ActivityStatus.InProgress)]
+    [TestCase(ActivityStatus.NotSet)]
+    public void GetApplication_RunStillGoing_IsInProgress(ActivityStatus runStatus)
+    {
+        var group = new ActivityObjectTypeSynchronisation { Changes = [Change(1, systemId: 3, typeId: 7, typeName: "user", claimedBy: Guid.NewGuid())] };
+
+        Assert.That(group.GetApplication(runStatus), Is.EqualTo(ConfigurationChangeApplication.InProgress));
+    }
+
     [Test]
     public void IsApplied_NoChanges_IsFalse()
     {

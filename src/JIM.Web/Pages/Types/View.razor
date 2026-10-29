@@ -57,6 +57,11 @@
     }
 </AuthorizeView>
 
+@* Flagged for review against every export rule (#2615), above the tabs for the same reason: JIM will act on this person's
+   accounts at the next synchronisation. Administrators only; the banner enforces that itself, and the flag is read only
+   for an administrator (ApplyExportReview). *@
+<ExportReviewPendingBanner Pending="_object.ExportReviewPending" ChangedAttributeNames="_object.ExportReviewChangedAttributeNames" />
+
 @if (MetaverseObject != null)
 {
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChanged"
@@ -759,6 +764,15 @@
             await LoadQueuedPasswordChangesAsync(jim, state);
             state.GeneratedValueDecisions = await jim.GeneratedValueDecisions.GetDecisionsForMetaverseObjectAsync(state.ObjectId);
         }
+
+        // Export review (#2615): the flag is on the object already loaded; what is read from it beyond the flag is read
+        // only for an administrator, through the callback.
+        //
+        // EXTENSION POINT, changes made outside synchronisation: once the Metaverse Object records them
+        // (MetaverseObject.UnsynchronisedChangesJson, which holds a MetaverseObjectUnsynchronisedChanges), supply a callback as
+        // the third argument that deserialises it and returns the changed attribute names. The banner then adds "Changed
+        // outside synchronisation: ..." to its explanation, and nothing else changes.
+        state.ApplyExportReview(MetaverseObject.ScopeReviewPending, _isAdministrator);
 
         if (MetaverseObject.NameOrId != null)
             _breadcrumbs = new List<BreadcrumbItem>

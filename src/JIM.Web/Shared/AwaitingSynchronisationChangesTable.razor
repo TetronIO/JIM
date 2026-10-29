@@ -1,0 +1,56 @@
+@using JIM.Models.Activities
+@using JIM.Models.Staging.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The saved configuration changes behind a Connected System Object Type that a synchronisation processes in full
+   (#2615): what was saved, linked to the configuration change Activity that holds the detail, when, and by whom. Shared
+   by the Connected System page's notices and the Activity page's sections, which list the same changes. A short table
+   by design: it always sits inside another panel, so it carries no density toggle of its own. *@
+<MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="@Class" data-testid="jim-awaiting-synchronisation-changes">
+    <thead>
+        <tr>
+            <th>Reason</th>
+            <th>Saved</th>
+            <th>By</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var change in Changes)
+        {
+            <tr @key="change.Id">
+                <td>
+                    @if (change.ConfigurationChangeActivityId is { } changeActivityId)
+                    {
+                        <MudLink Href="@($"/activity/{changeActivityId}")">@change.Reason</MudLink>
+                    }
+                    else
+                    {
+                        @change.Reason
+                    }
+                </td>
+                <td>@change.RequestedAt.ToLocalTime().ToFriendlyDate()</td>
+                <td>
+                    <InitiatorChip InitiatedByType="@(change.InitiatedByType ?? ActivityInitiatorType.NotSet)"
+                                   InitiatedById="@change.InitiatedById"
+                                   InitiatedByName="@change.InitiatedByName" />
+                </td>
+            </tr>
+        }
+    </tbody>
+</MudSimpleTable>
+
+@code {
+    /// <summary>
+    /// The changes to list, in the order to show them.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ConfigurationChangeSynchronisationSummary> Changes { get; set; } = [];
+
+    /// <summary>
+    /// Classes for the surrounding geometry (margins).
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+}

@@ -28,7 +28,11 @@
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_metaverseObjectType != null)
     {
-        <AuditInfo Entity="@_metaverseObjectType" />
+        <div class="d-flex align-center gap-3">
+            @* Metaverse Objects of this type flagged for review against every export rule (#2615). Nothing when none are. *@
+            <ExportReviewPendingChip Count="@_exportReviewPendingCount" Class="ma-0" />
+            <AuditInfo Entity="@_metaverseObjectType" />
+        </div>
     }
 </div>
 
@@ -634,6 +638,10 @@
     // Type, with their inline-editable Deprovisioning Action.
     private IList<SyncRuleHeader>? _exportRuleHeaders;
 
+    // How many Metaverse Objects of this type are flagged for review against every export rule (#2615), which the next
+    // synchronisation of any Connected System carries out.
+    private int _exportReviewPendingCount;
+
     protected override async Task OnInitializedAsync()
     {
         using var jim = JimFactory.Create();
@@ -662,6 +670,8 @@
 
         // Downstream Deprovisioning (#655): export Synchronisation Rules targeting this object type
         _exportRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync(Id, SyncRuleDirection.Export);
+
+        _exportReviewPendingCount = await jim.Metaverse.GetExportReviewPendingCountAsync(Id);
 
         // Initialise deletion rules state
         InitialiseDeletionRulesState();

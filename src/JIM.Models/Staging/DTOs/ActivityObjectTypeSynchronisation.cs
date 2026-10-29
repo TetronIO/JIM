@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
+
 namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
@@ -62,4 +64,20 @@ public class ActivityObjectTypeSynchronisation
     public Guid? AppliedByActivityId => IsApplied
         ? Changes.OrderByDescending(change => change.AppliedAt).Select(change => change.ClaimedByActivityId).FirstOrDefault()
         : null;
+
+    /// <summary>
+    /// Where the changes a synchronisation run claimed stand, given how the run ended. A run applies the changes it claimed
+    /// as it completes, whether or not individual objects had errors, and a run that failed or was cancelled applies none
+    /// of them and leaves its claim for the next run to take over.
+    /// </summary>
+    /// <param name="runStatus">The status of the synchronisation run's Activity.</param>
+    public ConfigurationChangeApplication GetApplication(ActivityStatus runStatus)
+    {
+        if (IsApplied)
+            return ConfigurationChangeApplication.Applied;
+
+        return runStatus is ActivityStatus.FailedWithError or ActivityStatus.Cancelled
+            ? ConfigurationChangeApplication.NotApplied
+            : ConfigurationChangeApplication.InProgress;
+    }
 }

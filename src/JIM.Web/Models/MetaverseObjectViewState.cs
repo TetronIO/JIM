@@ -58,6 +58,35 @@ public sealed class MetaverseObjectViewState(Guid objectId)
     /// <summary>Whether a banner action (Allow the rename, Try again) is in flight.</summary>
     public bool GeneratedValueActionRunning { get; set; }
 
+    /// <summary>
+    /// Whether this object is flagged for review against every export rule (#2615): the "Awaiting export review" banner
+    /// above the tabs. Set only for an administrator, by <see cref="ApplyExportReview"/>.
+    /// </summary>
+    public bool ExportReviewPending { get; private set; }
+
+    /// <summary>
+    /// The attributes whose values were changed outside synchronisation and not yet sent on, when the object records them;
+    /// empty otherwise. Set only for an administrator, by <see cref="ApplyExportReview"/>.
+    /// </summary>
+    public IReadOnlyList<string> ExportReviewChangedAttributeNames { get; private set; } = [];
+
+    /// <summary>
+    /// Records what the export review banner shows (#2615). Administrators only: for anyone else nothing is recorded, and
+    /// <paramref name="changedAttributeNames"/> is never called, so what it reads is not loaded for a reader who cannot see it.
+    /// </summary>
+    /// <param name="pending">Whether the object is flagged for review.</param>
+    /// <param name="isAdministrator">Whether the reader is an administrator.</param>
+    /// <param name="changedAttributeNames">
+    /// Reads the names of the attributes changed outside synchronisation, where the object records them. Called only for an
+    /// administrator and only when the object is flagged. The seam for recording those changes on the object: until it is
+    /// supplied, the banner gives the shorter explanation.
+    /// </param>
+    public void ApplyExportReview(bool pending, bool isAdministrator, Func<IReadOnlyList<string>>? changedAttributeNames = null)
+    {
+        ExportReviewPending = isAdministrator && pending;
+        ExportReviewChangedAttributeNames = ExportReviewPending && changedAttributeNames != null ? changedAttributeNames() : [];
+    }
+
     // Inspect view (#399): the object's attribute provenance, the source filter chosen from the contribution bar,
     // and the attribute opened in the inspector.
     public MetaverseObjectProvenance? Provenance { get; set; }

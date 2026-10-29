@@ -156,7 +156,7 @@ public class ConfigurationChangeSynchronisationDatabaseTests
     }
 
     /// <summary>
-    /// Claims as the worker does: read the ids awaiting synchronisation first, then claim only those. A test passes
+    /// Claims as the worker does: read the ids awaiting synchronisation first, then claim only those. A test supplies
     /// <paramref name="eligibleIds"/> to claim against ids read earlier.
     /// </summary>
     private async Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimAsync(
