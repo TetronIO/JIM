@@ -670,10 +670,12 @@ public interface ISyncRepository
     Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects);
 
     /// <summary>
-    /// Updates a single MVO. Used for ad-hoc updates outside of batch processing
-    /// (e.g., disconnection handling).
+    /// Records when a Metaverse Object's last connector was disconnected, and writes nothing else. The per-object
+    /// deletion fallback uses it so housekeeping retries a deletion that failed. A one-column write rather than an
+    /// update of the whole object: the object is detached by then, and saving its graph would reach objects created
+    /// on the same page, which the bulk create leaves untracked (#2598).
     /// </summary>
-    Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
+    Task SetMetaverseObjectLastConnectorDisconnectedDateAsync(Guid metaverseObjectId, DateTime lastConnectorDisconnectedDate);
 
     /// <summary>
     /// Deletes an MVO, cascading FK cleanup via raw SQL to prevent constraint violations. In the same transaction,
