@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-09-29, JIM v0.16.0
+> Last updated: 2026-10-29, JIM v0.17.0
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target Connected Systems.
 
@@ -18,7 +18,7 @@ stateDiagram-v2
 
     Pending --> Exported: File-based export succeeds<br/>on a connector that does<br/>not auto-confirm
 
-    Pending --> [*]: File-based export succeeds<br/>on an auto-confirming connector,<br/>or a file Delete is auto-confirmed<br/>(PE deleted, with its CSO for a Delete)
+    Pending --> [*]: File-based export succeeds<br/>on an auto-confirming connector,<br/>or a file Delete for a CSO whose<br/>provisioning was never confirmed<br/>(PE deleted, and the CSO for a Delete)
 
     Executing --> Exported: Connector reports<br/>success, or worker start<br/>recovery when a change<br/>was already sent
 
@@ -107,31 +107,33 @@ flowchart LR
 
     subgraph "2. Export"
         Withdraw[Withdraw queued changes nothing<br/>authorises any more: rule deleted<br/>or disabled, no enabled mapping,<br/>or CSO no longer joined<br/>Empty Update PE deleted<br/>not in preview] --> GetExecutable
-        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now<br/>exported Creates skipped<br/>types over a Run Profile limit withheld] --> MarkExec[Mark batch:<br/>Status = Executing]
+        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed, or an<br/>Exported Update with changes<br/>still to send<br/>no count or age of failed<br/>attempts keeps one out, #2119<br/>exported Creates skipped<br/>types over a Run Profile limit withheld] --> MarkExec[Mark batch:<br/>Status = Executing]
         MarkExec --> ConnExport[Connector executes<br/>export operations]
         ConnExport --> Success{Success?}
         Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Exported]
         Success -->|Yes, Update| ExpResult[Status = Exported<br/>RPEI: Exported]
         Success -->|Yes, in part| PartResult[References still owed, #1398<br/>Status = Pending<br/>Create becomes Update<br/>RPEI: Exported]
         Success -->|Yes, Delete| DeprovResult[Status = Exported<br/>RPEI: Deprovisioned<br/>Never-confirmed provisioning,<br/>or auto-confirmed #1936:<br/>delete PE + CSO now, #1685]
-        Success -->|No| FailResult[Increment ErrorCount<br/>Set NextRetryAt<br/>Status = Pending,<br/>or Failed at MaxRetries]
+        Success -->|Value already in use, #242| CollisionResult[Collision Remediation:<br/>corrected, Status = Pending<br/>for the next sync to re-stage<br/>needs a decision, Status = Parked<br/>no attempt counted either way]
+        Success -->|No| FailResult[Failed attempt, #2119:<br/>ErrorCount + 1, FailingSince<br/>set on the first, error kept<br/>Status = Pending<br/>RPEI names the error]
         ProvResult --> OptimisticApply
         ExpResult --> OptimisticApply[Optimistic apply #1079:<br/>Project exported attribute<br/>changes onto the CSO's<br/>in-memory + persisted values<br/>every export path, #1936,<br/>never stamps LastUpdated/Status]
         PartResult --> OptimisticApply
     end
 
     subgraph "3. Confirming Import"
-        ImportData[Import fresh data<br/>from target system] --> Reconcile[Reconcile each PE for a CSO<br/>the import returned: compare<br/>its attribute changes against<br/>imported CSO values<br/>Executing PEs skipped; a Failed PE<br/>is deleted only when every change<br/>is now on the CSO, else untouched]
+        ImportData[Import fresh data<br/>from target system] --> Reconcile[Reconcile each PE for a CSO<br/>the import returned: compare<br/>its attribute changes against<br/>imported CSO values<br/>Executing and Parked PEs skipped]
         Reconcile --> AllMatch{Any changes<br/>remain?}
         AllMatch -->|No| DeletePE[Delete PE<br/>Export confirmed<br/>PE lifecycle complete]
-        AllMatch -->|Yes| Remaining[Remove confirmed changes<br/>A Create becomes an Update:<br/>the object is proven to exist, #1695<br/>Status from what remains:<br/>unconfirmed = ExportNotConfirmed<br/>appended only = Pending<br/>all failed = Failed]
+        AllMatch -->|Yes| Remaining[Remove confirmed changes<br/>A Create becomes an Update:<br/>the object is proven to exist, #1695<br/>Status from what remains:<br/>unconfirmed = ExportNotConfirmed<br/>appended only = Pending<br/>RPEI: ExportNotConfirmed on<br/>every import that misses it]
         ImportData --> Unseen{Full Import did not return<br/>an exported Create at all?}
-        Unseen -->|Yes| RetryCreate[Mark the Create for retry, #1695<br/>Status = ExportNotConfirmed,<br/>or Failed at MaxRetries<br/>RPEI: ExportNotConfirmed<br/>Delta Imports cannot prove absence]
+        Unseen -->|Yes| RetryCreate[Mark the Create for retry, #1695<br/>Status = ExportNotConfirmed<br/>RPEI: ExportNotConfirmed<br/>Delta Imports cannot prove absence]
     end
 
     PersistPE --> Withdraw
     OptimisticApply --> ImportData
-    FailResult -.->|Next export run<br/>after backoff| Withdraw
+    FailResult -.->|Next export run| Withdraw
+    CollisionResult -.->|Next sync re-stages,<br/>or the decision releases it| Withdraw
     Remaining -.->|Next export run| Withdraw
     RetryCreate -.->|Next export run| Withdraw
 ```
@@ -140,8 +142,8 @@ flowchart LR
 
 Pending Exports are confirmed only by the confirming import path shown in "3. Confirming Import" above (`ISyncEngine.ReconcileCsoAgainstPendingExport`, driven by `SyncImportTaskProcessor.ReconcilePendingExportsAsync`). Synchronisation does not re-check them: every change to a CSO's values arrives through an import, so the import has always seen it first.
 
-- **Failed** Pending Exports need manual intervention, and reconciliation leaves them alone (no status, attribute, ErrorCount or attempt change) unless every change they assert is now visible on the CSO, for example because an administrator fixed the target by hand. They are then deleted, like a fully confirmed Exported one.
-- **Parked** and **Executing** Pending Exports are never touched by reconciliation. (`Parked` belongs to Unique Value Generation.)
+- An unconfirmed change is never given up on (#2119): reconciliation marks it `ExportedNotConfirmed` and reports it on every import that misses it, however many imports have, and the next export run sends it again.
+- **Parked** and **Executing** Pending Exports are never touched by reconciliation. (`Parked` belongs to Unique Value Generation: a generated value the target rejected as already in use, which another Connected System holds, waits there for an administrator's decision.)
 - **Executing** never outlives the run that set it (#2083): a cancelled run puts the changes it did not write back as they were, with no attempt counted, and a batch that fails as a whole records one failed attempt on each change. Only the release write itself failing, or a worker crash or restart part-way through a batch, leaves a Pending Export Executing, and those are recovered when the worker starts: to Exported if any change was already sent, so the next confirming import reconciles it, otherwise to Pending, so the next export retries it.
 
 ## Attribute-Level Status Tracking
@@ -166,14 +168,12 @@ stateDiagram-v2
 
     ExportedPendingConfirmation --> [*]: A held change withdrawn once<br/>the Metaverse wants what the<br/>target already holds (leaver)
 
-    ExportedNotConfirmed --> Pending: Reasserted on<br/>next export run
+    ExportedNotConfirmed --> ExportedPendingConfirmation: Sent again at the<br/>next export run, however<br/>many times before (#2119)
 
-    ExportedNotConfirmed --> Failed: Max retries exceeded
-
-    ExportedNotConfirmed --> [*]: Withdrawn before re-export<br/>(as from Pending)
-
-    Failed --> [*]: Manual intervention
+    ExportedNotConfirmed --> [*]: Confirmed by a later import,<br/>or withdrawn before re-export<br/>(as from Pending)
 ```
+
+There is no attribute-level `Failed` either (#2119): a change still unconfirmed after five attempts used to stop being sent. Its ordinal, 3, is retired.
 
 ## Change Types
 
@@ -189,14 +189,17 @@ During sync, drift detection can also create Pending Exports:
 
 ```mermaid
 flowchart TD
-    DriftCheck[EvaluateDriftAndEnforceState<br/>during sync CSO processing] --> HeldCheck{CSO holds a change<br/>awaiting an Initial<br/>Password? #2039}
-    HeldCheck -->|Yes| SkipHeld([Skip the whole object:<br/>a correction would make the<br/>page flush replace its PE])
-    HeldCheck -->|No| CompareCSO[Compare CSO attribute values<br/>against expected MVO values<br/>using EnforceState export rules]
+    DriftCheck[EvaluateDriftAndEnforceState<br/>at the page flush, for each<br/>CSO queued during processing] --> CompareCSO[Compare CSO attribute values<br/>against expected MVO values<br/>using EnforceState export rules]
     CompareCSO --> Drifted{CSO value<br/>differs from<br/>expected?}
     Drifted -->|No| NoDrift([No action])
     Drifted -->|Yes| CheckContributor{Is this system<br/>a legitimate contributor:<br/>its winning import flow<br/>reads the diverged<br/>attribute? #1864}
     CheckContributor -->|Yes| LegitChange([Skip - legitimate import<br/>from authoritative source])
-    CheckContributor -->|No| CreateCorrective[Create corrective PE:<br/>ChangeType = Update<br/>Status = Pending<br/>RPEI: DriftCorrection]
+    CheckContributor -->|No| HeldCheck{CSO's PE holds a change<br/>awaiting an Initial<br/>Password? #2039}
+    HeldCheck -->|No| CreateCorrective[Create corrective PE:<br/>ChangeType = Update<br/>Status = Pending<br/>RPEI: DriftCorrection]
+    HeldCheck -->|Yes| KeepHeld[Drop a correction restating<br/>the held change, #2501<br/>Carry the held change, with its<br/>status and attempt count, into<br/>the correction that replaces the PE<br/>A still-queued PE keeps its id]
+    KeepHeld --> AnyLeft{Any correction<br/>left?}
+    AnyLeft -->|No| NoDrift
+    AnyLeft -->|Yes| CreateCorrective
 ```
 
 ## Drift Correction and Export Evaluation Merge
@@ -219,13 +222,13 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 - **Partial confirmation**<br /> Individual attribute changes can be confirmed independently. If 3 out of 5 attributes match the target system, only the 2 unconfirmed attributes remain on the Pending Export for retry.
 
-- **A change written with an interim value is held, not retried (#2039)**<br /> On real Active Directory the LDAP Connector creates an account disabled when an Initial Password follows the Create, because Active Directory refuses an enabled account with no password, and the export run marks the `userAccountControl` change `AwaitsInitialPassword`. Every import holds such a change (the self-transition above) while a password is owed to the account, so the interim disabled value is neither retried nor reported, and releases it to `Pending` once none is, so the next export writes the flow's value as an ordinary Update. Every import judges every held change, including one whose account it did not return: an expired or cancelled password changes nothing an import reads, so a Full Import skips the account by its content hash and a Delta Import does not return it, and the sweep after reconciliation releases the change anyway, touching nothing else on the object. Drift Detection (and the synchronisation preview) skips an object holding one; export evaluation drops an incoming change restating it in every merge branch, and when nothing else changes keeps the Pending Export rather than rebuilding it, withdrawing from it in place only what the target no longer needs (the synchronisation preview reads the Pending Export and drops the restatement too, so it proposes no export the run will not stage); a held change is withdrawn (the transition to the end state above) when the Metaverse Object now wants what the target already holds, so a leaver's held enabled value can never be released; and optimistic apply records nothing for it. The full rule is under "The hold" in [Export Execution Flow](EXPORT_EXECUTION_FLOW.md#key-design-decisions).
+- **A change written with an interim value is held, not retried (#2039)**<br /> On real Active Directory the LDAP Connector creates an account disabled when an Initial Password follows the Create, because Active Directory refuses an enabled account with no password, and the export run marks the `userAccountControl` change `AwaitsInitialPassword`. Every import holds such a change (the self-transition above) while a password is owed to the account, so the interim disabled value is neither retried nor reported, and releases it to `Pending` once none is, so the next export writes the flow's value as an ordinary Update. Every import judges every held change, including one whose account it did not return: an expired or cancelled password changes nothing an import reads, so a Full Import skips the account by its content hash and a Delta Import does not return it, and the sweep after reconciliation releases the change anyway, touching nothing else on the object. Drift Detection (and the synchronisation preview) still corrects the object's other attributes (#2501), dropping a correction that restates the held change and carrying the held change, with its status and attempt count, into the correction that replaces the Pending Export; export evaluation drops an incoming change restating it in every merge branch, and when nothing else changes keeps the Pending Export rather than rebuilding it, withdrawing from it in place only what the target no longer needs (the synchronisation preview reads the Pending Export and drops the restatement too, so it proposes no export the run will not stage); a held change is withdrawn (the transition to the end state above) when the Metaverse Object now wants what the target already holds, so a leaver's held enabled value can never be released; and optimistic apply records nothing for it. The full rule is under "The hold" in [Export Execution Flow](EXPORT_EXECUTION_FLOW.md#key-design-decisions).
 
 - **Create-to-Update demotion (#1695)**<br /> Reconciliation only runs for a CSO an import actually returned, so a Create PE reaching it proves the object exists. Whatever remains on it once confirmed changes are removed (unconfirmed attributes, or changes appended while it awaited confirmation) therefore travels as an Update, whichever attributes confirmed. This replaced two narrower triggers (a confirmed secondary external ID, or every original change confirmed with more queued), under which a single unconfirmed attribute left the PE shaped as a Create and the retry sent a second Create for an existing object. A Create written in part for want of a reference (#1398) is demoted at export time instead, since the row now exists.
 
 - **An exported Create waits; later changes are appended (#1687)**<br /> A CSO stays `PendingProvisioning` until an import confirms its Create. A Metaverse Object change arriving in that window used to delete the exported Create and stage a fresh one carrying every change, so a second Create reached the connector. Staging now distinguishes a Create never sent (`IsProvisioningNeverExported`: restage it in place) from one already sent: the change is appended to the exported Create as a `Pending` attribute change, the export run never re-sends a Create at `Exported`, and the confirming import turns it into one Update carrying the change. An auto-confirming file export, which deletes the Create on success, stages the Update directly.
 
-- **An exported Create a Full Import never saw is retried (#1695)**<br /> Import deletion detection deliberately excludes `PendingProvisioning` CSOs, so a Create that was exported but never reported back by any import used to sit at `Exported` for ever. A Full Import now finds each such Create for the Object Types it read, marks its exported changes for retry (`ExportNotConfirmed`, or `Failed` once past the retry limit) and reports each on the import Activity. A Delta Import leaves them alone, since it cannot prove an object is absent.
+- **An exported Create a Full Import never saw is retried (#1695)**<br /> Import deletion detection deliberately excludes `PendingProvisioning` CSOs, so a Create that was exported but never reported back by any import used to sit at `Exported` for ever. A Full Import now finds each such Create for the Object Types it read, marks its exported changes for retry (`ExportNotConfirmed`, sent again at the next export run however many times it has been before, #2119) and reports each on the import Activity. A Delta Import leaves them alone, since it cannot prove an object is absent.
 
 - **One CSO per Metaverse Object per Connected System (#1344)**<br /> Export evaluation resolves the target CSO by Metaverse Object and Connected System, so an export Synchronisation Rule targeting a second Object Type in the same system would resolve to the object already holding that slot. `DetectObjectTypeConflict` catches this where the decision is made: nothing is staged, and a `CouldNotExportDueToExistingConnectedSystemObject` RPEI names the rule, both Object Types and the object holding the slot, rather than the page failing on the one-PE-per-CSO unique index.
 
@@ -245,9 +248,9 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 - **Queued changes are withdrawn once nothing authorises them**<br /> Before each export (not a preview), a queued change on an Update PE is withdrawn when the export rule that queued it is deleted or disabled, when that rule no longer has an enabled mapping for the attribute, or when the CSO is no longer joined (scope exit with Disconnect). The same check runs as each export-relevant configuration change is saved (rule or mapping disabled, removed or deleted, and a schema refresh disabling either), so the queue is accurate at once; the export-time run is the backstop, and the only one that sees a join broken by scope exit. `ISyncEngine.SelectQueuedChangesWithoutAuthority` makes the decision; an Update PE left empty is deleted. Changes already sent (`ExportedPendingConfirmation`), unattributed changes, Creates, Deletes and `Executing` PEs are left alone.
 
-- **A Disconnect withdraws a Delete queued under an earlier Delete action** (#1970)<br /> The export-time withdrawal above leaves Deletes alone, so a Delete queued while an export rule said Delete would otherwise still be exported after the rule is switched to Disconnect, removing an account the run reported keeping. Instead, when an object leaves scope under Disconnect, `ISyncEngine.DecideOutOfScopeDeprovisioning` reads the CSO's existing PE: an unsent Delete (`Pending`, `ExportNotConfirmed`, `Failed` or `Parked`) is deleted as the join is broken; a Delete already sent (`Executing` or `Exported`) is left to finish and the object is not disconnected (`DeleteAlreadySent`), since the confirming import completes the deletion. A Delete staged earlier in the same run by another out-of-scope rule stands (Delete beats Disconnect, as for #655). Changing an export rule's Deprovisioning Action flags the rule's Metaverse Object type for export scope review (`SyncRuleScopeState.DeprovisioningActionChangedBy`), which is what brings objects already out of scope back through this decision. The Deprovisioning Action change preview asks the engine the same question per object.
+- **A Disconnect withdraws a Delete queued under an earlier Delete action** (#1970)<br /> The export-time withdrawal above leaves Deletes alone, so a Delete queued while an export rule said Delete would otherwise still be exported after the rule is switched to Disconnect, removing an account the run reported keeping. Instead, when an object leaves scope under Disconnect, `ISyncEngine.DecideOutOfScopeDeprovisioning` reads the CSO's existing PE: an unsent Delete (`Pending`, `ExportNotConfirmed` or `Parked`) is deleted as the join is broken; a Delete already sent (`Executing` or `Exported`) is left to finish and the object is not disconnected (`DeleteAlreadySent`), since the confirming import completes the deletion. A Delete staged earlier in the same run by another out-of-scope rule stands (Delete beats Disconnect, as for #655). Changing an export rule's Deprovisioning Action flags the rule's Metaverse Object type for export scope review (`SyncRuleScopeState.DeprovisioningActionChangedBy`), which is what brings objects already out of scope back through this decision. The Deprovisioning Action change preview asks the engine the same question per object.
 
-- **Exponential backoff**<br /> Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.
+- **Never given up on (#2119)**<br /> A failed attempt leaves the export `Pending`, with `ErrorCount` counting the run of failures, `FailingSince` recording when it began and the error kept, and the next export run sends it again with no wait in between; an unconfirmed change stays `ExportedNotConfirmed` and is sent again the same way. Nothing caps the attempts and nothing delays them. The exponential backoff (`NextRetryAt`) and the five-attempt `Failed` status it led to were removed: an export that gave up dropped out of the queue, swallowed later changes to the same object, and left later runs looking clean, so a target that is down simply fails each run, reported each time, until it is back.
 
 - **Optimistic export apply** (#1079)<br /> On export success, `ExportExecutionServer.ProcessBatchSuccessAsync` projects the exported attribute changes onto the CSO's attribute values (add-if-absent, replace-on-Update, delete-if-present, delete-all) at export time rather than waiting for the confirming import to re-materialise them. This means the confirming import's "Compare each import attribute against existing CSO values" step (see [Full Import Flow](FULL_IMPORT_FLOW.md)) usually finds nothing to do, avoiding millions of redundant attribute value inserts at scale. Two rules keep this safe:
   - The parent CSO row (`Status`, `LastUpdated`, and every other field) is never touched. `LastUpdated` staying untouched is what keeps a no-op confirming import out of the next Delta Synchronisation; a status transition (e.g. `PendingProvisioning` → `Normal`) is still a genuine change and is stamped by the confirming import as before.
@@ -263,6 +266,6 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
   Reference-typed attribute changes (for example a group's member list) resolve their Connected System Object Id purely from `PendingExportAttributeValueChange.ResolvedReferenceCsoId`, a persisted column stamped once at the point of resolution (`ExportExecutionServer.TryResolveReferencesFromLookup`, SPEC-1079B). An earlier version of optimistic apply kept this as an in-memory-only hint and fell back to a database lookup whenever a change crossed a persistence boundary without it (cross-run retry, or the parallel batch path's per-batch fresh-context reload); that fallback queried the whole Connected System once per export run, and an even earlier per-batch version of the same fallback cost 10-15 seconds per call over an unindexed scan at Scale500k25kGroups (2026-07-21). Persisting the column removes the loss the fallback was compensating for, so no database lookup is needed here at all: a Pending Export whose Reference change has never been resolved simply applies unresolved (matched on `UnresolvedReferenceValue`, self-healing on the next import) rather than triggering a lookup. No foreign key or index backs the column - see its XML doc for the trade-off.
 
-  Optimistic apply means the confirming import's update path still hydrates every matched CSO's full attribute-value graph to run the diff, even though the diff usually confirms there's nothing to change. At Scale500k25kGroups this held ~9.8M attribute value objects in memory simultaneously across a 524,997-CSO run, tripling the confirming import's live heap versus the pre-#1079 baseline and causing an OOM kill. `SyncImportTaskProcessor.PerformImportAsync` now releases each update-path CSO's hydrated attribute values once its batch has been persisted (`ReleaseHydratedAttributeValues`), well after the diff, the change-history write, and the CSO cache refresh have all read what they needed - reconciliation, which runs afterwards, is unaffected because it reloads each CSO's attribute values fresh from the database per page rather than reading the released in-memory copies.
+  Optimistic apply means the confirming import's update path still hydrates every matched CSO's full attribute-value graph to run the diff, even though the diff usually confirms there's nothing to change. At Scale500k25kGroups this held ~9.8M attribute value objects in memory simultaneously across a 524,997-CSO run, tripling the confirming import's live heap versus the pre-#1079 baseline and causing an OOM kill. `SyncImportTaskProcessor.PerformImportAsync` now releases each update-path CSO's hydrated attribute values once its batch has been persisted (`ReleaseHydratedAttributeValues`), well after the diff and the change-history write have read what they needed (the Worker no longer keeps a Connected System Object lookup cache to refresh, #2246) - reconciliation, which runs afterwards, is unaffected because it reloads each CSO's attribute values fresh from the database per page rather than reading the released in-memory copies.
 
   `OptimisticExportApplyCalculator.ApplyAdd`/`ApplyRemove` originally called `SyncEngine.ValueExistsOnCso`/a linear scan once per attribute change, while every accepted Add appended to that same growing per-attribute list - O(M^2) for a Pending Export with M Add changes. The live database has groups with up to 495,008 members, and a full-scale run measured 255 slow `OptimisticApply` instances totalling 77.5 minutes, all in the group-batch wave. The calculator now builds a per-attribute index once per Pending Export (a `Dictionary` of value to matching row instances, keyed exactly like `ValueExistsOnCso`'s per-type comparisons - DateTime on `Ticks`, Reference on the CSO row's `UnresolvedReferenceValue`, Binary left as a linear `SequenceEqual` scan since byte arrays do not hash usefully and are never large multi-valued sets) and maintains it incrementally as changes are applied, turning the existence/match check into an O(1) average-case lookup.

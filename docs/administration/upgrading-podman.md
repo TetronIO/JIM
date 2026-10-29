@@ -3,7 +3,7 @@ title: Upgrading on Podman
 description: Upgrade JIM on Podman to a newer release, connected or air-gapped, rootful or rootless, and roll it back if you must.
 type: how-to
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Upgrading on Podman

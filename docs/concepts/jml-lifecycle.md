@@ -3,7 +3,7 @@ title: JML Lifecycle
 description: How JIM provisions, updates and deprovisions accounts as people join, move within and leave an organisation.
 type: concept
 audience: implementer
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # JML Lifecycle
@@ -30,7 +30,7 @@ A **joiner** event occurs when a new identity appears in a source system for the
 
 4. **Inbound Attribute Flow**<br /> The new employee's attributes (name, department, employee ID and so on) flow from the Connected System Object into the new Metaverse Object.
 
-5. **Outbound evaluation**<br /> Export Synchronisation Rules evaluate the new Metaverse Object. For each one it is in scope for, JIM **provisions** a new Connected System Object in that rule's target Connected System.
+5. **Outbound evaluation**<br /> Export Synchronisation Rules evaluate the new Metaverse Object. For each one that provisions and has it in scope, JIM **provisions** a new Connected System Object in that rule's target Connected System, unless an Object Matching Rule finds an existing account to join.
 
 6. **Export**<br /> The provisioned objects are exported to the target systems, creating the actual accounts, such as an Active Directory user account or a mailbox.
 
@@ -90,7 +90,7 @@ A **leaver** event occurs when an identity is removed, or marked inactive, in th
 
 1. **Import**<br /> JIM detects the change: the record has been deleted from the source system, so its Connected System Object is **obsoleted**; or a status attribute has changed, such as `employeeStatus` becoming "Terminated".
 
-2. **Inbound synchronisation**<br /> An obsoleted Connected System Object, or one that has fallen out of the import Synchronisation Rule's scope, is **disconnected** from its Metaverse Object, and the [Deletion Rules](#deletion-rules) decide what happens to the Metaverse Object. A status change flows in like any other change.
+2. **Inbound synchronisation**<br /> An obsoleted Connected System Object, or one that has fallen out of the import Synchronisation Rule's scope, is **disconnected** from its Metaverse Object (unless the import rule's [Out-of-Scope Action](../configuration/scoping-criteria.md) keeps it joined), and the [Deletion Rules](#deletion-rules) decide what happens to the Metaverse Object. A status change flows in like any other change.
 
 3. **Outbound evaluation**<br /> Each export Synchronisation Rule reacts. A Metaverse Object that is deleted, or falls out of the rule's scope, is **deprovisioned** from that rule's target system; a status change flows out through the rule's expressions, to disable an account, for example.
 

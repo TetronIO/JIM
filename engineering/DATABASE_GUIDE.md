@@ -45,7 +45,7 @@ max_parallel_workers=16
 max_parallel_maintenance_workers=4
 ```
 
-The same command line also sets `statement_timeout=300000` (5 minutes, to stop runaway queries), `log_min_duration_statement` from `JIM_DB_LOG_MIN_DURATION` (default 1000ms, slow-query logging), and the `logging_collector` / `jsonlog` settings that write structured JSON logs to the shared log volume for the Logs page. `shm_size` comes from `JIM_DB_SHM_SIZE` (default `1280mb`); the installer sets it to `shared_buffers` and a quarter more.
+The same command line also sets `statement_timeout=300000` (5 minutes, to stop runaway queries), `tcp_keepalives_idle=60`, `tcp_keepalives_interval=10` and `tcp_keepalives_count=6` (so the server drops a connection whose client has gone within two minutes, #1980; see Restoring from Backup below), `log_min_duration_statement` from `JIM_DB_LOG_MIN_DURATION` (default 1000ms, slow-query logging), and the `logging_collector` / `jsonlog` settings that write structured JSON logs to the shared log volume for the Logs page. `shm_size` comes from `JIM_DB_SHM_SIZE` (default `1280mb`); the installer sets it to `shared_buffers` and a quarter more.
 
 ---
 
@@ -111,13 +111,15 @@ Change history, Activities and password records are the tables that grow without
 
 | Service Setting | Default | Covers |
 |-----------------|---------|--------|
-| `History.RetentionPeriod` | 90 days | General change history and Activities |
+| `History.RetentionPeriod` | 90 days | General change history and Activities, and the SCIM 2.0 Service Provider's store journal (which SCIM requests changed which resource, #124) |
 | `History.ConfigurationChangeRetentionPeriod` | 3650 days | Configuration change Activities (the configuration change history) |
 | `History.SecurityEventRetentionPeriod` | 365 days | Security audit Activities (sign-in, failed API key or SSO access token authentication) |
 | `History.PasswordEventRetentionPeriod` | 365 days | Password Synchronisation Activities and terminal queue rows (parked, expired, cancelled), which carry an encrypted password |
 | `History.CleanupBatchSize` | 100 | Records deleted per batch, to avoid long transactions and locks |
 
 Records still being worked (for example a password change still owed to a system) are never removed, however old.
+
+Change records and Activities are trimmed on their own clocks, so a change record can outlive the Activity it was made in. Every reference from history to a Run Profile Execution Item is therefore `ON DELETE SET NULL` (the Metaverse Object side since #2460; the Connected System Object side already was), and `DeletePathForeignKeyCoverageTests` has an Activity retention surface, so a new history table whose foreign key would refuse an Activity delete fails the build rather than stopping retention on the same batch every night.
 
 ---
 

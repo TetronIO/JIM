@@ -50,15 +50,15 @@ The interactive API reference groups its endpoints by resource. Each group, and 
 |----------------|----------------|
 | Activities | [Activities](../configuration/activities.md), their items and their progress (`/api/v1/activities`) |
 | ApiKeys | The [API keys](../configuration/api-keys.md) scripts and integrations authenticate with (`/api/v1/apikeys`) |
-| Auth | The OIDC settings a client needs before it can sign in (`/api/v1/auth/config`); unauthenticated |
-| Certificates | [Trusted Certificates](../configuration/certificates.md) for connections to Connected Systems (`/api/v1/certificates`) |
+| Auth | The OIDC settings a client needs before it can sign in (`/api/v1/auth/config`) and whether JIM can [trust its identity provider](../administration/sso-setup/trusting-your-identity-provider.md) (`/api/v1/auth/identity-provider-trust`), both unauthenticated; and, for administrators, the [sign-in problems](../administration/troubleshooting.md#a-setting-stopped-sign-in) JIM has met (`/api/v1/auth/sign-in-diagnostics`) |
+| Certificates | [Trusted Certificates](../configuration/certificates.md) for connections to Connected Systems and for signing in through your identity provider (`/api/v1/certificates`) |
 | ConfigurationTests | Saved [configuration test cases](../configuration/configuration-tests.md), and running them (`/api/v1/configuration-tests`) |
 | ExampleData | Example Data templates and sets, for filling a test instance with realistic objects (`/api/v1/example-data`) |
 | FeatureFlags | Turning [Preview features](../administration/preview-features.md) on and off (`/api/v1/features`) |
 | FileSystem | Browsing the files a connector can read inside the container, such as the [File Connector](../connectors/jim-file-connector.md)'s import files (`/api/v1/filesystem`) |
 | GeneratedValues | Generated values a target refused, waiting for an [administrator's decision](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) (`/api/v1/generated-values`) |
 | Health | Health, readiness, liveness and version probes for load balancers and orchestrators (`/api/v1/health`); unauthenticated, and answering for the web tier only |
-| History | Counting and clearing old change history and deleted-object records (`/api/v1/history`) |
+| History | Searching changes to every Metaverse Object ([Object Changes](../configuration/object-changes.md)), reading a change's values a page at a time, and counting and clearing old change history and deleted-object records (`/api/v1/history`) |
 | Logs | Reading JIM's [service logs](../administration/configuration.md#logging) (`/api/v1/logs`) |
 | Metaverse | The [Metaverse](../configuration/metaverse.md) schema, Metaverse Objects, [Attribute Priority](../concepts/attribute-priority.md) and pending deletions (`/api/v1/metaverse`) |
 | PasswordSynchronisation | The [Password Synchronisation queue](../concepts/password-synchronisation.md#watching-the-queue) (`/api/v1/password-synchronisation`) |
@@ -85,6 +85,18 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 **v0.17.0**
 
 - **API keys are sent as bearer tokens.** An API key now goes in the `Authorization` header, `Authorization: Bearer jim_ak_...`, exactly as an SSO access token does; the `X-Api-Key` header is no longer read, so a request that sends a key only there is unauthenticated and receives a `401`. Update any integration or script that sets `X-Api-Key`. Upgrade the JIM PowerShell module together with JIM: version 0.17.0 sends the new header, while earlier versions send `X-Api-Key` and are refused with "JIM rejected the API key", although the key itself is fine. Roll the module back with JIM, too. This is a pre-v1.0 breaking change.
+- **Deleting a Synchronisation Rule or one of its Attribute Flows answers `200`, not `204`.** The body carries the affected counts. A script that checks for `204` must accept `200`.
+- **Pending Exports no longer fail permanently.** The `Failed` status is gone, with `maxRetries` and `nextRetryAt`: a Pending Export the Connected System refuses stays `Pending`, is attempted again at every export run, and carries `failingSince` until it succeeds. List them with `failing=true` rather than `status=Failed`.
+- **Export, Full Synchronisation and Delta Synchronisation Run Profiles take no `filePath`.** It did nothing on those types and is now refused; an export writes to the file the Connected System's own File Path names.
+- **Change history returns at most ten value changes per attribute.** Each changed attribute carries its first ten value changes and `valueChangeTotal`; read the rest a page at a time from `/api/v1/history/connected-system-object-changes/{changeId}/attributes/{attributeName}/values` and `/api/v1/history/metaverse-object-changes/{changeId}/attributes/{attributeName}/values`.
+- **Date attribute values are always UTC.** Every `dateTimeValue` ends in `Z`, whatever the server's time zone (see Conventions below).
+- **Five built-in Metaverse Attributes are renamed** to Proper Case: `Object GUID` (was `objectGUID`), `Object SID` (`objectSid`), `SID History` (`sIDHistory`), `Street Address` (`StreetAddress`) and `Web Page` (`WebPage`). Update any request or filter that names them.
+- **Example Data templates lose two fields and three operator names.** `connectedSystemObjectTypeAttributeId` and `boolShouldBeRandom` are removed from template attributes, and dependencies use the scoping operators' names: `GreaterThanOrEquals`, `LessThanOrEquals` and `Contains` in place of `GreaterThanOrEqual`, `LessThanOrEqual` and `Like`.
+- **Criteria never compare with an empty value.** A scoping or Predefined Search criterion with an empty value is refused; use the `HasValue` or `HasNoValue` operator, which existing criteria were converted to on upgrade.
+- **Saves are checked more strictly.** An Attribute Flow or Example Data expression that does not parse, reads an unknown attribute or returns a type its target can never hold (one left unchanged only warns), an Object Matching Rule that could never match, and deleting, renaming or deselecting an attribute a Scoping Criterion or expression still reads are each refused with the reason.
+- **New defaults over the REST API match the portal's.** A Metaverse Object Type created without a deletion rule gets **When Last Connector Disconnected** rather than **Manual**, and a new Object Matching Rule ignores case unless a source attribute is case-exact.
+- **The readiness check drops its `error` field.** `/api/v1/health/ready` no longer returns the exception behind a failure to anonymous callers; JIM logs it instead.
+- **Four Service Settings are removed:** Maintenance mode, Credential encryption, Verbose no-change recording and SSO unique identifier claim type. A script reading or setting one must stop.
 
 **v0.16.0**
 
@@ -105,7 +117,7 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 ## :material-shield-key-outline: Authentication
 
-All endpoints require authentication except a small number of system endpoints (health probes, version, auth config). Most endpoints additionally require the **Administrator** role. JIM supports two methods, both detailed in [Authentication](authentication.md):
+All endpoints require authentication except a small number of system endpoints (health probes, version, auth config, identity provider trust). Most endpoints additionally require the **Administrator** role. JIM supports two methods, both detailed in [Authentication](authentication.md):
 
 - **API keys**, suitable for scripts, automation, and service-to-service integrations
 - **JWT access tokens**, suitable for user-driven integrations via OIDC/SSO
@@ -132,4 +144,4 @@ These behaviours are common across the API. The interactive API reference is aut
 
 A small set of system-level endpoints (health, readiness, liveness, version, auth config, user info) are useful for orchestrators, load balancers, and client bootstraps rather than identity management workflows. They are documented in the interactive API reference alongside everything else.
 
-The unauthenticated health endpoints answer for the web tier only. `GET /api/v1/system/health` (Administrator role) reports whether the Worker's synchronisation loop, its Password Delivery Service and the Scheduler are alive and what each is doing, from the heartbeats they write to the database; it is the endpoint for monitoring that needs to know whether JIM's work is actually being done. See [Operations > Service Health](../configuration/operations.md#service-health) for what each status and condition means.
+The unauthenticated health endpoints answer for the web tier only. `GET /api/v1/system/health` (Administrator role) reports whether the Worker's synchronisation loop, its Password Delivery Service and the Scheduler are alive, what each is doing and whether any is short of memory, from the heartbeats they write to the database; it is the endpoint for monitoring that needs to know whether JIM's work is actually being done. See [Operations > Service Health](../configuration/operations.md#service-health) for what each status and condition means.
