@@ -5308,4 +5308,78 @@ public class SyncRepository : ISyncRepository
     }
 
     #endregion
+
+    #region Configuration Changes Awaiting Synchronisation (#2615)
+
+    private readonly List<ConfigurationChangeSynchronisation> _configurationChangeSynchronisations = [];
+    private long _nextConfigurationChangeSynchronisationId = 1;
+
+    /// <summary>
+    /// Every configuration change recorded as awaiting synchronisation, claimed and applied ones included, in the order
+    /// they were seeded.
+    /// </summary>
+    public IReadOnlyList<ConfigurationChangeSynchronisation> ConfigurationChangeSynchronisations => _configurationChangeSynchronisations;
+
+    /// <summary>
+    /// Records a configuration change awaiting synchronisation, as the saving side does in production (there the row is
+    /// written through <c>IConnectedSystemRepository</c> to the same database; here the two sides are separate stores, so
+    /// a test seeds it). A missing <see cref="ConfigurationChangeSynchronisation.Id"/> is numbered. A test simulates a
+    /// change saved while a run is in flight by seeding from a per-object hook: the claim below sees only the rows that
+    /// existed when it ran, exactly as a READ COMMITTED statement does.
+    /// </summary>
+    public ConfigurationChangeSynchronisation SeedConfigurationChangeSynchronisation(ConfigurationChangeSynchronisation change)
+    {
+        if (change.Id == 0)
+            change.Id = _nextConfigurationChangeSynchronisationId++;
+        else if (change.Id >= _nextConfigurationChangeSynchronisationId)
+            _nextConfigurationChangeSynchronisationId = change.Id + 1;
+
+        _configurationChangeSynchronisations.Add(change);
+        return change;
+    }
+
+    public Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, Guid runActivityId)
+    {
+        // Every row awaiting synchronisation, including one an earlier run claimed and never applied: that claim is
+        // overwritten, as the production statement does.
+        var claimed = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null)
+            .ToList();
+        foreach (var change in claimed)
+            change.ClaimedByActivityId = runActivityId;
+
+        return Task.FromResult<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>>(
+            claimed.Select(c => new ClaimedConfigurationChangeSynchronisation(c.Id, c.ConnectedSystemObjectTypeId)).ToList());
+    }
+
+    public Task<int> ApplyClaimedConfigurationChangeSynchronisationsAsync(Guid runActivityId)
+    {
+        var applied = _configurationChangeSynchronisations
+            .Where(c => c.ClaimedByActivityId == runActivityId && c.AppliedAt == null)
+            .ToList();
+        var appliedAt = DateTime.UtcNow;
+        foreach (var change in applied)
+            change.AppliedAt = appliedAt;
+
+        return Task.FromResult(applied.Count);
+    }
+
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(int connectedSystemId)
+    {
+        IReadOnlySet<int> awaiting = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null)
+            .Select(c => c.ConnectedSystemObjectTypeId)
+            .ToHashSet();
+        return Task.FromResult(awaiting);
+    }
+
+    public Task<int> GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(int connectedSystemId, DateTime modifiedSince, IReadOnlyCollection<int> objectTypeIds)
+    {
+        // Tests often build objects with only the Type navigation set, so read either (as the type filters do).
+        var count = GetCsosForSystem(connectedSystemId)
+            .Count(c => IsModifiedSince(c, modifiedSince) || objectTypeIds.Contains(c.TypeId != 0 ? c.TypeId : c.Type?.Id ?? 0));
+        return Task.FromResult(count);
+    }
+
+    #endregion
 }

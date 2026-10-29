@@ -65,6 +65,14 @@ public interface ISyncRepository
     Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince);
 
     /// <summary>
+    /// <see cref="GetConnectedSystemObjectModifiedSinceCountAsync"/> plus every object of the given Object Types: the
+    /// progress estimate of a Delta Synchronisation that processes some types in full because configuration changes are
+    /// awaiting synchronisation for them (#2615). An object that is both modified and of one of the types counts once.
+    /// An empty collection counts exactly as <see cref="GetConnectedSystemObjectModifiedSinceCountAsync"/> does.
+    /// </summary>
+    Task<int> GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(int connectedSystemId, DateTime modifiedSince, IReadOnlyCollection<int> objectTypeIds);
+
+    /// <summary>
     /// Loads a page of CSOs with full attribute values for sync processing.
     /// </summary>
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
@@ -2203,6 +2211,42 @@ public interface ISyncRepository
     /// </summary>
     /// <returns>How many values were forgotten.</returns>
     Task<int> DeleteRetiredGeneratedValuesForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId);
+
+    #endregion
+
+    #region Configuration Changes Awaiting Synchronisation (#2615)
+
+    /// <summary>
+    /// Claims, for a synchronisation run, every configuration change awaiting synchronisation for the Connected System,
+    /// in one statement, and returns what it claimed. A synchronisation calls this first, before it loads any
+    /// Synchronisation Rule, and processes every object of the types returned.
+    /// <para>
+    /// A change claimed by an earlier run that failed or was cancelled is claimed again (the earlier claim is
+    /// overwritten). A change saved while the run is in flight is not claimed by it and stays awaiting the next run.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being synchronised.</param>
+    /// <param name="runActivityId">The synchronisation run's Activity: what the claimed rows are stamped with, and what
+    /// <see cref="ApplyClaimedConfigurationChangeSynchronisationsAsync"/> later applies by.</param>
+    /// <returns>One entry per claimed row; empty when nothing is awaiting synchronisation.</returns>
+    Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, Guid runActivityId);
+
+    /// <summary>
+    /// Marks applied the changes the run claimed (<see cref="ClaimConfigurationChangeSynchronisationsAsync"/>), as the
+    /// run completes. A change another run has since claimed is not the caller's to apply and is left for that run, so
+    /// the count can fall short of what the caller claimed; a run that applies nothing leaves its changes awaiting
+    /// synchronisation, for the next run to claim.
+    /// </summary>
+    /// <param name="runActivityId">The synchronisation run's Activity.</param>
+    /// <returns>How many changes were marked applied.</returns>
+    Task<int> ApplyClaimedConfigurationChangeSynchronisationsAsync(Guid runActivityId);
+
+    /// <summary>
+    /// The Connected System Object Types the Connected System has configuration changes awaiting synchronisation for,
+    /// without claiming them: a read for the synchronisation preview, which must not change what a run would do. Never
+    /// call <see cref="ClaimConfigurationChangeSynchronisationsAsync"/> for this.
+    /// </summary>
+    Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(int connectedSystemId);
 
     #endregion
 }

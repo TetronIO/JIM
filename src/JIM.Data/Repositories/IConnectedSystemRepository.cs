@@ -2132,4 +2132,22 @@ public interface IConnectedSystemRepository
     /// </summary>
     Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds);
     #endregion
+
+    #region Configuration Changes Awaiting Synchronisation (#2615)
+
+    /// <summary>
+    /// Records a saved configuration change as awaiting synchronisation for one Connected System Object Type (#2615):
+    /// the Connected System's next synchronisation, Delta or Full, processes every object of that type and then marks
+    /// the change applied (<see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>).
+    /// <para>
+    /// Written only after the configuration change itself has been saved. The synchronisation's claim relies on that
+    /// order: a row that exists is a change that is already in the Synchronisation Rules the run then loads, so a
+    /// claimed change is never one the run could not see.
+    /// </para>
+    /// </summary>
+    /// <param name="change">The change to record. Its <see cref="ConfigurationChangeSynchronisation.ClaimedByActivityId"/>
+    /// and <see cref="ConfigurationChangeSynchronisation.AppliedAt"/> must be unset.</param>
+    Task CreateConfigurationChangeSynchronisationAsync(ConfigurationChangeSynchronisation change);
+
+    #endregion
 }
