@@ -131,7 +131,7 @@ Any of these remedies works:
 
 If the Synchronisation Rule already has an Initial Password, the account's password will not now be delivered: it expired or was cancelled before it could be set, and **Operations > Passwords** shows which. At the next import of the Connected System, Full or Delta, JIM stops waiting for a password, since none is owed any more, and the export after it writes your Attribute Flow's enabled value, which Active Directory refuses for the same reason. Set a password on the account with the set-password action, enabling it there. A password that is merely queued, retrying or parked does not cause this error, on a Create or an Update: the account waits, disabled, until the password is delivered.
 
-Nothing is lost while you fix it. The account stays disabled, the Pending Export stays queued and is retried on later export runs with a growing delay between attempts, up to the ordinary retry limit, and the Metaverse Object is untouched.
+Nothing is lost while you fix it. The account stays disabled, the Pending Export stays queued and is attempted again at every export run, and the Metaverse Object is untouched.
 
 ## :material-lifebuoy: Still stuck?
 

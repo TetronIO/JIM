@@ -119,7 +119,7 @@ Change history, Activities and password records are the tables that grow without
 
 Records still being worked (for example a password change still owed to a system) are never removed, however old.
 
-Change records and Activities are trimmed on their own clocks, so a change record can outlive the Activity it was made in. Every reference from history to a Run Profile Execution Item is therefore `ON DELETE SET NULL` (the Metaverse Object side since #2460; the Connected System Object side already was), and `DeletePathForeignKeyCoverageTests` has an Activity retention surface, so a new history table whose foreign key would refuse an Activity delete fails the build rather than stopping retention on the same batch every night.
+Change records and Activities are trimmed on their own clocks, so a change record can outlive the Activity it was made in. A change record's reference to its Run Profile Execution Item is therefore `ON DELETE SET NULL` (the Metaverse Object side since #2460; the Connected System Object side already was), and `DeletePathForeignKeyCoverageTests` has an Activity retention surface, so a new history table whose foreign key would refuse an Activity delete fails the build rather than stopping retention on the same batch every run.
 
 ---
 

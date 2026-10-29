@@ -100,7 +100,7 @@ Import { #import }
 :   The two Run Profile types, Full Import and Delta Import, that bring a Connected System's objects into the Connector Space. A Full Import reads everything the connection scope covers; a Delta Import reads only what has changed since the last one, where the Connected System supports it.
 
 Initial Export Only { #initial-export-only }
-:   An Attribute Flow option on export Synchronisation Rules. The attribute is set once, when JIM provisions the object, and is then treated as unmanaged: the Connected System owns the value from that point on and Drift Correction leaves it alone. Intended for one-time setup values and other set-once values; initial passwords are set on an export Synchronisation Rule's Initial Password tab, never through Attribute Flow.
+:   An Attribute Flow option on export Synchronisation Rules. The attribute is set once, when JIM provisions the object, and is then treated as unmanaged: the Connected System owns the value from that point on and Drift Correction leaves it alone. Intended for one-time setup values and other set-once values; initial passwords are set on an export Synchronisation Rule's **Passwords** tab, never through Attribute Flow.
 
 Join { #join }
 :   Linking a Connected System Object to an existing Metaverse Object. A Join happens when an Object Matching Rule finds that an incoming Connected System Object corresponds to one that already exists.
