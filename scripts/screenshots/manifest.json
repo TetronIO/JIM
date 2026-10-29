@@ -275,11 +275,11 @@
       ],
       "steps": [
         {
-          "goto": "/admin/operations?t=history"
+          "goto": "/admin/operations?t=activity"
         },
         {
           "waitFor": {
-            "text": "Execution History"
+            "selector": "[data-testid=\"activity-completed\"] .jim-activity-result"
           }
         }
       ]
@@ -417,28 +417,6 @@
         {
           "waitFor": {
             "text": "Execution Summary"
-          }
-        }
-      ]
-    },
-    {
-      "name": "operations-history",
-      "kind": "portal",
-      "profile": "portal",
-      "themes": [
-        "dark",
-        "light"
-      ],
-      "usedBy": [
-        "junctional.io tour assets; not on a tour page today"
-      ],
-      "steps": [
-        {
-          "goto": "/admin/operations?t=history&h-desc=0"
-        },
-        {
-          "waitFor": {
-            "text": "Execution History"
           }
         }
       ]
