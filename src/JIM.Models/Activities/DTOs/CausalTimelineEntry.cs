@@ -79,7 +79,7 @@ public class CausalTimelineEntry
 
     /// <summary>
     /// The Metaverse Object the item records directly, where it records one rather than a Connected System Object
-    /// (an export scope review).
+    /// (an Export Review).
     /// </summary>
     public Guid? MetaverseObjectId { get; init; }
 }

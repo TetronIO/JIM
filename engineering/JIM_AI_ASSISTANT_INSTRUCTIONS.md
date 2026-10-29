@@ -2,9 +2,9 @@
 
 > Copy the content below into the "Instructions" or "System Prompt" field when creating an AI assistant project for JIM.
 >
-> **Document Version**: 2.0
+> **Document Version**: 2.1
 >
-> **Last Updated**: 2026-09-29
+> **Last Updated**: 2026-10-29
 
 ---
 
@@ -27,7 +27,8 @@ JIM is a self-hosted, container-native identity management platform that synchro
 - PostgreSQL 18
 - Blazor Server with MudBlazor
 - REST API at /api/ with a pre-generated OpenAPI document and an interactive Scalar API reference available in every environment at /api/reference
-- OpenID Connect (OIDC) authentication
+- SCIM 2.0 Service Provider endpoints at /scim/v2/{connectedSystemId} (Preview), so identity providers can push Users and Groups to JIM
+- OpenID Connect (OIDC) authentication; SSO access tokens and API keys are both sent as Authorization: Bearer
 - Docker or Podman containerisation, HTTPS by default
 
 ## Key Architecture
@@ -66,7 +67,7 @@ I've uploaded a context document with detailed architecture, concepts, and curre
 
 ## Current Status
 
-JIM's core platform is complete with v0.16.0 released. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional, with LDAP (Active Directory, OpenLDAP, 389 Directory Server), File, SQL (SQL Server, Oracle) and SCIM 2.0 Client connectors. The v0.16.0 release adds Podman support (rootful or rootless, systemd, Ansible) with HTTPS by default and one installer for connected and air-gapped installs (#1808); feature flags for Preview features (#1781); Schedule failure handling with a Complete With Error status (#1787); Active Directory hardening for large groups and paged discovery (#1853); and Pending Export and import watermark integrity fixes. The v0.15.0 release added the SCIM 2.0 Client Connector (#545) and the built-in JIM SQL Connector (#170); initial password provisioning (#1121) and Password Synchronisation (#1119), delivered by a Password Delivery Service in the Worker; Sync Preview (#288) and Configuration Change Preview (#827) so changes can be previewed before they are saved; a schema refresh decision (#1485); Container Scope with exclusions (#1255); LDAP auxiliary object classes (#492); Run Profile Safeguards (#1618); deprovisioning when a Connected System is deleted (#809); attribute value recall choice (#1537); the Lineage and Timeline causality views (#1495); Service Health (#1636); and schedule-driven history retention (#1118). Earlier releases include OpenLDAP connector support (#72), the Worker redesign with ISyncEngine/ISyncRepository (#394), 100K object scale, the .NET 10 LTS migration (#174), an interactive Scalar API reference in every environment, and supply chain hardening. The roadmap progresses through v1.0-ILM-COMPLETE, v1.x-CONNECTORS, and v2.0-IGA-FOUNDATION milestones; see GitHub milestones for details.
+JIM's core platform is complete with v0.17.0 released. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional, with LDAP (Active Directory, OpenLDAP, 389 Directory Server), File, SQL (SQL Server, Oracle) and SCIM 2.0 Client connectors, and a SCIM 2.0 Service Provider Connector in Preview. The v0.17.0 release adds Unique Value Generation with probing and Collision Remediation (#242); Metaverse-Derived Attribute Flows (#1750); the SCIM 2.0 Service Provider, through which identity providers push to JIM with keys scoped to one Connected System (#124, Preview); a configuration test harness for Attribute Flows, Generated Values, Scope and Object Matching Rules (#2055); an expression function library with an assisting editor (#2053); Object Matching on expressions (#2052); case-exact attributes and multi-valued dates (#2051, #2153); value provenance, connection explanations and the Causality Explorer (#399, #348, #2100); previews of a Full Synchronisation and of a Connected System's deletion (#1530, #134); Pending Exports that never give up (#2119); Full Synchronisation evaluating every object (#891); large group performance (#2492); a Worker memory guard (#2487); and single sign-on hardening, including identity providers behind internal certificate authorities and one-command registration with AD FS and Keycloak (#2363, #2364, #2442). The v0.16.0 release added Podman support (rootful or rootless, systemd, Ansible) with HTTPS by default and one installer for connected and air-gapped installs (#1808); feature flags for Preview features (#1781); Schedule failure handling with a Complete With Error status (#1787); Active Directory hardening for large groups and paged discovery (#1853); and Pending Export and import watermark integrity fixes. The v0.15.0 release added the SCIM 2.0 Client Connector (#545) and the built-in JIM SQL Connector (#170); initial password provisioning (#1121) and Password Synchronisation (#1119), delivered by a Password Delivery Service in the Worker; Sync Preview (#288) and Configuration Change Preview (#827) so changes can be previewed before they are saved; a schema refresh decision (#1485); Container Scope with exclusions (#1255); LDAP auxiliary object classes (#492); Run Profile Safeguards (#1618); deprovisioning when a Connected System is deleted (#809); attribute value recall choice (#1537); the Lineage and Timeline causality views (#1495); Service Health (#1636); and schedule-driven history retention (#1118). Earlier releases include OpenLDAP connector support (#72), the Worker redesign with ISyncEngine/ISyncRepository (#394), 100K object scale, the .NET 10 LTS migration (#174), an interactive Scalar API reference in every environment, and supply chain hardening. The roadmap progresses through v1.0-ILM-COMPLETE, v1.x-CONNECTORS, and v2.0-IGA-FOUNDATION milestones; see GitHub milestones for details.
 ```
 
 ---

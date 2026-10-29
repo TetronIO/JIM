@@ -104,10 +104,16 @@ public interface IMetaverseRepository
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
-    /// scope, unless an export Synchronisation Rule changed since the run read its rules; see
-    /// <c>ISyncRepository.ClearMetaverseObjectScopeReviewPendingAsync</c>.
+    /// scope, unless an export Synchronisation Rule changed since the run read its rules or the object was written
+    /// since the run loaded it; see <c>ISyncRepository.ClearMetaverseObjectScopeReviewPendingAsync</c>.
     /// </summary>
-    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark);
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark);
+
+    /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on every Metaverse Object of a type no enabled export Synchronisation
+    /// Rule covers, in one statement (#2615); see <c>ISyncRepository.ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync</c>.
+    /// </summary>
+    public Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark);
 
     /// <summary>
     /// Flags every Metaverse Object of the given type <c>ScopeReviewPending</c> (issue #1925); see

@@ -1,6 +1,6 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Doing (Phases 1-5 complete)
+- **Status:** Doing (Phases 1-6 complete)
 - **Issue:** [#2570](https://github.com/TetronIO/JIM/issues/2570)
 - **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/doing/PRD_SQL_OBJECT_TYPES_EDITOR.md)
 - **Last Updated:** 2026-10-28
@@ -138,7 +138,7 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - Anchor preselected from the primary key in key order, with the reason; a view says it declares no keys.
 - **Tests:** step logic in a plain model class; bUnit test that finishing produces the same document a hand-written one would (PRD Scenario 1).
 
-### Phase 6: JSON view
+### Phase 6: JSON view ✅
 
 - Toggle between cards and JSON. Reuses the overlay technique of `ExpressionEditor.razor` (a transparent `textarea` over a highlighted, `aria-hidden` `pre`) with `Helpers.HighlightJson`, adding a line-number gutter and a marked line for each located problem. No new dependency: a third-party code editor would need the dependency governance process for one field.
 - Problems listed above the text with their line numbers; switching to cards and saving blocked while any remain.
@@ -183,7 +183,9 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 
 ## Deviations from the PRD
 
-- **Phase 4, JSON fallback:** until Phase 6's JSON view exists, **View as JSON** shows the setting's existing text field (with its example). A document the cards cannot show (one that is not JSON, or uses a field the document does not have) opens there with the parser's message, rather than being simplified.
+- **Phase 4, JSON fallback:** until Phase 6's JSON view existed, **View as JSON** showed the setting's existing text field (with its example). Phase 6 replaced it.
+- **Phase 6, what blocks switching to cards:** only a problem in the JSON itself (it is not JSON, or has a field the document does not). A problem with what a readable document says (a missing anchor, a reference to an undeclared Object Type) no longer blocks **View as cards**: each card shows its own problems, and a card is the better place to fix a missing anchor, since it offers the columns to choose from. Save Settings is held while the parser finds any problem, in either view, with a caption under it saying why; that matches what saving would refuse.
+- **Phase 6, locating a problem with what the document says:** it is marked on the line of the Object Type's field it concerns ('changeLog' for 'changeLog.table'), or on the line the Object Type opens on when that field is missing or the problem names none.
 - **Phase 4, offering an Object Type for a foreign key's table:** until Phase 5's dialog existed, accepting added an expanded card reading from that table. Phase 5 replaced this with the Add Object Type dialog, opened with the table chosen, as PRD requirement 6 asks.
 - **Phase 5, adding before the last step:** the dialog offers **Add Object Type** from the Anchor step on, since references and multi-valued attributes are optional; the PRD's "each step can be completed or skipped" is met by that rather than by a Skip button on each optional step.
 - **Phase 5, Delta Import fields:** the dialog's four steps match the PRD and leave out the watermark column and change log; the new card opens with them, alone, so the mode's fields are the next thing seen.

@@ -338,14 +338,14 @@ public class ExportRuleConfigurationChangeWorkflowTests : WorkflowTestBase
     {
         public Func<Task>? BeforeNextClear { get; set; }
 
-        public override async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+        public override async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
         {
             var beforeClear = BeforeNextClear;
             BeforeNextClear = null;
             if (beforeClear != null)
                 await beforeClear();
 
-            return await base.ClearMetaverseObjectScopeReviewPendingAsync(ids, exportRulesReadWatermark);
+            return await base.ClearMetaverseObjectScopeReviewPendingAsync(seenRowVersions, exportRulesReadWatermark);
         }
     }
 

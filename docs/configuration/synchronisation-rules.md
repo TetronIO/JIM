@@ -3,7 +3,7 @@ title: Synchronisation Rules
 description: What a Synchronisation Rule ties together, its direction, and where to configure its scope, matching, mappings and deprovisioning.
 type: object
 audience: administrator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Synchronisation Rules
@@ -74,7 +74,7 @@ An export rule:
 - Flows attribute values from the Metaverse Object to the Connected System Object
 - Creates Pending Exports for any changes
 
-When **enforce state** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the Metaverse-derived value. For a [generated value](generated-values.md) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object.
+When **Enforce State** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the Metaverse-derived value. For a [generated value](generated-values.md) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object.
 
 A change made in the Connected System is not drift when it can flow back in: that is, when the same Connected System holds the winning import Attribute Flow for the Metaverse attribute and that flow **reads the changed attribute**. For example, an import flow of `mail` into Email and an export of Email to `mail` let an edit to `mail` update Email. If the import flow reads a different attribute (Display Name built from `givenName` and `sn`, but exported to `displayName`), an edit to `displayName` could never reach the Metaverse, so it is treated as drift and corrected.
 
@@ -96,13 +96,13 @@ Where the object type is deleted [When Authoritative Source Disconnected](metave
 
 **Provisioning** applies to export rules. If provisioning is enabled, JIM creates a new Connected System Object in the target system's Connector Space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). If provisioning is not enabled, the rule only updates objects that already exist in the target.
 
-A rule that provisions also puts back an account deleted directly in the target system. The next import from that system (Full or Delta) marks the account's Connected System Object obsolete; the next synchronisation of that system (Full or Delta) disconnects it and, where the Metaverse Object is still in the rule's scope, stages a provisioning Create in the same run, so the next export recreates the account. Nothing else about the person needs to change. The Create is recorded on that run's Activity as an **Export Scope Review** item. It is not staged when the disconnection schedules or performs the Metaverse Object's deletion under its type's [Deletion Rules](metaverse.md#deletion-behaviour), or when the object was already due for deletion; and an export rule that does not provision leaves the person without an account in that system.
+A rule that provisions also puts back an account deleted directly in the target system. The next import from that system (Full or Delta) marks the account's Connected System Object obsolete; the next synchronisation of that system (Full or Delta) disconnects it and, where the Metaverse Object is still in the rule's scope, stages a provisioning Create in the same run, so the next export recreates the account. Nothing else about the person needs to change. The Create is recorded on that run's Activity as an **Export Review** item. It is not staged when the disconnection schedules or performs the Metaverse Object's deletion under its type's [Deletion Rules](metaverse.md#deletion-behaviour), or when the object was already due for deletion; and an export rule that does not provision leaves the person without an account in that system.
 
 Before provisioning, the rule's Object Matching Rules look for an unjoined account already in the target, so it is joined rather than duplicated; if several match, JIM provisions nothing for that rule and reports an **Ambiguous Provisioning Match**. See [Matching outcomes](object-matching-rules.md#matching-outcomes).
 
 If a Metaverse Object attribute changes again while its Create export is still awaiting confirmation by a subsequent import, JIM never sends a second Create; most Connected Systems reject a Create for an object they already hold. The change is queued and sent as a single Update once the Create is confirmed, carrying whatever the latest value is by then; the Create counts as confirmed as soon as an import reports the object back at all, even if one of the values it reports still differs from what was exported, and the outstanding value then retries as part of that same Update.
 
-If a Full Import completes without reporting the object back at all, the Create itself is retried on the next export, up to the ordinary retry limit; a Delta Import never triggers this, since it only reports changes and an object missing from its payload is not evidence that it no longer exists.
+If a Full Import completes without reporting the object back at all, the Create itself is sent again at every export until an import reports it; a Delta Import never triggers this, since it only reports changes and an object missing from its payload is not evidence that it no longer exists.
 
 ## :material-account-arrow-down-outline: Deprovisioning Action
 
@@ -110,11 +110,15 @@ Each export rule's **Deprovisioning Action** decides what happens to its object 
 
 ## :material-form-textbox-password: Initial password
 
-An export rule's **Initial Password** tab sets a password on every Connected System Object the rule creates. [Initial Password](initial-password.md) covers what you configure, and what happens after provisioning.
+An export rule's **Passwords** tab sets an Initial Password on every Connected System Object the rule creates. [Initial Password](initial-password.md) covers what you configure, and what happens after provisioning.
 
 ## :material-swap-vertical: Attribute mappings
 
 Attribute mappings define which attributes to synchronise and how to transform them: each maps a source attribute or an expression to a target attribute. [Attribute Mappings](attribute-mappings.md) covers each kind of mapping, value processing, Initial Export Only, previewing a change, and Attribute Priority; [Generated Values](generated-values.md) and [Deriving Metaverse Attributes](derived-attributes.md) cover the two kinds that build a value rather than copy one.
+
+## :material-flask-outline: Tests
+
+A saved rule's **Tests** tab holds its [configuration test cases](configuration-tests.md): inputs, and what the rule's Scope, one of its Attribute Flows or Generated Values, or one of its Object Matching Rules should give for them. Run them to check the rule still behaves as it did; saving a change runs the cases it could affect.
 
 ## :material-playlist-check: Common workflows
 
@@ -177,6 +181,7 @@ Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit s
 - **Cosmetic changes** (name, description) save straight away with no prompt.
 - **Changes that affect synchronisation** (scope, mappings, Object Matching Rules, direction, enabling or disabling the rule) show a confirmation listing exactly what is changing, from which value to which, and remind you that a Full Synchronisation is what puts it into effect.
 - **Destructive changes** (Deprovisioning Action, Inbound Out-of-Scope Action) additionally state, in plain terms, what the change will do: which objects will be deleted rather than disconnected, or disconnected rather than left joined.
+- **Changes that stop a test case passing** (see [Tests](#tests)) stop the save first: keep editing, accept the new result, or save anyway.
 
 The same rules apply across every configuration surface; see [Configuration changes](configuration-changes.md) for the full picture, including when JIM stays silent.
 

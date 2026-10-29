@@ -72,6 +72,39 @@ public class ConnectedSystemSettingsTabCatalogueTests : JimComponentTestContext
         }
     }
 
+    [Test]
+    public void SettingsTab_TheDocumentHasProblems_HoldsSaveSettingsAndSaysWhy()
+    {
+        var connectedSystem = CreateConnectedSystem();
+        connectedSystem.SettingValues.Single(sv => sv.Setting.Name == DocumentSettingName).StringValue =
+            """{ "objectTypes": [ { "name": "Person", "table": "EMPLOYEES", "anchorColumn": [ "EMPLOYEE_ID" ] } ] }""";
+
+        var cut = Render<ConnectedSystemSettingsTab>(p => p
+            .Add(c => c.ConnectedSystem, connectedSystem)
+            .Add(c => c.SettingCategories, [ConnectedSystemSettingCategory.Schema]));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Find("[data-testid=jim-settings-save]").HasAttribute("disabled"), Is.True);
+            Assert.That(cut.Find("[data-testid=jim-settings-save-blocked]").TextContent, Does.Contain(DocumentSettingName));
+        });
+    }
+
+    [Test]
+    public void SettingsTab_TheDocumentHasNoProblems_DoesNotHoldSaveSettingsForIt()
+    {
+        var connectedSystem = CreateConnectedSystem();
+        connectedSystem.SettingValues.Single(sv => sv.Setting.Name == DocumentSettingName).StringValue =
+            """{ "objectTypes": [ { "name": "Person", "table": "EMPLOYEES", "anchorColumns": [ "EMPLOYEE_ID" ] } ] }""";
+
+        var cut = Render<ConnectedSystemSettingsTab>(p => p
+            .Add(c => c.ConnectedSystem, connectedSystem)
+            .Add(c => c.SettingCategories, [ConnectedSystemSettingCategory.Schema]));
+
+        cut.WaitForState(() => cut.HasComponent<SqlObjectTypesEditor>());
+        Assert.That(cut.FindAll("[data-testid=jim-settings-save-blocked]"), Is.Empty);
+    }
+
     private static ConnectedSystem CreateConnectedSystem()
     {
         var settings = new List<ConnectorDefinitionSetting>

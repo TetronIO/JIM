@@ -87,6 +87,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-016-SqlConnectorMatrix" -FullMatrix        # full matrix including the 500,000-row scale import
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-015-ScimConnector"             # SCIM 2.0 Client Connector against the containerised test service provider
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-028-ScimKeycloak"               # SCIM 2.0 Client Connector against a real Keycloak's SCIM API
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-033-InitialAdministratorProvisioning" # an unscoped provisioning User export rule provisions the initial administrator the same way whether the rule or the administrator came first (#2615)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-017-InitialPasswordProvisioning" # Initial Password provisioning and the park-then-release loop (Samba AD only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-018-WritebackToSource"         # a derived value written back into its source Connected System (#1284)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-019-AuxiliaryClasses"          # LDAP auxiliary object classes (#492, OpenLDAP only)
@@ -97,6 +98,10 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-025-ActiveDirectoryDeltaImportIntegrity" -DirectoryType ActiveDirectory  # Delta Import with the Recycle Bin on and off; restore from backup (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-026-DerivedAttributeFlows" -Template Small  # Metaverse-Derived Attribute Flows (#1750, Samba AD or OpenLDAP)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-027-FirstSynchronisation"  # The tested tutorial, run from docs/getting-started/first-synchronisation.md (#1454; File Connector only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-029-ScimRoundTrip"  # JIM provisioning its own SCIM endpoint: SCIM 2.0 Client Connector against the SCIM 2.0 Service Provider (#124; no directory)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-030-ActiveDirectoryFederationTrust" -DirectoryType ActiveDirectory  # Trusting the lab's AD FS server as JIM's identity provider (lab only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-031-ActiveDirectoryFederationSignIn" -DirectoryType ActiveDirectory  # Signing people in to JIM through AD FS, posted as jim-ad-lab-adfs (lab only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-032-IntraTypeReferences" -DirectoryType OpenLDAP -Template Medium  # Managers and nested groups through the cross-page reference step (#2492, OpenLDAP only)
 
 # Short forms resolve to the full name: the number, Scenario-NNN, or the descriptive part
 ./test/integration/Run-IntegrationTests.ps1 -Scenario 005                # Scenario-005-MatchingRules
@@ -122,6 +127,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-025-ActiveDirectoryDeltaImportIntegrity" -DirectoryType ActiveDirectory -Step RestoreFromBackup  # Scenario 025 (independent steps): RecycleBin, RestoreFromBackup (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-023-UniqueValueGeneration" -Step Brownfield  # Scenario 023 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, NeverReuse, ProbeBrownfield, ProbeRestrictedBind, ProbeUnreachable, CollisionRemediated, CollisionDerivedUpn, CollisionNeedsDecision, CollisionRemediationOff
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-026-DerivedAttributeFlows" -Step WrongOrder  # Scenario 026 (cumulative): Ordering, Stability, CrossSystem, WrongOrder, MissingInput, Cycle, SurfaceParity
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-029-ScimRoundTrip" -Step Conflict  # Scenario 029 (in order with All): Provision, Inbound, Update, Clear, IdentityProvider, Conflict, Deprovision, Restore, Summary
 
 # Combine scenario, template, and step
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-002-CrossDomainSync" -Template Small -Step All
@@ -178,7 +184,7 @@ This single script handles everything:
 
 **Available Scenarios (`-Scenario` parameter):**
 
-In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019 and 022 are OpenLDAP only; Scenario 017 runs on Samba AD and the Active Directory lab only; Scenarios 023 and 026 support OpenLDAP and Samba AD only (they are skipped on the 389 Directory Server pass of a `-DirectoryType All` run); Scenarios 024 and 025 run on the Active Directory lab only (`-DirectoryType ActiveDirectory`, real Windows Server domain controllers on Hyper-V: see `test/integration/ad-lab/README.md`), which no container and no `-DirectoryType All` or `-PreRelease` run includes. Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand. Scenarios 011, 015, 016, 027 and 028 are directory-agnostic (they accept `-DirectoryConfig` but never use it), so a `-DirectoryType All` run executes them once, in the first directory pass, rather than once per directory type with identical results each time; the per-scenario rules live in `utils/Get-ScenarioDirectoryTypes.ps1`.
+In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019, 022 and 032 are OpenLDAP only; Scenario 017 runs on Samba AD and the Active Directory lab only; Scenarios 023 and 026 support OpenLDAP and Samba AD only (they are skipped on the 389 Directory Server pass of a `-DirectoryType All` run); Scenarios 024, 025, 030 and 031 run on the Active Directory lab only (`-DirectoryType ActiveDirectory`, real Windows Server domain controllers on Hyper-V: see `test/integration/ad-lab/README.md`), which no container and no `-DirectoryType All` or `-PreRelease` run includes. Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand. Scenarios 011, 015, 016, 027, 028, 029 and 033 are directory-agnostic (they accept `-DirectoryConfig` but never use it), so a `-DirectoryType All` run executes them once, in the first directory pass, rather than once per directory type with identical results each time; the per-scenario rules live in `utils/Get-ScenarioDirectoryTypes.ps1`.
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
@@ -198,6 +204,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario-014-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) |
 | `Scenario-015-ScimConnector` | SCIM 2.0 Client Connector end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted rather than validation skipped (#545) | file (HR CSV source), scim-provider |
 | `Scenario-028-ScimKeycloak` | SCIM 2.0 Client Connector against Keycloak's built-in SCIM API: group create then members, a membership change past Keycloak's 100-operation PATCH cap, Delta Import read in full, disable and delete, and an admin-protected account refused (#2349, #2094) | file (HR CSV source), keycloak-scim |
+| `Scenario-033-InitialAdministratorProvisioning` | The initial administrator (an internal Metaverse Object created at the first portal sign-in, driven here through the bundled Keycloak with no browser) is provisioned the same way whether the unscoped provisioning User export rule or the administrator came first (#2615). Two orders, each after a factory reset that includes administrators: a Delta Synchronisation of a File Connector system that holds no people must stage one Pending Export Create for the administrator (queued by its Export Review item), and the export must write the same row in both. `-Template` is ignored; needs the stack's Keycloak on `localhost:8180` | file (HR CSV source with no rows, CSV export target), the stack's own Keycloak |
 | `Scenario-016-SqlConnectorMatrix` | JIM SQL Connector provider x capability matrix: the connector's capability rows driven against both priority 1 providers (Microsoft SQL Server and Oracle Database). Accepts `-Provider SqlServer\|Oracle\|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import (#170) | sqlserver-hris-a, oracle-hris-b |
 | `Scenario-017-InitialPasswordProvisioning` | Initial Password provisioning end to end: an account is provisioned, then the scenario signs in as the account holder with the password JIM set, proves the directory is forcing a change, changes it as the account holder, and signs in again. Also proves the park-then-release loop: a static Initial Password the target genuinely refuses parks every provisioned account, and correcting the Synchronisation Rule releases them to the Password Delivery Service within seconds, and a password an administrator sets on a parked account is delivered as its first password, enabling it as the rule asks. Samba AD only; `-Template` is ignored | samba-ad-primary |
 | `Scenario-018-WritebackToSource` | Whether a value JIM derives is written back into the Connected System it came from ([#1284](https://github.com/TetronIO/JIM/issues/1284)). Two JIM File Connector systems carry identically shaped outbound rules over the same Metaverse Objects, evaluated in one run, differing only in whether the target is the run's source. `-Template` is ignored | file (no directory container) |
@@ -205,10 +212,15 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario-020-PasswordSynchronisation` | Password Synchronisation end to end ([#1119](https://github.com/TetronIO/JIM/issues/1119)): proves the OUTBOUND half only (inbound capture is [#1625](https://github.com/TetronIO/JIM/issues/1625)). Password changes are recorded against identities while the directory is switched off, held rather than discarded, then delivered the moment it is switched on, and the scenario signs in to the directory with each one. Also proves coalescing keeps the newest of three, and that no password value reaches a log. Samba AD or OpenLDAP, including the parked-change retry test, which both directories now genuinely refuse a too-short password for (Samba AD's domain minimum, OpenLDAP's ppolicy overlay). `-Template` is ignored | samba-ad-primary / openldap-primary |
 | `Scenario-021-RunProfileSafeguards` | The five per-Run-Profile safeguards ([#1618](https://github.com/TetronIO/JIM/issues/1618)): the export limits (Max creates, Max updates, Max deletes), one change type at a time, the Full Import deletion-detection limits (as a count and as a share of the Connector Space), and the same limits on a Delta Import of the directory ([#2089](https://github.com/TetronIO/JIM/issues/2089)): deletes the directory reports are withheld, and the watermark kept, until the limit allows them. A run that would exceed a limit makes none of that kind of change, and its warning names the limit. Reuses the Scenario 001 fixture (HR CSV source, directory target). Steps: `ExportLimit`, `ImportLimit`, `DeltaImportLimit` | samba-ad-primary / openldap-primary / dirsrv-primary |
 | `Scenario-022-OpenLdapPasswordPolicy` | OpenLDAP password policy discovery end to end ([#1702](https://github.com/TetronIO/JIM/issues/1702)): a `ppolicy` overlay with a default policy (minimum length 12, history 5, maximum age 90 days, `pwdCheckQuality` 2) is proven to enforce by a refused 5-character change, JIM reads it as published, provisions accounts as a non-root account with generated Initial Passwords and parks none, and notices a `pwdPolicySubentry`. OpenLDAP only; `-Template` is ignored | openldap-primary (Yellowstone suffix) |
+| `Scenario-023-UniqueValueGeneration` | Unique Value Generation ([#242](https://github.com/TetronIO/JIM/issues/242)): the HR feed carries no IT-owned columns and JIM generates the Account Name, with a sequence, a random token and an export-mode value; gates, stability, brownfield joins through Attribute Priority, probing and Collision Remediation | samba-ad-primary / openldap-primary |
 | `Scenario-024-ActiveDirectoryPasswordPolicy` | Active Directory password policy discovery end to end (PRD functional requirement 17), Scenario 022's counterpart for a real domain controller: the domain policy is set to complexity on, minimum length 12 and history 24, proven to enforce by a refused 5-character change by an ordinary account holder, and a Fine-Grained Password Policy (minimum length 16) is proven to be in force on one account. JIM reads the domain policy as it stands, reports the Fine-Grained Password Policy as CouldNotDetermine to svc-jim (which cannot see the Password Settings Container) and as Present to a Connected System bound as the domain administrator, provisions accounts with generated Initial Passwords and parks none, and parks an account whose static Initial Password only a domain controller can refuse (it contains part of the account's display name), with the directory's own 0000052D words, then releases it when the rule is corrected. Active Directory lab only; `-Template` is ignored (one Micro export) | dc-primary (PANOPLY.LOCAL) |
 | `Scenario-025-ActiveDirectoryDeltaImportIntegrity` | Delta Import against a real domain controller (PRD functional requirements 18 and 19). `RecycleBin`: a user created out of band is one add, its deletion is reported exactly once and marks its Connected System Object Obsolete, and the Delta Import after that reports nothing, with the Active Directory Recycle Bin on (dc-primary) and off (dc-source). `RestoreFromBackup`: dc-primary is reverted to its `baseline` checkpoint mid-scenario, which renews its invocationId as a restore from backup does, and the next Delta Import fails fast naming the previous and current invocationId and the Full Import remedy and importing nothing; a Full Import then succeeds and a Delta Import after it is clean. Active Directory lab only; `-Template` is ignored | dc-primary, dc-source |
 | `Scenario-026-DerivedAttributeFlows` | Metaverse-Derived Attribute Flows ([#1750](https://github.com/TetronIO/JIM/issues/1750)): import Attribute Flows reading `mv["..."]`, evaluated in dependency order. Account Name is generated, Email is derived from it and User Principal Name from Email, so all three carry the same suffix; a derived flow on the HR rule reads an attribute the Training system contributes and is re-evaluated by HR's next Delta Synchronisation whichever order the two run in (the derived-input mark); stability, Missing Input Behaviour, cycle refusal and surface parity. Samba AD or OpenLDAP; Small is the sign-off template | samba-ad-primary / openldap-primary |
 | `Scenario-027-FirstSynchronisation` | Your First Synchronisation ([#1454](https://github.com/TetronIO/JIM/issues/1454)): the public tutorial, executed from its docs page. Reads each PowerShell tab's code and each checkpoint marker from `docs/getting-started/first-synchronisation.md`, runs the code in page order and asserts the checkpoints: 25 people imported, projected and exported to a staff directory file. Directory-agnostic; `-Template` ignored | file (CSV / Metaverse only) |
+| `Scenario-029-ScimRoundTrip` | JIM provisioning its own SCIM 2.0 endpoint ([#124](https://github.com/TetronIO/JIM/issues/124)), the SCIM 2.0 Service Provider's acceptance test: the SCIM 2.0 Client Connector provisions to `jim.web` over HTTPS on a real socket with a scoped key, a Schedule imports what arrives through the SCIM 2.0 Service Provider Connector, and requests are also sent as identity providers send them (lenient forms, a refused pushed password, a 409 uniqueness clash, a 412 concurrency conflict), through deprovision, a Connector Space rebuilt from the store, and the per-key summary Activity | file (HR CSV source), jim.web over HTTPS (no directory) |
+| `Scenario-030-ActiveDirectoryFederationTrust` | AD FS identity provider trust ([#2355](https://github.com/TetronIO/JIM/issues/2355), [#2363](https://github.com/TetronIO/JIM/issues/2363)): JIM starts unable to trust the lab AD FS server's self-signed certificate, reports it Untrusted naming the certificate it presents, then `Add-JIMCertificate -FromIdentityProvider` trusts it for sign-in, and trusting it again changes nothing | Active Directory lab only (dc-primary, adfs-primary) |
+| `Scenario-031-ActiveDirectoryFederationSignIn` | AD FS sign-in end to end ([#2441](https://github.com/TetronIO/JIM/issues/2441)), with JIM registered by `Register-JIMIdentityProvider` and matched on Object GUID: portal sign-in, the initial administrator, a bearer token on `/api`, `Connect-JIM` by PKCE, one Metaverse Object across both, a renamed employee, an employee with no JIM role refused every Administrator API, and the API reference's Try It. Posted as its own commit status, `jim-ad-lab-adfs` | Active Directory lab only (dc-primary, adfs-primary) |
+| `Scenario-032-IntraTypeReferences` | The Full Synchronisation's cross-page reference step end to end ([#2492](https://github.com/TetronIO/JIM/issues/2492)): users with managers and groups nesting groups, references within one Object Type that no type order can resolve in the page loop, exported to an empty target and asserted manager by manager and member by member; also the step's measurement scenario (duration and reference-value count) | openldap-primary |
 
 **Available Templates (`-Template` parameter):**
 
@@ -222,7 +234,7 @@ See [Data Scale Templates](#data-scale-templates) for the full list: sizes, grou
 |----------------|-------------|---------|
 | `SambaAD` (default) | Samba Active Directory | LDAPS on port 636, `objectGUID`, AD schema discovery |
 | `OpenLDAP` | OpenLDAP with multi-suffix partitions | LDAP on port 1389, `entryUUID`, RFC 4512 schema, accesslog delta import |
-| `DirectoryServer389` | 389 Directory Server with the same two suffixes | LDAPS on port 3636 (JIM's Connected Systems; the harness's own `ldapsearch` checks use LDAP on 3389 inside the container), `entryUUID`, RFC 4512 schema, Retro Changelog delta import; every OpenLDAP scenario except 14, 19 and 22 (OpenLDAP only), 17 (Samba AD only), 23 (OpenLDAP and Samba AD only) and 24 and 25 (Active Directory lab only) |
+| `DirectoryServer389` | 389 Directory Server with the same two suffixes | LDAPS on port 3636 (JIM's Connected Systems; the harness's own `ldapsearch` checks use LDAP on 3389 inside the container), `entryUUID`, RFC 4512 schema, Retro Changelog delta import; every OpenLDAP scenario except 14, 19, 22 and 32 (OpenLDAP only), 17 (Samba AD only), 23 and 26 (OpenLDAP and Samba AD only) and 24, 25, 30 and 31 (Active Directory lab only) |
 | `ActiveDirectory` | Real Windows Server domain controllers (the lab) | Hyper-V virtual machines reverted to a checkpoint over SSH, LDAPS on port 636, the LDAP client tools run in the `jim-ldap-toolbox` container; configured by the `JIM_AD_LAB_*` environment variables. Needs the lab host, so it is asked for by name and never included in `All` or `-PreRelease`. Scenarios 24 and 25 run on it only. See `test/integration/ad-lab/README.md` |
 | `All` | Every container directory type (full regression) | Runs all scenarios against SambaAD first, then OpenLDAP, then DirectoryServer389; never ActiveDirectory |
 
@@ -1475,6 +1487,50 @@ PRD Scenario 5 (re-derivation after Collision Remediation) joins #242 release 4'
 
 **Runner handling.** As Scenario 024: Active Directory lab only, template independent, refused on any other explicit directory type, skipped by a sweep of any other directory. `Get-ActiveDirectoryLabInstance` returns Primary and Source, `Select-ActiveDirectoryLabCheckpoint` reverts both to `baseline` and never asks for population, and the runner trusts both domain controllers' certificates before the scenario starts.
 
+#### Scenario 029: JIM Provisioning Its Own SCIM Endpoint
+
+**Status**: implemented for [#124](https://github.com/TetronIO/JIM/issues/124) Phase 6, the SCIM 2.0 Service Provider's acceptance test (the round trip with the shipped client that #545 left outstanding). Its setup switches the Preview `Features.ScimServiceProvider` flag on.
+
+**Purpose**: prove the SCIM 2.0 Service Provider end to end with JIM's own SCIM 2.0 Client Connector as the identity provider, over HTTPS on a real socket exactly as between two JIM instances, and prove the forms real identity providers send that the client never does.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-029-ScimRoundTrip.ps1` and `test/integration/Setup-Scenario-029.ps1`. The setup creates three Connected Systems: an HR CSV source holding people and one group; the Service Provider, imported by a Schedule of Delta Import and Delta Synchronisation, whose Users join by `userName` and contribute Job Title (which only the identity provider requests set) and whose Groups join by display name; and the Client, pointed at the Service Provider's base URL on `jim.web` with a key scoped to it. It mints two scoped keys, one for the Client and one for the scenario's direct requests, so each has a summary Activity of its own; their secrets are held in a temporary file because a key's secret is shown once.
+
+**Steps** run in order with `All`: `Provision` (discovery, POST, members added by PATCH, a confirming Full Import paging through the endpoint four at a time), `Inbound` (the Schedule brings every person and the group, with its members, into the Metaverse), `Update` (a PATCH carrying `If-Match`, confirmed by the client's Delta Import), `Clear` (a value-less replace), `IdentityProvider` (a lower-case scheme, a bare key, a trailing slash, unknown query parameters, the empty credential probe, a capitalised `op`, Booleans as strings, a pushed password refused and stored nowhere, a duplicate `userName` refused with 409), `Conflict` (the client exports over a change made since it last read: 412, reported as a concurrency conflict), `Deprovision`, `Restore` (the Service Provider's Connector Space cleared and rebuilt from the store by a Full Import, with nothing re-sent) and `Summary` (each key's SCIM request summary Activity counts what it did).
+
+**Runner handling.** No directory: the runner skips directory population and ignores `-DirectoryConfig` and `-Template`. The SCIM 2.0 Client Connector refuses plain HTTP to anything but a loopback address, so every run applies `test/integration/docker/jim-web-https.override.yml`, which serves HTTPS on 8443 on the Docker network only (not published) from a certificate the runner mints for `jim.web`; the host, the health check and every other scenario keep using HTTP on 8080.
+
+#### Scenario 030: AD FS Identity Provider Trust
+
+**Status**: implemented for [#2355](https://github.com/TetronIO/JIM/issues/2355) and [#2363](https://github.com/TetronIO/JIM/issues/2363). Active Directory lab only.
+
+**Purpose**: the first scenario that signs in through the lab's AD FS server, `adfs-primary`, proving the first-install path against an AD FS farm whose HTTPS certificate comes from an internal certificate authority. The runner starts JIM with AD FS as its identity provider (`test/integration/docker/docker-compose.ad-lab-adfs.yml`, added after `docker-compose.ad-lab.yml`), reverts `adfs-primary` after `dc-primary`, and waits for it to publish its discovery document. AD FS's certificate is self-signed and deliberately trusted by nothing in the container.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-030-ActiveDirectoryFederationTrust.ps1`; there is no setup script. Its checks depend on each other, so only `-Step All` is meaningful: `Untrusted` (JIM reports the identity provider Untrusted, names the service host, and suggests trusting the certificate AD FS presents, compared by thumbprint with the one the runner read off the wire into `test/integration/ad-lab-certs/`), `Trust` (`Add-JIMCertificate -FromIdentityProvider` trusts it for sign-in), `Trusted` (JIM reports it Trusted by the JIM certificate store) and `AlreadyTrusted` (trusting it again changes nothing, and says so). Nobody signs in here; `Reset-JIMSystem` is never called, because the trust is the scenario's result.
+
+#### Scenario 031: AD FS Sign-In
+
+**Status**: implemented for [#2355](https://github.com/TetronIO/JIM/issues/2355) and [#2441](https://github.com/TetronIO/JIM/issues/2441). Active Directory lab only. Reported as its own commit status, `jim-ad-lab-adfs`, which gates releases (`engineering/RELEASE_PROCESS.md`, "Its AD FS gate").
+
+**Purpose**: sign people in to JIM through `adfs-primary` end to end, with JIM set up exactly as a customer sets it up.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-031-ActiveDirectoryFederationSignIn.ps1`, `test/integration/Setup-Scenario-031.ps1`, and `test/integration/utils/AdfsSignIn-Helpers.ps1` with `AdfsSignInClient.psm1` (a sign-in client run from the LDAP toolbox container, the lab's stand-in for an administrator's workstation, over plain HTTP with no browser). Before the scenario the runner (Step 4e) registers JIM on AD FS with `Register-JIMIdentityProvider`, creates the sign-in administrator `jim-sso-admin` in `dc-primary`, and recreates `jim.web` matching AD FS's `oid` claim to the built-in Object GUID attribute, with that account as its initial administrator; the registration's values travel in the runner's process environment (`JIM_AD_LAB_ADFS_*`), never a file. The setup synchronises `OU=Users,OU=Corp` into JIM so an ordinary employee has a Metaverse Object, matched by `objectGUID`.
+
+**Checks** (only `-Step All` is meaningful): the administrator signs in to the portal through the OpenID Connect code flow; JIM provisioned them from the `oid` claim as an Administrator; a bearer token AD FS issued is accepted on `/api`, Administrator APIs included; `Connect-JIM` signs them in by PKCE with the public client; the portal and `Connect-JIM` resolve them to the same Metaverse Object; the employee, renamed in Active Directory, still signs in as the same Metaverse Object; the employee, holding no JIM role, is told who they are and refused every Administrator API; and the API reference's Try It signs the administrator in as a browser on JIM's page does, its Content Security Policy letting it reach the token endpoint's origin and nothing else outside JIM (#2594).
+
+**Runner handling.** `Test-ScenarioRunsOnItsOwn` keeps it out of an Active Directory sweep; `ad-lab.yml` runs it as a step of its own after the LDAP scenarios, so a sign-in failure never colours the `jim-ad-lab` result or the reverse. It still runs by itself on request (`-Scenario 31`).
+
+#### Scenario 032: Intra-type References
+
+**Status**: implemented for [#2492](https://github.com/TetronIO/JIM/issues/2492). OpenLDAP only.
+
+**Purpose**: since synchronisation pages Object Types in dependency order, references between types resolve in the page loop, and Scenario 008's group-to-user references no longer reach the cross-page reference step. This scenario is that step's end-to-end exercise against a real directory: users have managers and groups contain groups, references within one Object Type that no type order can resolve in the page loop, so about half of each type is deferred to **Resolving cross-page references**, which re-flows their references and replaces the Pending Exports the page loop staged. It is also the step's measurement scenario: it reports the step's duration and reference-value count, so a change to the step can be timed against the same data. Changes to Pending Export staging or the cross-page pass run it alongside Scenario 008 (`src/JIM.Application/CLAUDE.md`).
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-032-IntraTypeReferences.ps1`, configured by `Setup-Scenario-008.ps1 -IntraTypeReferences` (Scenario 008's rules plus the manager mappings) and self-populating through `test/integration/Populate-OpenLDAP-Scenario-032.ps1`: in the Source suffix every user but the first reports to user `(i - 1) / 5` and group `g` contains groups `2g + 1` and `2g + 2`, deterministically, while the Target suffix starts empty.
+
+**Steps**: `InitialSync` (and `All`): Full Imports, a Source Full Synchronisation that must run the cross-page step (the scenario fails if the step did not run, since it would no longer exercise it), a Target Full Synchronisation, export and confirming import with no unresolved references; then every user in Target has the right manager and every group the right members, and a repeat Full Synchronisation stages no Pending Export. `-Template` takes Nano to Large.
+
+**Runner handling.** Skipped by the general OpenLDAP population (it asserts on everything it provisions into an empty Target suffix) and refused on any other directory type.
+
 ### Phase 2 - Database Scenarios
 
 > The road-mapped numbers here have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, Attribute Priority (#91) took 14, the SCIM 2.0 Client Connector (#545) took 15, and the JIM SQL Connector matrix ([#170](https://github.com/TetronIO/JIM/issues/170)) takes 16. What was previously listed as "Scenario 016: Database Source/Target" is delivered by the matrix scenario below. Initial Password Provisioning then claimed 17, and Scenarios 018-022 were claimed in turn (see below), so the two remaining planned scenarios are unnumbered until one is started.
@@ -2336,6 +2392,9 @@ JIM/
         ├── Setup-Scenario-023.ps1                            # Configures JIM for Scenario 023 (composes Setup-Scenario-001 -GenerateAccountName -DeriveFromAccountName)
         ├── Setup-Scenario-026.ps1                            # Configures JIM for Scenario 026 (composes Setup-Scenario-001 -GenerateAccountName -DeriveFromAccountName)
         ├── Setup-Scenario-028.ps1                            # Configures Keycloak (kcadm.sh) and JIM for Scenario 028 (SCIM Connector against Keycloak)
+        ├── Setup-Scenario-029.ps1                            # Configures JIM for Scenario 029 (HR CSV, the SCIM 2.0 Service Provider and the SCIM 2.0 Client pointed at it)
+        ├── Setup-Scenario-031.ps1                            # Synchronises the lab's Active Directory into JIM for Scenario 031 (AD FS sign-in)
+        ├── Setup-Scenario-033.ps1                            # Configures JIM for Scenario 033 (two File Connector systems, the unscoped provisioning export rule unless -OmitExportRule)
         ├── New-Scenario-016-TestDatabase.ps1                  # Deterministic SQL seeder for Scenario 016
         ├── Add-Scenario-008-Schedules.ps1                      # Optional schedule wiring for Scenario 008
         ├── Populate-SambaAD.ps1                            # Samba AD population (Scenarios 001, 004, 005, etc.)
@@ -2345,6 +2404,7 @@ JIM/
         ├── Populate-OpenLDAP-Scenario-014.ps1                # OpenLDAP population (Scenario 014)
         ├── Populate-OpenLDAP-Scenario-019.ps1                # OpenLDAP population (Scenario 019)
         ├── Populate-OpenLDAP-Scenario-022.ps1                # OpenLDAP population (Scenario 022)
+        ├── Populate-OpenLDAP-Scenario-032.ps1                # OpenLDAP population (Scenario 032: managers and nested groups)
         ├── Generate-TestCSV.ps1                            # CSV generation (HR, training, departments)
         ├── Get-OrGenerate-TestCSV.ps1                      # Cached wrapper around Generate-TestCSV
         ├── Test-CsvCache.ps1                               # CSV cache determinism acceptance test
@@ -2384,13 +2444,22 @@ JIM/
         │   ├── Invoke-Scenario-021-RunProfileSafeguards.ps1       # Run Profile export and deletion-detection limits
         │   ├── Invoke-Scenario-022-OpenLdapPasswordPolicy.ps1     # OpenLDAP password policy discovery (OpenLDAP only)
         │   ├── Invoke-Scenario-023-UniqueValueGeneration.ps1      # Unique Value Generation, release 1 (OpenLDAP or Samba AD)
+        │   ├── Invoke-Scenario-024-ActiveDirectoryPasswordPolicy.ps1 # Active Directory password policy (lab only)
+        │   ├── Invoke-Scenario-025-ActiveDirectoryDeltaImportIntegrity.ps1 # Active Directory Delta Import integrity (lab only)
         │   ├── Invoke-Scenario-026-DerivedAttributeFlows.ps1      # Metaverse-Derived Attribute Flows (OpenLDAP or Samba AD)
         │   ├── Invoke-Scenario-027-FirstSynchronisation.ps1       # The tested tutorial, run from its docs page (File Connector only)
         │   ├── Invoke-Scenario-028-ScimKeycloak.ps1               # SCIM 2.0 Client Connector against Keycloak's SCIM API
+        │   ├── Invoke-Scenario-029-ScimRoundTrip.ps1              # JIM provisioning its own SCIM endpoint (no directory)
+        │   ├── Invoke-Scenario-030-ActiveDirectoryFederationTrust.ps1 # AD FS identity provider trust (lab only)
+        │   ├── Invoke-Scenario-031-ActiveDirectoryFederationSignIn.ps1 # AD FS sign-in, posted as jim-ad-lab-adfs (lab only)
+        │   ├── Invoke-Scenario-032-IntraTypeReferences.ps1        # Cross-page reference step: managers and nested groups (OpenLDAP only)
+        │   ├── Invoke-Scenario-033-InitialAdministratorProvisioning.ps1 # The initial administrator provisioned the same way whether the unscoped export rule or the administrator came first (File Connector only)
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 011 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 004, 005)
         ├── docker/
         │   ├── docker-compose.integration-tests.yml             # External system containers
+        │   ├── docker-compose.ad-lab-adfs.yml                   # AD FS as jim.web's identity provider (Scenarios 030 and 031)
+        │   ├── jim-web-https.override.yml                       # HTTPS for jim.web on the Docker network (Scenario 029)
         │   ├── samba-ad-prebuilt/                                # Custom prebuilt Samba AD base image
         │   │   ├── Dockerfile
         │   │   ├── Build-SambaImages.ps1                         # Image build script
@@ -2426,6 +2495,7 @@ JIM/
         │   ├── Invoke-IntegrationScenario.ps1                    # Runs one scenario and returns its outcome
         │   ├── Initialize-WorkerLogDirectories.ps1               # Worker log directory preparation
         │   ├── Scenario-016-Helpers.ps1                            # Scenario 016 shared helpers
+        │   ├── AdfsSignIn-Helpers.ps1                            # AD FS sign-in checks for Scenario 031 (with AdfsSignInClient.psm1)
         │   └── *.Tests.ps1                                       # Pester tests for the helpers above
         ├── test-data/                                            # Generated CSV test data (gitignored)
         └── results/                                              # Test results output (gitignored)
@@ -2440,8 +2510,8 @@ All integration-test containers are internal to the `jim-network` Docker network
 | `samba-ad-primary` | Primary directory (single-directory scenarios) | 389 / 636 | LDAP / LDAPS |
 | `samba-ad-source` | Cross-domain source (Scenarios 002 & 8) | 389 / 636 | LDAP / LDAPS |
 | `samba-ad-target` | Cross-domain target (Scenarios 002 & 8) | 389 / 636 | LDAP / LDAPS |
-| `openldap-primary` | OpenLDAP, two suffixes (all directory scenarios; Scenarios 014, 019 and 022 only run here) | 1389 / 1636 | LDAP / LDAPS |
-| `dirsrv-primary` | 389 Directory Server, two suffixes (every OpenLDAP scenario except 14, 19 and 22; profile `dirsrv`); JIM connects over LDAPS, the harness's own checks over LDAP inside the container | 3389 / 3636 | LDAP / LDAPS |
+| `openldap-primary` | OpenLDAP, two suffixes (all directory scenarios; Scenarios 014, 019, 022 and 032 only run here) | 1389 / 1636 | LDAP / LDAPS |
+| `dirsrv-primary` | 389 Directory Server, two suffixes (every OpenLDAP scenario except 14, 19, 22 and 32; profile `dirsrv`); JIM connects over LDAPS, the harness's own checks over LDAP inside the container | 3389 / 3636 | LDAP / LDAPS |
 | `sqlserver-hris-a` | Phase 2 source: Microsoft SQL Server 2022 (Scenario 016) | 1433 | TCP |
 | `oracle-hris-b` | Phase 2 source: Oracle Database Free 23ai, CDB service `FREE`, pluggable database `FREEPDB1` (Scenario 016) | 1521 | TCP |
 | `postgres-target` | Phase 2, PostgreSQL 16: staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 016 | 5432 | TCP |
@@ -2464,13 +2534,13 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2026-09-23) - ✅ COMPLETE
+### Phase 1 Status (as of 2026-10-29) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
 | API Endpoints | ✅ Complete | Schema management, Synchronisation Rules, mappings, Run Profiles |
-| PowerShell Module | ✅ Complete | Cmdlets cover every implemented scenario (1, 2, 4-22) |
+| PowerShell Module | ✅ Complete | Cmdlets cover every implemented scenario (1, 2, 4-32) |
 | Scenario 001 | ✅ Complete | 8 lifecycle tests (Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection) plus ImportOnly/SyncOnly diagnostic steps |
 | Scenario 002 | ✅ Complete | All 4 tests (Provision, ForwardSync, ReverseSync, Conflict) |
 | Scenario 003 | ⏳ Pending | Stub script exists, not yet implemented |
@@ -2499,6 +2569,11 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 026 | ✅ Passing (Medium, Samba AD and OpenLDAP) | Metaverse-Derived Attribute Flows: dependency ordering (Account Name, Email, User Principal Name), cross-system inputs in either order (the derived-input mark), stability, Missing Input Behaviour, cycle refusal, surface parity (#1750) |
 | Scenario 027 | ✅ Complete | The tested tutorial: runs `docs/getting-started/first-synchronisation.md` from the page and asserts its checkpoints (#1454) |
 | Scenario 028 | ✅ Implemented | SCIM 2.0 Client Connector against Keycloak's built-in SCIM API, guarding the Keycloak behaviours #2094 works around (#2349) |
+| Scenario 029 | ✅ Implemented | JIM provisioning its own SCIM endpoint: the SCIM 2.0 Service Provider's acceptance test, with the identity provider request forms, conflict, deprovision, restore from the store and the summary Activity (#124) |
+| Scenario 030 | ✅ Implemented (lab only) | AD FS identity provider trust: Untrusted, trusted for sign-in from the identity provider's own certificate, Trusted, already trusted (#2355, #2363) |
+| Scenario 031 | ✅ Implemented (lab only) | AD FS sign-in: portal, initial administrator, bearer token, `Connect-JIM`, renamed employee, no-role employee, Try It; posted as `jim-ad-lab-adfs` (#2441) |
+| Scenario 032 | ✅ Implemented | Intra-type references through the cross-page reference step, exported and asserted manager by manager and member by member; the step's measurement scenario (OpenLDAP only) (#2492) |
+| Scenario 033 | ✅ Implemented | Initial administrator provisioning: the unscoped provisioning User export rule provisions an internal Metaverse Object the same way in both orders, through a Delta Synchronisation of another Connected System (#2615) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 016 going green) and performance baselines |
 | GitHub Actions | ✅ Release gate | `pre-release.yml` runs the pre-release regression when a release PR merges and on demand; `release.yml` requires it once `JIM_PRE_RELEASE_GATE_ENFORCED` is on |
 

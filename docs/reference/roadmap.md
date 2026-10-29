@@ -26,9 +26,8 @@ For the latest status and issue tracking, see the public [JIM Roadmap project bo
 
 ## :material-flag-checkered: v1.0: Identity Lifecycle Complete
 
-The first stable release, delivering a production-ready identity lifecycle platform.
+The first stable release, delivering a production-ready identity lifecycle platform. The expression engine enhancements (a wider function library, an editor that suggests functions and attributes as you type, checks when you save, and testers for every expression, Scoping Criterion and Object Matching Rule) have already shipped.
 
-- Expression engine enhancements (additional functions, improved error reporting)
 - Advanced scheduling capabilities (dependencies, conditional execution)
 - Comprehensive REST API coverage for all administrative operations
 - Full PowerShell module coverage with parity across all API endpoints

@@ -51,7 +51,7 @@ public class ActivityRunProfileExecutionItem
 
     /// <summary>
     /// The Metaverse Object this item is about, where it records a Metaverse Object rather than a Connected System
-    /// Object (an export scope review, #1971). Deliberately not a foreign key: the Metaverse Object can be deleted
+    /// Object (an Export Review, #1971). Deliberately not a foreign key: the Metaverse Object can be deleted
     /// later, and the item keeps the id as history, as it keeps its other snapshots.
     /// </summary>
     public Guid? MetaverseObjectId { get; set; }

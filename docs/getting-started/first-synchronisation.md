@@ -4,7 +4,7 @@ description: Synchronise 25 people from an HR file, through the Metaverse, into 
 type: tutorial
 audience: implementer
 scenario: 027-FirstSynchronisation
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Your First Synchronisation
@@ -222,7 +222,7 @@ It has a scope, too. Your JIM most likely holds one User already: you, the admin
 
 ## :material-play-circle-outline: Step 6: Create the Run Profiles
 
-A Run Profile is one operation JIM runs against a Connected System. You need three: a Full Import to read the HR file, a Full Synchronisation to apply the rules, and an Export to write the staff directory. Each one reads or writes the file its Connected System names, so leave **File Path** empty on all three.
+A Run Profile is one operation JIM runs against a Connected System. You need three: a Full Import to read the HR file, a Full Synchronisation to apply the rules, and an Export to write the staff directory. Each one reads or writes the file its Connected System names: leave the Full Import's **File Path** empty, and the other two have none.
 
 === "Portal"
 
