@@ -7,7 +7,6 @@ using JIM.Models.Core;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
@@ -33,12 +32,12 @@ public partial class SyncRepository
     /// </para>
     /// </summary>
     /// <remarks>
-    /// Unlike CSO creates (which happen during import), MVO creates happen during sync where
-    /// downstream code (change tracking, export evaluation) still relies on EF's change tracker
-    /// to persist MVO-related entities (e.g., MetaverseObjectChange via mvo.Changes collection).
-    /// After raw SQL persistence, MVOs are attached to the change tracker as Unchanged so that
-    /// EF can discover child entities added to their navigation collections. This bridge will
-    /// be removed when MVO change tracking is also converted to raw SQL.
+    /// The objects are left untracked (#2598). Everything the synchronisation page does with them afterwards is
+    /// raw SQL (attribute value updates, change records, Pending Exports, join states, deletion), and the page runs
+    /// with change detection off, so no EF save discovers them through a tracked object's navigation. Attaching them
+    /// instead cost roughly the square of a group's membership in EF's change tracker: 211 s for one page at
+    /// Scale750k40kGroups. Code that does save through EF on this context must not walk a graph that can reach a
+    /// new object (<c>DbSet.Update</c>, <c>Remove</c> on a detached root), or it inserts or updates it a second time.
     /// </remarks>
     public async Task CreateMetaverseObjectsBulkAsync(List<MetaverseObject> metaverseObjects)
     {
@@ -138,65 +137,6 @@ public partial class SyncRepository
                 }
             }
         }
-
-        // Bridge: attach persisted MVOs to the EF change tracker as Unchanged.
-        //
-        // Downstream sync code (CreatePendingMvoChangeObjectsAsync, EvaluatePendingExportsAsync)
-        // still relies on EF to persist child entities added to MVO navigation collections
-        // (e.g., mvo.Changes.Add(change)). Without tracking, these child entities are orphaned
-        // and SaveChangesAsync either misses them or hits concurrency errors when it discovers
-        // untracked MVOs through navigation property traversal.
-        //
-        // We set the shadow FK "TypeId" explicitly since MetaverseObject has no TypeId property
-        // (it's inferred by EF from the Type navigation). The xmin concurrency token is not set:
-        // PostgreSQL assigned a real xmin during COPY, but we do not know its value, so the tracked
-        // OriginalValue stays 0. This used to be a latent hazard: if a just-created MVO were then
-        // updated via EF SaveChangesAsync in the same page flush, the update issued "... WHERE xmin = 0",
-        // matched no rows, and threw an unhandled DbUpdateConcurrencyException that aborted the run (the
-        // pre-release Full Regression Scenario-014-AttributePriority failure). That hazard is now closed:
-        // the MVO update path is raw SQL too (see UpdateMetaverseObjectsBulkAsync), keyed by Id with no
-        // xmin predicate, and it detaches the graph afterwards so no later EF SaveChangesAsync re-runs the
-        // xmin-guarded update. The bogus tracked xmin is therefore harmless: nothing on the sync write path
-        // reads it. EF-tracked writes elsewhere (UI / API edits) still enforce xmin against their own reads.
-        using var attachSpan = MvoActivitySource.StartActivity("Mvo.Create.AttachToTracker");
-        foreach (var mvo in metaverseObjects)
-        {
-            var entry = _context.Entry(mvo);
-            if (entry.State == EntityState.Detached)
-            {
-                entry.State = EntityState.Unchanged;
-                // Set shadow FK for the Type relationship
-                SetShadowForeignKeyAsPersisted(entry.Property("TypeId"), mvo.Type.Id);
-            }
-
-            foreach (var av in mvo.AttributeValues)
-            {
-                var avEntry = _context.Entry(av);
-                if (avEntry.State == EntityState.Detached)
-                {
-                    avEntry.State = EntityState.Unchanged;
-                    // Set shadow FK for the MetaverseObject relationship
-                    SetShadowForeignKeyAsPersisted(avEntry.Property("MetaverseObjectId"), mvo.Id);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Sets a shadow foreign key on an entry just attached as Unchanged to the value the bulk write already
-    /// persisted, without leaving the property (and so the entity) Modified. Setting only
-    /// <c>CurrentValue</c> is not enough: when the principal is not tracked by this context (every sync page
-    /// after the first, because the page boundary clears the tracker), relationship fix-up has not filled the
-    /// shadow value in, so the attach snapshot holds an empty original value and the assignment registers as a
-    /// change. For a Metaverse Object that means the next EF <c>SaveChangesAsync</c> on the context issues an
-    /// xmin-guarded UPDATE with the unknown COPY-assigned xmin (tracked as 0), which matches no rows and throws
-    /// DbUpdateConcurrencyException (Pre-Release Scenario-023-UniqueValueGeneration, page 2 of 2).
-    /// </summary>
-    private static void SetShadowForeignKeyAsPersisted(PropertyEntry property, object value)
-    {
-        property.CurrentValue = value;
-        property.OriginalValue = value;
-        property.IsModified = false;
     }
 
     /// <summary>
@@ -573,8 +513,8 @@ public partial class SyncRepository
         //    marked Modified, and any attribute values added during processing may be tracked as Added; leaving them
         //    would let a later EF SaveChangesAsync in the same page flush (e.g. the CSO join-state update) re-run the
         //    xmin-guarded MVO update that this method exists to avoid, or re-insert attribute values already written
-        //    here as raw SQL (a duplicate-key violation). Detaching is the definitive guard against recurrence: unlike
-        //    re-attaching as Unchanged (the create path's bridge), a detached entity cannot be re-persisted by EF at all.
+        //    here as raw SQL (a duplicate-key violation). Detaching is the definitive guard against recurrence: a detached
+        //    entity cannot be re-persisted by EF at all, which is also why the create path leaves its objects untracked.
         DetachPersistedMvoGraphs(metaverseObjects);
     }
 
@@ -920,8 +860,18 @@ public partial class SyncRepository
     /// Deletes multiple MVOs in one set-based pass (issue #993). Each FK cleanup statement from
     /// the singular <see cref="SyncRepository.DeleteMetaverseObjectAsync"/> runs once for the whole
     /// batch via <c>= ANY</c> instead of once per object, and the MVO rows themselves are removed
-    /// in a single SaveChanges. Semantics per object are identical to the singular method.
+    /// by one raw <c>DELETE</c>. Semantics per object are identical to the singular method.
     /// </summary>
+    /// <remarks>
+    /// The rows are deleted by raw SQL, not EF's <c>RemoveRange</c>, because a deletion candidate arrives detached
+    /// (the bulk update that wrote its marker detaches what it writes) and <c>RemoveRange</c> on a detached object
+    /// attaches its whole graph: through its reference values that reaches objects created on the same page, which
+    /// the bulk create leaves untracked (#2598), and the save then wrote their references to the deleted object, rows
+    /// the cleanup above had already removed, and threw DbUpdateConcurrencyException. Every foreign key into the
+    /// table either cascades or sets null in the database, or is cleared by a statement above, so the database does
+    /// what EF's cascade did; <see cref="ReflectDeletedMetaverseObjectsInTracker"/> then does the same to anything the
+    /// context still tracks.
+    /// </remarks>
     public async Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
     {
         if (metaverseObjects.Count == 0)
@@ -980,8 +930,8 @@ public partial class SyncRepository
             @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
             mvoIds);
 
-        _context.MetaverseObjects.RemoveRange(metaverseObjects);
-        await _context.SaveChangesAsync();
+        await _context.Database.ExecuteSqlRawAsync(@"DELETE FROM ""MetaverseObjects"" WHERE ""Id"" = ANY({0})", mvoIds);
+        ReflectDeletedMetaverseObjectsInTracker(mvoIdSet);
 
         if (ownTransaction != null)
             await ownTransaction.CommitAsync();
@@ -989,6 +939,55 @@ public partial class SyncRepository
         Log.Information("DeleteMetaverseObjectsAsync: Deleted {Count} Metaverse Objects in bulk, retiring {RetiredCount} generated value(s)",
             metaverseObjects.Count, retirements.Count);
         return retirements;
+    }
+
+    /// <summary>
+    /// Brings the change tracker into line with a raw delete of Metaverse Objects: the deleted objects are detached,
+    /// a tracked entity whose foreign key to one of them cascades in the database is detached too (its row is gone),
+    /// and one whose foreign key sets null has the null recorded as already persisted, so no later EF save writes the
+    /// stale value back or acts on a row that no longer exists. Driven by the model's foreign keys, so a child table
+    /// added later is covered without being named here. Change detection is suppressed while enumerating, for the
+    /// reason given on <see cref="DetachTrackedEntities{T}"/>.
+    /// </summary>
+    private void ReflectDeletedMetaverseObjectsInTracker(HashSet<Guid> deletedIds)
+    {
+        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            foreach (var entry in _context.ChangeTracker.Entries().ToList())
+            {
+                if (entry.Entity is MetaverseObject metaverseObject)
+                {
+                    if (deletedIds.Contains(metaverseObject.Id))
+                        entry.State = EntityState.Detached;
+                    continue;
+                }
+
+                foreach (var foreignKey in entry.Metadata.GetForeignKeys()
+                    .Where(fk => fk.PrincipalEntityType.ClrType == typeof(MetaverseObject) && fk.Properties.Count == 1))
+                {
+                    var keyProperty = entry.Property(foreignKey.Properties[0].Name);
+                    if (keyProperty.CurrentValue is not Guid referencedId || !deletedIds.Contains(referencedId))
+                        continue;
+
+                    if (foreignKey.DeleteBehavior is DeleteBehavior.Cascade or DeleteBehavior.ClientCascade)
+                    {
+                        entry.State = EntityState.Detached;
+                        break;
+                    }
+
+                    keyProperty.CurrentValue = null;
+                    keyProperty.OriginalValue = null;
+                    keyProperty.IsModified = false;
+                    foreignKey.DependentToPrincipal?.PropertyInfo?.SetValue(entry.Entity, null);
+                }
+            }
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     #endregion

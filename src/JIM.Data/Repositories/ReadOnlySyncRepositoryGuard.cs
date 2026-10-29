@@ -519,8 +519,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => throw new PreviewWriteAttemptedException(nameof(UpdateMetaverseObjectsAsync));
 
-    public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
-        => throw new PreviewWriteAttemptedException(nameof(UpdateMetaverseObjectAsync));
+    public Task SetMetaverseObjectLastConnectorDisconnectedDateAsync(Guid metaverseObjectId, DateTime lastConnectorDisconnectedDate)
+        => throw new PreviewWriteAttemptedException(nameof(SetMetaverseObjectLastConnectorDisconnectedDateAsync));
 
     public Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
         => throw new PreviewWriteAttemptedException(nameof(DeleteMetaverseObjectAsync));

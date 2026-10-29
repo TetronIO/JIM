@@ -4146,10 +4146,9 @@ public abstract class SyncTaskProcessorBase
                 Log.Verbose("PersistPendingMetaverseObjectsAsync: Released {Count} obsolete CSO join slot(s) before writing new joins", obsoleteSlotsToRelease.Count);
             }
 
-            // For projected CSOs, MetaverseObjectId was not set at projection time (MVO had
-            // no ID yet). Now that CreateMetaverseObjectsAsync has persisted the MVOs, EF has
-            // assigned IDs and relationship fixup has set MetaverseObjectId on the CSOs.
-            // Ensure the FK is populated for any CSO where it's still null.
+            // For projected CSOs, MetaverseObjectId was not set at projection time, only the navigation.
+            // CreateMetaverseObjectsAsync leaves the new objects untracked (#2598), so no relationship
+            // fix-up fills the FK in: set it from the navigation for any CSO where it is still null.
             foreach (var cso in _pendingCsoJoinUpdates)
             {
                 if (cso.MetaverseObjectId == null && cso.MetaverseObject != null)
@@ -6510,7 +6509,7 @@ public abstract class SyncTaskProcessorBase
                     "ProcessMvoDeletionsIndividuallyAsync: Failed to delete MVO {MvoId}, marking for housekeeping retry",
                     mvo.Id);
                 mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
-                await _syncRepo.UpdateMetaverseObjectAsync(mvo);
+                await _syncRepo.SetMetaverseObjectLastConnectorDisconnectedDateAsync(mvo.Id, mvo.LastConnectorDisconnectedDate.Value);
             }
         }
 
