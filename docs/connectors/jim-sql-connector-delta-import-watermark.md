@@ -103,9 +103,17 @@ Repeat for each related table. A related table whose rows are only ever inserted
 
 Where the Object Type reads from a **view**, expose the underlying table's watermark column through the view and name that.
 
-## :material-shape-outline: 3. Configure the Object Type
+## :material-tune-variant: 3. Choose the mode
 
-Add a `watermarkColumn` to every Object Type that is selected for synchronisation, and to every related table of those Object Types, in the Connected System's **Object Types** document. An Object Type that is not selected (a table JIM only exports to, say) takes no part in a Delta Import and needs none; nothing outside JIM changes such a table, so there is nothing to detect.
+On the Connected System's **Settings** tab, set **Delta Import Mode** to **Watermark Column**. Leave saving until the next step: the Object Type cards follow the mode as it stands on screen.
+
+## :material-shape-outline: 4. Give each Object Type a watermark column, then save
+
+Every Object Type selected for synchronisation needs a watermark column, and so does every related table of those Object Types. An Object Type that is not selected (a table JIM only exports to, say) takes no part in a Delta Import and needs none; nothing outside JIM changes such a table, so there is nothing to detect.
+
+With the mode set, each Object Type's card has a **Delta Import** section with a **Watermark column** field, chosen from the table's own columns. A related table's watermark column is in its own dialog, opened from the multi-valued attribute's edit button on the card. The card of an Object Type selected on the Schema tab counts a missing watermark column among its problems.
+
+In the Object Types document (what REST and PowerShell send, and what **View as JSON** shows), the field is `watermarkColumn`, on the Object Type and on each related table:
 
 ```json title="Object Types with watermark columns"
 {
@@ -131,9 +139,7 @@ Add a `watermarkColumn` to every Object Type that is selected for synchronisatio
 }
 ```
 
-## :material-content-save-check-outline: 4. Choose the mode and save
-
-On the Connected System's Settings tab, set **Delta Import Mode** to **Watermark Column** and save. Any selected Object Type, or related table of one, without a `watermarkColumn` is reported now, naming it. The same check runs when you select an Object Type on the Schema tab (or through the REST API or PowerShell), so selecting one that lacks a watermark column while this mode is set is refused at that point rather than by the next Delta Import; deselect it, or give it a watermark column.
+Then select **Save Settings**. Any selected Object Type, or related table of one, without a watermark column is reported now, naming it. The same check runs when you select an Object Type on the Schema tab (or through the REST API or PowerShell), so selecting one that lacks a watermark column while this mode is set is refused at that point rather than by the next Delta Import; deselect it, or give it a watermark column.
 
 ## :material-import: 5. Baseline with a Full Import
 

@@ -1,9 +1,9 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Doing (Phases 1-6 complete)
+- **Status:** Done
 - **Issue:** [#2570](https://github.com/TetronIO/JIM/issues/2570)
-- **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/doing/PRD_SQL_OBJECT_TYPES_EDITOR.md)
-- **Last Updated:** 2026-10-28
+- **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/done/PRD_SQL_OBJECT_TYPES_EDITOR.md)
+- **Last Updated:** 2026-10-29
 
 ## Overview
 
@@ -145,7 +145,7 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - Copy and paste; the shipped example offered for an empty document.
 - **Tests:** model tests for problem-to-line mapping (JSON-level and semantic); bUnit test that an invalid document blocks switching and saving (PRD Scenario 4).
 
-### Phase 7: Documentation, changelog and lifecycle
+### Phase 7: Documentation, changelog and lifecycle ✅
 
 - `docs/connectors/jim-sql-connector.md` Step 2 rewritten around the editor, keeping the document reference for REST and PowerShell; the Delta Import pages describe the editor fields beside the document fields; new screenshots via `Capture-Screenshots.ps1`.
 - `engineering/developer/connectors.md`: `IConnectorCatalogue`.
@@ -190,6 +190,9 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - **Phase 5, adding before the last step:** the dialog offers **Add Object Type** from the Anchor step on, since references and multi-valued attributes are optional; the PRD's "each step can be completed or skipped" is met by that rather than by a Skip button on each optional step.
 - **Phase 5, Delta Import fields:** the dialog's four steps match the PRD and leave out the watermark column and change log; the new card opens with them, alone, so the mode's fields are the next thing seen.
 - **Phase 4, Delta Import problems:** a missing watermark column or change log is shown on the card only for an Object Type selected on the Schema tab, matching the rule saving the Schema tab applies (#1424).
+
+- **Phase 7, screenshots:** none were added. The documentation site has no screenshots by design (`engineering/DOCUMENTATION_STANDARD.md`, VOI-5): a screenshot is invalidated by any change to the control it shows and cannot be searched or read aloud. Step 2 names each control instead, with a diagram of the Add Object Type steps, and the two Delta Import pages name the card's fields beside the document's.
+- **Phase 7, Delta Import pages:** both pages now choose the mode before configuring the Object Types, because a card shows its Delta Import fields only once **Delta Import Mode** is set on screen.
 
 - **PRD non-functional requirement "loaded per schema":** the object list is loaded in one call rather than per schema. It is a narrow list of (schema, name, kind) and the provider queries are not schema-filtered today; one call is simpler and fast enough at the stated scale. Column detail is still per object. Revisit if the Phase 4 measurement says otherwise.
 - **PRD open question 4:** declined for this work (see Decisions).
