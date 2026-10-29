@@ -1,6 +1,6 @@
 # Import Rule Changes Take Effect at the Next Synchronisation
 
-- **Status:** Doing (Phases 1 to 6 done; Phases 4 and 5 await a runtime check and screenshots)
+- **Status:** Done
 - **Issue:** [#2615](https://github.com/TetronIO/JIM/issues/2615) (parts B and C; part A ships separately)
 - **Note:** Predicted against actual counts moved to [#2618](https://github.com/TetronIO/JIM/issues/2618): honest only when one change with an informing preview is behind the run.
 
