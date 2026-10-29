@@ -69,7 +69,7 @@ Get-JIMSyncRule [-ConnectedSystemName <string>] [-Name <string>] [-Direction <st
 
 ### Output
 
-The matching rules, or with `-Id`, the one rule.
+The matching rules, or with `-Id`, the one rule. Each carries what it is waiting on: an import rule's AwaitingSynchronisationChangeCount is the saved changes waiting for its Connected System's next synchronisation to process every object of the rule's Object Type, and an export rule's ExportReviewPendingCount is the Metaverse Objects of its type flagged for review against every export rule at the next synchronisation of any Connected System. Each is zero for the other direction.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -90,6 +90,8 @@ The matching rules, or with `-Id`, the one rule.
 | `EnforceState` | `bool` | For an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. Only meaningful on an export rule. |
 | `OutboundDeprovisionAction` | `string` | For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Only meaningful on an export rule. One of `Disconnect` or `Delete`. |
 | `InboundOutOfScopeAction` | `string` | For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule. One of `RemainJoined` or `Disconnect`. |
+| `AwaitingSynchronisationChangeCount` | `int` | For an import rule, how many saved changes (to this rule or to others on the same Connected System Object Type) are waiting for the Connected System's next synchronisation, which will then process every object of the rule's Connected System Object Type. Zero when none are, and for an export rule. |
+| `ExportReviewPendingCount` | `int` | For an export rule, how many Metaverse Objects of the rule's Metaverse Object Type are flagged for review against every export rule at the next synchronisation of any Connected System. Zero when none are, and for an import rule. |
 <!-- END GENERATED: Get-JIMSyncRule -->
 
 ### Examples
@@ -192,6 +194,8 @@ With `-PassThru`, the rule created; otherwise nothing. A deletion source warning
 | `EnforceState` | `bool` | For an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. Only meaningful on an export rule. |
 | `OutboundDeprovisionAction` | `string` | For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Only meaningful on an export rule. One of `Disconnect` or `Delete`. |
 | `InboundOutOfScopeAction` | `string` | For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule. One of `RemainJoined` or `Disconnect`. |
+| `AwaitingSynchronisationChangeCount` | `int` | For an import rule, how many saved changes (to this rule or to others on the same Connected System Object Type) are waiting for the Connected System's next synchronisation, which will then process every object of the rule's Connected System Object Type. Zero when none are, and for an export rule. |
+| `ExportReviewPendingCount` | `int` | For an export rule, how many Metaverse Objects of the rule's Metaverse Object Type are flagged for review against every export rule at the next synchronisation of any Connected System. Zero when none are, and for an import rule. |
 <!-- END GENERATED: New-JIMSyncRule -->
 
 ### Examples
