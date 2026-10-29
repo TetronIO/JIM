@@ -2505,6 +2505,22 @@ public partial class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).CountAsync();
     }
 
+    public async Task<Dictionary<int, int>> GetExportReviewPendingCountsAsync(IReadOnlyCollection<int> metaverseObjectTypeIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectTypeIds);
+        if (metaverseObjectTypeIds.Count == 0)
+            return [];
+
+        // The flag is rare and its partial index (IX_MetaverseObjects_ScopeReviewPending) holds only the flagged rows, so
+        // the planner starts from that index and groups what it finds; the type filter is applied to those few rows.
+        var typeIds = metaverseObjectTypeIds.ToArray();
+        return await Repository.Database.MetaverseObjects
+            .Where(mvo => mvo.ScopeReviewPending && typeIds.Contains(mvo.Type.Id))
+            .GroupBy(mvo => mvo.Type.Id)
+            .Select(group => new { TypeId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.TypeId, row => row.Count);
+    }
+
     /// <summary>
     /// Recursively builds a parenthesised SQL boolean expression for a predefined-search criteria group:
     /// its criteria and nested child groups combined with AND (group type All) or OR (group type Any).

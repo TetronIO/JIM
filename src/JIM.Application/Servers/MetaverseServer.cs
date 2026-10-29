@@ -1804,6 +1804,16 @@ public partial class MetaverseServer
     }
 
     /// <summary>
+    /// How many Metaverse Objects of a type are flagged for review against every export rule at the next synchronisation
+    /// of any Connected System (#2615). Zero when none are.
+    /// </summary>
+    public async Task<int> GetExportReviewPendingCountAsync(int metaverseObjectTypeId)
+    {
+        var counts = await Application.Repository.Metaverse.GetExportReviewPendingCountsAsync([metaverseObjectTypeId]);
+        return counts.GetValueOrDefault(metaverseObjectTypeId);
+    }
+
+    /// <summary>
     /// Gets a paginated list of lightweight Metaverse Object headers with only the attributes defined
     /// in the PredefinedSearch projected directly in SQL for optimum performance at scale.
     /// </summary>

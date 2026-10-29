@@ -8,6 +8,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -130,6 +131,45 @@ public partial class ConnectedSystemServer
                 objectTypeName: importRule.ConnectedSystemObjectTypeName,
                 syncRuleId: null,
                 reason: $"{importRule.ConnectedSystemObjectTypeName}: Object Matching Rule mode switched to {modeName}");
+        }
+    }
+
+    /// <summary>
+    /// The changes an Activity is part of (#2615): those it recorded, when it is a configuration change, and those a
+    /// synchronisation run claimed, when it is a run. Applied or not, grouped by Object Type name, oldest first within it,
+    /// and capped at <see cref="ObjectTypeAwaitingSynchronisation.MaxChangesListed"/>.
+    /// </summary>
+    public Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationsForActivityAsync(Guid activityId) =>
+        Application.Repository.ConnectedSystems.GetConfigurationChangeSynchronisationSummariesForActivityAsync(
+            activityId, ObjectTypeAwaitingSynchronisation.MaxChangesListed);
+
+    /// <summary>
+    /// Fills in what each Synchronisation Rule in a list is waiting on: for an import rule, how many saved changes wait for
+    /// its Connected System's next synchronisation to process every object of its type; for an export rule, how many
+    /// Metaverse Objects of its type are flagged for review against every export rule (#2615). Two reads for the whole
+    /// list, however long it is, and none for a kind the list does not hold.
+    /// </summary>
+    public async Task PopulateSyncRuleReviewStateAsync(IReadOnlyCollection<SyncRuleHeader> headers)
+    {
+        ArgumentNullException.ThrowIfNull(headers);
+
+        var imports = headers.Where(header => header.Direction == SyncRuleDirection.Import).ToList();
+        if (imports.Count > 0)
+        {
+            var waiting = (await Application.Repository.ConnectedSystems.GetConfigurationChangesAwaitingSynchronisationAsync(
+                    imports.Select(header => header.ConnectedSystemId).Distinct().ToList()))
+                .ToDictionary(awaiting => (awaiting.ConnectedSystemId, awaiting.ConnectedSystemObjectTypeId), awaiting => awaiting.ChangeCount);
+            foreach (var header in imports)
+                header.AwaitingSynchronisationChangeCount = waiting.GetValueOrDefault((header.ConnectedSystemId, header.ConnectedSystemObjectTypeId));
+        }
+
+        var exports = headers.Where(header => header.Direction == SyncRuleDirection.Export).ToList();
+        if (exports.Count > 0)
+        {
+            var flagged = await Application.Repository.Metaverse.GetExportReviewPendingCountsAsync(
+                exports.Select(header => header.MetaverseObjectTypeId).Distinct().ToList());
+            foreach (var header in exports)
+                header.ExportReviewPendingCount = flagged.GetValueOrDefault(header.MetaverseObjectTypeId);
         }
     }
 

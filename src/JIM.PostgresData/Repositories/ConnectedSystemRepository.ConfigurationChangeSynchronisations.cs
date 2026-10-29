@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +39,63 @@ public partial class ConnectedSystemRepository
                 })
             .ToListAsync();
     }
+
+    /// <inheritdoc />
+    public async Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationSummariesAwaitingAsync(int connectedSystemId, int maxChanges)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxChanges, 1);
+
+        return await SummariseConfigurationChanges(
+                Repository.Database.ConfigurationChangeSynchronisations
+                    .Where(change => change.ConnectedSystemId == connectedSystemId && change.AppliedAt == null))
+            .OrderByDescending(summary => summary.RequestedAt)
+            .ThenByDescending(summary => summary.Id)
+            .Take(maxChanges)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationSummariesForActivityAsync(Guid activityId, int maxChanges)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxChanges, 1);
+
+        // Both foreign keys are indexed. An Activity is a configuration change or a run, never both, so the two sides do
+        // not overlap; the rows are the ones it recorded or the ones it claimed.
+        return await SummariseConfigurationChanges(
+                Repository.Database.ConfigurationChangeSynchronisations
+                    .Where(change => change.ConfigurationChangeActivityId == activityId || change.ClaimedByActivityId == activityId))
+            .OrderBy(summary => summary.ObjectTypeName)
+            .ThenBy(summary => summary.RequestedAt)
+            .ThenBy(summary => summary.Id)
+            .Take(maxChanges)
+            .ToListAsync();
+    }
+
+    // The rows with the names needed to read them: the Object Type, the Connected System, and who saved the change. The
+    // Activity is a left join, because the row outlives it (history retention clears the reference rather than the row).
+    private IQueryable<ConfigurationChangeSynchronisationSummary> SummariseConfigurationChanges(IQueryable<ConfigurationChangeSynchronisation> changes) =>
+        from change in changes
+        join objectType in Repository.Database.ConnectedSystemObjectTypes on change.ConnectedSystemObjectTypeId equals objectType.Id
+        join system in Repository.Database.ConnectedSystems on change.ConnectedSystemId equals system.Id
+        join activity in Repository.Database.Activities on change.ConfigurationChangeActivityId equals (Guid?)activity.Id into activities
+        from activity in activities.DefaultIfEmpty()
+        select new ConfigurationChangeSynchronisationSummary
+        {
+            Id = change.Id,
+            ConnectedSystemId = change.ConnectedSystemId,
+            ConnectedSystemName = system.Name,
+            ConnectedSystemObjectTypeId = change.ConnectedSystemObjectTypeId,
+            ObjectTypeName = objectType.Name,
+            Reason = change.Reason,
+            RequestedAt = change.RequestedAt,
+            ConfigurationChangeActivityId = change.ConfigurationChangeActivityId,
+            SyncRuleId = change.SyncRuleId,
+            ClaimedByActivityId = change.ClaimedByActivityId,
+            AppliedAt = change.AppliedAt,
+            InitiatedByType = activity == null ? (ActivityInitiatorType?)null : activity.InitiatedByType,
+            InitiatedById = activity == null ? null : activity.InitiatedById,
+            InitiatedByName = activity == null ? null : activity.InitiatedByName
+        };
 
     /// <inheritdoc />
     public async Task CreateConfigurationChangeSynchronisationAsync(ConfigurationChangeSynchronisation change)

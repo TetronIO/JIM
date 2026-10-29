@@ -62,7 +62,7 @@ public class ConfigurationDriftAwaitingSynchronisationDatabaseTests
 
     private sealed record Seeded(
         int SystemId, int OtherSystemId, int UserTypeId, int ContactTypeId, int OtherSystemTypeId, int ImportRuleId, int ExportRuleId,
-        DateTime FullSynchronisationStart);
+        DateTime FullSynchronisationStart, int MetaverseObjectTypeId);
 
     /// <summary>
     /// A Connected System (User and Contact types, an import rule on User and an export rule on its Metaverse type) whose
@@ -119,7 +119,7 @@ public class ConfigurationDriftAwaitingSynchronisationDatabaseTests
         });
         await ctx.SaveChangesAsync();
 
-        return new Seeded(system.Id, otherSystem.Id, userType.Id, contactType.Id, otherType.Id, importRule.Id, exportRule.Id, fullSynchronisationStart);
+        return new Seeded(system.Id, otherSystem.Id, userType.Id, contactType.Id, otherType.Id, importRule.Id, exportRule.Id, fullSynchronisationStart, metaverseObjectType.Id);
     }
 
     /// <summary>
@@ -323,5 +323,160 @@ public class ConfigurationDriftAwaitingSynchronisationDatabaseTests
             Assert.That(drift.ChangeCount, Is.EqualTo(1), "and the import change is not counted with it");
             Assert.That(drift.Awaiting, Is.EqualTo(new[] { ("user", 1) }));
         }
+    }
+
+    // -- the reads behind the pages and responses that list what is waiting ------------------------------------------------
+
+    private async Task<Activity> AddActivityAsync(string name, Action<Activity>? edit = null)
+    {
+        await using var ctx = NewContext();
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetName = name,
+            TargetType = ActivityTargetType.SynchronisationRule,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            Status = ActivityStatus.Complete,
+            InitiatedByType = ActivityInitiatorType.System,
+            InitiatedByName = "System",
+            Created = DateTime.UtcNow.AddMinutes(-30)
+        };
+        edit?.Invoke(activity);
+        ctx.Activities.Add(activity);
+        await ctx.SaveChangesAsync();
+        return activity;
+    }
+
+    private async Task<ConfigurationChangeSynchronisation> RecordClaimedAsync(
+        int systemId, int typeId, Guid? changeActivityId, Guid claimedByActivityId, bool applied, DateTime requestedAt)
+    {
+        var change = await RecordAsync(systemId, typeId, changeActivityId, null, requestedAt);
+        await using var ctx = NewContext();
+        var stored = await ctx.ConfigurationChangeSynchronisations.SingleAsync(c => c.Id == change.Id);
+        stored.ClaimedByActivityId = claimedByActivityId;
+        stored.AppliedAt = applied ? DateTime.UtcNow : null;
+        await ctx.SaveChangesAsync();
+        return stored;
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeSynchronisationSummariesAwaitingAsync_ListsWhatIsWaitingNewestFirstWithNamesAndWhoSavedItAsync()
+    {
+        var s = await SeedAsync();
+        var personId = Guid.NewGuid();
+        var olderActivity = await AddActivityAsync("older", a => { a.InitiatedByType = ActivityInitiatorType.User; a.InitiatedById = personId; a.InitiatedByName = "Alice Adams"; });
+        var older = await RecordAsync(s.SystemId, s.UserTypeId, olderActivity.Id, s.ImportRuleId, DateTime.UtcNow.AddHours(-3));
+        var newer = await RecordAsync(s.SystemId, s.ContactTypeId, null, null, DateTime.UtcNow.AddHours(-1));
+        await ApplyAsync(await RecordAsync(s.SystemId, s.UserTypeId, null, null, DateTime.UtcNow.AddHours(-5)));
+        await RecordAsync(s.OtherSystemId, s.OtherSystemTypeId, null, null);
+
+        await using var ctx = NewContext(QueryTrackingBehavior.NoTracking);
+        var changes = await new PostgresDataRepository(ctx).ConnectedSystems.GetConfigurationChangeSynchronisationSummariesAwaitingAsync(s.SystemId, 100);
+
+        Assert.That(changes.Select(c => c.Id), Is.EqualTo(new[] { newer.Id, older.Id }), "newest first; neither the applied change nor another system's");
+        var first = changes[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.ConnectedSystemName, Is.EqualTo("drift-system"));
+            Assert.That(first.ObjectTypeName, Is.EqualTo("user"));
+            Assert.That(first.Reason, Is.EqualTo("drift-change"));
+            Assert.That(first.SyncRuleId, Is.EqualTo(s.ImportRuleId));
+            Assert.That(first.ConfigurationChangeActivityId, Is.EqualTo(olderActivity.Id));
+            Assert.That(first.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+            Assert.That(first.InitiatedById, Is.EqualTo(personId));
+            Assert.That(first.InitiatedByName, Is.EqualTo("Alice Adams"));
+            Assert.That(first.IsApplied, Is.False);
+            Assert.That(changes[0].InitiatedByType, Is.Null, "a change whose Activity has gone has no initiator to show");
+            Assert.That(changes[0].ObjectTypeName, Is.EqualTo("contact"));
+        }
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeSynchronisationSummariesAwaitingAsync_MoreThanTheMaximum_ReturnsTheNewestAsync()
+    {
+        var s = await SeedAsync();
+        await RecordAsync(s.SystemId, s.UserTypeId, null, null, DateTime.UtcNow.AddHours(-3));
+        var newest = await RecordAsync(s.SystemId, s.UserTypeId, null, null, DateTime.UtcNow.AddHours(-1));
+        await RecordAsync(s.SystemId, s.UserTypeId, null, null, DateTime.UtcNow.AddHours(-2));
+
+        await using var ctx = NewContext(QueryTrackingBehavior.NoTracking);
+        var changes = await new PostgresDataRepository(ctx).ConnectedSystems.GetConfigurationChangeSynchronisationSummariesAwaitingAsync(s.SystemId, 1);
+
+        Assert.That(changes.Select(c => c.Id), Is.EqualTo(new[] { newest.Id }));
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeSynchronisationSummariesForActivityAsync_ConfigurationChangeActivity_ReturnsTheChangesItRecordedAppliedOrNotAsync()
+    {
+        var s = await SeedAsync();
+        var change = await AddActivityAsync("change");
+        var run = await AddActivityAsync("run");
+        var awaiting = await RecordAsync(s.SystemId, s.UserTypeId, change.Id, s.ImportRuleId, DateTime.UtcNow.AddHours(-2));
+        var applied = await RecordClaimedAsync(s.SystemId, s.ContactTypeId, change.Id, run.Id, applied: true, DateTime.UtcNow.AddHours(-2));
+        await RecordAsync(s.SystemId, s.UserTypeId, (await AddActivityAsync("another change")).Id, null);
+
+        await using var ctx = NewContext(QueryTrackingBehavior.NoTracking);
+        var changes = await new PostgresDataRepository(ctx).ConnectedSystems.GetConfigurationChangeSynchronisationSummariesForActivityAsync(change.Id, 100);
+
+        Assert.That(changes.Select(c => c.Id), Is.EqualTo(new[] { applied.Id, awaiting.Id }), "by Object Type name: contact, then user");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changes[0].IsApplied, Is.True);
+            Assert.That(changes[0].ClaimedByActivityId, Is.EqualTo(run.Id), "the run that applied it");
+            Assert.That(changes[1].IsApplied, Is.False);
+            Assert.That(changes[1].ClaimedByActivityId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeSynchronisationSummariesForActivityAsync_SynchronisationRun_ReturnsTheChangesItClaimedAppliedOrNotAsync()
+    {
+        var s = await SeedAsync();
+        var run = await AddActivityAsync("run");
+        var otherRun = await AddActivityAsync("other run");
+        var applied = await RecordClaimedAsync(s.SystemId, s.UserTypeId, null, run.Id, applied: true, DateTime.UtcNow.AddHours(-2));
+        var notApplied = await RecordClaimedAsync(s.SystemId, s.UserTypeId, null, run.Id, applied: false, DateTime.UtcNow.AddHours(-1));
+        await RecordClaimedAsync(s.SystemId, s.ContactTypeId, null, otherRun.Id, applied: true, DateTime.UtcNow.AddHours(-1));
+        await RecordAsync(s.SystemId, s.UserTypeId, null, null);
+
+        await using var ctx = NewContext(QueryTrackingBehavior.NoTracking);
+        var changes = await new PostgresDataRepository(ctx).ConnectedSystems.GetConfigurationChangeSynchronisationSummariesForActivityAsync(run.Id, 100);
+
+        Assert.That(changes.Select(c => c.Id), Is.EqualTo(new[] { applied.Id, notApplied.Id }), "oldest first within the type; not another run's, not an unclaimed change");
+    }
+
+    [Test]
+    public async Task GetExportReviewPendingCountsAsync_CountsFlaggedMetaverseObjectsByTypeAndOmitsTypesWithNoneAsync()
+    {
+        var s = await SeedAsync();
+        int otherTypeId;
+        await using (var ctx = NewContext())
+        {
+            var otherType = new MetaverseObjectType { Name = "DriftGroup", PluralName = "DriftGroups" };
+            ctx.MetaverseObjectTypes.Add(otherType);
+            await ctx.SaveChangesAsync();
+            otherTypeId = otherType.Id;
+
+            var people = await ctx.MetaverseObjectTypes.SingleAsync(t => t.Id == s.MetaverseObjectTypeId);
+            ctx.MetaverseObjects.AddRange(
+                new MetaverseObject { Id = Guid.NewGuid(), Type = people, ScopeReviewPending = true },
+                new MetaverseObject { Id = Guid.NewGuid(), Type = people, ScopeReviewPending = true },
+                new MetaverseObject { Id = Guid.NewGuid(), Type = people, ScopeReviewPending = false },
+                new MetaverseObject { Id = Guid.NewGuid(), Type = otherType, ScopeReviewPending = false });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var read = NewContext(QueryTrackingBehavior.NoTracking);
+        var counts = await new PostgresDataRepository(read).Metaverse.GetExportReviewPendingCountsAsync([s.MetaverseObjectTypeId, otherTypeId]);
+
+        Assert.That(counts, Is.EqualTo(new Dictionary<int, int> { [s.MetaverseObjectTypeId] = 2 }), "only flagged objects count, and a type with none is absent");
+    }
+
+    [Test]
+    public async Task GetExportReviewPendingCountsAsync_NoTypes_ReturnsNothingAsync()
+    {
+        await using var read = NewContext(QueryTrackingBehavior.NoTracking);
+
+        Assert.That(await new PostgresDataRepository(read).Metaverse.GetExportReviewPendingCountsAsync([]), Is.Empty);
     }
 }

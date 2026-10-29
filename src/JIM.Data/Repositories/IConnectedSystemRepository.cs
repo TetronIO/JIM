@@ -2160,5 +2160,24 @@ public interface IConnectedSystemRepository
     /// </summary>
     Task<List<ObjectTypeAwaitingSynchronisation>> GetConfigurationChangesAwaitingSynchronisationAsync(IList<int> connectedSystemIds);
 
+    /// <summary>
+    /// Returns the saved changes still awaiting one Connected System's next synchronisation, newest first, with the Object
+    /// Type and Connected System names and who saved each. For the page that lists what is waiting; the aggregate read
+    /// above is what a list of systems uses.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System.</param>
+    /// <param name="maxChanges">The most changes to return, so a system that has been saved to a great many times cannot
+    /// make the page heavy. The aggregate read carries the true count.</param>
+    Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationSummariesAwaitingAsync(int connectedSystemId, int maxChanges);
+
+    /// <summary>
+    /// Returns the changes an Activity is part of (#2615): those it recorded, when it is a configuration change, and those
+    /// a synchronisation run claimed, when it is a run. Applied or not. Ordered by Object Type name, then oldest first, so
+    /// a caller can group them.
+    /// </summary>
+    /// <param name="activityId">The Activity.</param>
+    /// <param name="maxChanges">The most changes to return.</param>
+    Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationSummariesForActivityAsync(Guid activityId, int maxChanges);
+
     #endregion
 }

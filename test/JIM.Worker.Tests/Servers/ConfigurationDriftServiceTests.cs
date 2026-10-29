@@ -60,6 +60,8 @@ public class ConfigurationDriftServiceTests
             .ReturnsAsync([Scope(SystemId, syncRuleIds: [100], objectTypeIds: [20], attributeIds: [30])]);
         _connectedSystemRepo.Setup(r => r.GetConfigurationChangesAwaitingSynchronisationAsync(It.IsAny<IList<int>>()))
             .ReturnsAsync([]);
+        _connectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesAwaitingAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync([]);
 
         _jim = new JimApplication(_repo.Object);
     }
@@ -412,9 +414,79 @@ public class ConfigurationDriftServiceTests
         }
     }
 
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_OneSystem_ListsTheChangesBehindEachWaitingTypeAndCountsItsObjectsAsync()
+    {
+        // The page that says what is waiting also says what the changes are and how many objects the run will process.
+        SetAwaiting(
+            Awaiting(SystemId, 21, "user", changeCount: 2, AfterSync),
+            Awaiting(SystemId, 20, "group", changeCount: 1, AfterSync.AddHours(1)));
+        _connectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesAwaitingAsync(SystemId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
+            .ReturnsAsync(
+            [
+                Summary(1, 21, "user", "HR Import: Scope changed", AfterSync.AddHours(1)),
+                Summary(2, 20, "group", "Groups: Enabled changed", AfterSync.AddHours(1)),
+                Summary(3, 21, "user", "HR Import: Project to Metaverse changed", AfterSync)
+            ]);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(SystemId, 21, null)).ReturnsAsync(120_000);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(SystemId, 20, null)).ReturnsAsync(35);
+
+        var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
+
+        var user = result.AwaitingSynchronisation.Single(a => a.ObjectTypeName == "user");
+        var group = result.AwaitingSynchronisation.Single(a => a.ObjectTypeName == "group");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(user.ObjectCount, Is.EqualTo(120_000));
+            Assert.That(user.Changes.Select(c => c.Id), Is.EqualTo(new long[] { 1, 3 }), "this type's changes, newest first as read");
+            Assert.That(group.ObjectCount, Is.EqualTo(35));
+            Assert.That(group.Changes.Select(c => c.Id), Is.EqualTo(new long[] { 2 }));
+            Assert.That(user.ChangeCount, Is.EqualTo(2), "the true count stays the aggregate's");
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_ABatch_DoesNotListChangesOrCountObjectsAsync()
+    {
+        // A list of systems needs only the aggregate: the changes and a count per type would cost a read per system.
+        _activityRepo.Setup(r => r.GetLastFullSynchronisationStartsAsync(It.IsAny<IList<int>>()))
+            .ReturnsAsync(new Dictionary<int, DateTime> { [SystemId] = LastFullSync, [OtherSystemId] = LastFullSync });
+        _connectedSystemRepo.Setup(r => r.GetConfigurationScopesAsync(It.IsAny<IList<int>>()))
+            .ReturnsAsync([Scope(SystemId), Scope(OtherSystemId)]);
+        SetAwaiting(Awaiting(SystemId, 21, "user", changeCount: 2, AfterSync));
+
+        var results = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync([SystemId, OtherSystemId]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[SystemId].AwaitingSynchronisation.Single().Changes, Is.Empty);
+            Assert.That(results[SystemId].AwaitingSynchronisation.Single().ObjectCount, Is.Null);
+            _connectedSystemRepo.Verify(r => r.GetConfigurationChangeSynchronisationSummariesAwaitingAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            _connectedSystemRepo.Verify(r => r.GetConnectedSystemObjectCountAsync(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<int?>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_OneSystemWithNothingWaiting_ReadsNoChangeDetailAsync()
+    {
+        await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
+
+        _connectedSystemRepo.Verify(r => r.GetConfigurationChangeSynchronisationSummariesAwaitingAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
+
     #endregion
 
     #region helpers
+    private static ConfigurationChangeSynchronisationSummary Summary(long id, int objectTypeId, string objectTypeName, string reason, DateTime when) => new()
+    {
+        Id = id,
+        ConnectedSystemId = SystemId,
+        ConnectedSystemObjectTypeId = objectTypeId,
+        ObjectTypeName = objectTypeName,
+        Reason = reason,
+        RequestedAt = when
+    };
+
     private void SetAwaiting(params ObjectTypeAwaitingSynchronisation[] awaiting)
     {
         _connectedSystemRepo.Setup(r => r.GetConfigurationChangesAwaitingSynchronisationAsync(It.IsAny<IList<int>>()))

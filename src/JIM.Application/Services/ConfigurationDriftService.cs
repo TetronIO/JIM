@@ -35,9 +35,14 @@ public class ConfigurationDriftService
     /// Determines whether one Connected System has Sync-affecting or Destructive configuration changes recorded since
     /// its last completed Full Synchronisation.
     /// </summary>
+    /// <remarks>
+    /// Unlike the batch counterpart, this lists the changes waiting behind each Object Type and counts the objects the
+    /// next synchronisation will process (#2615): the page and response that describe one system say what is waiting, not
+    /// only that something is.
+    /// </remarks>
     public async Task<ConfigurationDriftStatus> GetConnectedSystemDriftAsync(int connectedSystemId)
     {
-        var results = await GetConnectedSystemDriftAsync([connectedSystemId]);
+        var results = await GetDriftAsync([connectedSystemId], listChanges: true);
         return results[connectedSystemId];
     }
 
@@ -47,7 +52,10 @@ public class ConfigurationDriftService
     /// does not degrade into an N+1.
     /// </summary>
     /// <returns>A status for every requested system id.</returns>
-    public async Task<Dictionary<int, ConfigurationDriftStatus>> GetConnectedSystemDriftAsync(IList<int> connectedSystemIds)
+    public Task<Dictionary<int, ConfigurationDriftStatus>> GetConnectedSystemDriftAsync(IList<int> connectedSystemIds) =>
+        GetDriftAsync(connectedSystemIds, listChanges: false);
+
+    private async Task<Dictionary<int, ConfigurationDriftStatus>> GetDriftAsync(IList<int> connectedSystemIds, bool listChanges)
     {
         ArgumentNullException.ThrowIfNull(connectedSystemIds);
 
@@ -66,6 +74,8 @@ public class ConfigurationDriftService
                     .OrderBy(awaiting => awaiting.EarliestRequestedAt)
                     .ThenBy(awaiting => awaiting.ObjectTypeName, StringComparer.OrdinalIgnoreCase)
                     .ToList());
+        if (listChanges)
+            awaitingBySystem = await ListChangesAsync(awaitingBySystem);
         IReadOnlyList<ObjectTypeAwaitingSynchronisation> AwaitingFor(int id) =>
             awaitingBySystem.TryGetValue(id, out var found) ? found : [];
 
@@ -131,6 +141,41 @@ public class ConfigurationDriftService
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Adds to each waiting Object Type the changes behind it and the number of objects the next synchronisation will
+    /// process. Per system, because the page that wants this describes one system; a list of systems never asks.
+    /// </summary>
+    private async Task<Dictionary<int, IReadOnlyList<ObjectTypeAwaitingSynchronisation>>> ListChangesAsync(
+        Dictionary<int, IReadOnlyList<ObjectTypeAwaitingSynchronisation>> awaitingBySystem)
+    {
+        var listed = new Dictionary<int, IReadOnlyList<ObjectTypeAwaitingSynchronisation>>();
+        foreach (var (connectedSystemId, awaiting) in awaitingBySystem)
+        {
+            var changes = await Application.Repository.ConnectedSystems.GetConfigurationChangeSynchronisationSummariesAwaitingAsync(
+                connectedSystemId, ObjectTypeAwaitingSynchronisation.MaxChangesListed);
+
+            var entries = new List<ObjectTypeAwaitingSynchronisation>();
+            foreach (var entry in awaiting)
+            {
+                entries.Add(new ObjectTypeAwaitingSynchronisation
+                {
+                    ConnectedSystemId = entry.ConnectedSystemId,
+                    ConnectedSystemObjectTypeId = entry.ConnectedSystemObjectTypeId,
+                    ObjectTypeName = entry.ObjectTypeName,
+                    ChangeCount = entry.ChangeCount,
+                    EarliestRequestedAt = entry.EarliestRequestedAt,
+                    ObjectCount = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(
+                        connectedSystemId, entry.ConnectedSystemObjectTypeId, null),
+                    Changes = changes.Where(change => change.ConnectedSystemObjectTypeId == entry.ConnectedSystemObjectTypeId).ToList()
+                });
+            }
+
+            listed[connectedSystemId] = entries;
+        }
+
+        return listed;
     }
 
     /// <summary>
