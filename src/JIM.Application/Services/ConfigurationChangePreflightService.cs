@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using Serilog;
 
 namespace JIM.Application.Services;
 
@@ -50,20 +51,44 @@ public class ConfigurationChangePreflightService
         // and a new export rule flags its Metaverse Objects for review.
         if (proposed.Id == 0)
         {
-            var outcome = await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync()
-                ? ConfigurationChangeCaptureOutcome.Created
-                : ConfigurationChangeCaptureOutcome.NotTracked;
-            return ConfigurationChangePreflight.None.WithEffect(await EffectOfSyncRuleSaveAsync(proposed, outcome, diff: null));
+            var created = await TryEffectOfSyncRuleSaveAsync(proposed, async () =>
+                await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync()
+                    ? ConfigurationChangeCaptureOutcome.Created
+                    : ConfigurationChangeCaptureOutcome.NotTracked, diff: null);
+            return created == null ? ConfigurationChangePreflight.None : ConfigurationChangePreflight.None.WithEffect(created);
         }
 
         // The captured state records the rule's saved test cases (#2055 Phase 4), which a save of the rule does not
-        // edit, so the proposed state carries them as stored; without them every case would read as removed.
-        var testCases = await Application.Repository.ConfigurationTests.GetTestCasesForSyncRuleAsync(proposed.Id);
+        // edit, so the proposed state carries them as stored; without them every case would read as removed. Read inside the
+        // guarded block, as the capture reads them, so a failure there is the same failed capture.
         var evaluation = await EvaluateCoreAsync(
             () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, proposed.Id),
-            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey, testCases),
+            async hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey,
+                await Application.Repository.ConfigurationTests.GetTestCasesForSyncRuleAsync(proposed.Id)),
             $"Synchronisation Rule {proposed.Id}");
-        return evaluation.Preflight.WithEffect(await EffectOfSyncRuleSaveAsync(proposed, evaluation.Outcome, evaluation.Diff));
+        var effect = await TryEffectOfSyncRuleSaveAsync(proposed, () => Task.FromResult(evaluation.Outcome), evaluation.Diff);
+        return effect == null ? evaluation.Preflight : evaluation.Preflight.WithEffect(effect);
+    }
+
+    /// <summary>
+    /// <see cref="EffectOfSyncRuleSaveAsync"/>, degrading as the capture does: a read that fails (the outcome, the count of
+    /// objects, the stored scope, a name) leaves the effect unstated rather than failing the acknowledgement, so the
+    /// dialog falls back to its general reminder instead of stopping the administrator saving. Only the failures the
+    /// capture treats as a failed read are absorbed; anything else is a defect and surfaces.
+    /// </summary>
+    private async Task<ConfigurationChangeEffect?> TryEffectOfSyncRuleSaveAsync(
+        SyncRule proposed, Func<Task<ConfigurationChangeCaptureOutcome>> outcomeAsync, ConfigurationDiff? diff)
+    {
+        try
+        {
+            return await EffectOfSyncRuleSaveAsync(proposed, await outcomeAsync(), diff);
+        }
+        catch (Exception ex) when (ConfigurationChangeCaptureService.IsCaptureFailure(ex))
+        {
+            Log.Warning(ex, "TryEffectOfSyncRuleSaveAsync: could not work out what saving Synchronisation Rule {RuleId} will do to existing objects; " +
+                "the acknowledgement states no effect.", proposed.Id);
+            return null;
+        }
     }
 
     /// <summary>
@@ -145,11 +170,13 @@ public class ConfigurationChangePreflightService
         if (proposed.Id == 0)
             return ConfigurationChangePreflight.None;
 
-        // As for a Synchronisation Rule: the captured state records the Simple mode Object Matching Rules' test cases.
-        var testCases = await Application.Repository.ConfigurationTests.GetSimpleModeMatchingTestCasesAsync(proposed.Id);
-        return await EvaluateAsync(
+        // As for a Synchronisation Rule: the captured state records the Simple mode Object Matching Rules' test cases, read
+        // inside the guarded block as the capture reads them.
+        return (await EvaluateCoreAsync(
             () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, proposed.Id),
-            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey, testCases));
+            async hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey,
+                await Application.Repository.ConfigurationTests.GetSimpleModeMatchingTestCasesAsync(proposed.Id)),
+            "configuration")).Preflight;
     }
 
     /// <summary>
@@ -214,7 +241,7 @@ public class ConfigurationChangePreflightService
     private async Task<ConfigurationChangePreflight> EvaluateAsync(
         Func<Task<string?>> getBaselineSnapshotAsync,
         Func<byte[], ConfigurationSnapshot> buildProposedSnapshot) =>
-        (await EvaluateCoreAsync(getBaselineSnapshotAsync, buildProposedSnapshot, "configuration")).Preflight;
+        (await EvaluateCoreAsync(getBaselineSnapshotAsync, hashKey => Task.FromResult(buildProposedSnapshot(hashKey)), "configuration")).Preflight;
 
     /// <summary>
     /// What an evaluation found: the preflight the acknowledgement is composed from, and the capture's own reading of the
@@ -224,23 +251,35 @@ public class ConfigurationChangePreflightService
 
     private async Task<Evaluation> EvaluateCoreAsync(
         Func<Task<string?>> getBaselineSnapshotAsync,
-        Func<byte[], ConfigurationSnapshot> buildProposedSnapshot,
+        Func<byte[], Task<ConfigurationSnapshot>> buildProposedSnapshotAsync,
         string targetDescription)
     {
-        // Only consults the store when change tracking is on. With tracking off no new baselines are written, so
-        // whatever is stored has gone stale: diffing against it would present changes made days ago as though they
-        // were part of this save. "Unknown" is the honest answer, and it is the same answer the changed-since
-        // indicator gives. The save's capture reads the same situation as "not tracked".
-        if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-            return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.NotTracked, null);
+        try
+        {
+            // Only consults the store when change tracking is on. With tracking off no new baselines are written, so
+            // whatever is stored has gone stale: diffing against it would present changes made days ago as though they
+            // were part of this save. "Unknown" is the honest answer, and it is the same answer the changed-since
+            // indicator gives. The save's capture reads the same situation as "not tracked".
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.NotTracked, null);
 
-        var baselineJson = await getBaselineSnapshotAsync();
-        var baseline = baselineJson == null ? null : ConfigurationSnapshotService.Deserialise(baselineJson);
-        if (baseline == null)
-            return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.Created, null);
+            var baselineJson = await getBaselineSnapshotAsync();
+            var baseline = baselineJson == null ? null : ConfigurationSnapshotService.Deserialise(baselineJson);
+            if (baseline == null)
+                return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.Created, null);
 
-        var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-        return Evaluate(baseline, buildProposedSnapshot(hashKey), targetDescription);
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            return Evaluate(baseline, await buildProposedSnapshotAsync(hashKey), targetDescription);
+        }
+        catch (Exception ex) when (ConfigurationChangeCaptureService.IsCaptureFailure(ex))
+        {
+            // The capture that follows the save treats the same failure as a failed capture and carries on, recording what it
+            // cannot rule out (#2615). An acknowledgement that threw instead could stop an administrator saving at all, so it
+            // degrades the same way: nothing can be said about what changed, and the save is assumed to record, fail-safe.
+            Log.Warning(ex, "EvaluateCoreAsync: could not read or compare the captured configuration of {Target}; the acknowledgement " +
+                "cannot say what changed, and treats the save as the capture would: unable to rule out a change.", targetDescription);
+            return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.Failed, null);
+        }
     }
 
     /// <summary>

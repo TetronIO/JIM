@@ -116,7 +116,7 @@ public class ConfigurationChangeCaptureService
             // filtering history by class.
             activity.ConfigurationChangeClass = ConfigurationChangeClass.Destructive;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException or CryptographicException)
+        catch (Exception ex) when (IsCaptureFailure(ex))
         {
             // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
             Log.Warning(ex, "CaptureDeletionAsync: failed to capture deletion snapshot for {Target}; the deletion proceeded but its history snapshot was not recorded.", targetDescription);
@@ -176,7 +176,7 @@ public class ConfigurationChangeCaptureService
             activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
             return outcome;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException or CryptographicException)
+        catch (Exception ex) when (IsCaptureFailure(ex))
         {
             // Configuration change capture is best-effort secondary metadata recorded after the entity has already
             // been persisted; it must never fail or roll back the configuration operation that succeeded. On failure
@@ -240,6 +240,15 @@ public class ConfigurationChangeCaptureService
             return ConfigurationChangeClass.NotClassified;
         }
     }
+
+    /// <summary>
+    /// Whether an exception is one of the ways reading, building or comparing a configuration snapshot can fail, as opposed
+    /// to a defect: a state that cannot be read or does not parse, a database that refuses the read, a key that cannot be
+    /// unprotected. The capture that follows a save treats these as a failed capture and carries on; the acknowledgement
+    /// that precedes it asks the same question, so the two degrade the same way (#2615). Anything else is a bug and surfaces.
+    /// </summary>
+    internal static bool IsCaptureFailure(Exception ex) =>
+        ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException or CryptographicException;
 
     private static void ApplyChangeReason(Activity activity, string? changeReason)
     {

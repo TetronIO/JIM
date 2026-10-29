@@ -198,6 +198,103 @@ public class ConfigurationChangeEffectAgreementTests
             Assert.That(_flaggedMetaverseObjectTypeIds.Single(), Is.EqualTo(MetaverseObjectTypeId), $"{scenario}: the Metaverse Object Type flagged");
     }
 
+    // -- a failure reading the baseline degrades the acknowledgement as it degrades the capture ----------------------------
+
+    /// <summary>A database failure of the kind the capture and the acknowledgement both treat as a failed read.</summary>
+    private sealed class FakeDatabaseException(string message) : System.Data.Common.DbException(message);
+
+    public static IEnumerable<TestCaseData> BaselineReadFailures()
+    {
+        yield return new TestCaseData(new InvalidOperationException("the baseline cannot be read")) { TestName = "InvalidOperationException" };
+        yield return new TestCaseData(new FakeDatabaseException("the database refused the read")) { TestName = "DbException" };
+        yield return new TestCaseData(new System.Text.Json.JsonException("the stored snapshot is not valid")) { TestName = "JsonException" };
+    }
+
+    [TestCaseSource(nameof(BaselineReadFailures))]
+    public async Task Preflight_BaselineReadThatFails_StatesTheFailSafeEffectTheSaveThenRecordsAsync(Exception failure)
+    {
+        SetupStoredRule(ImportRule());
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, SyncRuleId)).ThrowsAsync(failure);
+        var edited = ImportRule(r => r.ProjectToMetaverse = false);
+
+        var preflight = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(edited);
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(edited, NewUser());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(preflight.BaselineUnavailable, Is.True, "nothing can be said about what changed");
+            Assert.That(preflight.Effect, Is.Not.Null, "the effect is still stated");
+            Assert.That(preflight.Effect!.RecordsAwaitingSynchronisation, Is.True, "a capture that failed records, fail-safe");
+            Assert.That(_recorded, Has.Count.EqualTo(1), "and so does the save");
+            Assert.That(preflight.Effect.ObjectTypesProcessedInFull.Single().ConnectedSystemObjectTypeId,
+                Is.EqualTo(_recorded.Single().ConnectedSystemObjectTypeId), "for the same Object Type");
+        }
+    }
+
+    [Test]
+    public async Task Preflight_BaselineReadThatFailsForAnExportRule_StillStatesTheReviewTheSaveFlagsAsync()
+    {
+        SetupStoredRule(ExportRule());
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, SyncRuleId))
+            .ThrowsAsync(new InvalidOperationException("the baseline cannot be read"));
+        var edited = ExportRule(r => r.ObjectScopingCriteriaGroups.Add(EmployeesOnly()));
+
+        var preflight = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(edited);
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(edited, NewUser());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(preflight.Effect!.FlagsExportReview, Is.True);
+            Assert.That(_flaggedMetaverseObjectTypeIds, Has.Count.EqualTo(1), "the save flags the same review");
+        }
+    }
+
+    [Test]
+    public async Task Preflight_ReadOfTheTestCasesThatFails_DegradesAsTheCaptureDoesAsync()
+    {
+        // The proposed state records the rule's saved test cases, which the preflight reads before building it; the capture
+        // reads them inside the same guarded block, so a failure there is the same failed capture.
+        SetupStoredRule(ImportRule());
+        var failingTestCases = new Mock<IConfigurationTestRepository>();
+        failingTestCases.Setup(r => r.GetTestCasesForSyncRuleAsync(It.IsAny<int>())).ThrowsAsync(new InvalidOperationException("the test cases cannot be read"));
+        _repo.Setup(r => r.ConfigurationTests).Returns(failingTestCases.Object);
+
+        var preflight = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(ImportRule(r => r.ProjectToMetaverse = false));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(preflight.BaselineUnavailable, Is.True);
+            Assert.That(preflight.Effect!.RecordsAwaitingSynchronisation, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task Preflight_EstimateThatCannotBeRead_StatesNothingRatherThanFailingTheDialogAsync()
+    {
+        SetupStoredRule(ImportRule());
+        _csRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(ConnectedSystemId, ObjectTypeId, null))
+            .ThrowsAsync(new InvalidOperationException("the count cannot be read"));
+
+        var preflight = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(ImportRule(r => r.ProjectToMetaverse = false));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(preflight.RequiresAcknowledgement, Is.True, "the change itself is still described");
+            Assert.That(preflight.Effect, Is.Null, "no effect is stated, so the dialog shows its general reminder");
+        }
+    }
+
+    [Test]
+    public void Preflight_FailureOfAnUnexpectedKind_IsNotSwallowed()
+    {
+        SetupStoredRule(ImportRule());
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, SyncRuleId))
+            .ThrowsAsync(new ArgumentOutOfRangeException("snapshot", "a bug, not a failed read"));
+
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+            await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(ImportRule(r => r.ProjectToMetaverse = false)));
+    }
+
     // -- what is left for a Full Synchronisation -----------------------------------------------------------------------
 
     [Test]
