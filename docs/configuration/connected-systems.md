@@ -102,7 +102,7 @@ The Connected System's next synchronisation, Delta or Full, processes every obje
 - **Several changes, one run**<br /> Every change saved before a run starts is applied by that run.
 - **A change saved during a run waits for the next one**<br /> The running synchronisation carries on with the rules it started with.
 - **A failed or cancelled run applies nothing**<br /> The next run processes the Object Type again, and the notice stays until a run completes.
-- **The cost is the whole Object Type**<br /> On a large Object Type, the next Delta Synchronisation takes as long as processing every object of that type. The notice gives the object count: run it in a quiet period, or choose **Run now**.
+- **The cost is the whole Object Type**<br /> On a large Object Type, the next Delta Synchronisation takes as long as processing every object of that type. The notice gives the object count: run it in a quiet period, or choose **Run now** to start it straight away.
 - **Export follows on its own**<br /> Every Metaverse Object the Object Type joins or projects is processed too, so export evaluation runs on them as usual.
 
 The synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind it and whether it applied them. Each change's own Activity says **Applied by** that run, or **Awaiting the next synchronisation** of the system.
