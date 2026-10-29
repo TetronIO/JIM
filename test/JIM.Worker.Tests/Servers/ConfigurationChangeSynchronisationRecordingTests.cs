@@ -180,6 +180,38 @@ public class ConfigurationChangeSynchronisationRecordingTests
     }
 
     [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ImportRuleEditedWhileItStaysDisabled_RecordsNothingAsync()
+    {
+        // Switched off before and after: nothing it holds reaches the objects, so walking their type would change nothing.
+        SetupStoredRule(BuildImportRule(r => { r.Enabled = false; r.ProjectToMetaverse = true; }));
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(BuildImportRule(r => { r.Enabled = false; r.ProjectToMetaverse = false; }), NewUser());
+
+        Assert.That(_recorded, Is.Empty);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_DisabledImportRuleIsEnabled_RecordsItsObjectTypeAsync()
+    {
+        SetupStoredRule(BuildImportRule(r => r.Enabled = false));
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(BuildImportRule(), NewUser());
+
+        AssertRecordedFor(ObjectTypeId);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ImportRuleThatIsDisabled_RecordsNothingAsync()
+    {
+        // The same rule applies to a granular edit: a mapping added to a rule that is off reaches no object.
+        SetupStoredRule(BuildImportRule(r => r.Enabled = false), reloadedWithMapping: true);
+
+        await _jim.ConnectedSystems.CreateSyncRuleMappingAsync(NewMapping(), NewApiKey());
+
+        Assert.That(_recorded, Is.Empty);
+    }
+
+    [Test]
     public async Task CreateOrUpdateSyncRuleAsync_ImportRuleRenamed_RecordsNothingAsync()
     {
         SetupStoredRule(BuildImportRule());
@@ -632,6 +664,7 @@ public class ConfigurationChangeSynchronisationRecordingTests
         // The granular endpoints capture from the rule as reloaded, which now carries what the endpoint changed.
         var reloaded = stored.Direction == SyncRuleDirection.Import ? BuildImportRule() : BuildExportRule();
         reloaded.Id = stored.Id;
+        reloaded.Enabled = stored.Enabled;
         if (reloadedWithMapping)
             reloaded.AttributeFlowRules = [new SyncRuleMapping { Id = 101, TargetMetaverseAttributeId = 42 }];
         if (reloadedWithMatchingRule)

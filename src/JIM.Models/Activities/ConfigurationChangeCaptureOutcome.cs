@@ -16,24 +16,30 @@ namespace JIM.Models.Activities;
 /// <param name="ChangedSections">The labels of the top-level sections of the configuration that changed (for example
 /// "Scope" or "Enabled"), for readable reasons. Empty unless <paramref name="Kind"/> is
 /// <see cref="ConfigurationChangeCaptureKind.Changed"/>.</param>
+/// <param name="ChangedKeys">The machine keys of the same top-level sections (for example "objectScopingCriteriaGroups"
+/// or "enabled"), for a caller that must decide on which setting changed without depending on a display label. Parallel
+/// to <paramref name="ChangedSections"/>; empty unless <paramref name="Kind"/> is
+/// <see cref="ConfigurationChangeCaptureKind.Changed"/>.</param>
 public sealed record ConfigurationChangeCaptureOutcome(
     ConfigurationChangeCaptureKind Kind,
     ConfigurationChangeClass Class,
-    IReadOnlyList<string> ChangedSections)
+    IReadOnlyList<string> ChangedSections,
+    IReadOnlyList<string> ChangedKeys)
 {
     /// <summary>Tracking is off; nothing was compared.</summary>
-    public static ConfigurationChangeCaptureOutcome NotTracked { get; } = new(ConfigurationChangeCaptureKind.NotTracked, ConfigurationChangeClass.NotClassified, []);
+    public static ConfigurationChangeCaptureOutcome NotTracked { get; } = new(ConfigurationChangeCaptureKind.NotTracked, ConfigurationChangeClass.NotClassified, [], []);
 
     /// <summary>The capture could not complete.</summary>
-    public static ConfigurationChangeCaptureOutcome Failed { get; } = new(ConfigurationChangeCaptureKind.Failed, ConfigurationChangeClass.NotClassified, []);
+    public static ConfigurationChangeCaptureOutcome Failed { get; } = new(ConfigurationChangeCaptureKind.Failed, ConfigurationChangeClass.NotClassified, [], []);
 
     /// <summary>There was no earlier snapshot to compare with.</summary>
-    public static ConfigurationChangeCaptureOutcome Created { get; } = new(ConfigurationChangeCaptureKind.Created, ConfigurationChangeClass.NotClassified, []);
+    public static ConfigurationChangeCaptureOutcome Created { get; } = new(ConfigurationChangeCaptureKind.Created, ConfigurationChangeClass.NotClassified, [], []);
 
     /// <summary>The saved configuration is identical to the latest snapshot.</summary>
-    public static ConfigurationChangeCaptureOutcome NoChange { get; } = new(ConfigurationChangeCaptureKind.NoChange, ConfigurationChangeClass.NotClassified, []);
+    public static ConfigurationChangeCaptureOutcome NoChange { get; } = new(ConfigurationChangeCaptureKind.NoChange, ConfigurationChangeClass.NotClassified, [], []);
 
     /// <summary>The saved configuration differs from the latest snapshot.</summary>
-    public static ConfigurationChangeCaptureOutcome Changed(ConfigurationChangeClass changeClass, IReadOnlyList<string> changedSections) =>
-        new(ConfigurationChangeCaptureKind.Changed, changeClass, changedSections);
+    public static ConfigurationChangeCaptureOutcome Changed(
+        ConfigurationChangeClass changeClass, IReadOnlyList<string> changedSections, IReadOnlyList<string> changedKeys) =>
+        new(ConfigurationChangeCaptureKind.Changed, changeClass, changedSections, changedKeys);
 }

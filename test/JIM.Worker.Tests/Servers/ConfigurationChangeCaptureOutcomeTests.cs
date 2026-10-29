@@ -134,6 +134,7 @@ public class ConfigurationChangeCaptureOutcomeTests
             Assert.That(outcome.Kind, Is.EqualTo(ConfigurationChangeCaptureKind.Changed));
             Assert.That(outcome.Class, Is.EqualTo(ConfigurationChangeClass.Cosmetic));
             Assert.That(outcome.ChangedSections, Is.EqualTo(new[] { "Name" }));
+            Assert.That(outcome.ChangedKeys, Is.EqualTo(new[] { "name" }), "the machine key, for a caller that must not depend on a display label");
         }
     }
 
@@ -151,6 +152,7 @@ public class ConfigurationChangeCaptureOutcomeTests
             Assert.That(outcome.Kind, Is.EqualTo(ConfigurationChangeCaptureKind.Changed));
             Assert.That(outcome.Class, Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
             Assert.That(outcome.ChangedSections, Is.EqualTo(new[] { "Enabled" }));
+            Assert.That(outcome.ChangedKeys, Is.EqualTo(new[] { "enabled" }));
         }
     }
 
@@ -168,6 +170,7 @@ public class ConfigurationChangeCaptureOutcomeTests
         {
             Assert.That(outcome.Class, Is.EqualTo(ConfigurationChangeClass.SyncAffecting), "classified by the most consequential change");
             Assert.That(outcome.ChangedSections, Is.EquivalentTo(new[] { "Name", "Enabled" }));
+            Assert.That(outcome.ChangedKeys, Is.EquivalentTo(new[] { "name", "enabled" }));
         }
     }
 

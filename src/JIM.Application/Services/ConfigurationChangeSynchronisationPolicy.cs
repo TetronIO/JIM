@@ -19,11 +19,18 @@ namespace JIM.Application.Services;
 internal static class ConfigurationChangeSynchronisationPolicy
 {
     /// <summary>
+    /// The snapshot key of a Synchronisation Rule's own on/off setting. Matched against the changed top-level keys, so an
+    /// "enabled" nested in an Attribute Flow or the initial password is not mistaken for it.
+    /// </summary>
+    private const string EnabledKey = "enabled";
+
+    /// <summary>
     /// Whether the change the capture reported must be carried to the objects that already exist.
     /// </summary>
     /// <param name="outcome">What configuration change capture found.</param>
-    /// <param name="isInForce">Whether the saved configuration takes part in synchronisation: an enabled rule. It only
-    /// matters when there is no earlier version to compare with, and when nothing could be compared.</param>
+    /// <param name="isInForce">Whether the saved configuration takes part in synchronisation: an enabled rule. It matters
+    /// when a change was made to a rule that is switched off after the save, when there is no earlier version to compare
+    /// with, and when nothing could be compared.</param>
     internal static bool RequiresSynchronisation(ConfigurationChangeCaptureOutcome outcome, bool isInForce)
     {
         ArgumentNullException.ThrowIfNull(outcome);
@@ -34,8 +41,12 @@ internal static class ConfigurationChangeSynchronisationPolicy
             ConfigurationChangeCaptureKind.NoChange => false,
 
             // Graded. NotClassified is a changed property the classifier has no class for, which is a gap in JIM's
-            // tables, not evidence that the change is harmless.
-            ConfigurationChangeCaptureKind.Changed => outcome.Class != ConfigurationChangeClass.Cosmetic,
+            // tables, not evidence that the change is harmless. A rule that is off after the save, and was off before it,
+            // does nothing for the objects of its type whatever was edited in it: walking the type would cost a run
+            // (28 minutes at 750,000 objects) and change nothing. Switching it off is the exception, because that does
+            // change what the existing objects produce, and enabling it later is a change of its own.
+            ConfigurationChangeCaptureKind.Changed => outcome.Class != ConfigurationChangeClass.Cosmetic
+                                                      && (isInForce || outcome.ChangedKeys.Contains(EnabledKey)),
 
             // A first version: a rule just created reaches objects that already exist, but only if it is switched on. A
             // rule created disabled applies to nothing, and enabling it later is a Sync-affecting change of its own.

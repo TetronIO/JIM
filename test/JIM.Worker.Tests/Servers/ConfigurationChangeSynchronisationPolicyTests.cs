@@ -21,9 +21,49 @@ public class ConfigurationChangeSynchronisationPolicyTests
     [TestCase(ConfigurationChangeClass.NotClassified, true)]
     public void RequiresSynchronisation_ChangedConfiguration_IsDecidedByItsClass(ConfigurationChangeClass changeClass, bool expected)
     {
-        var outcome = ConfigurationChangeCaptureOutcome.Changed(changeClass, ["Scope"]);
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(changeClass, ["Scope"], ["objectScopingCriteriaGroups"]);
 
         Assert.That(ConfigurationChangeSynchronisationPolicy.RequiresSynchronisation(outcome, isInForce: true), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void RequiresSynchronisation_ChangedRuleThatStaysDisabled_DoesNotRecord()
+    {
+        // A rule switched off before and after the save does nothing for the objects of its type, whatever was edited in
+        // it, so walking the type (28 minutes at 750,000 objects) would change nothing. Enabling it later is a change of
+        // its own, and records then.
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting, ["Scope"], ["objectScopingCriteriaGroups"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.RequiresSynchronisation(outcome, isInForce: false), Is.False);
+    }
+
+    [Test]
+    public void RequiresSynchronisation_ChangedRuleThatWasSwitchedOff_Records()
+    {
+        // Disabling is a change to what the existing objects produce, even though the rule is off afterwards.
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting, ["Enabled"], ["enabled"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.RequiresSynchronisation(outcome, isInForce: false), Is.True);
+    }
+
+    [Test]
+    public void RequiresSynchronisation_ChangedRuleThatWasSwitchedOffAlongsideOtherEdits_Records()
+    {
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting,
+            ["Name", "Enabled", "Scope"], ["name", "enabled", "objectScopingCriteriaGroups"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.RequiresSynchronisation(outcome, isInForce: false), Is.True);
+    }
+
+    [Test]
+    public void RequiresSynchronisation_ChangedRuleWhoseOnlyEnabledSettingsAreNested_DoesNotCountThemAsTheRulesOwn()
+    {
+        // The key is matched on the rule's own top-level setting. An Attribute Flow or the initial password has an
+        // "enabled" of its own, but those changes arrive under "attributeFlowRules" or "initialPassword".
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting,
+            ["Attribute Flow rules", "Initial Password"], ["attributeFlowRules", "initialPassword"]);
+
+        Assert.That(ConfigurationChangeSynchronisationPolicy.RequiresSynchronisation(outcome, isInForce: false), Is.False);
     }
 
     [TestCase(true)]
@@ -66,7 +106,7 @@ public class ConfigurationChangeSynchronisationPolicyTests
     [Test]
     public void Describe_ChangedConfiguration_NamesTheSubjectTheSectionsAndTheClass()
     {
-        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting, ["Scope", "Enabled"]);
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting, ["Scope", "Enabled"], ["objectScopingCriteriaGroups", "enabled"]);
 
         var reason = ConfigurationChangeSynchronisationPolicy.Describe("HR Import", outcome, isNew: false);
 
@@ -76,7 +116,7 @@ public class ConfigurationChangeSynchronisationPolicyTests
     [Test]
     public void Describe_ChangedConfigurationWithNoClass_OmitsTheClass()
     {
-        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.NotClassified, ["Scope"]);
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.NotClassified, ["Scope"], ["objectScopingCriteriaGroups"]);
 
         var reason = ConfigurationChangeSynchronisationPolicy.Describe("HR Import", outcome, isNew: false);
 
@@ -86,7 +126,7 @@ public class ConfigurationChangeSynchronisationPolicyTests
     [Test]
     public void Describe_ChangedConfigurationWithNoSectionsNamed_StillReads()
     {
-        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.Destructive, []);
+        var outcome = ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.Destructive, [], []);
 
         var reason = ConfigurationChangeSynchronisationPolicy.Describe("HR Import", outcome, isNew: false);
 

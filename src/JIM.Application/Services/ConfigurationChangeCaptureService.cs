@@ -170,7 +170,10 @@ public class ConfigurationChangeCaptureService
                 // diff, so nothing is at risk and the class stays NotClassified.
                 var changeClass = ClassifyOrDefault(diff, snapshot.ObjectKey, targetDescription);
                 activity.ConfigurationChangeClass = changeClass;
-                outcome = ConfigurationChangeCaptureOutcome.Changed(changeClass, ChangedSections(diff));
+                var changedSections = ChangedTopLevelSections(diff);
+                outcome = ConfigurationChangeCaptureOutcome.Changed(changeClass,
+                    changedSections.Select(section => section.Label ?? section.Key).ToList(),
+                    changedSections.Select(section => section.Key).ToList());
             }
 
             activity.ConfigurationChangeVersion = await getNextVersionAsync();
@@ -190,13 +193,13 @@ public class ConfigurationChangeCaptureService
     }
 
     /// <summary>
-    /// The labels of the top-level sections of the configuration that changed, in the order the snapshot lists them
-    /// (for example "Scope", "Enabled"), so a reason can say where a change was made without dumping the diff.
+    /// The top-level sections of the configuration that changed, in the order the snapshot lists them. Their labels (for
+    /// example "Scope", "Enabled") let a reason say where a change was made without dumping the diff; their keys let a
+    /// caller decide on which setting changed without depending on a label.
     /// </summary>
-    private static List<string> ChangedSections(ConfigurationDiff diff) =>
+    private static List<ConfigurationDiffNode> ChangedTopLevelSections(ConfigurationDiff diff) =>
         diff.Root?.Children?
             .Where(section => section.ChangeType != ConfigurationDiffChangeType.Unchanged)
-            .Select(section => section.Label ?? section.Key)
             .ToList() ?? [];
 
     /// <summary>
