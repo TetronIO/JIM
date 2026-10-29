@@ -5688,8 +5688,8 @@ public class SyncImportTaskProcessor
     /// neither import type: a Full Import skips it by its content hash (the confirming import stamped the disabled
     /// state it holds through the hold), and a Delta Import never returns it. A password that then expires or is
     /// cancelled (a change to the password, not the account), or is delivered without enabling the account, would
-    /// leave the change held for ever: the account disabled, nothing reported, and Drift Detection skipping the
-    /// object permanently.
+    /// leave the change held for ever: the account disabled, nothing reported, and Drift Detection never correcting
+    /// its enabled state.
     /// <para>
     /// Each such change is held while a password is still owed to the object's Metaverse Object and released otherwise,
     /// silently and exactly as reconciliation releases it (<see cref="ISyncEngine.JudgeChangesAwaitingInitialPasswordNotReconciled"/>),
@@ -5752,11 +5752,11 @@ public class SyncImportTaskProcessor
             await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
         }
 
-        // Anything neither still owed nor released sits on a Pending Export reconciliation leaves alone (Parked, Executing
-        // or Failed), and is left alone here too.
+        // Anything neither still owed nor released sits on a Pending Export reconciliation leaves alone (Parked or
+        // Executing), and is left alone here too.
         Log.Information("JudgeUnreconciledInitialPasswordHoldsAsync: Judged {Count} change(s) held until an Initial Password is delivered on " +
             "Connected System Object(s) this import did not return. Still held (Initial Password owed): {Held}, " +
-            "Released (no Initial Password owed): {Released}, Left on a Parked, Executing or Failed export: {Left}",
+            "Released (no Initial Password owed): {Released}, Left on a Parked or Executing export: {Left}",
             unreconciled.Count, stillOwedCount, releasedCount, unreconciled.Count - stillOwedCount - releasedCount);
     }
 
