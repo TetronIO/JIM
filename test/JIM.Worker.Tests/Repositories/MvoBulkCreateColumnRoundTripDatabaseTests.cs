@@ -129,6 +129,8 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
         var referencedMvo = new MetaverseObject { Id = Guid.NewGuid(), Type = s.MvoType, Created = DateTime.UtcNow };
 
         var schedulingItemId = Guid.NewGuid();
+        var unsynchronisedChanges = new MetaverseObjectUnsynchronisedChanges { AttributeIds = [s.TextAttrId, s.ReferenceAttrId] };
+        unsynchronisedChanges.Record(null, [new MetaverseObjectAttributeValue { AttributeId = s.TextAttrId, StringValue = "Jo Bloggs (old)" }]);
         var mvo = new MetaverseObject
         {
             Id = Guid.NewGuid(),
@@ -147,7 +149,8 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
             DeletionScheduledByRunProfileExecutionItemId = schedulingItemId,
             CachedDisplayName = "Jo Bloggs",
             ScopeReviewPending = true,
-            LastScopeEvaluatedAt = lastScopeEvaluatedAt
+            LastScopeEvaluatedAt = lastScopeEvaluatedAt,
+            UnsynchronisedChangesJson = unsynchronisedChanges.ToJson()
         };
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs", ContributedBySystemId = s.ContributingSystemId, ContributedBySyncRuleId = s.ContributingSyncRuleId, ContributedByKind = ValueContributorKind.SynchronisationRule });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo", ContributedByKind = ValueContributorKind.SignInClaim, ContributedByClaimType = "given_name" });
@@ -190,6 +193,11 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedMvo.CachedDisplayName, Is.EqualTo("Jo Bloggs"));
             Assert.That(storedMvo.ScopeReviewPending, Is.True);
             Assert.That(storedMvo.LastScopeEvaluatedAt, Is.EqualTo(lastScopeEvaluatedAt));
+
+            // The jsonb document is normalised by the database (key order, whitespace), so it is compared as the record it holds.
+            var storedChanges = MetaverseObjectUnsynchronisedChanges.FromJson(storedMvo.UnsynchronisedChangesJson);
+            Assert.That(storedChanges?.AttributeIds, Is.EqualTo(unsynchronisedChanges.AttributeIds));
+            Assert.That(storedChanges?.Removals, Is.EqualTo(unsynchronisedChanges.Removals));
         }
 
         var storedValues = await readContext.MetaverseObjectAttributeValues

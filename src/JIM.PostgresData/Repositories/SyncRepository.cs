@@ -250,8 +250,11 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<Guid, string?>> GetMetaverseObjectDisplayNamesAsync(IReadOnlyCollection<Guid> ids)
         => _repo.Metaverse.GetMetaverseObjectDisplayNamesAsync(ids);
 
-    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
-        => _repo.Metaverse.ClearMetaverseObjectScopeReviewPendingAsync(ids, exportRulesReadWatermark);
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
+        => _repo.Metaverse.ClearMetaverseObjectScopeReviewPendingAsync(seenRowVersions, exportRulesReadWatermark);
+
+    public Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark)
+        => _repo.Metaverse.ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(coveredMetaverseObjectTypeIds, exportRulesReadWatermark);
 
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
         => _repo.Metaverse.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);

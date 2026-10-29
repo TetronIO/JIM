@@ -302,6 +302,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(mvo.LastScopeEvaluatedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
+            if (mvo.UnsynchronisedChangesJson is not null)
+                await writer.WriteAsync(mvo.UnsynchronisedChangesJson, NpgsqlTypes.NpgsqlDbType.Jsonb);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

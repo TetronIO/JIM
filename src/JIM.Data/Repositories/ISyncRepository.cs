@@ -574,15 +574,44 @@ public interface ISyncRepository
     /// read its rules: the run evaluated these objects against rules that no longer stand, and the change that
     /// replaced them flagged the objects for review against the new configuration. Clearing then would lose that
     /// review, so nothing is cleared and the next run evaluates them again. The check and the clear are one
-    /// statement, so a rule saved at any moment either is seen by it or flags the objects again after it.
+    /// statement, but it checks on the snapshot it took when it started, so a clear that cleared anything checks
+    /// again once it has committed and, if a rule was saved under it, flags exactly the objects it just cleared
+    /// again. A rule saved at any moment is therefore seen by the clear, seen by that second look, or runs its own
+    /// flagging after the clear committed and finds the objects unflagged.
+    /// <para>
+    /// A flag is also kept on any object written since the run loaded it (#2615): a sign-in editing a person's
+    /// profile, say, writes the row and flags it again, and the run's evaluation never saw that edit. Each object is
+    /// cleared only while its row version (<c>xmin</c>) is still the one the run read, so the object is reviewed again
+    /// by the next run instead of the edit going unreviewed.
+    /// </para>
     /// </summary>
-    /// <param name="ids">The objects the run has re-evaluated.</param>
+    /// <param name="seenRowVersions">The objects the run has re-evaluated, each with the row version
+    /// (<c>MetaverseObject.xmin</c>) the run read when it loaded the object.</param>
     /// <param name="exportRulesReadWatermark">The newest Created or Last Updated stamp among the export
     /// Synchronisation Rules as the run read them (<c>ExportEvaluationCache.ExportRulesReadWatermark</c>); null when
     /// the run read none, in which case any export rule existing now counts as a change.</param>
-    /// <returns>False when the flags were kept because the export rules changed; true otherwise (including when
-    /// <paramref name="ids"/> is empty).</returns>
-    Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark);
+    /// <returns>False when the flags were kept, or cleared and flagged again, because the export rules changed; true
+    /// otherwise (including when <paramref name="seenRowVersions"/> is empty, and when individual flags were kept
+    /// because their object was written since it was loaded).</returns>
+    Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark);
+
+    /// <summary>
+    /// Clears, in one statement and without loading the objects, the <c>ScopeReviewPending</c> flag on every Metaverse
+    /// Object whose type none of the given types covers (#2615). A review of such an object can neither provision nor
+    /// deprovision anything, so keeping it flagged only costs the review. Guarded exactly as
+    /// <see cref="ClearMetaverseObjectScopeReviewPendingAsync"/> is: nothing is cleared when an export Synchronisation
+    /// Rule has been created or updated since the run read its rules, because that change flagged the objects for
+    /// review against the rules as they now stand, and the rule may be the one that covers their type. It takes the same
+    /// second look: once it has cleared anything it checks the rules again and, if one was saved under it, flags
+    /// everything it cleared again.
+    /// </summary>
+    /// <param name="coveredMetaverseObjectTypeIds">The Metaverse Object Types an enabled export Synchronisation Rule
+    /// covers, as the run read the rules. A disabled rule does not cover its type: it provisions and deprovisions
+    /// nothing, and re-enabling it flags the whole type again (#1925).</param>
+    /// <param name="exportRulesReadWatermark">As for <see cref="ClearMetaverseObjectScopeReviewPendingAsync"/>.</param>
+    /// <returns>How many flags were left cleared: zero when the export rules changed, including when a rule saved while
+    /// the statement ran led to everything it cleared being flagged again.</returns>
+    Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark);
 
     /// <summary>
     /// Flags every Metaverse Object of the given type <c>ScopeReviewPending</c>, so the next synchronisation of any
@@ -600,10 +629,12 @@ public interface ISyncRepository
     /// synchronisation re-evaluates each one against every export rule (issue #2318). Set when a synchronisation
     /// disconnects an object from a Connected System an export rule provisions to: the account was deleted in that
     /// system, nothing else about the person changed, and only the review can stage the provisioning Create that puts
-    /// it back, once the departed object is gone. Already-flagged objects are left as they are.
+    /// it back, once the departed object is gone. An object that is flagged already is written again, which moves its
+    /// row version: a drain that loaded it flagged and is about to clear it holds the version it read, and must find
+    /// the row changed, or it would clear a flag whose new reason its review never saw (#2615).
     /// </summary>
     /// <param name="ids">The Metaverse Objects to flag; ids that match no object are ignored.</param>
-    /// <returns>How many objects were not already flagged.</returns>
+    /// <returns>How many objects were flagged: every given id that matches an object, flagged already or not.</returns>
     Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>

@@ -1106,6 +1106,12 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_MetaverseObjects_ScopeReviewPending")
             .HasFilter("\"ScopeReviewPending\"");
 
+        // What a write outside synchronisation changed on the object (#2615), a document the review reads and the guarded
+        // clear nulls; nothing queries into it, so it is a plain string column of jsonb type, as the SCIM store's are.
+        modelBuilder.Entity<MetaverseObject>()
+            .Property(mvo => mvo.UnsynchronisedChangesJson)
+            .HasColumnType("jsonb");
+
         // Partial index on the Metaverse-Derived Attribute Flow mark (#1750). Delta synchronisation selects a Connected
         // System's objects that are new, changed, OR marked (WHERE "ConnectedSystemId" = @cs AND ... OR
         // "DerivedInputChangePending"); marks are rare and cleared once processed, so keying the partial index on

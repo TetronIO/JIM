@@ -1752,18 +1752,45 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public virtual Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+    // The in-memory store does not model a Metaverse Object's row version (xmin), so, unlike the PostgreSQL statement, this
+    // clears every object it is given whatever version the run read. It has no concurrent writers either, so a rule cannot
+    // be saved between the check and the clear, and there is no second look at the export rules afterwards (the
+    // PostgreSQL clear re-flags what it cleared when one was). Both guards are proved against PostgreSQL
+    // (ScopeReviewFlagDatabaseTests). It clears the record of unsynchronised changes (#2615) with the flag.
+    public virtual Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
     {
         // Mirrors the PostgreSQL statement: nothing is cleared once an export rule has been created or updated since
         // the run read its rules (#1925).
-        var exportRulesChanged = _syncRules.Values.Any(rule => rule.Direction == SyncRuleDirection.Export &&
-            (exportRulesReadWatermark == null || (rule.LastUpdated ?? rule.Created) > exportRulesReadWatermark));
-        if (exportRulesChanged)
+        if (ExportRulesChangedSince(exportRulesReadWatermark))
             return Task.FromResult(false);
 
-        foreach (var stored in ids.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
-            stored!.ScopeReviewPending = false;
+        foreach (var stored in seenRowVersions.Keys.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
+            ClearScopeReview(stored!);
         return Task.FromResult(true);
+    }
+
+    public virtual Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark)
+    {
+        if (ExportRulesChangedSince(exportRulesReadWatermark))
+            return Task.FromResult(0);
+
+        // An object with no type loaded is left alone: nothing says no rule covers it.
+        var toClear = _mvos.Values
+            .Where(mvo => mvo.ScopeReviewPending && mvo.Type != null && !coveredMetaverseObjectTypeIds.Contains(mvo.Type.Id))
+            .ToList();
+        foreach (var mvo in toClear)
+            ClearScopeReview(mvo);
+        return Task.FromResult(toClear.Count);
+    }
+
+    private bool ExportRulesChangedSince(DateTime? exportRulesReadWatermark)
+        => _syncRules.Values.Any(rule => rule.Direction == SyncRuleDirection.Export &&
+            (exportRulesReadWatermark == null || (rule.LastUpdated ?? rule.Created) > exportRulesReadWatermark));
+
+    private static void ClearScopeReview(MetaverseObject mvo)
+    {
+        mvo.ScopeReviewPending = false;
+        mvo.UnsynchronisedChangesJson = null;
     }
 
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
@@ -1774,11 +1801,13 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(toFlag.Count);
     }
 
+    // Like the PostgreSQL statement, counts every given object that exists, flagged already or not (which there rewrites the
+    // row to move its row version; the in-memory store has no row versions to move).
     public Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids)
     {
         var toFlag = ids.Distinct()
             .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
-            .Where(mvo => mvo is { ScopeReviewPending: false })
+            .Where(mvo => mvo != null)
             .ToList();
         foreach (var mvo in toFlag)
             mvo!.ScopeReviewPending = true;

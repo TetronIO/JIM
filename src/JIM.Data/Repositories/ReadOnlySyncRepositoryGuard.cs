@@ -504,8 +504,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> FixupMvoReferenceValueIdsAsync(IReadOnlyList<(Guid MvoId, int AttributeId, Guid TargetMvoId)> fixups)
         => throw new PreviewWriteAttemptedException(nameof(FixupMvoReferenceValueIdsAsync));
 
-    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
         => throw new PreviewWriteAttemptedException(nameof(ClearMetaverseObjectScopeReviewPendingAsync));
+
+    public Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark)
+        => throw new PreviewWriteAttemptedException(nameof(ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync));
 
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
         => throw new PreviewWriteAttemptedException(nameof(FlagMetaverseObjectsOfTypeForScopeReviewAsync));
