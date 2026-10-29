@@ -155,10 +155,23 @@ public class ConfigurationChangeSynchronisationDatabaseTests
         return await ctx.ConfigurationChangeSynchronisations.OrderBy(c => c.Id).ToListAsync();
     }
 
-    private async Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimAsync(int systemId, Guid runActivityId)
+    /// <summary>
+    /// Claims as the worker does: read the ids awaiting synchronisation first, then claim only those. A test passes
+    /// <paramref name="eligibleIds"/> to claim against ids read earlier.
+    /// </summary>
+    private async Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimAsync(
+        int systemId, Guid runActivityId, IReadOnlyCollection<long>? eligibleIds = null)
     {
         await using var ctx = NewContext();
-        return await new PostgresDataRepository(ctx).Sync.ClaimConfigurationChangeSynchronisationsAsync(systemId, runActivityId);
+        var sync = new PostgresDataRepository(ctx).Sync;
+        eligibleIds ??= await sync.GetConfigurationChangeSynchronisationIdsAwaitingAsync(systemId);
+        return await sync.ClaimConfigurationChangeSynchronisationsAsync(systemId, eligibleIds, runActivityId);
+    }
+
+    private async Task<IReadOnlyList<long>> ReadAwaitingIdsAsync(int systemId)
+    {
+        await using var ctx = NewContext();
+        return await new PostgresDataRepository(ctx).Sync.GetConfigurationChangeSynchronisationIdsAwaitingAsync(systemId);
     }
 
     private async Task<int> ApplyAsync(Guid runActivityId)
@@ -273,6 +286,84 @@ public class ConfigurationChangeSynchronisationDatabaseTests
         var s = await SeedAsync();
 
         Assert.That(await ClaimAsync(s.SystemId, s.RunActivityId), Is.Empty);
+    }
+
+    [Test]
+    public async Task ClaimConfigurationChangeSynchronisationsAsync_RowSavedAfterTheEligibleIdsWereRead_IsNotClaimedAndIsClaimedByTheNextRunAsync()
+    {
+        var s = await SeedAsync();
+        var before = await CreateChangeAsync(s.SystemId, s.UserTypeId);
+        var eligible = await ReadAwaitingIdsAsync(s.SystemId);
+        // Committed after the worker read the ids and before the run claims: it may not be in what the run loaded.
+        var after = await CreateChangeAsync(s.SystemId, s.UserTypeId);
+
+        var claimed = await ClaimAsync(s.SystemId, s.RunActivityId, eligible);
+
+        var rows = (await ReadAllAsync()).ToDictionary(r => r.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(claimed.Select(c => c.Id), Is.EqualTo(new[] { before.Id }));
+            Assert.That(rows[after.Id].ClaimedByActivityId, Is.Null, "the later row is not claimed");
+            Assert.That(rows[after.Id].AppliedAt, Is.Null);
+        }
+
+        await ApplyAsync(s.RunActivityId);
+        var next = await ClaimAsync(s.SystemId, s.OtherRunActivityId);
+        Assert.That(next.Select(c => c.Id), Is.EqualTo(new[] { after.Id }), "the next run reads the ids afresh and claims it");
+    }
+
+    [Test]
+    public async Task ClaimConfigurationChangeSynchronisationsAsync_NoEligibleIds_ClaimsNothingAsync()
+    {
+        var s = await SeedAsync();
+        await CreateChangeAsync(s.SystemId, s.UserTypeId);
+
+        var claimed = await ClaimAsync(s.SystemId, s.RunActivityId, []);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(claimed, Is.Empty);
+            Assert.That((await ReadAllAsync()).Single().ClaimedByActivityId, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task ClaimConfigurationChangeSynchronisationsAsync_EligibleIdsOfAppliedRowsAndOtherSystems_AreNotClaimedAsync()
+    {
+        var s = await SeedAsync();
+        var appliedRow = await CreateChangeAsync(s.SystemId, s.UserTypeId);
+        await ClaimAsync(s.SystemId, s.OtherRunActivityId);
+        await ApplyAsync(s.OtherRunActivityId);
+        var otherSystemRow = await CreateChangeAsync(s.OtherSystemId, s.OtherSystemTypeId);
+        var mine = await CreateChangeAsync(s.SystemId, s.ContactTypeId);
+
+        // Every id is offered, but only this system's row still awaiting synchronisation can be claimed.
+        var claimed = await ClaimAsync(s.SystemId, s.RunActivityId, [appliedRow.Id, otherSystemRow.Id, mine.Id]);
+
+        var rows = (await ReadAllAsync()).ToDictionary(r => r.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(claimed.Select(c => c.Id), Is.EqualTo(new[] { mine.Id }));
+            Assert.That(rows[appliedRow.Id].ClaimedByActivityId, Is.EqualTo(s.OtherRunActivityId), "an applied row keeps its applying run");
+            Assert.That(rows[otherSystemRow.Id].ClaimedByActivityId, Is.Null, "another system's row is not claimed even if its id is offered");
+        }
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeSynchronisationIdsAwaitingAsync_ReturnsOnlyTheSystemsRowsAwaitingSynchronisationAsync()
+    {
+        var s = await SeedAsync();
+        var first = await CreateChangeAsync(s.SystemId, s.UserTypeId);
+        var second = await CreateChangeAsync(s.SystemId, s.ContactTypeId);
+        await CreateChangeAsync(s.OtherSystemId, s.OtherSystemTypeId);
+        await ClaimAsync(s.SystemId, s.OtherRunActivityId, [first.Id]);
+        await ApplyAsync(s.OtherRunActivityId); // applies only the first
+        var third = await CreateChangeAsync(s.SystemId, s.UserTypeId);
+
+        var ids = await ReadAwaitingIdsAsync(s.SystemId);
+
+        Assert.That(ids, Is.EquivalentTo(new[] { second.Id, third.Id }), "applied rows and other systems' rows are not awaiting this system");
+        Assert.That((await ReadAllAsync()).Count(r => r.ClaimedByActivityId != null), Is.EqualTo(1), "reading claims nothing");
     }
 
     [Test]
@@ -396,7 +487,7 @@ public class ConfigurationChangeSynchronisationDatabaseTests
         var tracked = await ctx.ConfigurationChangeSynchronisations.SingleAsync(c => c.Id == created.Id);
         var sync = new PostgresDataRepository(ctx).Sync;
 
-        await sync.ClaimConfigurationChangeSynchronisationsAsync(s.SystemId, s.RunActivityId);
+        await sync.ClaimConfigurationChangeSynchronisationsAsync(s.SystemId, [created.Id], s.RunActivityId);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(tracked.ClaimedByActivityId, Is.EqualTo(s.RunActivityId), "the tracked instance reads as claimed");

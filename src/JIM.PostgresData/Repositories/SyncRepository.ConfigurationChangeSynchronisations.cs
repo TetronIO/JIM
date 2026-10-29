@@ -24,27 +24,33 @@ namespace JIM.PostgresData.Repositories;
 /// </summary>
 public partial class SyncRepository
 {
-    public async Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, Guid runActivityId)
+    public async Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, IReadOnlyCollection<long> eligibleIds, Guid runActivityId)
     {
-        // One statement, and that is the whole of why the claim cannot lose or duplicate a change.
+        if (eligibleIds.Count == 0)
+            return [];
+
+        // The claim claims only the ids the worker read BEFORE it loaded anything the run uses, and that is the whole of
+        // why it cannot lose a change.
         //
-        // Under READ COMMITTED a statement sees exactly the rows committed before it started. A row is only ever written
-        // after the configuration change it records has been saved, so every row this statement claims is a change that
-        // is already committed, and therefore already in the Synchronisation Rules the run loads afterwards (the run
-        // claims before it loads any, and each load is a statement of its own that starts later). A change saved while
-        // the run is in flight commits its row after this statement ran, so it is not claimed and stays awaiting
-        // synchronisation for the next run. No timestamps are compared, so no clock skew between hosts can move either
-        // boundary.
+        // A row is only ever written after the configuration change it records has been saved and committed. So a row the
+        // worker's early read saw was committed before the worker loaded the Connected System (with its Object Types and
+        // their Simple Mode Object Matching Rules) and, later, the Synchronisation Rules: every claimed change is already in
+        // everything the run holds. A change saved after the early read is not in the id list, so it is not claimed however
+        // close to the claim it commits; it stays awaiting synchronisation and the next run reads it. Claiming "everything
+        // awaiting" at this point instead would claim a row committed between the worker's load and the claim, which the
+        // loaded Object Types may not contain. No timestamps are compared, so no clock skew between hosts moves the line.
         //
         // A row an earlier run claimed and never applied (it failed or was cancelled) still has AppliedAt null, so it is
         // claimed again and the earlier claim is overwritten. If two runs for one Connected System overlap, whichever
         // statement runs second waits for the first's row locks, re-checks the rows and overwrites the claim; the first
         // run then applies nothing (see ApplyClaimedConfigurationChangeSynchronisationsAsync) and the second applies
-        // everything. Both runs processed the types in full by then, so that is safe, only redundant.
+        // everything it was offered. Both runs processed the types in full by then, so that is safe, only redundant.
+        //
+        // The Connected System predicate is belt and braces: the ids are already this system's.
         const string sql = """
             UPDATE "ConfigurationChangeSynchronisations"
             SET "ClaimedByActivityId" = @runActivityId
-            WHERE "ConnectedSystemId" = @connectedSystemId AND "AppliedAt" IS NULL
+            WHERE "Id" = ANY(@eligibleIds) AND "ConnectedSystemId" = @connectedSystemId AND "AppliedAt" IS NULL
             RETURNING "Id", "ConnectedSystemObjectTypeId"
             """;
 
@@ -53,6 +59,7 @@ public partial class SyncRepository
         await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
         command.Parameters.Add(new NpgsqlParameter("runActivityId", NpgsqlDbType.Uuid) { Value = runActivityId });
         command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("eligibleIds", NpgsqlDbType.Array | NpgsqlDbType.Bigint) { Value = eligibleIds.ToArray() });
 
         var claimed = new List<ClaimedConfigurationChangeSynchronisation>();
         await using (var reader = await command.ExecuteReaderAsync())
@@ -100,6 +107,15 @@ public partial class SyncRepository
             entry => SetAsPersisted(entry.Property(c => c.AppliedAt), (DateTime?)appliedAt));
 
         return applied.Count;
+    }
+
+    public async Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId)
+    {
+        return await _context.ConfigurationChangeSynchronisations
+            .AsNoTracking()
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null)
+            .Select(c => c.Id)
+            .ToListAsync();
     }
 
     public async Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(int connectedSystemId)

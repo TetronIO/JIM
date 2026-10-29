@@ -37,8 +37,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations, uniquenessProbeSessionHost)
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null,
+        IReadOnlyCollection<long>? configurationChangeIdsEligibleToClaim = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations, uniquenessProbeSessionHost, configurationChangeIdsEligibleToClaim)
     {
     }
 

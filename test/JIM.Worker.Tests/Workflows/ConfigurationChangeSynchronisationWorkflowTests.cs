@@ -161,6 +161,53 @@ public class ConfigurationChangeSynchronisationWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task DeltaSync_ChangeCommittedAfterTheEligibleIdsWereReadButBeforeTheClaim_IsNotClaimedAndIsClaimedByTheNextRunAsync()
+    {
+        // The window the worker's order closes: a change saved after the worker read the ids and before the run claims
+        // may be missing from the Connected System and Object Types the worker has already loaded, so it must wait.
+        var first = RecordChange(_userType);
+        ConfigurationChangeSynchronisation? lateChange = null;
+
+        var run = await RunAsync(ConnectedSystemRunType.DeltaSynchronisation, afterEligibleIdsRead: () => lateChange = RecordChange(_userType));
+
+        Assert.That(lateChange, Is.Not.Null, "precondition: the change was committed in the gap");
+        var late = lateChange!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.AppliedAt, Is.Not.Null, "the change read before is claimed and applied");
+            Assert.That(late.ClaimedByActivityId, Is.Null, "the change committed in the gap is not claimed");
+            Assert.That(late.AppliedAt, Is.Null);
+        }
+
+        var next = await RunAsync(ConnectedSystemRunType.DeltaSynchronisation);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(next.ProcessedCsoIds.Order(), Is.EqualTo(_users.Select(u => u.Id).Order()), "the next run processes the type in full again");
+            Assert.That(late.ClaimedByActivityId, Is.EqualTo(next.Activity.Id));
+            Assert.That(late.AppliedAt, Is.Not.Null);
+            Assert.That(first.ClaimedByActivityId, Is.EqualTo(run.Activity.Id));
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_ProcessorConstructedWithoutEligibleIds_ClaimsNothingAsync()
+    {
+        var awaiting = RecordChange(_userType);
+        var reloaded = await ReloadEntityAsync(_system);
+        var profile = await CreateRunProfileAsync(reloaded.Id, $"Delta {Guid.NewGuid():N}", ConnectedSystemRunType.DeltaSynchronisation);
+        var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.DeltaSynchronisation);
+
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ClaimedByActivityId, Is.Null);
+            Assert.That(awaiting.AppliedAt, Is.Null, "a run handed no ids has nothing it may claim or apply");
+        }
+    }
+
+    [Test]
     public async Task DeltaSync_TenChangesForOneType_ProcessesEachObjectOnceAndAppliesAllTenAsync()
     {
         var changes = Enumerable.Range(0, 10).Select(i => RecordChange(_userType, $"{ChangeReason} {i}")).ToList();
@@ -400,13 +447,20 @@ public class ConfigurationChangeSynchronisationWorkflowTests : WorkflowTestBase
     /// <param name="onProcessed">Called after each object is processed, for a test to act at an exact point in the run.</param>
     /// <param name="cts">Lets a test cancel the run.</param>
     /// <param name="repository">Wraps the synchronisation repository, for a test to observe call order.</param>
+    /// <param name="afterEligibleIdsRead">Called once the worker's read of the ids awaiting synchronisation is done and
+    /// before the processor starts, for a test to commit a change in that gap.</param>
     private async Task<RunResult> RunAsync(
         ConnectedSystemRunType runType,
         Action<ConnectedSystemObject>? onProcessed = null,
         CancellationTokenSource? cts = null,
-        ISyncRepository? repository = null)
+        ISyncRepository? repository = null,
+        Action? afterEligibleIdsRead = null)
     {
         var reloaded = await ReloadEntityAsync(_system);
+        // As the worker does, before it loads the Connected System: read the ids awaiting synchronisation. They are the
+        // only changes the run may claim.
+        var eligibleIds = await SyncRepo.GetConfigurationChangeSynchronisationIdsAwaitingAsync(reloaded.Id);
+        afterEligibleIdsRead?.Invoke();
         var profile = await CreateRunProfileAsync(reloaded.Id, $"{runType} {Guid.NewGuid():N}", runType);
         var activity = await CreateActivityAsync(reloaded.Id, profile, runType);
         var processed = new List<Guid>();
@@ -420,7 +474,8 @@ public class ConfigurationChangeSynchronisationWorkflowTests : WorkflowTestBase
         var syncRepository = repository ?? SyncRepo;
         if (runType == ConnectedSystemRunType.FullSynchronisation)
         {
-            var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), syncRepository, reloaded, profile, activity, cts)
+            var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), syncRepository, reloaded, profile, activity, cts,
+                configurationChangeIdsEligibleToClaim: eligibleIds)
             {
                 OnConnectedSystemObjectProcessedInPass2 = Record
             };
@@ -428,7 +483,8 @@ public class ConfigurationChangeSynchronisationWorkflowTests : WorkflowTestBase
         }
         else
         {
-            var processor = new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), syncRepository, reloaded, profile, activity, cts)
+            var processor = new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), syncRepository, reloaded, profile, activity, cts,
+                configurationChangeIdsEligibleToClaim: eligibleIds)
             {
                 OnConnectedSystemObjectProcessedInPass2 = Record
             };

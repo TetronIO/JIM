@@ -114,7 +114,7 @@ public class ReadOnlySyncRepositoryGuardTests
     {
         // Claiming stamps the rows with a run's Activity; a preview that claimed would take them from the run that must
         // apply them (#2615). The preview reads what is awaiting through the read-only query below.
-        Assert.That(() => _guard.ClaimConfigurationChangeSynchronisationsAsync(1, Guid.NewGuid()),
+        Assert.That(() => _guard.ClaimConfigurationChangeSynchronisationsAsync(1, [1L], Guid.NewGuid()),
             Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync)));
     }
 
@@ -134,6 +134,17 @@ public class ReadOnlySyncRepositoryGuardTests
         var result = await _guard.GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(3);
 
         Assert.That(result, Is.SameAs(awaiting));
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeSynchronisationIdsAwaitingAsync_IsARead_DelegatesToTheWrappedRepository()
+    {
+        IReadOnlyList<long> ids = [4L, 5L];
+        _inner.Setup(r => r.GetConfigurationChangeSynchronisationIdsAwaitingAsync(3)).ReturnsAsync(ids);
+
+        var result = await _guard.GetConfigurationChangeSynchronisationIdsAwaitingAsync(3);
+
+        Assert.That(result, Is.SameAs(ids));
     }
 
     [Test]

@@ -5335,12 +5335,22 @@ public class SyncRepository : ISyncRepository
         return change;
     }
 
-    public Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, Guid runActivityId)
+    public Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId)
     {
-        // Every row awaiting synchronisation, including one an earlier run claimed and never applied: that claim is
-        // overwritten, as the production statement does.
-        var claimed = _configurationChangeSynchronisations
+        IReadOnlyList<long> ids = _configurationChangeSynchronisations
             .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null)
+            .Select(c => c.Id)
+            .ToList();
+        return Task.FromResult(ids);
+    }
+
+    public Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, IReadOnlyCollection<long> eligibleIds, Guid runActivityId)
+    {
+        // Every eligible row still awaiting synchronisation, including one an earlier run claimed and never applied: that
+        // claim is overwritten, as the production statement does. A row seeded after the caller read the eligible ids is
+        // not among them and is left alone.
+        var claimed = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null && eligibleIds.Contains(c.Id))
             .ToList();
         foreach (var change in claimed)
             change.ClaimedByActivityId = runActivityId;

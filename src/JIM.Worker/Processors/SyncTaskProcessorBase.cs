@@ -295,6 +295,12 @@ public abstract class SyncTaskProcessorBase
     private IReadOnlyList<ClaimedConfigurationChangeSynchronisation> _claimedConfigurationChanges = [];
 
     /// <summary>
+    /// The only configuration changes awaiting synchronisation this run may claim: the ids the worker read before it
+    /// loaded anything the run uses (#2615). Empty for a processor constructed without them, which claims nothing.
+    /// </summary>
+    private readonly IReadOnlyCollection<long> _configurationChangeIdsEligibleToClaim;
+
+    /// <summary>
     /// The Object Types whose every object this run processes because configuration changes awaiting synchronisation
     /// were claimed for them (#2615). A Full Synchronisation processes everything anyway; a Delta Synchronisation uses
     /// this to page these types in full and the others by modification.
@@ -536,7 +542,8 @@ public abstract class SyncTaskProcessorBase
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null,
+        IReadOnlyCollection<long>? configurationChangeIdsEligibleToClaim = null)
     {
         _syncEngine = syncEngine;
         _syncServer = syncServer;
@@ -554,6 +561,7 @@ public abstract class SyncTaskProcessorBase
         // run-scoped set of its own, which is exactly as safe: nothing else shares it.
         _uniqueValueReservations = uniqueValueReservations ?? new UniqueValueReservationSet();
         _uniquenessProbeSessionHost = uniquenessProbeSessionHost;
+        _configurationChangeIdsEligibleToClaim = configurationChangeIdsEligibleToClaim ?? [];
     }
 
     /// <summary>
@@ -1096,22 +1104,21 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Claims every configuration change awaiting synchronisation for this Connected System (#2615), and records which
-    /// Object Types this run must therefore process in full. Call it first, as the run starts: before the progress count
-    /// and before any Synchronisation Rule is loaded. That order is what makes the claim race-free (see
-    /// <see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>): a change claimed is already saved,
-    /// so the rules this run loads next contain it, and a change saved after the claim waits for the next run.
+    /// Claims the configuration changes awaiting synchronisation that the worker offered this run (#2615), and records
+    /// which Object Types the run must therefore process in full. Call it first, as the run starts: before the progress
+    /// count and before any Synchronisation Rule is loaded.
     /// <para>
-    /// Known limit: the worker loads the Connected System and its Object Types, with the Simple Mode Object Matching
-    /// Rules held on them, before it constructs the processor, so a Simple Mode Object Matching Rule change saved in
-    /// the moments between that load and this claim is claimed yet absent from the Object Types the run uses.
-    /// Synchronisation Rules, which the run loads after the claim, are not affected.
+    /// The guarantee: the worker read the ids it offers before it loaded the Connected System with its Object Types and
+    /// their Simple Mode Object Matching Rules, and this run loads the Synchronisation Rules after the claim. A change's
+    /// row is written only after the change is saved, so every change claimed here is already in all of those. A change
+    /// saved after the worker's read is not offered, however soon after it commits, and waits for the next run (see
+    /// <see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>).
     /// </para>
     /// </summary>
     /// <param name="runKind">The run kind, for the log line.</param>
     protected async Task ClaimConfigurationChangesAwaitingSynchronisationAsync(string runKind)
     {
-        _claimedConfigurationChanges = await _syncRepo.ClaimConfigurationChangeSynchronisationsAsync(_connectedSystem.Id, _activity.Id);
+        _claimedConfigurationChanges = await _syncRepo.ClaimConfigurationChangeSynchronisationsAsync(_connectedSystem.Id, _configurationChangeIdsEligibleToClaim, _activity.Id);
         _objectTypeIdsToProcessInFull = _claimedConfigurationChanges.Select(c => c.ConnectedSystemObjectTypeId).ToHashSet();
 
         if (_claimedConfigurationChanges.Count == 0)

@@ -2219,19 +2219,37 @@ public interface ISyncRepository
     #region Configuration Changes Awaiting Synchronisation (#2615)
 
     /// <summary>
-    /// Claims, for a synchronisation run, every configuration change awaiting synchronisation for the Connected System,
-    /// in one statement, and returns what it claimed. A synchronisation calls this first, before it loads any
-    /// Synchronisation Rule, and processes every object of the types returned.
+    /// The ids of every configuration change awaiting synchronisation for the Connected System, without claiming them.
+    /// The worker reads these first of all when it takes a synchronisation task, before it loads the Connected System,
+    /// and hands them to the run as the only rows it may claim
+    /// (<see cref="ClaimConfigurationChangeSynchronisationsAsync"/>). Also a plain read for anything that needs to know
+    /// what is waiting; it changes nothing.
+    /// </summary>
+    Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Claims, for a synchronisation run, the given configuration changes that are still awaiting synchronisation for the
+    /// Connected System, in one statement, and returns what it claimed. A synchronisation calls this first, before it
+    /// loads any Synchronisation Rule, and processes every object of the types returned.
+    /// <para>
+    /// The guarantee: every row claimed was committed before the worker read the ids it passes here, and the worker reads
+    /// them before it loads anything the run uses (the Connected System with its Object Types and their Simple Mode Object
+    /// Matching Rules, then the Synchronisation Rules). A row is only written after the configuration change it records
+    /// has been saved, so every claimed change is already in everything the run loaded. A change saved after the ids were
+    /// read is not among them; it stays awaiting the next run, however soon after it commits.
+    /// </para>
     /// <para>
     /// A change claimed by an earlier run that failed or was cancelled is claimed again (the earlier claim is
-    /// overwritten). A change saved while the run is in flight is not claimed by it and stays awaiting the next run.
+    /// overwritten), provided its id is among those passed.
     /// </para>
     /// </summary>
     /// <param name="connectedSystemId">The Connected System being synchronised.</param>
+    /// <param name="eligibleIds">The ids the run may claim, as read before it loaded anything
+    /// (<see cref="GetConfigurationChangeSynchronisationIdsAwaitingAsync"/>). Rows not listed are never claimed.</param>
     /// <param name="runActivityId">The synchronisation run's Activity: what the claimed rows are stamped with, and what
     /// <see cref="ApplyClaimedConfigurationChangeSynchronisationsAsync"/> later applies by.</param>
-    /// <returns>One entry per claimed row; empty when nothing is awaiting synchronisation.</returns>
-    Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, Guid runActivityId);
+    /// <returns>One entry per claimed row; empty when nothing eligible is still awaiting synchronisation.</returns>
+    Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, IReadOnlyCollection<long> eligibleIds, Guid runActivityId);
 
     /// <summary>
     /// Marks applied the changes the run claimed (<see cref="ClaimConfigurationChangeSynchronisationsAsync"/>), as the

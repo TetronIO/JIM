@@ -1,6 +1,6 @@
 # Import Rule Changes Take Effect at the Next Synchronisation
 
-- **Status:** Doing (Phase 1)
+- **Status:** Doing (Phase 1 done; Phase 2 under way)
 - **Issue:** [#2615](https://github.com/TetronIO/JIM/issues/2615) (parts B and C; part A ships separately)
 - **Note:** Predicted against actual counts moved to [#2618](https://github.com/TetronIO/JIM/issues/2618): honest only when one change with an informing preview is behind the run.
 
@@ -20,7 +20,7 @@ Saving a change to an import Synchronisation Rule, or to an Object Matching Rule
 
 ### Data model
 
-New entity `ConfigurationChangeSynchronisation` (table `ConfigurationChangeSynchronisations`), one row per saved change per Object Type. No "pass" anywhere, in code or UI: product vocabulary is synchronisation, and what runs is the administrator's ordinary Delta or Full Synchronisation, never a new kind of run:
+New entity `ConfigurationChangeSynchronisation` (table `ConfigurationChangeSynchronisations`), one row per saved change per Object Type. Product vocabulary is synchronisation: what runs is the administrator's ordinary Delta or Full Synchronisation, never a new kind of run:
 
 | Column | Notes |
 |---|---|
@@ -52,7 +52,7 @@ Deleting an import rule is out of scope: deletion recall already handles it.
 
 ### Consuming requests (worker)
 
-- **Claim** at run start, before rules load: `UPDATE "ConfigurationChangeSynchronisations" SET "ClaimedByActivityId" = @run WHERE "ConnectedSystemId" = @cs AND "AppliedAt" IS NULL RETURNING "Id", "ConnectedSystemObjectTypeId"`. READ COMMITTED means only committed rows are claimed, and a row is written after its rule change commits, so every claimed row's change is in the rules the run then loads.
+- **Claim** at run start, before rules load, and only the rows the worker offered. The worker reads the ids awaiting synchronisation for the Connected System BEFORE it loads the Connected System (`Worker.LoadConnectedSystemForSynchronisationAsync`), hands them to the processor, and the claim is `UPDATE "ConfigurationChangeSynchronisations" SET "ClaimedByActivityId" = @run WHERE "Id" = ANY(@eligibleIds) AND "AppliedAt" IS NULL RETURNING "Id", "ConnectedSystemObjectTypeId"`. A row is written after its rule change commits, so every claimed row was committed before anything the run uses was loaded (the Connected System with its Object Types and Simple Mode Object Matching Rules, then the Synchronisation Rules); a row committed after the early read waits for the next run.
 - **Delta:** the count adds the full count of claimed types; the early exit also waits for claimed requests; `CreateTypeOrderedPagerAsync`'s loader selects every object for a claimed type and modified objects for the rest. The closing sweep is unchanged.
 - **Full:** claims everything pending; processes as today.
 - **Apply** on success, beside `UpdateDeltaSyncWatermarkAsync`: `SET "AppliedAt" = now() WHERE "ClaimedByActivityId" = @run AND "AppliedAt" IS NULL`. Cancelled or failed runs apply nothing.
@@ -79,7 +79,7 @@ Deleting an import rule is out of scope: deletion recall already handles it.
 
 ## Implementation Phases
 
-1. **Engine**: entity, migration, repositories (Postgres, in-memory, read-only guard), claim and apply, Delta and Full consumption, early exit, synchronisation preview. Workflow tests: a save leads to a Delta processing every object of that type and only changed objects of others; a save during a run is not consumed by it; ten saves mean the type is processed once, with ten changes listed; a failed run applies nothing. `RequiresPostgres`: claim and apply SQL, delete paths.
+1. ✅ **Engine**: entity, migration, repositories (Postgres, in-memory, read-only guard), claim and apply, Delta and Full consumption, early exit, synchronisation preview. Workflow tests: a save leads to a Delta processing every object of that type and only changed objects of others; a save during a run is not consumed by it; ten saves mean the type is processed once, with ten changes listed; a failed run applies nothing. `RequiresPostgres`: claim and apply SQL, delete paths.
 2. **Requests**: every save path above, class-driven, Simple Mode type carried through, loud failure. Tests per path.
 3. **Drift indicator** rework.
 4. **Read surfaces**: portal notices and chips, Activity sections, DTOs, cmdlet output, Pester tests. Artefact screenshots.

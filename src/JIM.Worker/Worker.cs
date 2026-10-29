@@ -363,9 +363,10 @@ public class Worker : BackgroundService
                                             syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     }
                                     {
-                                        // Load with change tracking so EF Core identity-fixes overlapping entities
-                                        // across the multiple queries used during sync (object types, Synchronisation Rules, etc.)
-                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId, withChangeTracking: true);
+                                        // Loaded with change tracking (see LoadConnectedSystemForSynchronisationAsync), after the ids of the
+                                        // configuration changes awaiting synchronisation are read (#2615): that order is what lets the
+                                        // processor claim them safely.
+                                        var (connectedSystem, eligibleConfigurationChangeIds) = await LoadConnectedSystemForSynchronisationAsync(taskJim, syncRepo, syncWorkerTask.ConnectedSystemId);
                                         if (connectedSystem != null)
                                         {
                                             // Resolve the connector for this Connected System's connector definition
@@ -409,7 +410,8 @@ public class Worker : BackgroundService
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
                                                             var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter, _uniqueValueReservations,
-                                                                new JIM.Worker.UniqueValues.WorkerUniquenessProbeSessionHost(_jimFactory, _connectorFactory));
+                                                                new JIM.Worker.UniqueValues.WorkerUniquenessProbeSessionHost(_jimFactory, _connectorFactory),
+                                                                eligibleConfigurationChangeIds);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
                                                             // Stranded-value sweep (#1549): runs only when an earlier Connector Space clear armed
@@ -438,7 +440,8 @@ public class Worker : BackgroundService
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
                                                             var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter, _uniqueValueReservations,
-                                                                new JIM.Worker.UniqueValues.WorkerUniquenessProbeSessionHost(_jimFactory, _connectorFactory));
+                                                                new JIM.Worker.UniqueValues.WorkerUniquenessProbeSessionHost(_jimFactory, _connectorFactory),
+                                                                eligibleConfigurationChangeIds);
                                                             await syncDeltaSyncTaskProcessor.PerformDeltaSyncAsync();
                                                             break;
                                                         }
@@ -1603,6 +1606,27 @@ public class Worker : BackgroundService
     /// </summary>
     internal static List<TaskTask> GetDefunctTaskEntries(IEnumerable<TaskTask> currentTasks) =>
         currentTasks.Where(entry => entry.Task.IsCompleted).ToList();
+
+    /// <summary>
+    /// Loads the Connected System a synchronisation task runs against, having first read the ids of the configuration
+    /// changes awaiting synchronisation for it (#2615). The order is the point. A change's row is written only after the
+    /// change is saved, so every row read here was committed before anything the run uses is loaded: the Connected System
+    /// with its Object Types and their Simple Mode Object Matching Rules, here, and the Synchronisation Rules, later. The
+    /// processor claims only these ids, so a change committed after this read waits for the next run however close to the
+    /// claim it lands. Done for every synchronisation task, import runs included, which simply ignore the ids: it is one
+    /// indexed read.
+    /// </summary>
+    /// <returns>The Connected System (null where it no longer exists) and the ids the run may claim.</returns>
+    internal static async Task<(ConnectedSystem? ConnectedSystem, IReadOnlyList<long> EligibleConfigurationChangeIds)> LoadConnectedSystemForSynchronisationAsync(
+        JimApplication taskJim, ISyncRepository syncRepo, int connectedSystemId)
+    {
+        var eligibleIds = await syncRepo.GetConfigurationChangeSynchronisationIdsAwaitingAsync(connectedSystemId);
+
+        // Load with change tracking so EF Core identity-fixes overlapping entities across the multiple queries used
+        // during sync (object types, Synchronisation Rules, etc.)
+        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
+        return (connectedSystem, eligibleIds);
+    }
 
     /// <summary>
     /// Summarises one retention pass for its Activity's message (requirement 30): what it removed, per class of

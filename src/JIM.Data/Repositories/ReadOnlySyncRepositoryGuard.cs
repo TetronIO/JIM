@@ -44,6 +44,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(int connectedSystemId)
         => _inner.GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(connectedSystemId);
 
+    public Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId)
+        => _inner.GetConfigurationChangeSynchronisationIdsAwaitingAsync(connectedSystemId);
+
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
         => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
 
@@ -759,7 +762,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<long?> ResetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId)
         => throw new PreviewWriteAttemptedException(nameof(ResetGeneratedValueSequenceAsync));
 
-    public Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, Guid runActivityId)
+    public Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, IReadOnlyCollection<long> eligibleIds, Guid runActivityId)
         => throw new PreviewWriteAttemptedException(nameof(ClaimConfigurationChangeSynchronisationsAsync));
 
     public Task<int> ApplyClaimedConfigurationChangeSynchronisationsAsync(Guid runActivityId)
