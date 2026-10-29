@@ -422,28 +422,6 @@
       ]
     },
     {
-      "name": "operations-history",
-      "kind": "portal",
-      "profile": "portal",
-      "themes": [
-        "dark",
-        "light"
-      ],
-      "usedBy": [
-        "junctional.io tour assets; not on a tour page today"
-      ],
-      "steps": [
-        {
-          "goto": "/admin/operations?t=activity"
-        },
-        {
-          "waitFor": {
-            "selector": "[data-testid=\"activity-completed\"] .jim-activity-result"
-          }
-        }
-      ]
-    },
-    {
       "name": "schedules-new",
       "kind": "portal",
       "profile": "portal",
