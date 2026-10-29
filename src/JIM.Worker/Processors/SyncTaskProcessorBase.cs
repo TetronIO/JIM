@@ -112,10 +112,12 @@ public abstract class SyncTaskProcessorBase
     // export rule still has the Metaverse Object in scope, keeps its Delete (#1018).
     private readonly HashSet<Guid> _deprovisionedCsoIdsThisPage = [];
 
-    // Batch collection for deferred CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
+    // Batch collection for deferred CSO join-state updates (MetaverseObjectId, JoinType, DateJoined and the join
+    // record): a projection, a join, and a join released by an out-of-scope Disconnect all queue the CSO here.
     // CSO scalar property changes are NOT detected by EF during sync because AutoDetectChangesEnabled is
     // disabled at page boundaries for performance. Without explicit persistence, JoinType stays as NotJoined
-    // and DateJoined stays null in the database after projection or join.
+    // and DateJoined stays null in the database after projection or join, and a released join keeps its
+    // Metaverse Object and join record.
     protected readonly List<ConnectedSystemObject> _pendingCsoJoinUpdates = [];
 
     // Batch collection of CSO ids that carried the Temporal Scope Reconciler flag (ScopeReviewPending, #892) and
@@ -4120,9 +4122,11 @@ public abstract class SyncTaskProcessorBase
             _pendingMvoUpdateIds.Clear();
         }
 
-        // Batch update CSOs that had JoinType/DateJoined/MetaverseObjectId changed during
-        // projection or join. This must run AFTER MVO creates so that projected CSOs can
-        // pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange).
+        // Batch update CSOs whose join state (JoinType/DateJoined/MetaverseObjectId and the join record) changed
+        // during projection, join or an out-of-scope Disconnect. This must run AFTER MVO creates so that projected
+        // CSOs can pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange), and it runs
+        // BEFORE FlushPendingMvoDeletionsAsync, so a CSO released from a Metaverse Object that is deleted in the
+        // same flush no longer references it when the delete runs.
         if (_pendingCsoJoinUpdates.Count > 0)
         {
             // Release-before-claim: obsolete CSOs that were disconnected in-memory this page (their
@@ -7634,6 +7638,16 @@ public abstract class SyncTaskProcessorBase
                 connectedSystemObject.MetaverseObjectId = null;
                 connectedSystemObject.ClearJoinRecord();
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
+
+                // The break above is in memory only: EF does not detect CSO scalar changes at page boundaries, and
+                // the join-state batch is the only thing that writes them. Queue the CSO for it, whatever becomes of
+                // the Metaverse Object, or the Activity reports the disconnection while the row keeps its Metaverse
+                // Object and join record. An immediate deletion of the Metaverse Object does not stand in for this:
+                // it happens to clear the row of a CSO still joined to it, but only after the page's export
+                // evaluation has treated the departed CSO as a deprovisioning target of the object it just left.
+                // The flush writes the batch before the Metaverse Object is deleted, so the row is already released
+                // when the delete runs.
+                _pendingCsoJoinUpdates.Add(connectedSystemObject);
 
                 // Apply pending attribute changes and queue the MVO onto the page-flush batch update
                 // (skip when MVO is about to be deleted immediately - the update would be a wasted

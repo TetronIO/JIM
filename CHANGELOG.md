@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 People JIM creates or changes outside synchronisation, such as the initial administrator at first sign-in, now reach their accounts at the next synchronisation, changed and removed values included; the run's review step is now called **Export Review**. (#2615)
+- 🐛 An object that leaves an import Synchronisation Rule's scope under the Disconnect action is now actually disconnected; before, the Activity reported the disconnection while the object stayed joined. Where its Metaverse Object is deleted as a result, the object that left is no longer deprovisioned along with it.
 
 ## [0.17.0] - 2026-10-29
 
