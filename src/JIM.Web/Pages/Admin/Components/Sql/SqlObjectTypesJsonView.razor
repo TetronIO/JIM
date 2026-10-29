@@ -1,0 +1,165 @@
+@using JIM.Web.Models
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The SQL Object Types document as text (#2570), for pasting, copying and anything the cards do not cover. It is the
+   ExpressionEditor's overlay: a transparent textarea over an aria-hidden pre painting the same text through
+   Helpers.HighlightJson, both taking their metrics from .jim-expression-editor-layer so a glyph in the pre lands under
+   the same character in the textarea. Lines do not wrap, so a line number in the gutter is always a line of the
+   document, and the problems the parser finds are listed above it and marked on their lines.
+   The textarea's value stays an @bind (get/set) for the reason ExpressionEditor gives: value plus @oninput loses
+   characters typed while a keystroke is in flight. *@
+<div class="@($"jim-sql-json-view {Class}".Trim())" data-testid="jim-sql-json-view">
+    @if (Problems.Count > 0)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-3" data-testid="jim-sql-json-problems">
+            @if (Problems.Any(p => p.StopsReading))
+            {
+                <strong>The cards can show this document once @(Problems.Count == 1 ? "this is" : "these are") fixed.</strong>
+            }
+            else if (Problems.Count > 1)
+            {
+                <strong>@Problems.Count problems to fix before this document can be saved.</strong>
+            }
+            @if (Problems.Count == 1)
+            {
+                <div class="jim-sql-json-problem-single" data-testid="jim-sql-json-problem">@ProblemText(Problems[0])</div>
+            }
+            else
+            {
+                <ul class="jim-sql-json-problem-list">
+                    @foreach (var problem in Problems)
+                    {
+                        <li data-testid="jim-sql-json-problem">@ProblemText(problem)</li>
+                    }
+                </ul>
+            }
+        </MudAlert>
+    }
+
+    <div class="@($"jim-sql-json-editor{(Problems.Count > 0 ? " jim-sql-json-editor-invalid" : string.Empty)}")">
+        <div class="jim-sql-json-scroller" @ref="_scroller">
+            <div class="jim-sql-json-body">
+                <div class="jim-sql-json-gutter" aria-hidden="true">
+                    @for (var i = 1; i <= LineCount; i++)
+                    {
+                        var marked = _markedLines.Contains(i);
+                        <div class="@($"jim-sql-json-line-number{(marked ? " jim-sql-json-line-number-marked" : string.Empty)}")"
+                             data-testid="jim-sql-json-line" data-marked="@(marked ? "true" : "false")">@i</div>
+                    }
+                </div>
+                <div class="jim-sql-json-stack">
+                    <div class="jim-sql-json-marks" aria-hidden="true">
+                        @foreach (var line in _markedLines)
+                        {
+                            <div class="jim-sql-json-mark" style="@($"--jim-sql-json-mark-line: {line - 1};")"></div>
+                        }
+                    </div>
+                    <pre class="jim-expression-editor-layer jim-expression-editor-highlight jim-sql-json-layer" aria-hidden="true">@((MarkupString)OverlayMarkup)</pre>
+                    <textarea @ref="_textarea" class="jim-expression-editor-layer jim-expression-editor-input jim-sql-json-layer" rows="1" wrap="off"
+                              @bind:get="Value" @bind:set="OnTypedAsync" @bind:event="oninput"
+                              placeholder="@Placeholder" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
+                              aria-label="@Label" aria-invalid="@(Problems.Count > 0 ? "true" : "false")"
+                              data-testid="jim-sql-json-input"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>The document as typed.</summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    /// <summary>Raised on every keystroke, with the text as it now stands.</summary>
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>The parser's problems with <see cref="Value"/>, located on their lines.</summary>
+    [Parameter]
+    public IReadOnlyList<SqlObjectTypesJsonProblem> Problems { get; set; } = [];
+
+    /// <summary>The name the textarea is announced by.</summary>
+    [Parameter]
+    public string Label { get; set; } = "Object Types document";
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private const string Placeholder = "Paste or type the document, or insert the example to start from.";
+
+    private ElementReference _textarea;
+    private ElementReference _scroller;
+    private HashSet<int> _markedLines = [];
+
+    private int LineCount => Math.Max(1, (Value ?? string.Empty).Count(c => c == '\n') + 1);
+
+    protected override void OnParametersSet() =>
+        _markedLines = [.. Problems.Select(p => p.Line).OfType<int>()];
+
+    /// <summary>
+    /// The highlighted text. A pre gives a trailing line break no line of its own, while a textarea does, so a value
+    /// ending in one is padded with a space; while the field is empty the pre holds the placeholder, invisibly, so the
+    /// field is as wide as the placeholder the textarea paints.
+    /// </summary>
+    private string OverlayMarkup
+    {
+        get
+        {
+            var value = Value ?? string.Empty;
+            if (value.Length == 0)
+                return $"<span class=\"jim-expression-editor-placeholder-sizer\">{System.Net.WebUtility.HtmlEncode(Placeholder)}</span>";
+
+            var markup = Helpers.HighlightJson(value);
+            return value.EndsWith('\n') ? markup + " " : markup;
+        }
+    }
+
+    /// <summary>A problem's message, led by a link to its line where it has one.</summary>
+    private RenderFragment ProblemText(SqlObjectTypesJsonProblem problem) => __builder =>
+    {
+        @if (problem.Line is { } line)
+        {
+            <MudLink OnClick="@(() => GoToLineAsync(line))">Line @line</MudLink><text>: </text>
+        }
+        @problem.Message
+    };
+
+    private Task OnTypedAsync(string? value) => ValueChanged.InvokeAsync(value ?? string.Empty);
+
+    /// <summary>Puts the caret at the start of a problem's line and brings the line into view.</summary>
+    private async Task GoToLineAsync(int line)
+    {
+        var value = Value ?? string.Empty;
+        var start = 0;
+        for (var i = 1; i < line; i++)
+        {
+            var next = value.IndexOf('\n', start);
+            if (next < 0)
+            {
+                start = value.Length;
+                break;
+            }
+
+            start = next + 1;
+        }
+
+        var end = value.IndexOf('\n', start);
+        try
+        {
+            await JS.InvokeVoidAsync("jimInterop.selectTextLine", _textarea, _scroller, start, end < 0 ? value.Length : end, line);
+        }
+        catch (JSException)
+        {
+            // Going to the line is a convenience; the problem still names it.
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is nobody left to show it to.
+        }
+    }
+}

@@ -1854,6 +1854,115 @@ html[lang] .jim-sql-inline-alert .mud-alert-message {
     white-space: nowrap;
 }
 
+/* ─── SQL Object Types JSON view (<SqlObjectTypesJsonView />) ───
+   The ExpressionEditor's overlay (.jim-expression-editor-layer and friends) with three differences: lines never wrap,
+   so each gutter number is a line of the document; the gutter scrolls vertically with the text and stays put
+   horizontally (sticky); and marked lines are washed from a layer beneath the pre. The expression editor's tokens are
+   set here so its layer rule gives this view the same metrics. */
+.jim-sql-json-editor {
+    --jim-expression-editor-line-height: 1.25rem;
+    --jim-expression-editor-padding-x: 12px;
+    --jim-sql-json-padding-y: 8px;
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: var(--mud-default-borderradius);
+    background-color: var(--mud-palette-surface);
+}
+
+.jim-sql-json-editor:focus-within {
+    border-color: var(--mud-palette-primary);
+    box-shadow: 0 0 0 1px var(--mud-palette-primary);
+}
+
+.jim-sql-json-editor.jim-sql-json-editor-invalid {
+    border-color: var(--mud-palette-error);
+}
+
+.jim-sql-json-editor.jim-sql-json-editor-invalid:focus-within {
+    box-shadow: 0 0 0 1px var(--mud-palette-error);
+}
+
+.jim-sql-json-scroller {
+    max-height: calc(30 * var(--jim-expression-editor-line-height) + 2 * var(--jim-sql-json-padding-y));
+    overflow: auto;
+    border-radius: inherit;
+}
+
+.jim-sql-json-body {
+    display: grid;
+    grid-template-columns: auto minmax(max-content, 1fr);
+    width: max-content;
+    min-width: 100%;
+    padding: var(--jim-sql-json-padding-y) 0;
+}
+
+.jim-sql-json-gutter {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    padding: 0 8px 0 12px;
+    border-right: 1px solid var(--mud-palette-lines-default);
+    background-color: var(--mud-palette-surface);
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.75rem;
+    line-height: var(--jim-expression-editor-line-height);
+    text-align: right;
+    color: var(--mud-palette-text-secondary);
+    user-select: none;
+}
+
+.jim-sql-json-line-number {
+    min-width: 2ch;
+}
+
+.jim-sql-json-line-number-marked {
+    color: var(--mud-palette-error);
+    font-weight: 600;
+}
+
+/* Its own stacking context, so the marks (positioned, and so otherwise painted over the text and the textarea) can
+   sit beneath both. */
+.jim-sql-json-stack {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr);
+    position: relative;
+    z-index: 0;
+}
+
+html[lang] .jim-expression-editor-layer.jim-sql-json-layer {
+    white-space: pre;
+    overflow-wrap: normal;
+}
+
+.jim-sql-json-marks {
+    grid-area: 1 / 1;
+    position: relative;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.jim-sql-json-mark {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--jim-sql-json-mark-line) * var(--jim-expression-editor-line-height));
+    height: var(--jim-expression-editor-line-height);
+    background-color: rgba(var(--mud-palette-error-rgb), 0.14);
+    box-shadow: inset 3px 0 0 var(--mud-palette-error);
+}
+
+.jim-sql-json-problem-list {
+    margin: 4px 0 0;
+    padding-left: 1.25rem;
+}
+
+.jim-sql-json-problem-list:first-child {
+    margin-top: 0;
+}
+
+.jim-sql-json-problem-single:not(:first-child) {
+    margin-top: 4px;
+}
+
 /* A Connector setting's example, beneath its field. Long examples scroll within the block rather than
    pushing the rest of the form a screen further down. */
 .jim-setting-example .jim-code-block {

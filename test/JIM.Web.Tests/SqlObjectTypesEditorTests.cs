@@ -202,11 +202,110 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.Find("[data-testid=jim-sql-object-types-unloadable]").TextContent, Does.Contain("anchorColumns"));
-            Assert.That(cut.HasComponent<ConnectedSystemSettingField>(), Is.True, "the text stays editable, so the problem can be fixed");
+            Assert.That(cut.Find("[data-testid=jim-sql-json-problem]").TextContent, Does.Contain("anchorColumns"));
+            Assert.That(cut.FindAll("[data-testid=jim-sql-json-input]"), Has.Count.EqualTo(1), "the text stays editable, so the problem can be fixed");
             Assert.That(cut.HasComponent<SqlObjectTypeCard>(), Is.False);
         }
     }
+
+    #region JSON view
+
+    [Test]
+    public void JsonView_APastedMisspeltField_MarksItsLineAndBlocksTheCardsAndSaving()
+    {
+        // PRD Scenario 4: 'anchorColumn' on line 7.
+        const string pasted = """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "schema": "HR",
+                  "table": "EMPLOYEES",
+                  "anchorColumn": [ "EMPLOYEE_ID" ]
+                }
+              ]
+            }
+            """;
+        var settingValue = ObjectTypesSetting(PersonOnly);
+        var hasProblems = new List<bool>();
+        var cut = Render<SqlObjectTypesEditor>(p => p
+            .Add(c => c.SettingValue, settingValue)
+            .Add(c => c.HasProblemsChanged, (bool value) => hasProblems.Add(value)));
+        cut.Find("[data-testid=jim-sql-object-types-json-toggle]").Click();
+
+        cut.Find("[data-testid=jim-sql-json-input]").Input(pasted);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(settingValue.StringValue, Is.EqualTo(pasted), "the text is the setting's value as typed");
+            Assert.That(cut.FindAll("[data-testid=jim-sql-json-line][data-marked=true]").Select(l => l.TextContent.Trim()), Is.EqualTo(new[] { "7" }));
+            var problem = cut.Find("[data-testid=jim-sql-json-problem]").TextContent;
+            Assert.That(problem, Does.Contain("Line 7").And.Contain("Did you mean 'anchorColumns'?"));
+            Assert.That(cut.Find("[data-testid=jim-sql-object-types-json-toggle]").HasAttribute("disabled"), Is.True, "the cards cannot show a document they cannot read");
+            Assert.That(hasProblems.LastOrDefault(), Is.True, "the settings tab is told, so it can hold Save Settings");
+        }
+    }
+
+    [Test]
+    public void JsonView_ProblemFixed_ReleasesTheCardsAndSaving()
+    {
+        var hasProblems = new List<bool>();
+        var cut = Render<SqlObjectTypesEditor>(p => p
+            .Add(c => c.SettingValue, ObjectTypesSetting("{ \"objectTypes\": [ { \"anchorColumn\": [\"ID\"] } ] }"))
+            .Add(c => c.HasProblemsChanged, (bool value) => hasProblems.Add(value)));
+
+        cut.Find("[data-testid=jim-sql-json-input]").Input(PersonOnly);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid=jim-sql-json-problem]"), Is.Empty);
+            Assert.That(cut.FindAll("[data-testid=jim-sql-json-line][data-marked=true]"), Is.Empty);
+            Assert.That(cut.Find("[data-testid=jim-sql-object-types-json-toggle]").HasAttribute("disabled"), Is.False);
+            Assert.That(hasProblems, Is.EqualTo(new[] { true, false }), "told once when the editor opens on a broken document, and once when it is fixed");
+        }
+    }
+
+    [Test]
+    public void JsonView_AProblemWithWhatTheDocumentSays_IsMarkedButTheCardsCanStillShowIt()
+    {
+        const string missingAnchor = """
+            {
+              "objectTypes": [
+                { "name": "Person", "schema": "HR", "table": "EMPLOYEES" }
+              ]
+            }
+            """;
+        var cut = Render<SqlObjectTypesEditor>(p => p.Add(c => c.SettingValue, ObjectTypesSetting(PersonOnly)));
+        cut.Find("[data-testid=jim-sql-object-types-json-toggle]").Click();
+
+        cut.Find("[data-testid=jim-sql-json-input]").Input(missingAnchor);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid=jim-sql-json-line][data-marked=true]").Select(l => l.TextContent.Trim()), Is.EqualTo(new[] { "3" }));
+            Assert.That(cut.Find("[data-testid=jim-sql-object-types-json-toggle]").HasAttribute("disabled"), Is.False,
+                "a card can show a missing anchor and offer the columns to choose from, so the cards are the better place to fix it");
+        }
+    }
+
+    [Test]
+    public void JsonView_AnEmptyDocument_OffersTheExampleToStartFrom()
+    {
+        var settingValue = ObjectTypesSetting("");
+        settingValue.Setting.Example = PersonOnly;
+        var cut = Render<SqlObjectTypesEditor>(p => p.Add(c => c.SettingValue, settingValue));
+        cut.Find("[data-testid=jim-sql-object-types-json-toggle]").Click();
+
+        cut.Find("[data-testid=jim-sql-json-insert-example]").Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(settingValue.StringValue, Is.EqualTo(PersonOnly));
+            Assert.That(cut.FindAll("[data-testid=jim-sql-json-insert-example]"), Is.Empty, "there is nothing to start from once the document has text");
+        }
+    }
+
+    #endregion
 
     #region Add Object Type dialog
 
