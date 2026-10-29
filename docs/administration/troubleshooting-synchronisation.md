@@ -65,7 +65,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
 
-**Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, the next synchronisation, Delta included, processes every object of its Object Type. The object's execution item records a join or a projection.
+**Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, the next synchronisation processes every object of its Object Type. The object's execution item records a join or a projection.
 
 ## :material-vector-link: **Ambiguous Provisioning Match**: `This Metaverse Object matches ... Connected System Objects in '...' on ...`
 
@@ -176,9 +176,9 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 
 ## :material-timer-sand: **Failed with error**: `The change was saved, but JIM could not record that the next synchronisation of ... must process every ... object`
 
-**What it means.** JIM could not record that a saved import Synchronisation Rule or Object Matching Rule change needs the Connected System's next synchronisation to process every object of its Object Type, so it may not reach the objects that already exist. The change is saved and nothing is lost; the save's Activity fails so that it does not promise the change will take effect.
+**What it means.** An import Synchronisation Rule or Object Matching Rule change was saved, but JIM could not record that the next synchronisation must process its whole Object Type, so existing objects may miss it. The save's Activity is marked failed to warn you.
 
-**How to fix.** Run a Full Synchronisation of the Connected System the message names. It processes every object of every type, so it applies the change whatever was lost.
+**How to fix.** Run a Full Synchronisation of the Connected System named: it processes every object.
 
 **Check.** The Full Synchronisation's Activity ends **Complete**.
 
