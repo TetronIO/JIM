@@ -1,6 +1,6 @@
 # Import Rule Changes Take Effect at the Next Synchronisation
 
-- **Status:** Doing (Phases 1 to 3 done; Phase 4, the read surfaces, next)
+- **Status:** Doing (Phases 1 to 4 done; Phase 5, before saving, next; Phase 4 awaits a runtime check and screenshots)
 - **Issue:** [#2615](https://github.com/TetronIO/JIM/issues/2615) (parts B and C; part A ships separately)
 - **Note:** Predicted against actual counts moved to [#2618](https://github.com/TetronIO/JIM/issues/2618): honest only when one change with an informing preview is behind the run.
 
@@ -86,7 +86,7 @@ Deleting an import rule is out of scope: deletion recall already handles it.
 1. ✅ **Engine**: entity, migration, repositories (Postgres, in-memory, read-only guard), claim and apply, Delta and Full consumption, early exit, synchronisation preview. Workflow tests: a save leads to a Delta processing every object of that type and only changed objects of others; a save during a run is not consumed by it; ten saves mean the type is processed once, with ten changes listed; a failed run applies nothing. `RequiresPostgres`: claim and apply SQL, delete paths.
 2. ✅ **Requests**: every save path above, class-driven, Simple Mode type carried through, loud failure. Tests per path.
 3. ✅ **Drift indicator** rework.
-4. **Read surfaces**: portal notices and chips, Activity sections, DTOs, cmdlet output, Pester tests. Artefact screenshots.
+4. ✅ **Read surfaces**: portal notices and chips, Activity sections, DTOs, cmdlet output, Pester tests. Artefact screenshots (taken at the runtime check).
 5. **Before saving**: dialog wording, estimate, save response.
 6. **Docs**: rewrite (not append) the pages that say "run a Full Synchronisation after changing configuration": `concepts/synchronisation-pipeline.md` (Full Sync vs Delta Sync), `configuration/connected-systems.md` (Configuration changes pending), `configuration/configuration-changes.md`, `configuration/synchronisation-rules.md`, `configuration/scoping-criteria.md`, `administration/troubleshooting-synchronisation.md`, `concepts/attribute-priority.md`, `configuration/attribute-mappings.md`; plus the "when a configuration change takes effect" flow diagram from part D. Changelog.
 
