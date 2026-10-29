@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using JIM.Web.Controllers.Api;
@@ -327,6 +328,97 @@ public class SynchronisationControllerUpdateSyncRuleTests
         var response = result?.Value as SyncRuleSaveResponse;
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.DeletionSourceWarning, Is.Null, "re-saving a rule that already projected must not repeat the warning");
+    }
+
+    #endregion
+
+    #region Awaiting synchronisation (#2615)
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_EnabledImportRuleSave_ReportsTheTypeItRecordedWithItsCostAsync()
+    {
+        var syncRule = BuildImportRule(30);
+        syncRule.Enabled = true;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(30)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(100, 200, null)).ReturnsAsync(30_000);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(100, null)).ReturnsAsync(100_000);
+        _mockActivityRepo.Setup(r => r.GetLatestCompletedFullSynchronisationAsync(100))
+            .ReturnsAsync(new Activity { ExecutionTime = TimeSpan.FromMinutes(50) });
+
+        var result = await _controller.UpdateSyncRuleAsync(30, new UpdateSyncRuleRequest { InboundOutOfScopeAction = InboundOutOfScopeAction.RemainJoined }) as OkObjectResult;
+
+        var response = result?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null);
+        var awaiting = response!.AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemId, Is.EqualTo(100));
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("Test CS"));
+            Assert.That(awaiting.ConnectedSystemObjectTypeId, Is.EqualTo(200));
+            Assert.That(awaiting.ObjectTypeName, Is.EqualTo("user"));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(30_000));
+            // 100,000 objects in 50 minutes is 2,000 a minute, so 30,000 take 15 minutes.
+            Assert.That(awaiting.EstimatedDuration, Is.EqualTo(TimeSpan.FromMinutes(15)));
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_ImportRuleOnASystemThatHasNeverFullySynchronised_ReportsTheTypeWithoutADurationAsync()
+    {
+        var syncRule = BuildImportRule(31);
+        syncRule.Enabled = true;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(31)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(100, 200, null)).ReturnsAsync(12);
+
+        var result = await _controller.UpdateSyncRuleAsync(31, new UpdateSyncRuleRequest { InboundOutOfScopeAction = InboundOutOfScopeAction.RemainJoined }) as OkObjectResult;
+
+        var awaiting = (result?.Value as SyncRuleSaveResponse)!.AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(12));
+            Assert.That(awaiting.EstimatedDuration, Is.Null, "with no completed Full Synchronisation there is no speed to estimate from");
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_ExportRuleSave_ReportsNothingAwaitingSynchronisationAsync()
+    {
+        var syncRule = BuildExportRule(32);
+        syncRule.Enabled = true;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(32)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateSyncRuleAsync(32, new UpdateSyncRuleRequest { OutboundDeprovisionAction = OutboundDeprovisionAction.Delete }) as OkObjectResult;
+
+        var response = result?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.AwaitingSynchronisation, Is.Empty,
+            "an export rule's change reaches existing objects through the review the save flags, not through a type awaiting synchronisation");
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_ImportRuleSwitchedOffWhileOff_ReportsNothingAwaitingSynchronisationAsync()
+    {
+        var syncRule = BuildImportRule(33);
+        syncRule.Enabled = false;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(33)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateSyncRuleAsync(33, new UpdateSyncRuleRequest { Description = "Still off." }) as OkObjectResult;
+
+        var response = result?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.AwaitingSynchronisation, Is.Empty, "a rule that is off and stays off does nothing for the objects of its type");
     }
 
     #endregion

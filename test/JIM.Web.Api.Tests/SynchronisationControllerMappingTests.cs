@@ -1049,4 +1049,106 @@ public class SynchronisationControllerMappingTests
     }
 
     #endregion
+
+    #region Awaiting synchronisation (#2615)
+
+    private static SyncRule ImportRuleOnHr(int syncRuleId, int objectTypeId) => new()
+    {
+        Id = syncRuleId,
+        Name = "Import Rule",
+        Direction = SyncRuleDirection.Import,
+        Enabled = true,
+        ConnectedSystemId = 100,
+        ConnectedSystem = new ConnectedSystem { Id = 100, Name = "HR" },
+        ConnectedSystemObjectTypeId = objectTypeId,
+        ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId, Name = "user" }
+    };
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ImportMapping_ReportsTheTypeItRecordedWithItsCostAsync()
+    {
+        const int syncRuleId = 1;
+        const int objectTypeId = 7;
+        var syncRule = ImportRuleOnHr(syncRuleId, objectTypeId);
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>())).ReturnsAsync(() => captured);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(100, objectTypeId, null)).ReturnsAsync(480);
+
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetMetaverseAttributeId = 5,
+            Sources = new List<CreateSyncRuleMappingSourceRequest> { new() { Order = 0, ConnectedSystemAttributeId = 20 } }
+        };
+
+        var result = await _controller.CreateSyncRuleMappingAsync(syncRuleId, request) as CreatedAtRouteResult;
+
+        var dto = result?.Value as SyncRuleMappingDto;
+        Assert.That(dto, Is.Not.Null);
+        var awaiting = dto!.AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(awaiting.ObjectTypeName, Is.EqualTo("user"));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(480));
+        }
+    }
+
+    [Test]
+    public async Task DeleteSyncRuleMappingAsync_ImportMapping_ReportsTheTypeItRecordedWithItsCostAsync()
+    {
+        const int syncRuleId = 1;
+        const int mappingId = 10;
+        const int objectTypeId = 7;
+        var syncRule = ImportRuleOnHr(syncRuleId, objectTypeId);
+        var mapping = new SyncRuleMapping { Id = mappingId, SyncRule = syncRule, SyncRuleId = syncRuleId };
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(mappingId)).ReturnsAsync(mapping);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(100, objectTypeId, null)).ReturnsAsync(480);
+
+        var result = await _controller.DeleteSyncRuleMappingAsync(syncRuleId, mappingId) as OkObjectResult;
+
+        var response = result?.Value as SyncRuleMappingDeletionResponse;
+        Assert.That(response, Is.Not.Null);
+        var awaiting = response!.AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(480));
+        }
+    }
+
+    [Test]
+    public async Task DeleteSyncRuleMappingAsync_ExportMapping_ReportsNothingAwaitingSynchronisationAsync()
+    {
+        const int syncRuleId = 2;
+        const int mappingId = 11;
+        var syncRule = ImportRuleOnHr(syncRuleId, 7);
+        syncRule.Direction = SyncRuleDirection.Export;
+        var mapping = new SyncRuleMapping { Id = mappingId, SyncRule = syncRule, SyncRuleId = syncRuleId };
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(mappingId)).ReturnsAsync(mapping);
+
+        var result = await _controller.DeleteSyncRuleMappingAsync(syncRuleId, mappingId) as OkObjectResult;
+
+        var response = result?.Value as SyncRuleMappingDeletionResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.AwaitingSynchronisation, Is.Empty, "an export rule's change is carried by the review the save flags");
+    }
+
+    #endregion
 }

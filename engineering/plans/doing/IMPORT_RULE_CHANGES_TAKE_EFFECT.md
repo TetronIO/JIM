@@ -1,6 +1,6 @@
 # Import Rule Changes Take Effect at the Next Synchronisation
 
-- **Status:** Doing (Phases 1 to 4 done; Phase 5, before saving, next; Phase 4 awaits a runtime check and screenshots)
+- **Status:** Doing (Phases 1 to 5 done; Phase 6, docs, next; Phases 4 and 5 await a runtime check and screenshots)
 - **Issue:** [#2615](https://github.com/TetronIO/JIM/issues/2615) (parts B and C; part A ships separately)
 - **Note:** Predicted against actual counts moved to [#2618](https://github.com/TetronIO/JIM/issues/2618): honest only when one change with an informing preview is behind the run.
 
@@ -87,7 +87,7 @@ Deleting an import rule is out of scope: deletion recall already handles it.
 2. ✅ **Requests**: every save path above, class-driven, Simple Mode type carried through, loud failure. Tests per path.
 3. ✅ **Drift indicator** rework.
 4. ✅ **Read surfaces**: portal notices and chips, Activity sections, DTOs, cmdlet output, Pester tests. Artefact screenshots (taken at the runtime check).
-5. **Before saving**: dialog wording, estimate, save response.
+5. ✅ **Before saving**: dialog wording, estimate, save response. The acknowledgement and the save ask the same policy functions with the same inputs (`ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation`, `FlagsExportReview`), and an end-to-end agreement suite runs both for every branch. Saves answer with what they recorded: `AwaitingSynchronisation` on the Synchronisation Rule, Attribute Flow mapping and Object Matching Rule responses, one entry per Object Type with its object count and, where the Connected System has completed a Full Synchronisation, about how long. Scoping Criteria saves and the deletes that answer 204 (Object Matching Rule, Scoping Criteria) do not carry it yet; the Connected System's page and `Get-JIMConnectedSystem` list what is waiting.
 6. **Docs**: rewrite (not append) the pages that say "run a Full Synchronisation after changing configuration": `concepts/synchronisation-pipeline.md` (Full Sync vs Delta Sync), `configuration/connected-systems.md` (Configuration changes pending), `configuration/configuration-changes.md`, `configuration/synchronisation-rules.md`, `configuration/scoping-criteria.md`, `administration/troubleshooting-synchronisation.md`, `concepts/attribute-priority.md`, `configuration/attribute-mappings.md`; plus the "when a configuration change takes effect" flow diagram from part D. Changelog.
 
 ## Validation

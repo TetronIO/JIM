@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using JIM.Web.Controllers.Api;
@@ -18,6 +19,8 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -56,6 +59,10 @@ public class SynchronisationControllerCreateSyncRuleTests
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockMetaverseRepo.StubExportReviewReads();
         _mockConnectedSystemRepo.StubConfigurationChangeSynchronisationReads();
+        // Configuration change capture reads the setting that turns it on, and the configuration test cases covering what a
+        // save changes: without them the capture cannot compare anything and every save is recorded.
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
+        _mockRepository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
@@ -217,5 +224,43 @@ public class SynchronisationControllerCreateSyncRuleTests
         var response = result?.Value as SyncRuleSaveResponse;
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.DeletionSourceWarning, Is.Null, "a join-only contributor is the normal pattern and is never flagged");
+    }
+
+    [Test]
+    public async Task CreateSyncRuleAsync_EnabledImportRule_ReportsTheTypeItRecordedWithItsCostAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(100, 200, null)).ReturnsAsync(2_500);
+        // The response names the system and the type, which the saved rule does not carry once it has been created.
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemHeaderAsync(100)).ReturnsAsync(new ConnectedSystemHeader { Id = 100, Name = "Test CS" });
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(200)).ReturnsAsync(new ConnectedSystemObjectType { Id = 200, Name = "user", Selected = true });
+        var request = BuildCreateRequest();
+        request.Enabled = true;
+
+        var actionResult = await _controller.CreateSyncRuleAsync(request);
+
+        Assert.That(actionResult, Is.InstanceOf<CreatedAtRouteResult>(), ((actionResult as ObjectResult)?.Value as ApiErrorResponse)?.Message);
+        var response = (actionResult as CreatedAtRouteResult)?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null);
+        var awaiting = response!.AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("Test CS"));
+            Assert.That(awaiting.ObjectTypeName, Is.EqualTo("user"));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(2_500), "a new rule reaches the objects that already exist");
+            Assert.That(awaiting.EstimatedDuration, Is.Null, "the system has never completed a Full Synchronisation");
+        }
+    }
+
+    [Test]
+    public async Task CreateSyncRuleAsync_ImportRuleCreatedDisabled_ReportsNothingAwaitingSynchronisationAsync()
+    {
+        var request = BuildCreateRequest();
+        request.Enabled = false;
+
+        var result = await _controller.CreateSyncRuleAsync(request) as CreatedAtRouteResult;
+
+        var response = result?.Value as SyncRuleSaveResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.AwaitingSynchronisation, Is.Empty, "a rule created disabled applies to nothing until it is enabled");
     }
 }

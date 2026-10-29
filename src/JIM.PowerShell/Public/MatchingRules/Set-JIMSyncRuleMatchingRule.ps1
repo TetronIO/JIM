@@ -52,7 +52,10 @@ function Set-JIMSyncRuleMatchingRule {
         Returns the rule as changed.
 
     .OUTPUTS
-        With -PassThru, the rule as changed; otherwise nothing.
+        With -PassThru, the rule as changed; otherwise nothing. AwaitingSynchronisation names the Connected System Object
+        Type the change makes its Connected System's next synchronisation, Delta or Full, process in full, with how many
+        objects that is and about how long it takes, and a line saying the same is written to the information stream
+        (shown with -InformationAction Continue).
 
     .EXAMPLE
         Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12 -Order 0
@@ -152,6 +155,9 @@ function Set-JIMSyncRuleMatchingRule {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules/$Id" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated Matching Rule ID: $Id"
+
+                # The Object Types the save made the next synchronisation process in full (#2615): said, never blocking.
+                Write-JIMAwaitingSynchronisationInformation -AwaitingSynchronisation $result.AwaitingSynchronisation
 
                 if ($PassThru) {
                     $result | Add-Member -NotePropertyName 'SyncRuleId' -NotePropertyValue $SyncRuleId -PassThru -Force

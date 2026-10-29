@@ -141,6 +141,10 @@ function New-JIMSyncRuleMapping {
 
     .OUTPUTS
         The mapping created. Any warnings the save raised are written to the warning stream as well.
+        AwaitingSynchronisation names the Connected System Object Type an import mapping makes its Connected System's next
+        synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes (empty
+        for an export mapping), and a line saying the same is written to the information stream (shown with
+        -InformationAction Continue).
 
     .EXAMPLE
         New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10
@@ -551,6 +555,9 @@ function New-JIMSyncRuleMapping {
                 foreach ($saveWarning in @($result.Warnings | Where-Object { $_ })) {
                     Write-Warning $saveWarning
                 }
+
+                # The Object Types the save made the next synchronisation process in full (#2615): said, never blocking.
+                Write-JIMAwaitingSynchronisationInformation -AwaitingSynchronisation $result.AwaitingSynchronisation
 
                 $result
             }

@@ -209,6 +209,65 @@ public class SynchronisationControllerObjectMatchingRuleTests
     }
 
     [Test]
+    public async Task CreateSyncRuleObjectMatchingRule_SystemInAdvancedMode_ReportsTheTypeItRecordedWithItsCostAsync()
+    {
+        // #2615: a matching change alters what an import produces for every object of the type, so the save records the type
+        // as awaiting synchronisation and the response says how many objects the next synchronisation will process.
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(ConnectedSystemId, CsoTypeId, null)).ReturnsAsync(640);
+
+        var result = await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, SyncRuleScopedRequest());
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var awaiting = ((ObjectMatchingRuleDto)((CreatedAtRouteResult)result).Value!).AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(awaiting.ObjectTypeName, Is.EqualTo("User"));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(640));
+        }
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_SimpleModeTypeCoveredByAnEnabledImportRule_ReportsTheTypeItRecordedAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.ConnectedSystem;
+        IList<SyncRuleHeader> importRules =
+        [
+            new SyncRuleHeader
+            {
+                Id = SyncRuleId, Name = "Import Users", Direction = SyncRuleDirection.Import, Enabled = true,
+                ConnectedSystemId = ConnectedSystemId, ConnectedSystemName = "HR",
+                ConnectedSystemObjectTypeId = CsoTypeId, ConnectedSystemObjectTypeName = "User"
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(importRules);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(ConnectedSystemId, CsoTypeId, null)).ReturnsAsync(640);
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, TypeScopedRequest());
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var awaiting = ((ObjectMatchingRuleDto)((CreatedAtRouteResult)result).Value!).AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(640));
+        }
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_SimpleModeTypeNoImportRuleCovers_ReportsNothingAwaitingSynchronisationAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.ConnectedSystem;
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, TypeScopedRequest());
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        Assert.That(((ObjectMatchingRuleDto)((CreatedAtRouteResult)result).Value!).AwaitingSynchronisation, Is.Empty,
+            "nothing synchronises the objects of a type no enabled import rule covers");
+    }
+
+    [Test]
     public async Task CreateObjectMatchingRule_CaseSensitiveOmitted_IgnoresCaseAsync()
     {
         // The portal always created rules that ignore case while the REST API (and so PowerShell) defaulted to

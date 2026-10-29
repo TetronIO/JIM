@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Logic;
+using JIM.Models.Staging.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -118,6 +119,15 @@ public class ObjectMatchingRuleDto
     /// When the rule was created.
     /// </summary>
     public DateTime Created { get; set; }
+
+    /// <summary>
+    /// On the response to a create or update of the rule: the Connected System Object Types the save recorded as awaiting
+    /// synchronisation. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the
+    /// type, not only the changed ones; the entry gives how many objects that is and about how long it takes at the speed
+    /// of the Connected System's last Full Synchronisation (empty when it has never completed one). Empty on a read, and
+    /// when the save recorded nothing.
+    /// </summary>
+    public List<AwaitingSynchronisationEstimate> AwaitingSynchronisation { get; set; } = new();
 
     /// <summary>
     /// Creates a DTO from an ObjectMatchingRule entity.

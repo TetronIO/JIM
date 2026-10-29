@@ -135,7 +135,11 @@ function Set-JIMSyncRuleMapping {
 
     .OUTPUTS
         With -PassThru, the mapping as changed; otherwise nothing. Its warnings, and any derived Attribute Flows the
-        change left with a missing input, are written to the warning stream either way.
+        change left with a missing input, are written to the warning stream either way. AwaitingSynchronisation names the
+        Connected System Object Type an import mapping's change makes its Connected System's next synchronisation, Delta
+        or Full, process in full, with how many objects that is and about how long it takes (empty for an export
+        mapping), and a line saying the same is written to the information stream (shown with -InformationAction
+        Continue).
 
     .EXAMPLE
         Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailObject
@@ -348,6 +352,9 @@ function Set-JIMSyncRuleMapping {
 
                 # Derived flows the update left with a missing input (#1750, FR 3): reported, never blocking.
                 Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $result.DependentDerivedFlows
+
+                # The Object Types the save made the next synchronisation process in full (#2615): said, never blocking.
+                Write-JIMAwaitingSynchronisationInformation -AwaitingSynchronisation $result.AwaitingSynchronisation
 
                 if ($PassThru) {
                     $result
