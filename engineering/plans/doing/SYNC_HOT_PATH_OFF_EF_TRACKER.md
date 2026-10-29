@@ -1,8 +1,8 @@
 # Synchronisation Hot Path Off EF Core's Change Tracker
 
-- **Status:** Doing (Phase 0: spans in place and the attach measured; awaiting a scale run with the new spans)
+- **Status:** Doing (Phase 0 complete)
 - **Issue:** [#2598](https://github.com/TetronIO/JIM/issues/2598)
-- **Last Updated:** 2026-10-28
+- **Last Updated:** 2026-10-29
 
 ## Overview
 
@@ -50,7 +50,7 @@ What stays on EF: portal and API reads, configuration create/update/delete, and 
 
 ## Implementation Phases
 
-### Phase 0: Measure what is still dark
+### Phase 0: Measure what is still dark ✅
 
 - Spans inside `EvaluateExportRules` around the work outside its rule loop, and on the join path (match lookup, join match load, join count, join-state write), so breakdown lines cover the large-group export evaluation and the target-side Full Synchronisation and confirming synchronisation.
 - A `RequiresPostgres` measurement of the tracker attach against group size (1,000, 10,000, 100,000 values) to establish whether it is linear, and why if not.
@@ -68,25 +68,35 @@ The attach, measured on one Metaverse Object written through `CreateMetaverseObj
 
 So the attach grows roughly with the square of a group's size, and overtakes the write itself above about 30,000 values. A CPU profile of the 100,000 case puts all of it in EF Core's change tracker: identity-map hashing as each value is tracked (about 5.4 s), relationship fix-up scanning the list-backed `AttributeValues` before adding each value (4.6 s), and fix-up of each value's reference to a member the context does not track (4.8 s). Attaching the values before the object, which avoids the list scans, cut it by a third and left it superlinear. There is therefore no cheap fix to the attach itself: Phase 1 removes it, as planned, and needs no interim step.
 
+**Scale run with the new spans (2026-10-28, Scale750k40kGroups, InitialSync):**
+
+| Slowest pages | Where the time went |
+|---|---|
+| Source Full Synchronisation, 266 s and 182 s | Tracker attach 211 s and 136 s (bulk write 15 s and 12 s); the Pending Export snapshot 15.8 s and 14.9 s, almost all of it `Snapshot.LoadReferencedObjects` (14.8 s and 14.3 s) for one group; the export rule loop itself 0.5 s |
+| Target Full Synchronisation, 154 s and 103 s | `Cso.LoadMetaverseObjects` 154 s and 103 s; the page's own load 5 ms |
+
+The target side was the unknown, and it is not the join: the target's objects were provisioned by JIM and are already joined, so no match lookup ran. It is `LoadMetaverseObjectsForCsosAsync`, a tracked EF query that `Include`s every attribute value of every Metaverse Object on the page, so a page of groups materialises and tracks every membership, which is the same per-value tracker cost the attach measurement shows. The phases below are reordered accordingly: the target-side load moves up to Phase 2, the snapshot's referenced-object load becomes Phase 3, and the join match load, which never registered, joins the remaining reads in Phase 4.
+
 ### Phase 1: Remove the tracker bridge
 
 - Find every consumer that relies on a freshly written Metaverse Object being tracked (navigations used to add children, EF saves reaching it), convert each to raw SQL, then delete `AttachToTracker` from `CreateMetaverseObjectsBulkAsync` and the matching re-attachment in the update path.
 - A guard test: after a page flush, the context tracks no Metaverse Object or attribute value.
-- If Phase 0 shows the attach is superlinear and the bridge cannot go in one step, an interim fix to the attach itself is acceptable only with the guard test in place and the bridge's removal still scheduled.
+- Target: the source side's two slowest pages lose 211 s and 136 s.
 
-### Phase 2: Export evaluation for large groups
+### Phase 2: Load a page's Metaverse Objects untracked
 
-- Remove the per-value cost Phase 0 finds outside the rule loop, by raw SQL or by not materialising what evaluation does not read; the approach follows the measurement.
+- Replace the tracked `Include` in `LoadMetaverseObjectsForCsosAsync` with a raw SQL read into untracked objects, navigations assigned explicitly, and move whatever later saves those objects through EF (`UpdateMetaverseObjectsAsync` relies on them being tracked, per the method's own comment) to raw set-based writes in the same phase. Phase 1's guard test extends to cover it.
+- Tests: `RequiresPostgres` round trip asserting every field and navigation the engine reads from a loaded Metaverse Object, on a `NoTracking` context.
+- Target: the target side's two slowest pages lose 154 s and 103 s.
 
-### Phase 3: Join match load
+### Phase 3: The Pending Export snapshot's referenced objects
 
-- A join-specific read returning the Metaverse Object with only what joining, Attribute Flow and export evaluation need, by raw SQL, untracked; no referenced objects' display names.
-- Join bookkeeping (join count, join-state write) as raw SQL.
-- Tests: `RequiresPostgres` round trip asserting every field the engine reads, plus a test that joining a group does not load its members' objects.
+- `SnapshotPendingExportChangesAsync` loads the target system's object for every referenced member through `GetConnectedSystemObjectsByMetaverseObjectIdsAsync` (14.8 s for one group). The snapshot needs only each object's identifiers for display, so replace the load with a raw SQL Summary-tier read of those identifiers.
+- Target: under 1 s for the largest group.
 
-### Phase 4: Page load and remaining per-page EF reads
+### Phase 4: Remaining per-page EF reads
 
-- The page load (raw SQL page reader into untracked objects, with callers that later write a loaded object through EF moved to raw set-based writes), the export-side reads and the cross-page reference reload, in order of their Phase 0 cost; any that measure as negligible are left on EF and recorded as such.
+- The page's own load (`GetConnectedSystemObjectsAsync`), the join match load, the other export-side reads and the cross-page reference reload, in order of measured cost; any that measure as negligible are left on EF and recorded as such. At the 2026-10-28 run none registered: the page load took 5 to 220 ms and no join ran.
 
 ### Phase 5: Scale verification
 
@@ -96,7 +106,7 @@ So the attach grows roughly with the square of a group's size, and overtakes the
 
 - No group page at Scale750k40kGroups takes more than 30 s (the slowest took 266 s), and the tracker attach is gone from the breakdown lines.
 - After a page flush, the Worker's context tracks no Metaverse Objects, Connected System Objects or attribute values (guard test).
-- Target-side Full Synchronisation and confirming synchronisation each at least 30% faster than the baseline above, provided Phase 0 shows EF Core work is most of their time; otherwise this criterion is restated from the measurement.
+- Target-side Full Synchronisation and confirming synchronisation each at least 30% faster than the baseline above (Phase 0 found EF Core's tracked Metaverse Object load is most of the target side's slowest pages).
 - Every integration scenario's outcome identical; no new `DbUpdateConcurrencyException` class of failure.
 
 ## Benefits
