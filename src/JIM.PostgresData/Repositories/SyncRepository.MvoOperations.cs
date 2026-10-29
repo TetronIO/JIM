@@ -7,6 +7,8 @@ using JIM.Models.Core;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
@@ -955,32 +957,29 @@ public partial class SyncRepository
         _context.ChangeTracker.AutoDetectChangesEnabled = false;
         try
         {
-            foreach (var entry in _context.ChangeTracker.Entries().ToList())
+            var entries = _context.ChangeTracker.Entries().ToList();
+
+            foreach (var entry in entries.Where(e => e.Entity is MetaverseObject mvo && deletedIds.Contains(mvo.Id)))
+                entry.State = EntityState.Detached;
+
+            foreach (var (entry, references) in entries
+                .Where(e => e.Entity is not MetaverseObject)
+                .Select(e => (Entry: e, References: ReferencesToDeletedMetaverseObjects(e, deletedIds)))
+                .Where(x => x.References.Count > 0))
             {
-                if (entry.Entity is MetaverseObject metaverseObject)
+                if (references.Any(r => r.ForeignKey.DeleteBehavior is DeleteBehavior.Cascade or DeleteBehavior.ClientCascade))
                 {
-                    if (deletedIds.Contains(metaverseObject.Id))
-                        entry.State = EntityState.Detached;
-                    continue;
+                    entry.State = EntityState.Detached;
                 }
-
-                foreach (var foreignKey in entry.Metadata.GetForeignKeys()
-                    .Where(fk => fk.PrincipalEntityType.ClrType == typeof(MetaverseObject) && fk.Properties.Count == 1))
+                else
                 {
-                    var keyProperty = entry.Property(foreignKey.Properties[0].Name);
-                    if (keyProperty.CurrentValue is not Guid referencedId || !deletedIds.Contains(referencedId))
-                        continue;
-
-                    if (foreignKey.DeleteBehavior is DeleteBehavior.Cascade or DeleteBehavior.ClientCascade)
+                    foreach (var (foreignKey, keyProperty) in references)
                     {
-                        entry.State = EntityState.Detached;
-                        break;
+                        keyProperty.CurrentValue = null;
+                        keyProperty.OriginalValue = null;
+                        keyProperty.IsModified = false;
+                        foreignKey.DependentToPrincipal?.PropertyInfo?.SetValue(entry.Entity, null);
                     }
-
-                    keyProperty.CurrentValue = null;
-                    keyProperty.OriginalValue = null;
-                    keyProperty.IsModified = false;
-                    foreignKey.DependentToPrincipal?.PropertyInfo?.SetValue(entry.Entity, null);
                 }
             }
         }
@@ -989,6 +988,18 @@ public partial class SyncRepository
             _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
         }
     }
+
+    /// <summary>
+    /// The single-column foreign keys from <paramref name="entry"/> to Metaverse Objects whose current value is one of
+    /// <paramref name="deletedIds"/>.
+    /// </summary>
+    private static List<(IForeignKey ForeignKey, PropertyEntry KeyProperty)> ReferencesToDeletedMetaverseObjects(
+        EntityEntry entry, HashSet<Guid> deletedIds)
+        => entry.Metadata.GetForeignKeys()
+            .Where(fk => fk.PrincipalEntityType.ClrType == typeof(MetaverseObject) && fk.Properties.Count == 1)
+            .Select(fk => (ForeignKey: fk, KeyProperty: entry.Property(fk.Properties[0].Name)))
+            .Where(r => r.KeyProperty.CurrentValue is Guid id && deletedIds.Contains(id))
+            .ToList();
 
     #endregion
 }
