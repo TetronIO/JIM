@@ -87,6 +87,21 @@ window.jimInterop = {
         element.focus();
         element.setSelectionRange(start, end);
     },
+    // Selects one line of a textarea that does not scroll itself (the SQL Object Types JSON view's), and scrolls the
+    // box around it so the line shows: a third of the way down when it was out of view, and from the start of the line.
+    selectTextLine: function (element, scroller, start, end, line) {
+        if (!element) return;
+        element.focus({ preventScroll: true });
+        element.setSelectionRange(start, end);
+        if (!scroller) return;
+        var lineHeight = parseFloat(getComputedStyle(element).lineHeight) || 20;
+        var top = (line - 1) * lineHeight;
+        if (top < scroller.scrollTop || top + lineHeight > scroller.scrollTop + scroller.clientHeight) {
+            scroller.scrollTop = Math.max(0, top - scroller.clientHeight / 3);
+        }
+        scroller.scrollLeft = 0;
+        scroller.scrollIntoView({ block: 'nearest' });
+    },
     // Focuses a textarea or input and selects all its text, so Ctrl+C copies it at once: the Copy summary fallback,
     // offered when the browser refuses the clipboard. A dialog's focus trap takes focus as the dialog opens, which can
     // happen after this call, so focus is reclaimed the first time it moves elsewhere within the dialog; only while

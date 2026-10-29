@@ -81,7 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Connectors
 
-- ✨ Configure a SQL Connected System's Object Types in the portal instead of writing a JSON document, choosing tables, views and columns from the database itself, with its primary and foreign keys offered as anchors and references. (#2570)
+- ✨ Configure a SQL Connected System's Object Types in the portal instead of writing a JSON document, choosing tables, views and columns from the database itself, with its primary and foreign keys offered as anchors and references; **View as JSON** marks each problem on its line. (#2570)
 - ✨ See what a SQL database contains (its tables and views, a table's columns and keys, or the columns a SELECT would return) with `Get-JIMConnectedSystemCatalogue` or REST. (#2570)
 - ✨ A refused server certificate shows its chain and where JIM found each certificate, and **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain. (#1914)
 - ✨ An Oracle Database connection over TCPS can use a server certificate from your own certificate authority, trusted from the failed connection test or **Admin > Certificates**. (#2581)

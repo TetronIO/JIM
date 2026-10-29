@@ -148,7 +148,7 @@ You do not list the ordinary columns; JIM discovers them. You only say what the 
 
 #### The Object Types document
 
-Behind the cards, the setting holds a JSON document. It is what REST and PowerShell send as the setting's value, and what **View as JSON** shows. To find the exact names to put in it, list what the database account can see with [`Get-JIMConnectedSystemCatalogue`](../powershell/connected-system-schema.md#get-jimconnectedsystemcatalogue) or the catalogue endpoints of the REST API, once the connection settings are saved. A table's primary key, which it reports in key order, is usually the right `anchorColumns`.
+Behind the cards, the setting holds a JSON document. It is what REST and PowerShell send as the setting's value, and what **View as JSON** shows, highlighted and with line numbers, so you can copy it out or paste one in. Each problem JIM finds is listed above the text and marked on its line, and **Save Settings** waits until there are none. A pasted document that is not valid JSON, or that uses a field the document does not have, has to be fixed there before **View as cards** can show it. To find the exact names to put in it, list what the database account can see with [`Get-JIMConnectedSystemCatalogue`](../powershell/connected-system-schema.md#get-jimconnectedsystemcatalogue) or the catalogue endpoints of the REST API, once the connection settings are saved. A table's primary key, which it reports in key order, is usually the right `anchorColumns`.
 
 Each entry in the document names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
 
