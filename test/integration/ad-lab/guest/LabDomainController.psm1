@@ -587,7 +587,7 @@ function ConvertTo-LabVmNote {
 
         # What the VM is. A domain controller writes no role line, so its notes read exactly as they did before
         # the lab had any other kind of VM.
-        [ValidateSet('DomainController', 'FederationServer')]
+        [ValidateSet('DomainController', 'FederationServer', 'ExchangeServer')]
         [string]$Role = 'DomainController'
     )
 
@@ -657,17 +657,18 @@ function Get-LabReadinessPort {
     <#
     .SYNOPSIS
         The TCP port that proves a lab VM of a given role is serving after a revert: LDAPS on a domain controller,
-        HTTPS on a federation server.
+        HTTPS on a federation server or an Exchange server (AD FS, or Remote PowerShell). Port 443 answering is not yet
+        Exchange answering: its services take minutes longer to start.
     #>
     [CmdletBinding()]
     [OutputType([int])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('DomainController', 'FederationServer')]
+        [ValidateSet('DomainController', 'FederationServer', 'ExchangeServer')]
         [string]$Role
     )
 
-    if ($Role -eq 'FederationServer') {
+    if ($Role -ne 'DomainController') {
         return 443
     }
     return 636

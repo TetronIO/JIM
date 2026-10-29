@@ -131,6 +131,15 @@ Describe 'Get-LabSettingsExample' {
         $extensions[0].isoPath | Should -Match '\.iso$'
     }
 
+    It 'describes an Exchange server in a forest with the Exchange organisation, and where its prerequisites are' {
+        $server = $script:Settings.exchangeServers.'exchange-primary'
+        $server.domainController | Should -Be 'dc-primary'
+        $script:Settings.domainControllers.PSObject.Properties.Name | Should -Contain $server.domainController
+        $server.ipAddress | Should -Be '10.99.0.31'
+        $server.gateway | Should -Be $script:Settings.ntpServer
+        $script:Settings.exchangePrerequisiteDirectory | Should -Not -BeNullOrEmpty
+    }
+
     It 'has no dnsForwarder: the Lab switch has no uplink, so there is nothing to forward to' {
         $script:Settings.PSObject.Properties.Name | Should -Not -Contain 'dnsForwarder'
     }

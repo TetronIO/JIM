@@ -941,6 +941,12 @@ Describe 'VM notes' {
         $parsed.ComputerName | Should -Be 'adfs1'
     }
 
+    It 'round-trips the Exchange server role' {
+        $notes = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'ex1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.31' -Role ExchangeServer
+        $notes | Should -Match '(?m)^role=ExchangeServer$'
+        (ConvertFrom-LabVmNote -Notes $notes).Role | Should -Be 'ExchangeServer'
+    }
+
     It 'refuses a role it does not know' {
         { ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'x1' -NetBiosName 'PANOPLY' -Role 'WebServer' } | Should -Throw
     }
@@ -976,6 +982,10 @@ Describe 'Get-LabReadinessPort' {
 
     It 'waits for HTTPS on a federation server, where AD FS answers' {
         Get-LabReadinessPort -Role FederationServer | Should -Be 443
+    }
+
+    It 'waits for HTTPS on an Exchange server, where Remote PowerShell answers' {
+        Get-LabReadinessPort -Role ExchangeServer | Should -Be 443
     }
 
     It 'refuses a role it does not know' {
