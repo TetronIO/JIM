@@ -1,6 +1,6 @@
 # Synchronisation Hot Path Off EF Core's Change Tracker
 
-- **Status:** Doing (Phase 0 complete)
+- **Status:** Doing (Phases 0 and 1 complete; Phase 1 awaiting scale measurement)
 - **Issue:** [#2598](https://github.com/TetronIO/JIM/issues/2598)
 - **Last Updated:** 2026-10-29
 
@@ -77,11 +77,13 @@ So the attach grows roughly with the square of a group's size, and overtakes the
 
 The target side was the unknown, and it is not the join: the target's objects were provisioned by JIM and are already joined, so no match lookup ran. It is `LoadMetaverseObjectsForCsosAsync`, a tracked EF query that `Include`s every attribute value of every Metaverse Object on the page, so a page of groups materialises and tracks every membership, which is the same per-value tracker cost the attach measurement shows. The phases below are reordered accordingly: the target-side load moves up to Phase 2, the snapshot's referenced-object load becomes Phase 3, and the join match load, which never registered, joins the remaining reads in Phase 4.
 
-### Phase 1: Remove the tracker bridge
+### Phase 1: Remove the tracker bridge ✅
 
 - Find every consumer that relies on a freshly written Metaverse Object being tracked (navigations used to add children, EF saves reaching it), convert each to raw SQL, then delete `AttachToTracker` from `CreateMetaverseObjectsBulkAsync` and the matching re-attachment in the update path.
 - A guard test: after a page flush, the context tracks no Metaverse Object or attribute value.
 - Target: the source side's two slowest pages lose 211 s and 136 s.
+
+**As delivered (2026-10-29):** the bulk create leaves the objects it writes untracked. Change detection is already off for the whole page flush, so the only code that still needed the new objects tracked was two saves that walk object graphs, where a tracked new object stopped the walk. Both are now raw SQL. `DeleteMetaverseObjectsAsync` was EF's `RemoveRange` on a detached deletion candidate. Through the candidate's reference values that reached a same-page new object, then saved that object's reference to the deleted one, a row the reference cleanup had already removed, and threw `DbUpdateConcurrencyException`; a `RequiresPostgres` test reproduces it. It is now a raw `DELETE`, followed by a pass over the tracker driven by the model's foreign keys, which detaches cascade children and records set-null keys as persisted. The per-object deletion fallback's `Update(mvo)` became a one-column write, and the sync repository's `UpdateMetaverseObjectAsync`, which had no other caller, is gone. The guard test asserts nothing is tracked after a create. Full solution tests pass, as do Scenarios 008 and 032 at Medium on OpenLDAP. Not yet measured at scale.
 
 ### Phase 2: Load a page's Metaverse Objects untracked
 
