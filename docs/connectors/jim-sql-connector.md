@@ -133,14 +133,16 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 ### Step 2: Describe your tables
 
-SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM. On the Connected System's **Settings** tab, **Object Types** under **Object Type Configuration** shows one card per Object Type. Select **Add Object Type**, then on its card give it a name and choose:
+SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM. On the Connected System's **Settings** tab, **Object Types** under **Object Type Configuration** shows one card per Object Type. Select **Add Object Type** and work through its steps:
 
-- its **Schema** and **Table or view**, or **Read from a SELECT statement instead** where you cannot create a view
-- its **Anchor**: the column or columns whose values identify a row, in key order
-- any **References to other Object Types**: columns whose values hold another object's anchor, such as a manager
-- any **Multi-valued attributes**: child tables holding one row per value, such as phone numbers or group members
+1. **Source**: a name for the Object Type, and its **Schema** and **Table or view**, or a **SELECT statement** where you cannot create a view.
+2. **Anchor**: the column or columns whose values identify a row, in key order. JIM preselects the table's primary key and says so; a view declares no keys, so for a view you choose.
+3. **References** (optional): columns whose values hold another object's anchor, such as a manager.
+4. **Multi-valued attributes** (optional): child tables holding one row per value, such as phone numbers or group members.
 
-Names are chosen from the database's own list of tables, views and columns, read with the connection settings on screen. Where the database declares a primary key, the card offers it as the anchor. Where a column has a foreign key to another Object Type's anchor, the card offers it as a reference, and a foreign key to a table no Object Type reads from yet offers to add one for it. Nothing changes until you accept. If JIM cannot reach the database, the card says why, names are typed instead, and **Retry** reads the list again.
+The Object Type can be added from the Anchor step on; anything skipped can be added later on its card, where everything the steps set can also be changed.
+
+Names are chosen from the database's own list of tables, views and columns, read with the connection settings on screen. Where a column has a foreign key to another Object Type's anchor, JIM offers it as a reference, and a foreign key to a table no Object Type reads from yet offers to add one for it, opening **Add Object Type** with that table chosen. Nothing changes until you accept. If JIM cannot reach the database, it says why, names are typed instead, and **Retry** reads the list again.
 
 You do not list the ordinary columns; JIM discovers them. You only say what the database cannot: which table is which object, what identifies a row, which columns point at other objects, and which child tables belong to which parent. A card shows any problem with its Object Type as you work, and a collapsed card shows how many it has.
 

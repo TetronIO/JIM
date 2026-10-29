@@ -131,6 +131,9 @@ public sealed class SqlObjectTypesEditorModel
         return string.IsNullOrWhiteSpace(objectType.Schema) ? objectType.Table : $"{objectType.Schema}.{objectType.Table}";
     }
 
+    /// <summary>A table's name with its schema, where it has one: how the editor names a table in running text.</summary>
+    public static string Qualified(string? schema, string name) => string.IsNullOrWhiteSpace(schema) ? name : $"{schema}.{name}";
+
     /// <summary>
     /// What a collapsed card shows: its anchor, then each reference, then each multi-valued attribute.
     /// </summary>
@@ -157,19 +160,39 @@ public sealed class SqlObjectTypesEditorModel
     }
 
     /// <summary>
-    /// What the foreign keys declared on an Object Type's source suggest, as schema discovery reads them: a
-    /// single-column key pointing at another Object Type's single-column anchor is a reference to that Object
-    /// Type; one pointing at a table no Object Type reads from offers an Object Type for it. Columns already
-    /// configured as references, anchor columns and dismissed suggestions are left out.
+    /// What the foreign keys declared on an Object Type's source suggest; see <see cref="Suggest"/>.
     /// </summary>
     /// <param name="index">The Object Type whose source <paramref name="source"/> describes.</param>
     /// <param name="source">The source's columns and keys, or null where they could not be read.</param>
     public IReadOnlyList<SqlObjectTypeSuggestion> SuggestionsFor(int index, ConnectorCatalogueObjectDetail? source)
     {
-        if (source == null || index < 0 || index >= ObjectTypes.Count)
+        if (index < 0 || index >= ObjectTypes.Count)
             return [];
 
         var objectType = ObjectTypes[index];
+        return Suggest(objectType, ObjectTypes, source, constraint => _dismissed.Contains((objectType, constraint)));
+    }
+
+    /// <summary>
+    /// What the foreign keys declared on an Object Type's source suggest, as schema discovery reads them: a
+    /// single-column key pointing at a single-column anchor of one of <paramref name="objectTypes"/> is a reference
+    /// to that Object Type; one pointing at a table none of them reads from offers an Object Type for it. Columns
+    /// already configured as references, anchor columns and dismissed suggestions are left out. Shared by the
+    /// cards and the Add Object Type dialog, so both suggest by the same rules.
+    /// </summary>
+    /// <param name="objectType">The Object Type whose source <paramref name="source"/> describes.</param>
+    /// <param name="objectTypes">Every Object Type a key may point at, <paramref name="objectType"/> included, since a key can point at its own table.</param>
+    /// <param name="source">The source's columns and keys, or null where they could not be read.</param>
+    /// <param name="isDismissed">Whether the suggestion from the named constraint has been dismissed.</param>
+    public static IReadOnlyList<SqlObjectTypeSuggestion> Suggest(
+        SqlObjectTypeDocument objectType,
+        IReadOnlyCollection<SqlObjectTypeDocument> objectTypes,
+        ConnectorCatalogueObjectDetail? source,
+        Func<string, bool> isDismissed)
+    {
+        if (source == null)
+            return [];
+
         var references = (objectType.Columns ?? [])
             .Where(column => !string.IsNullOrWhiteSpace(column.ReferencesObjectType) && column.Name != null)
             .Select(column => column.Name!)
@@ -184,18 +207,18 @@ public sealed class SqlObjectTypesEditorModel
             fk.ReferencedColumns.Count == 1 &&
             !references.Contains(fk.Columns[0]) &&
             !anchor.Contains(fk.Columns[0]) &&
-            !_dismissed.Contains((objectType, fk.ConstraintName)));
+            !isDismissed(fk.ConstraintName));
 
         foreach (var foreignKey in candidates)
         {
-            var readers = ObjectTypes
+            var readers = objectTypes
                 .Where(other => string.IsNullOrWhiteSpace(other.Select) && ReadsFrom(other, foreignKey.ReferencedSchemaName, foreignKey.ReferencedObjectName))
                 .ToList();
 
             if (readers.Count == 0)
             {
                 if (offeredTables.Add($"{foreignKey.ReferencedSchemaName}.{foreignKey.ReferencedObjectName}"))
-                    suggestions.Add(Suggest(SqlObjectTypeSuggestionKind.AddObjectType, foreignKey, null));
+                    suggestions.Add(SuggestionFrom(SqlObjectTypeSuggestionKind.AddObjectType, foreignKey, null));
                 continue;
             }
 
@@ -205,10 +228,26 @@ public sealed class SqlObjectTypesEditorModel
                 string.Equals(anchorColumn, foreignKey.ReferencedColumns[0], StringComparison.OrdinalIgnoreCase));
 
             if (target != null)
-                suggestions.Add(Suggest(SqlObjectTypeSuggestionKind.Reference, foreignKey, target.Name));
+                suggestions.Add(SuggestionFrom(SqlObjectTypeSuggestionKind.Reference, foreignKey, target.Name));
         }
 
         return suggestions;
+    }
+
+    /// <summary>
+    /// Configures a suggested column on <paramref name="objectType"/> as a reference to the suggested Object Type.
+    /// </summary>
+    public static void ApplyReference(SqlObjectTypeDocument objectType, SqlObjectTypeSuggestion suggestion)
+    {
+        if (suggestion.Kind != SqlObjectTypeSuggestionKind.Reference)
+            return;
+
+        var columns = objectType.Columns ??= [];
+        var existing = columns.FirstOrDefault(c => string.Equals(c.Name, suggestion.ColumnName, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+            existing.ReferencesObjectType = suggestion.ReferencedObjectTypeName;
+        else
+            columns.Add(new SqlColumnDocument { Name = suggestion.ColumnName, ReferencesObjectType = suggestion.ReferencedObjectTypeName });
     }
 
     /// <summary>Stops offering a suggestion for the rest of this editing session. The document is unchanged.</summary>
@@ -221,16 +260,10 @@ public sealed class SqlObjectTypesEditorModel
     /// <summary>Configures the suggested column as a reference to the suggested Object Type.</summary>
     public void AcceptReference(int index, SqlObjectTypeSuggestion suggestion)
     {
-        if (suggestion.Kind != SqlObjectTypeSuggestionKind.Reference || index < 0 || index >= ObjectTypes.Count)
+        if (index < 0 || index >= ObjectTypes.Count)
             return;
 
-        var columns = ObjectTypes[index].Columns ??= [];
-        var existing = columns.FirstOrDefault(c => string.Equals(c.Name, suggestion.ColumnName, StringComparison.OrdinalIgnoreCase));
-        if (existing != null)
-            existing.ReferencesObjectType = suggestion.ReferencedObjectTypeName;
-        else
-            columns.Add(new SqlColumnDocument { Name = suggestion.ColumnName, ReferencesObjectType = suggestion.ReferencedObjectTypeName });
-
+        ApplyReference(ObjectTypes[index], suggestion);
         Revalidate();
     }
 
@@ -246,16 +279,10 @@ public sealed class SqlObjectTypesEditorModel
         return source.PrimaryKey;
     }
 
-    /// <summary>Adds an Object Type at the end of the document, returning its position.</summary>
-    public int AddObjectType(string? schema = null, string? table = null, IEnumerable<string>? anchorColumns = null)
+    /// <summary>Adds an Object Type built elsewhere (the Add Object Type dialog) at the end of the document, returning its position.</summary>
+    public int AddObjectType(SqlObjectTypeDocument objectType)
     {
-        ObjectTypes.Add(new SqlObjectTypeDocument
-        {
-            Schema = schema,
-            Table = table,
-            AnchorColumns = anchorColumns?.Select(c => (string?)c).ToList()
-        });
-
+        ObjectTypes.Add(objectType);
         Revalidate();
         return ObjectTypes.Count - 1;
     }
@@ -387,7 +414,7 @@ public sealed class SqlObjectTypesEditorModel
         string.Equals(objectType.Table, objectName, StringComparison.OrdinalIgnoreCase) &&
         (string.IsNullOrWhiteSpace(objectType.Schema) || string.Equals(objectType.Schema, schemaName, StringComparison.OrdinalIgnoreCase));
 
-    private static SqlObjectTypeSuggestion Suggest(SqlObjectTypeSuggestionKind kind, ConnectorCatalogueForeignKey foreignKey, string? objectTypeName) => new(
+    private static SqlObjectTypeSuggestion SuggestionFrom(SqlObjectTypeSuggestionKind kind, ConnectorCatalogueForeignKey foreignKey, string? objectTypeName) => new(
         kind,
         foreignKey.ConstraintName,
         foreignKey.Columns[0],

@@ -1,0 +1,330 @@
+@using JIM.Connectors.Sql
+@using JIM.Models.Staging
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Adds an Object Type to the SQL Connector's Object Types document in four steps (#2570): where its objects come
+   from, what identifies them, which columns reference other Object Types, and which child tables hold
+   multi-valued attributes. The first two are what the Connector cannot do without; the last two are optional, so
+   the Object Type can be added from the Anchor step on. The step rules live in SqlAddObjectTypeModel. *@
+<MudDialog>
+    <DialogContent>
+        <ol class="jim-sql-steps" aria-label="Steps">
+            @foreach (var step in Steps)
+            {
+                var state = step.Step == _model.Step ? "current" : step.Step < _model.Step ? "done" : "upcoming";
+                <li class="jim-sql-step jim-sql-step--@state" aria-current="@(state == "current" ? "step" : null)">
+                    <span class="jim-sql-step-marker">
+                        @if (state == "done")
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                        }
+                        else
+                        {
+                            @((int)step.Step + 1)
+                        }
+                    </span>
+                    <span class="jim-sql-step-title">@step.Title</span>
+                    @if (step.Optional)
+                    {
+                        <span class="jim-sql-step-optional">optional</span>
+                    }
+                </li>
+            }
+        </ol>
+
+        @switch (_model.Step)
+        {
+            case SqlAddObjectTypeStep.Source:
+                <MudTextField T="string" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" AutoFocus="true"
+                              Value="@_model.ObjectType.Name" ValueChanged="@(v => _model.ObjectType.Name = v)"
+                              HelperText="What JIM calls this Object Type. Use a standard name (User, Group, Person) where one fits, and JIM maps it to the matching Metaverse Object Type."
+                              Class="mb-4" data-testid="jim-sql-add-name" />
+
+                <SegmentedToggle TValue="bool" Options="@SourceKinds" Value="@_model.ReadsFromStatement"
+                                 ValueChanged="@(v => _model.ReadsFromStatement = v)" AriaLabel="Where the objects come from" Class="mb-4" />
+
+                @if (_model.ReadsFromStatement)
+                {
+                    @* Immediate, so Next follows the text; the statement is described against the database only when
+                       the Anchor step opens. *@
+                    <MudTextField T="string" Label="SELECT statement" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Lines="5" Class="jim-setting-text" spellcheck="false" Immediate="true"
+                                  Value="@_model.ObjectType.Select" ValueChanged="@(v => _model.ObjectType.Select = v ?? string.Empty)"
+                                  HelperText="A single statement beginning SELECT or WITH, for when a view cannot be created. JIM can import from it, but cannot export to it." />
+                }
+                else
+                {
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" sm="5">
+                            <SqlCatalogueNameField Label="Schema" Value="@_model.ObjectType.Schema" Options="@SchemaOptions"
+                                                   ValueChanged="@(v => { _model.ObjectType.Schema = v; return Task.CompletedTask; })"
+                                                   TestId="jim-sql-add-schema" />
+                        </MudItem>
+                        <MudItem xs="12" sm="7">
+                            <SqlCatalogueNameField Label="Table or view" Value="@_model.ObjectType.Table" Options="@TableOptions"
+                                                   ValueChanged="OnTableChanged" TestId="jim-sql-add-table" />
+                        </MudItem>
+                    </MudGrid>
+                }
+                break;
+
+            case SqlAddObjectTypeStep.Anchor:
+                <MudText Class="mb-2">
+                    The column or columns whose values identify a row of
+                    @if (_model.ReadsFromStatement)
+                    {
+                        <text>the statement</text>
+                    }
+                    else
+                    {
+                        <code class="jim-code-inline">@SqlObjectTypesEditorModel.Qualified(_model.ObjectType.Schema, _model.ObjectType.Table ?? string.Empty)</code>
+                    }, in key order.
+                </MudText>
+                @if (_readingSource)
+                {
+                    <div class="d-flex align-center gap-2 my-3">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Reading its columns and keys...</MudText>
+                    </div>
+                }
+                else
+                {
+                    <SqlAnchorColumnsField ObjectType="@_model.ObjectType" ColumnOptions="@ColumnOptions" OnChanged="StateHasChanged" />
+                    @if (AnchorReason is { } reason)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3" data-testid="jim-sql-add-anchor-reason">
+                            <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Class="mr-1" Style="vertical-align: text-bottom;" />
+                            @reason
+                        </MudText>
+                    }
+                }
+                break;
+
+            case SqlAddObjectTypeStep.References:
+                <MudText Class="mb-3">Columns whose values hold another object's anchor, such as a manager. Skip this if there are none; you can add them later.</MudText>
+                <SqlObjectTypeReferences ObjectType="@_model.ObjectType" ObjectTypeNames="@ObjectTypeNames" ColumnOptions="@ColumnOptions"
+                                         Suggestions="@_model.ReferenceSuggestions"
+                                         OnAccept="@(s => _model.AcceptReference(s))" OnDismiss="@(s => _model.Dismiss(s))"
+                                         OnChanged="StateHasChanged" />
+                break;
+
+            case SqlAddObjectTypeStep.MultiValuedAttributes:
+                <MudText Class="mb-3">Child tables holding one row per value, such as phone numbers or group members. Skip this if there are none; you can add them later.</MudText>
+                <SqlObjectTypeRelatedTables ObjectType="@_model.ObjectType" ObjectTypeNames="@ObjectTypeNames" CatalogueObjects="@CatalogueObjects"
+                                            LoadTable="@LoadTable" ShowWatermark="@(DeltaImportMode == SqlConnectorConstants.DeltaImportModeWatermarkColumn)"
+                                            OnChanged="StateHasChanged" />
+                break;
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())" data-testid="jim-sql-add-cancel">Cancel</MudButton>
+        <MudSpacer />
+        @if (_model.Step != SqlAddObjectTypeStep.Source)
+        {
+            <MudButton OnClick="Back" data-testid="jim-sql-add-back">Back</MudButton>
+        }
+        @if (_model.Step == SqlAddObjectTypeStep.MultiValuedAttributes)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_model.CanFinish)" OnClick="Finish"
+                       data-testid="jim-sql-add-finish">Add Object Type</MudButton>
+        }
+        else
+        {
+            @* Adding before the last step skips the optional ones: the main action stays Next, so it is the
+               primary button, and this is the quieter way out. *@
+            @if (_model.Step != SqlAddObjectTypeStep.Source)
+            {
+                <MudButton Variant="Variant.Filled" Disabled="@(!_model.CanFinish)" OnClick="Finish"
+                           data-testid="jim-sql-add-finish">Add Object Type</MudButton>
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_model.CanContinue || _readingSource)" OnClick="NextAsync"
+                       data-testid="jim-sql-add-next">Next</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>The Object Types already in the document, which the new one's foreign keys may point at.</summary>
+    [Parameter]
+    public IReadOnlyList<SqlObjectTypeDocument> ExistingObjectTypes { get; set; } = [];
+
+    /// <summary>A schema to start with, such as that of a table a foreign key points at.</summary>
+    [Parameter]
+    public string? Schema { get; set; }
+
+    /// <summary>A table to start with.</summary>
+    [Parameter]
+    public string? Table { get; set; }
+
+    /// <summary>
+    /// The tables and views to choose from, answered once any read of them in progress has finished; null where
+    /// there is no catalogue to read. A function rather than a list, so a dialog opened while the list is still
+    /// being read gets it when it arrives.
+    /// </summary>
+    [Parameter]
+    public Func<Task<IReadOnlyList<ConnectorCatalogueObject>>>? LoadCatalogueObjects { get; set; }
+
+    /// <summary>Reads a table or view's columns and keys; null where there is no catalogue to read.</summary>
+    [Parameter]
+    public Func<string?, string, Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>>>? LoadTable { get; set; }
+
+    /// <summary>Describes a SELECT statement's columns; null where there is no catalogue to read.</summary>
+    [Parameter]
+    public Func<string, Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>>>? DescribeStatement { get; set; }
+
+    /// <summary>The Delta Import Mode on screen, which decides whether a related table needs a watermark column.</summary>
+    [Parameter]
+    public string? DeltaImportMode { get; set; }
+
+    private SqlAddObjectTypeModel _model = null!;
+    private IReadOnlyList<ConnectorCatalogueObject> CatalogueObjects { get; set; } = [];
+    private bool _readingSource;
+    private string? _readSourceKey;
+
+    private sealed record StepInfo(SqlAddObjectTypeStep Step, string Title, bool Optional);
+
+    private static readonly IReadOnlyList<StepInfo> Steps =
+    [
+        new(SqlAddObjectTypeStep.Source, "Source", false),
+        new(SqlAddObjectTypeStep.Anchor, "Anchor", false),
+        new(SqlAddObjectTypeStep.References, "References", true),
+        new(SqlAddObjectTypeStep.MultiValuedAttributes, "Multi-valued attributes", true)
+    ];
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> SourceKinds =
+    [
+        new(false, "Table or view"),
+        new(true, "SELECT statement")
+    ];
+
+    private IEnumerable<string> SchemaOptions => CatalogueObjects.Select(o => o.SchemaName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<string> TableOptions => CatalogueObjects
+        .Where(o => string.IsNullOrWhiteSpace(_model.ObjectType.Schema) || string.Equals(o.SchemaName, _model.ObjectType.Schema, StringComparison.OrdinalIgnoreCase))
+        .Select(o => o.Name)
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<string> ColumnOptions => _model.Source?.Columns.Select(c => c.Name) ?? [];
+
+    private IEnumerable<string> ObjectTypeNames => ExistingObjectTypes.Append(_model.ObjectType)
+        .Select(o => o.Name).OfType<string>().Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private string? AnchorReason => _model.AnchorOrigin switch
+    {
+        SqlAnchorOrigin.PrimaryKey => "Preselected from the table's primary key, in key order.",
+        SqlAnchorOrigin.ViewDeclaresNoKeys => "A view declares no keys, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.",
+        SqlAnchorOrigin.TableHasNoPrimaryKey => "The table declares no primary key, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.",
+        SqlAnchorOrigin.StatementDeclaresNoKeys => "A SELECT statement declares no keys, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.",
+        SqlAnchorOrigin.ColumnsUnreadable => _model.SourceFailure is { } failure
+            ? $"The columns could not be read, so type their names: {failure}"
+            : "The columns could not be read, so type their names.",
+        _ => null
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _model = new SqlAddObjectTypeModel(ExistingObjectTypes, Schema, Table);
+
+        if (LoadCatalogueObjects != null)
+            CatalogueObjects = await LoadCatalogueObjects();
+    }
+
+    private Task OnTableChanged(string? table)
+    {
+        _model.ObjectType.Table = table;
+
+        // A name in exactly one schema is that schema's table; saying so keeps the document unambiguous.
+        if (string.IsNullOrWhiteSpace(_model.ObjectType.Schema) && table != null)
+        {
+            var matches = CatalogueObjects.Where(o => string.Equals(o.Name, table, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count == 1)
+                _model.ObjectType.Schema = matches[0].SchemaName;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task NextAsync()
+    {
+        _model.Next();
+        if (_model.Step == SqlAddObjectTypeStep.Anchor)
+            await ReadSourceAsync();
+    }
+
+    private void Back() => _model.Back();
+
+    /// <summary>
+    /// Reads the source's columns and keys as the Anchor step opens, so its primary key can be preselected. Read
+    /// again only when the source has changed since, so going back and forth costs nothing.
+    /// </summary>
+    private async Task ReadSourceAsync()
+    {
+        var objectType = _model.ObjectType;
+        var key = _model.ReadsFromStatement ? $"S|{objectType.Select}" : $"T|{objectType.Schema}|{objectType.Table}";
+        if (key == _readSourceKey)
+            return;
+
+        _readSourceKey = key;
+        ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>? read = null;
+        _readingSource = true;
+        StateHasChanged();
+
+        try
+        {
+            if (_model.ReadsFromStatement && DescribeStatement != null)
+                read = await DescribeStatement(objectType.Select!);
+            else if (!_model.ReadsFromStatement && LoadTable != null)
+                read = await LoadTable(objectType.Schema, objectType.Table!);
+        }
+        finally
+        {
+            _readingSource = false;
+        }
+
+        var failure = read == null
+            ? null
+            : read.Failure ?? (read.Value == null ? "The database account cannot see a table or view of that name. Check the name, the schema, and the account's permissions." : null);
+        _model.SourceRead(read?.Value, failure);
+    }
+
+    private void Finish()
+    {
+        if (_model.CanFinish)
+            MudDialog.Close(DialogResult.Ok(_model.Build()));
+    }
+
+    /// <summary>
+    /// Opens the dialog; the Object Type built, or null when cancelled.
+    /// </summary>
+    public static async Task<SqlObjectTypeDocument?> ShowAsync(
+        IDialogService dialogService,
+        IReadOnlyList<SqlObjectTypeDocument> existingObjectTypes,
+        string? schema,
+        string? table,
+        Func<Task<IReadOnlyList<ConnectorCatalogueObject>>>? loadCatalogueObjects,
+        Func<string?, string, Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>>>? loadTable,
+        Func<string, Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>>>? describeStatement,
+        string? deltaImportMode)
+    {
+        var parameters = new DialogParameters<SqlAddObjectTypeDialog>
+        {
+            { x => x.ExistingObjectTypes, existingObjectTypes },
+            { x => x.Schema, schema },
+            { x => x.Table, table },
+            { x => x.LoadCatalogueObjects, loadCatalogueObjects },
+            { x => x.LoadTable, loadTable },
+            { x => x.DescribeStatement, describeStatement },
+            { x => x.DeltaImportMode, deltaImportMode }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<SqlAddObjectTypeDialog>("Add Object Type", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: SqlObjectTypeDocument objectType } ? objectType : null;
+    }
+}
