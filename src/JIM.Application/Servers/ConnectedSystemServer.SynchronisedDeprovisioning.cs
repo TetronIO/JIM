@@ -136,26 +136,40 @@ public partial class ConnectedSystemServer
                 ? task.CheckpointConnectedSystemObjectId ?? Guid.Empty
                 : Guid.Empty;
 
-            while (true)
+            // Change detection is off while Pass A runs, and the tracker is cleared once it ends (#2598). Each page's
+            // Metaverse Objects are loaded untracked and hang off its tracked Connected System Objects, so a detection
+            // pass (any EF save while it is on) would attach them as Modified, and the save would then issue
+            // xmin-guarded updates that match no rows. Every save in the pass marks what it writes explicitly
+            // (Entry().State, SetValues, AddRange of the batch's own new rows), as the synchronisation page flush does.
+            Application.SyncRepo.SetAutoDetectChangesEnabled(false);
+            try
             {
-                var page = await Application.SyncRepo.GetConnectedSystemObjectsAsync(
-                    task.ConnectedSystemId, page: 1, pageSize: batchSize,
-                    knownTotalCount: activity.ObjectsToProcess, afterId: cursor);
-                if (page.Results.Count == 0)
-                    break;
+                while (true)
+                {
+                    var page = await Application.SyncRepo.GetConnectedSystemObjectsAsync(
+                        task.ConnectedSystemId, page: 1, pageSize: batchSize,
+                        knownTotalCount: activity.ObjectsToProcess, afterId: cursor);
+                    if (page.Results.Count == 0)
+                        break;
 
-                await ProcessDeprovisioningBatchAsync(task, activity, page.Results, systemSyncRules, fallibleImportRules, fallibleExportRules, recallScope,
-                    priorityContext, remainingImportSourceEvaluator, syncEngine, syncServer, expressionEvaluator,
-                    exportEvaluationCache, survivorObjectTypes, systemNamesById, syncOutcomeTrackingLevel, csoChangeTrackingEnabled,
-                    connectedSystem.Name, derivedInputMarks, result);
+                    await ProcessDeprovisioningBatchAsync(task, activity, page.Results, systemSyncRules, fallibleImportRules, fallibleExportRules, recallScope,
+                        priorityContext, remainingImportSourceEvaluator, syncEngine, syncServer, expressionEvaluator,
+                        exportEvaluationCache, survivorObjectTypes, systemNamesById, syncOutcomeTrackingLevel, csoChangeTrackingEnabled,
+                        connectedSystem.Name, derivedInputMarks, result);
 
-                // Persist the checkpoint AFTER the batch is fully persisted: a crash between the two
-                // re-processes the batch, which is safe (idempotent per object, delete-then-create export
-                // staging), where the reverse ordering would skip unpersisted work.
-                cursor = page.Results[^1].Id;
-                task.CheckpointPhase = SynchronisedDeprovisioningPhase.ObjectPass;
-                task.CheckpointConnectedSystemObjectId = cursor;
-                await Application.Tasking.UpdateWorkerTaskAsync(task);
+                    // Persist the checkpoint AFTER the batch is fully persisted: a crash between the two
+                    // re-processes the batch, which is safe (idempotent per object, delete-then-create export
+                    // staging), where the reverse ordering would skip unpersisted work.
+                    cursor = page.Results[^1].Id;
+                    task.CheckpointPhase = SynchronisedDeprovisioningPhase.ObjectPass;
+                    task.CheckpointConnectedSystemObjectId = cursor;
+                    await Application.Tasking.UpdateWorkerTaskAsync(task);
+                }
+            }
+            finally
+            {
+                Application.SyncRepo.ClearChangeTracker();
+                Application.SyncRepo.SetAutoDetectChangesEnabled(true);
             }
         }
 
@@ -683,7 +697,7 @@ public partial class ConnectedSystemServer
                 continue;
 
             // Evaluated on the fully loaded object (the discovery load carries no values); evaluation only reads it.
-            var hydrated = await syncRepository.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id) ?? survivor;
+            var hydrated = await syncRepository.GetConnectedSystemObjectWithAttributeValuesAsync(survivor.ConnectedSystemId, survivor.Id) ?? survivor;
             foreach (var rule in rules.Where(rule => !survivorScopeAnswers.ContainsKey((survivor.Id, rule.Id))))
             {
                 try

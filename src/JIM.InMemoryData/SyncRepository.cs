@@ -497,6 +497,11 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
+    /// <inheritdoc />
+    /// <remarks>The store holds one instance per object, so this is <see cref="GetConnectedSystemObjectAsync"/>.</remarks>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId)
+        => GetConnectedSystemObjectAsync(connectedSystemId, csoId);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
         int connectedSystemId, int attributeId, int attributeValue)
     {

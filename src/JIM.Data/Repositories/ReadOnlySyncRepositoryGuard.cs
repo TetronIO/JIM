@@ -53,6 +53,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _inner.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
 
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId)
+        => _inner.GetConnectedSystemObjectWithAttributeValuesAsync(connectedSystemId, csoId);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, int attributeValue)
         => _inner.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
 

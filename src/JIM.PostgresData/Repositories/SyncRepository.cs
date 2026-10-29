@@ -85,6 +85,24 @@ public partial class SyncRepository : ISyncRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
 
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId)
+    {
+        // AsTracking required: the Include path CSO -> AttributeValues -> ReferenceValue(CSO) is a self-referencing
+        // cycle EF Core forbids in a no-tracking query. The Metaverse Object is deliberately not included (#2598): a
+        // tracked copy of a page's untracked Metaverse Object would let EF's fix-up repoint the page's Connected
+        // System Objects at it.
+        return _context.ConnectedSystemObjects
+            .AsTracking()
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(cso => cso!.Type)
+            .SingleOrDefaultAsync(x => x.ConnectedSystemId == connectedSystemId && x.Id == csoId);
+    }
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, int attributeValue)
         => _repo.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
 
@@ -213,8 +231,14 @@ public partial class SyncRepository : ISyncRepository
         int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive)
         => _repo.Metaverse.CountMetaverseObjectsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive);
 
-    public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
-        => _repo.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
+    public async Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
+    {
+        // Untracked, through the page load's own reader (#2598): a tracked load would create second instances of any
+        // page Metaverse Object the match references, and EF's fix-up could repoint the page's Connected System
+        // Objects at those partial copies.
+        var loaded = await MetaverseObjectRawReader.ReadAsync(_context, [metaverseObjectId]);
+        return loaded.GetValueOrDefault(metaverseObjectId);
+    }
 
     public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
         int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)

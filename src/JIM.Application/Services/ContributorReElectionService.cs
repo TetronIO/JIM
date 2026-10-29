@@ -120,7 +120,7 @@ public static class ContributorReElectionService
                 // instance, now fully hydrated.
                 if (NeedsHydration(survivor))
                 {
-                    var loaded = await syncRepository.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id);
+                    var loaded = await syncRepository.GetConnectedSystemObjectWithAttributeValuesAsync(survivor.ConnectedSystemId, survivor.Id);
                     if (loaded != null)
                     {
                         survivor.AttributeValues = loaded.AttributeValues;
@@ -243,7 +243,7 @@ public static class ContributorReElectionService
             if (!evaluatedSurvivors.TryGetValue(survivor.Id, out var evaluated))
             {
                 evaluated = NeedsHydration(survivor)
-                    ? await syncRepository.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id) ?? survivor
+                    ? await syncRepository.GetConnectedSystemObjectWithAttributeValuesAsync(survivor.ConnectedSystemId, survivor.Id) ?? survivor
                     : survivor;
                 evaluatedSurvivors[survivor.Id] = evaluated;
             }

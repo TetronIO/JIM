@@ -124,6 +124,13 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId);
 
     /// <summary>
+    /// Gets a single CSO by ID with its type and full attribute values, without its Metaverse Object (#2598).
+    /// For synchronisation-path hydration during a page: the page holds its Metaverse Objects untracked, and a load
+    /// that brought a tracked copy of one would let relationship fix-up repoint the page's objects at it.
+    /// </summary>
+    Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId);
+
+    /// <summary>
     /// Gets a CSO by its external ID attribute value (int type).
     /// Used during import to match incoming objects to existing CSOs.
     /// </summary>

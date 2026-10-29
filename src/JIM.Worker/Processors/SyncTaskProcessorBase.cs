@@ -1981,8 +1981,8 @@ public abstract class SyncTaskProcessorBase
 
             // Queue the LastConnectorDisconnectedDate, initiator info, triggering system and snapshot for
             // the page-flush batch update rather than persisting immediately here. This method runs during
-            // Pass 1, before the flush sets AutoDetectChangesEnabled=false, so an immediate SaveChangesAsync
-            // on the shared sync DbContext would still walk every tracked entity's navigation properties -
+            // Pass 1; were change detection on for it (it once was, until the flush), an immediate SaveChangesAsync
+            // on the shared sync DbContext would walk every tracked entity's navigation properties -
             // including the tracked Activity's RunProfileExecutionItems collection, which holds this page's
             // RPEIs (created moments earlier for this CSO's disconnection). DetectChanges finds them as new
             // and inserts them early; the page flush's own raw-SQL RPEI insert then collides on the same Id
@@ -4546,6 +4546,13 @@ public abstract class SyncTaskProcessorBase
         Log.Debug("ResolveCrossPageReferences: Cleared change tracker, page identity map and {RpeiCount} in-memory RPEIs from activity",
             rpeiCountBeforeClear);
 
+        // Change detection stays off for the whole resolution, restored after its final tracker clear (#2598). Each
+        // batch reloads Connected System Objects tracked with their Metaverse Objects untracked, so a detection pass
+        // would attach those objects as Modified through cso.MetaverseObject; and with detection on, a save walks every
+        // tracked navigation and collides on the shared Metaverse Attribute and Type instances the reload brings in.
+        // An EF save in the resolution therefore writes only what is explicitly marked (Entry().State).
+        _syncRepo.SetAutoDetectChangesEnabled(false);
+
         // Build Synchronisation Rule lookup (keyed by ID) for O(1) access
         var requiredSyncRuleIds = _unresolvedCrossPageReferences
             .SelectMany(x => x.SyncRuleIds)
@@ -4782,113 +4789,91 @@ public abstract class SyncTaskProcessorBase
             for (var unitIndex = batchStart; unitIndex < batchStart + batchCount; unitIndex++)
                 resolvedCount += progressUnits[unitIndex];
 
-            // Disable AutoDetectChangesEnabled for the flush sequence (including the status update).
-            // After ClearChangeTracker(), the change tracker contains entities loaded by the cross-page
-            // CSO query (with Include chains that bring in MetaverseAttribute, MetaverseObjectType, etc.).
-            // Multiple MVOs sharing the same Type/Attributes create separate in-memory instances of these
-            // shared entities. When SaveChangesAsync calls DetectChanges(), it walks ALL tracked entities'
-            // navigation properties and discovers these conflicting instances, causing identity conflicts.
-            //
-            // By disabling auto-detect, SaveChangesAsync only persists entities we explicitly mark via
-            // Entry().State (in UpdateMetaverseObjectsAsync and UpdateActivityAsync), without scanning
-            // navigation properties that lead to shared MetaverseAttribute/MetaverseObjectType entities.
-            //
-            // IMPORTANT: Must be set BEFORE any SaveChangesAsync call — including the activity message
-            // update — because by this point the tracker already contains conflicting instances from
-            // the batch processing above.
-            _syncRepo.SetAutoDetectChangesEnabled(false);
+            _activity.ObjectsProcessed = resolvedCount;
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+
+            // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
+            // subsequent SaveChangesAsync calls (same pattern as per-page processing).
+            // NOTE: This only inserts NEW RPEIs. Existing RPEIs (merged from initial page
+            // processing) are updated separately below.
+            await FlushRpeisAsync();
+
+            // Batch-update existing RPEIs whose AttributeFlowCount and OutcomeSummary changed
+            // due to cross-page reference resolution merging. These RPEIs were already persisted
+            // during initial page processing; we update them in-place rather than inserting duplicates.
+            if (updatedExistingRpeis.Count > 0)
+            {
+                // Collect any new sync outcome nodes added during merge (e.g., AttributeFlow child)
+                var newOutcomes = updatedExistingRpeis
+                    .SelectMany(r => r.SyncOutcomes)
+                    .Where(o => o.Id == Guid.Empty)
+                    .ToList();
+                foreach (var outcome in newOutcomes)
+                {
+                    if (outcome.Id == Guid.Empty)
+                        outcome.Id = Guid.NewGuid();
+                }
+
+                await _syncRepo.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
+
+                // Accumulate stats ONLY for newly added outcome nodes (not the full RPEIs, which
+                // were already counted during initial page flush). New outcomes can occur when the
+                // initial RPEI had no AttributeFlow child (Detailed mode) and cross-page resolution
+                // adds one. In the common case, no new outcomes are added (just DetailCount updated).
+                if (_hasRawSqlSupport && newOutcomes.Count > 0)
+                {
+                    _activity.TotalAttributeFlows += newOutcomes.Count(o =>
+                        o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+                }
+
+                Log.Debug("ResolveCrossPageReferences: Updated {Count} existing RPEIs with merged reference Attribute Flows",
+                    updatedExistingRpeis.Count);
+                updatedExistingRpeis.Clear();
+            }
+
+            // Flush this batch (same sequence as per-page processing)
+            await PersistPendingMetaverseObjectsAsync();
+
+            // Unique Value Generation (#242, Phase 2 work package G): defensive, matching the per-page
+            // flush sequence, deletions before commit (#242 Scenario 023 bug fix). In practice always a
+            // no-op here: this pass is reference-attributes-only (onlyReferenceAttributes: true), and a
+            // generated mapping never targets a Reference attribute, so nothing this pass resolves or
+            // reconciles ever has anything queued to commit or delete.
+            await FlushGeneratedValueAssignmentDeletionsAsync();
+            await CommitGeneratedValueAssignmentsAsync();
+
+            await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
+            await EvaluateQueuedDriftAsync();
+
+            // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
+            // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
+            // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
+            // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
+            // batch instead, since deleting rows whose replacements were never staged would lose their changes.
+            var pendingExportBatchFlushed = false;
+            _syncRepo.BeginPendingExportBatch();
             try
             {
-                _activity.ObjectsProcessed = resolvedCount;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
-
-                // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
-                // subsequent SaveChangesAsync calls (same pattern as per-page processing).
-                // NOTE: This only inserts NEW RPEIs. Existing RPEIs (merged from initial page
-                // processing) are updated separately below.
-                await FlushRpeisAsync();
-
-                // Batch-update existing RPEIs whose AttributeFlowCount and OutcomeSummary changed
-                // due to cross-page reference resolution merging. These RPEIs were already persisted
-                // during initial page processing; we update them in-place rather than inserting duplicates.
-                if (updatedExistingRpeis.Count > 0)
-                {
-                    // Collect any new sync outcome nodes added during merge (e.g., AttributeFlow child)
-                    var newOutcomes = updatedExistingRpeis
-                        .SelectMany(r => r.SyncOutcomes)
-                        .Where(o => o.Id == Guid.Empty)
-                        .ToList();
-                    foreach (var outcome in newOutcomes)
-                    {
-                        if (outcome.Id == Guid.Empty)
-                            outcome.Id = Guid.NewGuid();
-                    }
-
-                    await _syncRepo.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
-
-                    // Accumulate stats ONLY for newly added outcome nodes (not the full RPEIs, which
-                    // were already counted during initial page flush). New outcomes can occur when the
-                    // initial RPEI had no AttributeFlow child (Detailed mode) and cross-page resolution
-                    // adds one. In the common case, no new outcomes are added (just DetailCount updated).
-                    if (_hasRawSqlSupport && newOutcomes.Count > 0)
-                    {
-                        _activity.TotalAttributeFlows += newOutcomes.Count(o =>
-                            o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
-                    }
-
-                    Log.Debug("ResolveCrossPageReferences: Updated {Count} existing RPEIs with merged reference Attribute Flows",
-                        updatedExistingRpeis.Count);
-                    updatedExistingRpeis.Clear();
-                }
-
-                // Flush this batch (same sequence as per-page processing)
-                await PersistPendingMetaverseObjectsAsync();
-
-                // Unique Value Generation (#242, Phase 2 work package G): defensive, matching the per-page
-                // flush sequence, deletions before commit (#242 Scenario 023 bug fix). In practice always a
-                // no-op here: this pass is reference-attributes-only (onlyReferenceAttributes: true), and a
-                // generated mapping never targets a Reference attribute, so nothing this pass resolves or
-                // reconciles ever has anything queued to commit or delete.
-                await FlushGeneratedValueAssignmentDeletionsAsync();
-                await CommitGeneratedValueAssignmentsAsync();
-
-                await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
-                await EvaluateQueuedDriftAsync();
-
-                // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
-                // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
-                // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
-                // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
-                // batch instead, since deleting rows whose replacements were never staged would lose their changes.
-                var pendingExportBatchFlushed = false;
-                _syncRepo.BeginPendingExportBatch();
-                try
-                {
-                    await EvaluatePendingExportsAsync(prefetchPendingExports: true);
-                    await _syncRepo.FlushPendingExportBatchAsync();
-                    pendingExportBatchFlushed = true;
-                }
-                finally
-                {
-                    if (!pendingExportBatchFlushed)
-                        _syncRepo.AbandonPendingExportBatch();
-                }
-
-                await FlushPendingExportOperationsAsync();
-
-                // Flush any RPEIs generated during the flush sequence
-                await FlushRpeisAsync();
-
-                // Persist MVO change records via raw SQL before clearing the change tracker
-                await FlushPendingMvoChangesAsync();
-
-                // Update activity progress
-                await _syncRepo.UpdateActivityAsync(_activity);
+                await EvaluatePendingExportsAsync(prefetchPendingExports: true);
+                await _syncRepo.FlushPendingExportBatchAsync();
+                pendingExportBatchFlushed = true;
             }
             finally
             {
-                _syncRepo.SetAutoDetectChangesEnabled(true);
+                if (!pendingExportBatchFlushed)
+                    _syncRepo.AbandonPendingExportBatch();
             }
+
+            await FlushPendingExportOperationsAsync();
+
+            // Flush any RPEIs generated during the flush sequence
+            await FlushRpeisAsync();
+
+            // Persist MVO change records via raw SQL before clearing the change tracker
+            await FlushPendingMvoChangesAsync();
+
+            // Update activity progress
+            await _syncRepo.UpdateActivityAsync(_activity);
 
             // Clear the change tracker (and the page identity map, #1612) between batches to prevent entity
             // tracking conflicts. Each batch loads CSOs, MVOs, MetaverseObjectType, MetaverseAttribute, and
@@ -4936,6 +4921,7 @@ public abstract class SyncTaskProcessorBase
         // so the caller's next SaveChangesAsync starts with a clean tracker.
         // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling.
         ClearPageTrackingState();
+        _syncRepo.SetAutoDetectChangesEnabled(true);
         LogUnresolvableReferenceSummary();
 
         span.SetSuccess();
@@ -7334,7 +7320,7 @@ public abstract class SyncTaskProcessorBase
             // Need to load CSO attributes for scoping evaluation if not already loaded
             if (csoWithAttributes.AttributeValues.Count == 0)
             {
-                var fullCso = await _syncRepo.GetConnectedSystemObjectAsync(_connectedSystem.Id, connectedSystemObject.Id);
+                var fullCso = await _syncRepo.GetConnectedSystemObjectWithAttributeValuesAsync(_connectedSystem.Id, connectedSystemObject.Id);
                 if (fullCso != null)
                 {
                     csoWithAttributes = fullCso;

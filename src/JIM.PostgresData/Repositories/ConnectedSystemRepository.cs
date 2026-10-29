@@ -1969,33 +1969,23 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(cso => cso.MetaverseObjectId != null)
             .Select(cso => cso.MetaverseObjectId!.Value)
             .Distinct()
-            .ToList();
+            .ToArray();
 
-        if (mvoIds.Count == 0)
+        if (mvoIds.Length == 0)
             return;
 
-        // MVOs remain tracked for persistence by UpdateMetaverseObjectsAsync.
-        // Note: ContributedBySystem navigation is NOT included — the sync path uses the
-        // scalar FK (ContributedBySystemId) directly, avoiding the need to load the full entity.
-        var mvos = await Repository.Database.MetaverseObjects
-            .Include(mvo => mvo.Type)
-            .Include(mvo => mvo.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Where(mvo => mvoIds.Contains(mvo.Id))
-            .ToListAsync();
+        // Raw SQL into untracked objects (#2598): see MetaverseObjectRawReader for why.
+        var mvosById = await MetaverseObjectRawReader.ReadAsync(Repository.Database, mvoIds);
 
-        // Manually stitch cso.MetaverseObject navigations. This is required when CSOs are loaded
-        // with AsNoTracking (cross-page resolution) since EF relationship fixup only works for
-        // tracked entities. For tracked CSOs (per-page sync), fixup already populated the navigation
-        // but this explicit assignment is harmless and ensures correctness in both cases.
-        var mvosById = mvos.ToDictionary(mvo => mvo.Id);
-        foreach (var cso in csos)
+        // Join each page Connected System Object to its object, both ways. EF's relationship fix-up did this when the
+        // objects were tracked; the reverse collection is what the engine reads for an object's loaded connectors.
+        foreach (var cso in csos.Where(c => c.MetaverseObjectId.HasValue && mvosById.ContainsKey(c.MetaverseObjectId.Value)))
         {
-            if (cso.MetaverseObjectId.HasValue && mvosById.TryGetValue(cso.MetaverseObjectId.Value, out var mvo))
-                cso.MetaverseObject = mvo;
+            var mvo = mvosById[cso.MetaverseObjectId!.Value];
+            cso.MetaverseObject = mvo;
+            mvo.ConnectedSystemObjects.Add(cso);
         }
     }
-
 
     /// <summary>
     /// DTO for the reference external ID lookup SQL query.
