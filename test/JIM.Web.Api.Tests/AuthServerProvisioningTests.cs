@@ -423,6 +423,74 @@ public class AuthServerProvisioningTests
 
     #endregion
 
+    #region Flagging for export scope review (#2615)
+
+    /// <summary>
+    /// Sign-in writes a person outside any synchronisation, so nothing visits them to re-evaluate export scope: the
+    /// write flags them, in the same save, for the next synchronisation of any Connected System to review.
+    /// </summary>
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_InitialAdminFirstContact_FlagsTheUserForExportScopeReviewAsync()
+    {
+        Environment.SetEnvironmentVariable(Constants.Config.SsoInitialAdmin, AdminSub);
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, _uniqueIdAttribute, AdminSub))
+            .ReturnsAsync((MetaverseObject?)null);
+        bool? flaggedAtSave = null;
+        _mockMetaverse.Setup(r => r.CreateMetaverseObjectAsync(It.IsAny<MetaverseObject>()))
+            .Callback<MetaverseObject>(m => { m.Id = Guid.NewGuid(); flaggedAtSave = m.ScopeReviewPending; })
+            .Returns(Task.CompletedTask);
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = AdminSub, DisplayName = "Jay Admin" });
+
+        Assert.That(flaggedAtSave, Is.True, "flagged before the save, so the flag is written with the object");
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_ExistingUserWithoutEmail_FlagsTheUserForExportScopeReviewAsync()
+    {
+        var existing = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType, Origin = MetaverseObjectOrigin.Projected };
+        _mockMetaverse.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(_userType, _uniqueIdAttribute, "synced-user-sub"))
+            .ReturnsAsync(existing);
+        bool? flaggedAtSave = null;
+        _mockMetaverse.Setup(r => r.UpdateMetaverseObjectAsync(existing))
+            .Callback<MetaverseObject>(m => flaggedAtSave = m.ScopeReviewPending)
+            .Returns(Task.CompletedTask);
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "synced-user-sub", Email = "synced.user@panoply.local" });
+
+        Assert.That(flaggedAtSave, Is.True, "flagged before the save, so the flag is written with the new value");
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_TokenOwnedValueChanged_FlagsTheUserForExportScopeReviewAsync()
+    {
+        var user = ExistingUserWithDisplayName("contractor-sub", "Jo Bloggs", ValueContributorKind.SignInClaim, "name");
+        bool? flaggedAtSave = null;
+        _mockMetaverse.Setup(r => r.UpdateMetaverseObjectAsync(user))
+            .Callback<MetaverseObject>(m => flaggedAtSave = m.ScopeReviewPending)
+            .Returns(Task.CompletedTask);
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "contractor-sub", DisplayName = "Jo Smith" });
+
+        Assert.That(flaggedAtSave, Is.True, "a refreshed Display Name can move the person into or out of an export rule's scope");
+    }
+
+    [Test]
+    public async Task ResolveOrProvisionSsoIdentityAsync_SignInChangesNothing_DoesNotFlagTheUserAsync()
+    {
+        var user = ExistingUserWithDisplayName("contractor-sub", "Jo Bloggs", ValueContributorKind.SignInClaim, "name");
+
+        await _application.Auth.ResolveOrProvisionSsoIdentityAsync(new SsoIdentity { UniqueId = "contractor-sub", DisplayName = "Jo Bloggs" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(user.ScopeReviewPending, Is.False, "an ordinary sign-in writes nothing, so it must not queue a review either");
+            _mockMetaverse.Verify(r => r.UpdateMetaverseObjectAsync(It.IsAny<MetaverseObject>()), Times.Never);
+        }
+    }
+
+    #endregion
+
     [Test]
     public async Task ResolveOrProvisionSsoIdentityAsync_ExistingInitialAdminMissingRole_EnsuresRoleWithoutRecreatingAsync()
     {
