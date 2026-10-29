@@ -12,15 +12,23 @@ stateDiagram-v2
 
     Pending --> [*]: Never-exported provisioning<br/>cancelled with its CSO,<br/>or every queued change withdrawn<br/>(target already holds the value,<br/>or nothing authorises it any more)
 
-    Pending --> Executing: Export run starts<br/>batch marked executing
+    Pending --> Executing: Export run starts<br/>batch marked executing<br/>(call-based connectors)
+
+    Pending --> ExportNotConfirmed: File-based export throws,<br/>or an auto-confirmed file export<br/>whose values could not be recorded<br/>(file exports are never marked Executing)
+
+    Pending --> Exported: File-based export succeeds<br/>on a connector that does<br/>not auto-confirm
+
+    Pending --> [*]: File-based export succeeds<br/>on an auto-confirming connector,<br/>or a file Delete is auto-confirmed<br/>(PE deleted, with its CSO for a Delete)
 
     Executing --> Exported: Connector reports<br/>success, or worker start<br/>recovery when a change<br/>was already sent
 
-    Executing --> Pending: Connector reports failure<br/>or the batch fails<br/>(retry after NextRetryAt backoff),<br/>or written in part while<br/>references are still owed,<br/>or the run is cancelled before<br/>it is written (no attempt counted),<br/>or worker start recovery<br/>when nothing was sent
-    Executing --> ExportNotConfirmed: File-based export<br/>throws (retryable)
-    Executing --> Failed: ErrorCount >= MaxRetries
+    Executing --> Pending: Connector reports failure<br/>or the batch fails (a failed attempt,<br/>sent again at the next export run),<br/>or written in part while<br/>references are still owed,<br/>or a generated value already in use<br/>was corrected (no attempt counted),<br/>or the run is cancelled before<br/>it is written (no attempt counted),<br/>or worker start recovery<br/>when nothing was sent
 
-    Executing --> [*]: Delete succeeds for a CSO whose<br/>provisioning was never confirmed,<br/>or an auto-confirming connector<br/>(PE deleted)
+    Executing --> Parked: Value already in use and<br/>another Connected System holds it<br/>(Needs Decision, Unique Value Generation)
+
+    Executing --> [*]: Delete succeeds for a CSO whose<br/>provisioning was never confirmed<br/>(PE and CSO deleted)
+
+    Parked --> Pending: The decision is made<br/>(allow the rename, try again,<br/>or the generation configuration changes)
 
     Exported --> [*]: Confirming import confirms<br/>all attribute values match<br/>(PE deleted)
 
@@ -28,22 +36,20 @@ stateDiagram-v2
 
     Exported --> Pending: Confirmed, but changes appended<br/>while a Create awaited confirmation<br/>remain (now an Update)
 
-    ExportNotConfirmed --> Executing: Next export run<br/>(after NextRetryAt backoff)
+    ExportNotConfirmed --> Executing: Next export run,<br/>however many times it<br/>has been sent before
 
     ExportNotConfirmed --> Pending: Sync re-evaluates<br/>and reasserts changes
 
-    ExportNotConfirmed --> Failed: ErrorCount >= MaxRetries<br/>(permanent failure)
-
-    ExportNotConfirmed --> [*]: Every queued change withdrawn<br/>(as from Pending)
-
-    Failed --> [*]: Confirming import finds every<br/>change now on the CSO,<br/>or PE deleted manually
+    ExportNotConfirmed --> [*]: Every queued change withdrawn<br/>(as from Pending),<br/>or a confirming import<br/>confirms what remains
 
     note right of Pending
         Initial state.
         Created by EvaluateExportRules
         during Full/Delta Sync.
         Also the retry state after a
-        connector-reported failure.
+        failed attempt: ErrorCount and
+        FailingSince record the run of
+        failures, cleared on success.
     end note
     note right of Exported
         Awaiting confirmation.
@@ -53,18 +59,21 @@ stateDiagram-v2
         re-sent while it waits.
     end note
     note left of ExportNotConfirmed
-        Retryable failure.
-        Will be re-exported after
-        exponential backoff delay.
+        Sent, not confirmed.
+        Sent again at the next
+        export run, with no wait.
     end note
-    note left of Failed
-        Permanent failure.
-        Requires manual intervention.
-        RPEI: ExportConfirmationFailed
+    note left of Parked
+        Held for an administrator's
+        decision. Never exported,
+        no attempt counted, and
+        never touched by reconciliation.
     end note
 ```
 
 A change type withheld by a Run Profile export limit (#1629) never leaves `Pending`: the export run does not mark it, attempt it, or record anything against it.
+
+**There is no Failed status (#2119).** JIM never gives up on a Pending Export: one the Connected System refuses, or whose value an import never confirms, is attempted again at every export run, with no wait in between, and reported on every run until the cause is fixed. The status that used to end the lifecycle after five attempts, with its `MaxRetries` limit and `NextRetryAt` backoff, is gone (its ordinal, 3, is retired), and Pending Exports left `Failed` were queued again on upgrade. A failing export is told apart by `FailingSince`, set on the first failed attempt of a run and cleared, with `ErrorCount` and the error message, when an attempt succeeds; it drives the portal's **Failing Since** column and **Failing only** filter, the Connected System page's **Failing Exports** count, and `Get-JIMPendingExport -Failing`.
 
 ## Full Lifecycle Across Operations
 
