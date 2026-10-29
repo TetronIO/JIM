@@ -1,6 +1,6 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Doing (Phases 1-4 complete)
+- **Status:** Doing (Phases 1-5 complete)
 - **Issue:** [#2570](https://github.com/TetronIO/JIM/issues/2570)
 - **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/doing/PRD_SQL_OBJECT_TYPES_EDITOR.md)
 - **Last Updated:** 2026-10-28
@@ -132,7 +132,7 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - **Tests (JIM.Web.Tests):** `SqlObjectTypesEditorModel` unit tests for every suggestion rule, summary chips, problem mapping and the reference-removal check; bUnit tests that editing a card rewrites `StringValue` with a document `Parse` accepts, that a catalogue failure leaves the configuration editable with the banner shown, and that Delta Import fields follow the mode. Presentation is not asserted (root `CLAUDE.md`).
 - **Runtime verification:** sandbox light stack against a SQL Server container (Scenario 016's setup builds a suitable schema), screenshots in both themes.
 
-### Phase 5: Add Object Type dialog
+### Phase 5: Add Object Type dialog ✅
 
 - Four steps (Source, Anchor, References, Multi-valued attributes), each skippable where the document allows; Finish adds an expanded card.
 - Anchor preselected from the primary key in key order, with the reason; a view says it declares no keys.
@@ -184,7 +184,9 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 ## Deviations from the PRD
 
 - **Phase 4, JSON fallback:** until Phase 6's JSON view exists, **View as JSON** shows the setting's existing text field (with its example). A document the cards cannot show (one that is not JSON, or uses a field the document does not have) opens there with the parser's message, rather than being simplified.
-- **Phase 4, offering an Object Type for a foreign key's table:** until Phase 5's dialog exists, accepting adds an expanded card reading from that table, anchored on the column the key points at, for the administrator to name.
+- **Phase 4, offering an Object Type for a foreign key's table:** until Phase 5's dialog existed, accepting added an expanded card reading from that table. Phase 5 replaced this with the Add Object Type dialog, opened with the table chosen, as PRD requirement 6 asks.
+- **Phase 5, adding before the last step:** the dialog offers **Add Object Type** from the Anchor step on, since references and multi-valued attributes are optional; the PRD's "each step can be completed or skipped" is met by that rather than by a Skip button on each optional step.
+- **Phase 5, Delta Import fields:** the dialog's four steps match the PRD and leave out the watermark column and change log; the new card opens with them, alone, so the mode's fields are the next thing seen.
 - **Phase 4, Delta Import problems:** a missing watermark column or change log is shown on the card only for an Object Type selected on the Schema tab, matching the rule saving the Schema tab applies (#1424).
 
 - **PRD non-functional requirement "loaded per schema":** the object list is loaded in one call rather than per schema. It is a narrow list of (schema, name, kind) and the provider queries are not schema-filtered today; one call is simpler and fast enough at the stated scale. Column detail is still per object. Revisit if the Phase 4 measurement says otherwise.

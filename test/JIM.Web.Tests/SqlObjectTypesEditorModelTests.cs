@@ -339,17 +339,18 @@ public class SqlObjectTypesEditorModelTests
     #region Adding, renaming and removing
 
     [Test]
-    public void AddObjectType_FromATable_ReadsFromThatTableWithTheAnchorGiven()
+    public void AddObjectType_ABuiltObjectType_GoesAtTheEndOfTheDocument()
     {
         SqlObjectTypesEditorModel.TryLoad(PersonAndGroup, out var model, out _);
+        var department = new SqlObjectTypeDocument { Name = "Department", Schema = "HR", Table = "DEPARTMENTS", AnchorColumns = ["DEPARTMENT_ID"] };
 
-        var index = model!.AddObjectType("HR", "DEPARTMENTS", ["DEPARTMENT_ID"]);
+        var index = model!.AddObjectType(department);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(index, Is.EqualTo(2));
-            Assert.That(model.ObjectTypes[2].Table, Is.EqualTo("DEPARTMENTS"));
-            Assert.That(model.ObjectTypes[2].AnchorColumns, Is.EqualTo(new[] { "DEPARTMENT_ID" }));
+            Assert.That(model.ObjectTypes[2], Is.SameAs(department));
+            Assert.That(model.ProblemsFor(2), Is.Empty, "the document it joins is revalidated with it");
         }
     }
 
@@ -402,13 +403,9 @@ public class SqlObjectTypesEditorModelTests
     }
 
     [Test]
-    public void IsBlank_AnObjectTypeJustAdded_IsBlank()
+    public void IsBlank_AnObjectTypeWithNothingConfigured_IsBlank()
     {
-        SqlObjectTypesEditorModel.TryLoad(PersonAndGroup, out var model, out _);
-
-        var index = model!.AddObjectType();
-
-        Assert.That(SqlObjectTypesEditorModel.IsBlank(model.ObjectTypes[index]), Is.True);
+        Assert.That(SqlObjectTypesEditorModel.IsBlank(new SqlObjectTypeDocument()), Is.True);
     }
 
     [Test]

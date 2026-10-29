@@ -1,0 +1,111 @@
+@using JIM.Connectors.Sql
+@using JIM.Models.Staging
+@using JIM.Web.Models
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* An Object Type's multi-valued attributes: one line per related table, edited in a dialog, and an action to add
+   one. Shared by the card and the Add Object Type dialog. *@
+@if (ObjectType.RelatedTables != null)
+{
+    @foreach (var relatedTable in ObjectType.RelatedTables)
+    {
+        <div class="d-flex align-center gap-2 mb-2" @key="relatedTable" data-testid="jim-sql-related-table-row">
+            <div class="flex-grow-1">
+                <MudText>@Describe(relatedTable)</MudText>
+            </div>
+            <MudTooltip Text="Edit this multi-valued attribute" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" aria-label="Edit this multi-valued attribute"
+                               OnClick="@(() => EditAsync(relatedTable))" />
+            </MudTooltip>
+            <MudTooltip Text="Remove this multi-valued attribute" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" aria-label="Remove this multi-valued attribute"
+                               OnClick="@(() => RemoveAsync(relatedTable))" />
+            </MudTooltip>
+        </div>
+    }
+}
+<MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAsync(null))">Add multi-valued attribute</MudButton>
+
+@code {
+    [Parameter, EditorRequired]
+    public SqlObjectTypeDocument ObjectType { get; set; } = null!;
+
+    /// <summary>The Object Types a related table's values may reference.</summary>
+    [Parameter]
+    public IEnumerable<string> ObjectTypeNames { get; set; } = [];
+
+    /// <summary>The tables and views to choose from, or empty where the catalogue could not be read.</summary>
+    [Parameter]
+    public IReadOnlyList<ConnectorCatalogueObject> CatalogueObjects { get; set; } = [];
+
+    /// <summary>Reads a table's columns; null where there is no catalogue to read.</summary>
+    [Parameter]
+    public Func<string?, string, Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>>>? LoadTable { get; set; }
+
+    /// <summary>Whether each related table needs a watermark column of its own (Watermark Column Delta Import).</summary>
+    [Parameter]
+    public bool ShowWatermark { get; set; }
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private async Task EditAsync(SqlRelatedTableDocument? relatedTable)
+    {
+        var edited = await SqlRelatedTableDialog.ShowAsync(
+            DialogService,
+            relatedTable ?? new SqlRelatedTableDocument(),
+            relatedTable == null,
+            string.IsNullOrWhiteSpace(ObjectType.Name) ? "parent" : ObjectType.Name,
+            [.. (ObjectType.AnchorColumns ?? []).OfType<string>()],
+            [.. ObjectTypeNames],
+            CatalogueObjects,
+            LoadTable,
+            ShowWatermark);
+
+        if (edited == null)
+            return;
+
+        var relatedTables = ObjectType.RelatedTables ??= [];
+        var position = relatedTable == null ? -1 : relatedTables.IndexOf(relatedTable);
+        if (position >= 0)
+            relatedTables[position] = edited;
+        else
+            relatedTables.Add(edited);
+
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveAsync(SqlRelatedTableDocument relatedTable)
+    {
+        ObjectType.RelatedTables?.Remove(relatedTable);
+        if (ObjectType.RelatedTables is { Count: 0 })
+            ObjectType.RelatedTables = null;
+
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    /// A multi-valued attribute in one line: the attribute, where its values come from, how they join to the
+    /// parent, and what they reference. Names of attributes, tables and columns are inline code.
+    /// </summary>
+    private static RenderFragment Describe(SqlRelatedTableDocument relatedTable) => __builder =>
+    {
+        <code class="jim-code-inline">@(relatedTable.AttributeName ?? "unnamed")</code>
+        <text> from </text>
+        <code class="jim-code-inline">@($"{SqlObjectTypesEditorModel.Qualified(relatedTable.Schema, relatedTable.Table ?? "?")}.{relatedTable.ValueColumn ?? "?"}")</code>
+        <text>, joined on </text>
+        <SqlColumnList Columns="@(relatedTable.JoinColumns ?? [])" />
+        @if (!string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType))
+        {
+            <text>, referencing @relatedTable.ReferencesObjectType</text>
+        }
+        @if (!string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
+        {
+            <text>, watermark </text>
+            <code class="jim-code-inline">@relatedTable.WatermarkColumn</code>
+        }
+    };
+}

@@ -1,6 +1,6 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Doing (Phases 1-4 of 7 complete)
+- **Status:** Doing (Phases 1-5 of 7 complete)
 - **Created:** 2026-10-28
 - **Author:** Jay
 - **Issue:** #2570
