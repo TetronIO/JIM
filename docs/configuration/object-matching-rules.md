@@ -189,7 +189,7 @@ contributes goes with it; a rule matched too tightly projects a second Metaverse
 a successful synchronisation, and both are found later by a person.
 
 The Matching tab therefore offers **Preview Impact** beside **Add Matching Rule**, and again on the Simple/Advanced
-switch. It answers what the proposed matching would do, without saving it.
+switch. It answers what the proposed matching would do, without saving it. Saving then records the change as [awaiting synchronisation](connected-systems.md#changes-awaiting-synchronisation) for the Object Type, so the Connected System's next synchronisation, Delta included, matches its unjoined objects.
 
 The preview reports:
 

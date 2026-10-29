@@ -82,6 +82,8 @@ A mover event can also change whether an identity is **in scope** for a Synchron
 
 When an identity falls out of scope for an export Synchronisation Rule, its account in that rule's target system is **deprovisioned**, as the leaver section describes.
 
+Scope also changes without the record changing. A relative date, such as a leave date, moves an identity across a boundary on its own, and [Temporal Scope Reconciliation](../configuration/schedules.md#built-in-schedules) flags it so the next synchronisation acts. An edited rule moves every identity it newly includes or excludes at the next synchronisation. [Scoping Criteria](../configuration/scoping-criteria.md#what-re-checks-an-object) shows what re-checks an identity, and when.
+
 ## :material-account-minus-outline: Leaver
 
 A **leaver** event occurs when an identity is removed, or marked inactive, in the source system, as when HR processes an employee's termination.

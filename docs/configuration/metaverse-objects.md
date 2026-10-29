@@ -83,6 +83,8 @@ Each entry shows the Connected System, the rule, one reason and a one-line hint 
 
 Nothing on the Connections tab changes data: the explanations are evaluated in memory against values already stored.
 
+**Awaiting export review.** A Metaverse Object flagged for review against every export Synchronisation Rule (by a rule change, a relative date, or a write made outside synchronisation) shows an **Awaiting export review** notice above its tabs, to Administrators only. The next synchronisation of any Connected System carries the review out. Automation reads the flag as `ExportReviewPending` from `Get-JIMMetaverseObject -Id`.
+
 The same explanations, in the same words, are available through the REST API (`GET /api/v1/metaverse/objects/{id}/connections`, adding `?includeNotConnected=true` for the Not connected entries; see the [interactive API reference](../../api/reference/)) and PowerShell ([`Get-JIMMetaverseObjectConnection`](../powershell/metaverse.md#get-jimmetaverseobjectconnection)).
 
 ## :material-book-open-variant-outline: Related

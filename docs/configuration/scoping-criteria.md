@@ -1,52 +1,109 @@
 ---
 title: Scoping Criteria
-description: "Decide which objects a Synchronisation Rule applies to, how criteria are evaluated, and how to test and preview a scope change."
+description: "Where scope is checked, what happens to objects in and out of scope, how criteria are evaluated, and how to test and preview a scope change."
 type: object
 audience: administrator
 ---
 
 # Scoping Criteria
 
-Scoping criteria determine which objects the rule applies to. Only objects that match are processed.
+Scoping criteria decide which objects a Synchronisation Rule applies to. An object that matches is in scope and the rule processes it; one that does not is out of scope, and what follows depends on whether the rule imports into the Metaverse or exports from it.
 
-```jim-diagram
-archetype: decision
-title: How Scoping Criteria decide an object's scope
-desc: 'An object is in scope when any one of the rule''s top-level groups is met, or when the rule has no criteria; within a group, All needs every condition and Any at least one. An object a criterion cannot decide is left as it is, with an error recorded against it. An object out of scope leaves the rule: an import rule''s Out-of-Scope Action either disconnects it from the Metaverse or keeps the join and stops Attribute Flow, and an export rule''s Deprovisioning Action decides what happens to its object in the Connected System.'
-start: {label: Object against a rule's criteria}
-questions:
-- {id: groups, label: 'Any top-level group met?', sub: 'All: every condition; Any: one'}
-- {id: leaves, label: 'Which rule does it leave?'}
-outcomes:
-- {id: in, label: In scope, sub: processed by the rule, good: true}
-- {id: undecided, label: Left as it is, sub: an error recorded against it}
-- {id: disconnect, label: Disconnected, sub: from its Metaverse Object}
-- {id: joined, label: 'Left scope, join kept', sub: nothing flows from it}
-- {id: deprov, label: Deprovisioned, sub: per the Deprovisioning Action}
-answers:
-- {from: groups, to: in, label: 'yes, or no criteria'}
-- {from: groups, to: undecided, label: cannot be decided}
-- {from: groups, to: leaves, label: 'no'}
-- {from: leaves, to: disconnect, label: 'import: Disconnect'}
-- {from: leaves, to: joined, label: 'import: Remain joined'}
-- {from: leaves, to: deprov, label: an export rule}
-```
+## :material-sitemap-outline: Where scope is checked
 
-For import rules, criteria evaluate Connected System Object attributes:
+A synchronisation does not look at every object. A Delta Synchronisation visits the Connected System Objects that changed since the last one, and every object of an Object Type awaiting synchronisation; a Full Synchronisation visits them all. Scope is checked at two points on the path from there, and an object a run never visits is not checked at all.
+
+--8<-- "assets/diagrams/visits-and-scope.svg"
+
+An object nothing has changed for has nothing new to evaluate, so a Delta Synchronisation leaves it alone. The exceptions are the events that change what an unchanged object should do; see [What re-checks an object](#what-re-checks-an-object).
+
+## :material-swap-horizontal: Import scope and export scope
+
+The two sides read different objects. For an import rule, criteria evaluate Connected System Object attributes:
 
 ```text
 cs["objectClass"] = "user" AND cs["employeeType"] = "FTE"
 ```
 
-For export rules, criteria evaluate Metaverse Object attributes:
+For an export rule, criteria evaluate Metaverse Object attributes:
 
 ```text
 mv["Object Type"] = "Person" AND mv["Employee Status"] = "Active"
 ```
 
-Objects that fall out of scope are **disconnected** from the rule. This is important for the [JML lifecycle](../concepts/jml-lifecycle.md): when an employee's status changes to "Leaver", they may fall out of scope for an export rule, triggering deprovisioning. Changing an export rule's criteria moves objects too, at the next synchronisation; see [When a change to an export rule takes effect](deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
+```jim-diagram
+archetype: comparison
+title: Import scope and export scope compared
+desc: 'An import rule judges a Connected System Object and an export rule judges a Metaverse Object. In scope, an import rule joins or projects the object and values flow in, and an export rule provisions an account and values flow out. Out of scope, an import rule applies its Out-of-Scope Action, which disconnects the object or keeps the join, and an export rule applies its Deprovisioning Action, which disconnects the account or deletes it. When a relative date is crossed, the object is flagged, for the next synchronisation of its Connected System on the import side and of any Connected System on the export side. An edited import scope takes effect at the next synchronisation of the rule''s Connected System, which processes every object of the type; an edited export scope takes effect at the next synchronisation of any Connected System, which reviews every Metaverse Object of the type.'
+columns:
+- {label: Import scope, sub: judged on the Connected System Object}
+- {label: Export scope, sub: judged on the Metaverse Object}
+rows:
+- label: In scope
+  cells:
+  - {text: joins or projects, sub: then values flow in}
+  - {text: provisions, sub: then values flow out}
+- label: Out of scope
+  cells:
+  - {text: Out-of-Scope Action, sub: 'disconnects, or keeps the join'}
+  - {text: Deprovisioning Action, sub: 'disconnects, or deletes the account'}
+- label: A relative date is crossed
+  cells:
+  - {text: flagged, sub: next synchronisation of its Connected System}
+  - {text: flagged, sub: next synchronisation of any Connected System}
+- label: An edited scope takes effect
+  cells:
+  - {text: next synchronisation of its Connected System, sub: processes every object of the type}
+  - {text: next synchronisation of any Connected System, sub: reviews every Metaverse Object of the type}
+```
 
-An import rule's **Out-of-Scope Action** (**When objects fall out of scope** on the rule's Scope tab) can be **Remain joined (stop Attribute Flow)** instead of **Disconnect from Metaverse**. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Execution Items](activity-execution-items.md).
+This is how the [JML lifecycle](../concepts/jml-lifecycle.md) acts on a status change: when an employee's status changes to "Leaver", they fall out of scope for an export rule, and [Deprovisioning](deprovisioning.md) covers what happens to their account.
+
+## :material-arrow-decision-outline: What happens to each object a synchronisation visits
+
+Each Connected System Object a synchronisation visits ends in one of these outcomes:
+
+```jim-diagram
+archetype: decision
+title: What a synchronisation does with a Connected System Object it visits
+desc: 'A Connected System Object a synchronisation visits is checked against the scope of the import rules for its Object Type. If it is in scope and already joined to a Metaverse Object, or an Object Matching Rule finds one, the join stands and values flow. If it is in scope and nothing matches, the rule projects a new Metaverse Object when projection is on, and otherwise the object stays unjoined. If it is out of scope and not joined, nothing happens. If it is out of scope and joined, the Out-of-Scope Action decides: Disconnect breaks the join and withdraws the values the object contributed, and Remain joined keeps the join and stops values flowing.'
+start: {label: Connected System Object}
+questions:
+- {id: scope, label: 'In scope of an import rule?', sub: its Scoping Criteria}
+- {id: join, label: 'Joined, or matches one?', sub: 'an existing join, or an Object Matching Rule'}
+- {id: project, label: 'Projection on?'}
+outcomes:
+- {id: flows, label: 'Joined, values flow', sub: a match is joined first, good: true}
+- {id: projected, label: Projected, sub: 'a new Metaverse Object, then values flow'}
+- {id: unjoined, label: Left unjoined, sub: nothing flows}
+- {id: disconnected, label: Disconnected, sub: 'values it contributed withdrawn'}
+- {id: kept, label: Join kept, sub: nothing flows from it}
+- {id: nothing, label: Nothing to do}
+answers:
+- {from: scope, to: join, label: 'yes'}
+- {from: scope, to: nothing, label: 'no, not joined'}
+- {from: scope, to: disconnected, label: 'no, joined: Disconnect'}
+- {from: scope, to: kept, label: 'no, joined: Remain joined'}
+- {from: join, to: flows, label: 'yes'}
+- {from: join, to: project, label: 'no'}
+- {from: project, to: projected, label: 'yes'}
+- {from: project, to: unjoined, label: 'no'}
+```
+
+An import rule's **Out-of-Scope Action** (**When objects fall out of scope** on the rule's Scope tab) is **Disconnect from Metaverse** by default. With **Remain joined (stop Attribute Flow)** the Connected System Object stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Execution Items](activity-execution-items.md). An export rule has no such choice: its [Deprovisioning Action](deprovisioning.md) decides what happens to the account.
+
+## :material-update: What re-checks an object
+
+A synchronisation checks only the objects it visits, so an object nothing has changed for waits for one of these events:
+
+--8<-- "assets/diagrams/what-rechecks-an-object.svg"
+
+- **A rule you saved**<br /> [When a change takes effect](configuration-changes.md#when-a-change-takes-effect) lists which change waits for which synchronisation.
+- **A relative date crossed**<br /> [Temporal Scope Reconciliation](schedules.md#built-in-schedules) flags the objects a [relative date](#relative-dates-in-scope-filters) has moved across their boundary, on both sides, and the next synchronisation visits them.
+- **An account deleted in the target**<br /> The next import obsoletes its Connected System Object, and the next synchronisation of that Connected System disconnects it and, where the Metaverse Object is still in scope of a provisioning rule, stages the account again.
+- **A Metaverse Object written outside synchronisation**<br /> It is flagged for review; see [When a change to an export rule takes effect](deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
+
+## :material-filter-outline: Building criteria
 
 Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter, or tests whether it holds a value at all. Where the attribute's value needs reshaping first, a criterion can compare an [expression](../concepts/expressions.md) instead; see [Comparing a computed value](#comparing-a-computed-value).
 
@@ -69,6 +126,23 @@ The operators offered depend on the attribute's data type. They mean the same he
 For example, to bring in only directory accounts that have an employee type and an email address in the organisation's domain, use an **All** group with `employeeType` *has a value* and `mail` *matches pattern* `^[a-z.]+@example\.org$`. An account with no employee type, or with an address that does not fit, is out of scope, and its Connections tab names the condition it fails.
 
 ## :material-arrow-decision-outline: How criteria are evaluated
+
+```jim-diagram
+archetype: decision
+title: How Scoping Criteria decide an object's scope
+desc: 'An object is in scope when any one of the rule''s top-level groups is met, or when the rule has no criteria; within a group, All needs every condition and Any at least one. An object a criterion cannot decide is left as it is, with an error recorded against it. Every other object is out of scope, and what follows depends on whether the rule imports or exports.'
+start: {label: Object against a rule's criteria}
+questions:
+- {id: groups, label: 'Any top-level group met?', sub: 'All: every condition; Any: one'}
+outcomes:
+- {id: in, label: In scope, sub: processed by the rule, good: true}
+- {id: out, label: Out of scope, sub: what follows depends on the side}
+- {id: undecided, label: Left as it is, sub: an error recorded against it}
+answers:
+- {from: groups, to: in, label: 'yes, or no criteria'}
+- {from: groups, to: out, label: 'no'}
+- {from: groups, to: undecided, label: cannot be decided}
+```
 
 Four rules decide outcomes that are easy to misread from the editor:
 
@@ -107,7 +181,7 @@ JIM refuses an expression criterion when you save the rule if it could never wor
 
 ## :material-calendar-clock-outline: Relative dates in scope filters
 
-A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated on every run, so a scope that says "terminated within the last year" keeps moving with time, with no need to edit the rule.
+A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated whenever an object is visited, and [Temporal Scope Reconciliation](schedules.md#built-in-schedules) flags the objects whose boundary has been crossed so the next synchronisation visits them. A scope that says "terminated within the last year" therefore keeps moving with time, with no need to edit the rule.
 
 A relative criterion is a **count**, a **unit** (Hours, Days, Weeks, Months or Years) and a **direction** (Ago for the past, From now for the future). Date/time operators read in calendar wording: *before*, *on or before*, *after*, *on or after*, *equals*, *does not equal*.
 

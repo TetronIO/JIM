@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Created** | 2026-04-23 |
-| **Last Updated** | 2026-10-06 |
+| **Last Updated** | 2026-10-29 |
 | **Status** | Active |
 
 This document describes the behaviour of Synchronisation Rule scoping in JIM, the administrator-facing scenarios it supports, and how each scenario is realised in code.
@@ -63,7 +63,7 @@ Relevant code:
 
 ## Outbound (export rule) scope transitions
 
-An export rule's scoping rules control whether an MVO projects into a target Connected System. Re-evaluation happens in two places: inline during inbound sync when an MVO's attributes change, and during a normal export run.
+An export rule's scoping rules control whether an MVO projects into a target Connected System. Re-evaluation happens in three places: inline during inbound sync when an MVO's attributes change, during a normal export run, and in the review at the end of a synchronisation (`ProcessScopeReviewPendingMetaverseObjectsAsync`) for every MVO flagged for it; see [When scope is re-checked](#when-scope-is-re-checked).
 
 ```mermaid
 flowchart TD
@@ -85,6 +85,21 @@ Relevant code:
 
 - `src/JIM.Application/Servers/ExportEvaluationServer.cs`: `EvaluateOutOfScopeExportsAsync` (line 180 non-cached, line 404 cached) and `HandleOutboundDeprovisioningAsync` (line 464).
 - `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`: the call site at line 1364 that performs outbound re-evaluation during inbound sync.
+
+## When scope is re-checked
+
+A Delta Synchronisation visits only the CSOs that changed since the last one, so scope is only re-checked for an object that did not change when something flags it or claims its Object Type. Each row is the whole mechanism for one event.
+
+| Event | Mechanism | Picked up by |
+|---|---|---|
+| A CSO's data changes on import | The CSO's modified time is later than the Connected System's `LastSyncCompletedAt` watermark | The next synchronisation of that Connected System, Delta or Full |
+| An import Synchronisation Rule or an Object Matching Rule is saved | A `ConfigurationChangeSynchronisation` row per Connected System Object Type, written after the save by `ConnectedSystemServer.RecordConfigurationChangeAwaitingSynchronisationAsync` when `ConfigurationChangeSynchronisationPolicy` says the change can alter what an import produces | The next synchronisation of that Connected System claims the rows it was offered before it loaded the system (`ClaimConfigurationChangesAwaitingSynchronisationAsync`), processes every CSO of those types (the Delta loader and count take them in addition to the modified ones), and marks them applied only on success (`ApplyClaimedConfigurationChangesAsync`); a failed or cancelled run applies nothing |
+| An export rule is created, re-enabled, switched to provisioning or re-scoped, or its Deprovisioning Action changes | Every MVO of the rule's type is flagged for review | The review at the end of the next synchronisation of any Connected System |
+| A relative date crosses a boundary | The Temporal Scope Reconciler flags the CSOs and MVOs it moves | The next synchronisation of the CSO's Connected System, or the end-of-run review for an MVO |
+| An MVO is created or changed outside synchronisation | The MVO is flagged for review, with the attributes that changed and the values removed | The end-of-run review of the next synchronisation of any Connected System |
+| An export Attribute Flow is edited | Nothing is flagged | The target Connected System's next Full Synchronisation, while the rule enforces state |
+
+Disabling an export rule, or switching its provisioning off, flags nothing: the rule stops acting and nothing it created is deprovisioned.
 
 ## MVO deletion cascade
 

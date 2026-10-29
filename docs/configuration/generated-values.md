@@ -134,7 +134,7 @@ The REST API and PowerShell report the stored reason.
 
 **Where you see it.**
 
-- The editor's **Result** shows the first value and the candidates that follow when it is taken, worked out from the values tried in its **Try it** pane, or from placeholder values until you try some. For a saved rule it also counts the existing Metaverse Objects that would receive a value on the next Full Synchronisation, and for a sequence it shows the counter's state.
+- The editor's **Result** shows the first value and the candidates that follow when it is taken, worked out from the values tried in its **Try it** pane, or from placeholder values until you try some. For a saved rule it also counts the existing Metaverse Objects that would receive a value when the next synchronisation processes them, and for a sequence it shows the counter's state.
 - A synchronisation's Activity counts **Values Generated**, and each object's summary names the value it was given. A failure (no free value within the attempt limit, or a sequence that outgrew its width) is an ordinary Activity error naming the reason.
 - On the Metaverse Object page's [Inspect view](metaverse-objects.md#where-a-value-comes-from), a generated value's source reads **Connected System · Synchronisation Rule · Generated Value**, with its own share of the source bar, and its inspector gives the Source type as **Generated Value** (marked **Corrected** if a collision revised it).
 

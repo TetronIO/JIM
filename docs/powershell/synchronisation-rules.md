@@ -133,6 +133,12 @@ Get-JIMSyncRule -ConnectedSystemId $cs.Id
 Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule -Direction Import -Status Enabled
 ```
 
+```powershell title="Find the rules waiting on a synchronisation"
+Get-JIMSyncRule |
+    Where-Object { $_.AwaitingSynchronisationChangeCount -gt 0 -or $_.ExportReviewPendingCount -gt 0 } |
+    Select-Object Name, Direction, AwaitingSynchronisationChangeCount, ExportReviewPendingCount
+```
+
 ---
 
 ## :material-plus-circle-outline: New-JIMSyncRule
