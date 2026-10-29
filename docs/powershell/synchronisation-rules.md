@@ -176,13 +176,14 @@ New-JIMSyncRule [-Name] <string> -ConnectedSystemName <string> -ConnectedSystemO
 
 ### Output
 
-With `-PassThru`, the rule created; otherwise nothing. A deletion source warning is written to the warning stream either way.
+With `-PassThru`, the rule created; otherwise nothing. A deletion source warning is written to the warning stream either way. AwaitingSynchronisation lists the Connected System Object Type an enabled import rule makes its Connected System's next synchronisation process in full, with how many objects that is and about how long it takes; it is empty for an export rule and for a rule created disabled, and a warning saying the same is written to the warning stream.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `Warnings` | `string[]` | Non-blocking warnings the save raised about the rule's Attribute Flows and Scoping Criteria, for example that an Attribute Flow deriving a Metaverse attribute calls a function returning a different value each time it is evaluated, or that a Scoping Criterion the save left as it was is no longer valid. The save went ahead regardless. Always present; empty when there are none. |
 | `DependentDerivedFlows` | `object[]` | The Metaverse-Derived Attribute Flows the save left with a missing input (for example by disabling the rule holding the last enabled contributor of an attribute they read). The save went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
 | `DeletionSourceWarning` | `string` | Set when the save took the rule into projecting into a Metaverse Object Type deleted When Authoritative Source Disconnected, from a Connected System that is not one of its authoritative sources: objects only this system holds will never be deleted, and those it shares with an authoritative source are deleted when that source disconnects. Empty when there is nothing to warn about, including for a rule that already projected. |
+| `AwaitingSynchronisation` | `object[]` | The Connected System Object Types this save recorded as awaiting synchronisation. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives the Connected System and Object Type, how many objects that is, and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Always present; empty when the save recorded nothing: a change that needs no synchronisation, a rule that is switched off, and an export rule, whose change reaches existing objects through the review it flags instead. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 | `Id` | `int` | The ID of the Synchronisation Rule. |
 | `Name` | `string` | The name of the Synchronisation Rule. |
 | `Description` | `string` | What the Synchronisation Rule is for, for administrators; empty when none is set. |
@@ -291,7 +292,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 
 ### Output
 
-With `-PassThru`, the rule as changed; otherwise nothing. Its warnings are written to the warning stream either way.
+With `-PassThru`, the rule as changed; otherwise nothing. Its warnings are written to the warning stream either way. AwaitingSynchronisation lists each Connected System Object Type an import rule's change makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes; it is empty for an export rule and for a change that needs none, and a line for each type saying the same is written to the warning stream.
 
 Properties as under [New-JIMSyncRule](#new-jimsyncrule).
 <!-- END GENERATED: Set-JIMSyncRule -->

@@ -120,6 +120,7 @@ The rules, in the order JIM tries them, or the one rule.
 | `Sources` | `object[]` | The rule's source: one entry, naming a Connected System attribute or an expression. Each has `Id`, `Order`, `ConnectedSystemAttributeId`, `ConnectedSystemAttributeName` and `Expression`. |
 | `CaseSensitive` | `bool` | Whether the comparison respects case; false ignores it. |
 | `Created` | `datetime` | When the rule was created. |
+| `AwaitingSynchronisation` | `object[]` | On the response to a create or update of the rule: the Connected System Object Types the save recorded as awaiting synchronisation. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives how many objects that is and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Empty on a read, and when the save recorded nothing. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 | `ConnectedSystemId` | `int` | The ID of the Connected System the rule belongs to, so the rule can be piped to `Set-JIMMatchingRule` and `Remove-JIMMatchingRule`. |
 <!-- END GENERATED: Get-JIMMatchingRule -->
 
@@ -168,7 +169,7 @@ New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int> -MetaverseObjec
 
 ### Output
 
-With `-PassThru`, the rule created; otherwise nothing.
+With `-PassThru`, the rule created; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type the new rule makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMMatchingRule](#get-jimmatchingrule).
 <!-- END GENERATED: New-JIMMatchingRule -->
@@ -236,7 +237,7 @@ Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> -SourceExpression <string
 
 ### Output
 
-With `-PassThru`, the rule as changed; otherwise nothing.
+With `-PassThru`, the rule as changed; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type the change makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMMatchingRule](#get-jimmatchingrule).
 <!-- END GENERATED: Set-JIMMatchingRule -->
@@ -335,6 +336,7 @@ The rules, in the order JIM tries them, or the one rule.
 | `Sources` | `object[]` | The rule's source: one entry, naming a Connected System attribute or an expression. Each has `Id`, `Order`, `ConnectedSystemAttributeId`, `ConnectedSystemAttributeName` and `Expression`. |
 | `CaseSensitive` | `bool` | Whether the comparison respects case; false ignores it. |
 | `Created` | `datetime` | When the rule was created. |
+| `AwaitingSynchronisation` | `object[]` | On the response to a create or update of the rule: the Connected System Object Types the save recorded as awaiting synchronisation. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives how many objects that is and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Empty on a read, and when the save recorded nothing. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 <!-- END GENERATED: Get-JIMSyncRuleMatchingRule -->
 
 ### Examples
@@ -380,7 +382,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int> -SourceExpression <string> -Target
 
 ### Output
 
-With `-PassThru`, the rule created; otherwise nothing.
+With `-PassThru`, the rule created; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type the new rule makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMSyncRuleMatchingRule](#get-jimsyncrulematchingrule).
 <!-- END GENERATED: New-JIMSyncRuleMatchingRule -->
@@ -444,7 +446,7 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> -SourceExpression <strin
 
 ### Output
 
-With `-PassThru`, the rule as changed; otherwise nothing.
+With `-PassThru`, the rule as changed; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type the change makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMSyncRuleMatchingRule](#get-jimsyncrulematchingrule).
 <!-- END GENERATED: Set-JIMSyncRuleMatchingRule -->
