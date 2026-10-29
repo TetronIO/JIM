@@ -840,6 +840,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("TypeId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("UnsynchronisedChangesJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()

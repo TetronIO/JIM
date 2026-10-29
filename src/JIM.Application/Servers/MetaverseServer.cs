@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
@@ -1373,7 +1374,7 @@ public partial class MetaverseServer
     /// Updates a Metaverse Object and optionally records the update for audit trail.
     /// When additions/removals are provided and change tracking is enabled, a change record is created automatically.
     /// Callers that only update operational metadata (e.g. deletion dates) can omit additions/removals
-    /// to skip change tracking.
+    /// to skip change tracking. An update that changes attribute values also flags the object for export scope review.
     /// </summary>
     /// <param name="metaverseObject">The MVO to update.</param>
     /// <param name="additions">Attribute values being added (null to skip change tracking).</param>
@@ -1419,6 +1420,19 @@ public partial class MetaverseServer
         if (nameAttributeChanged)
             metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
+        // A changed attribute value is a write outside any synchronisation, so no synchronisation has visited the object
+        // to re-evaluate its export scope or to deliver the new value to the systems that hold the object (#2615): flag
+        // it, and record what changed, so the next synchronisation of any Connected System reviews it against every export
+        // rule and stages the change. Callers passing no changed values update operational metadata, which cannot move an
+        // object into or out of scope or change anything an export carries, so they leave both alone. Set before the save
+        // so they are written in the same statement as the edit: the drain's guarded clear then sees the row's version
+        // move and keeps the flag and the record for a change it loaded the object before.
+        if (additions is { Count: > 0 } || removals is { Count: > 0 })
+        {
+            metaverseObject.ScopeReviewPending = true;
+            RecordUnsynchronisedChanges(metaverseObject, additions, removals);
+        }
+
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
 
         // A direct edit is a write outside any Connected System's synchronisation (#1750 Phase 4, FR 9): nothing has run
@@ -1426,6 +1440,33 @@ public partial class MetaverseServer
         // attribute. After the save, so a hosting run that clears the mark has seen the edit.
         if (additions != null || removals != null)
             await MarkDerivedInputChangesAsync(metaverseObject, (additions ?? []).Concat(removals ?? []).ToList());
+    }
+
+    /// <summary>
+    /// Merges one write's changes into what the Metaverse Object already records as awaiting delivery (#2615): a second
+    /// edit before the next synchronisation adds to the first's, it never replaces it.
+    /// </summary>
+    private static void RecordUnsynchronisedChanges(
+        MetaverseObject metaverseObject,
+        List<MetaverseObjectAttributeValue>? additions,
+        List<MetaverseObjectAttributeValue>? removals)
+    {
+        MetaverseObjectUnsynchronisedChanges? recorded = null;
+        try
+        {
+            recorded = MetaverseObjectUnsynchronisedChanges.FromJson(metaverseObject.UnsynchronisedChangesJson);
+        }
+        catch (JsonException ex)
+        {
+            // A document nothing can read cannot be delivered either way, and failing here would fail the write (a
+            // sign-in, say) over a record of an earlier one: start afresh, saying so.
+            Log.Warning(ex, "RecordUnsynchronisedChanges: the unsynchronised changes recorded on Metaverse Object {MvoId} cannot be read, " +
+                "so they are replaced by this write's; the earlier changes will not be delivered to Connected Systems.", metaverseObject.Id);
+        }
+
+        recorded ??= new MetaverseObjectUnsynchronisedChanges();
+        recorded.Record(additions, removals);
+        metaverseObject.UnsynchronisedChangesJson = recorded.ToJson();
     }
 
     /// <summary>
@@ -1614,7 +1655,8 @@ public partial class MetaverseServer
 
     /// <summary>
     /// Creates a Metaverse Object and optionally records the creation for audit trail.
-    /// Change tracking is handled automatically when enabled — callers just pass initiator info.
+    /// Change tracking is handled automatically when enabled; callers just pass initiator info. The object is also
+    /// flagged for export scope review, as it is created outside any synchronisation.
     /// </summary>
     /// <param name="metaverseObject">The MVO to create.</param>
     /// <param name="initiatedByType">The type of principal initiating the creation.</param>
@@ -1647,6 +1689,11 @@ public partial class MetaverseServer
 
         // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
         metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
+
+        // Created outside any synchronisation, so none has visited it to evaluate its export scope (#2615): flag it, and
+        // the next synchronisation of any Connected System reviews it against every export rule, whether the rule that
+        // covers it existed before the object or not.
+        metaverseObject.ScopeReviewPending = true;
 
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }

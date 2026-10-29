@@ -122,7 +122,7 @@ public enum FullSyncPreviewItemKind
     Evaluated,
     /// <summary>A Connected System Object awaiting deletion, which the synchronisation tears down rather than processes.</summary>
     Obsolete,
-    /// <summary>A Metaverse Object flagged for export scope review that no Connected System Object of this system reached.</summary>
+    /// <summary>A Metaverse Object flagged for an Export Review that no Connected System Object of this system reached.</summary>
     ExportScopeReview,
     /// <summary>The last item when a bound stopped the walk before the whole population was evaluated.</summary>
     Truncated
