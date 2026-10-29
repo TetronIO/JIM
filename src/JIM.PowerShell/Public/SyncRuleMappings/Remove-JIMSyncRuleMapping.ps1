@@ -10,7 +10,7 @@ function Remove-JIMSyncRuleMapping {
         Deletes an Attribute Flow (mapping) from a Synchronisation Rule.
 
         When an import mapping still contributes Metaverse attribute values, deleting it recalls them by
-        default: the values are withdrawn at the next Full Synchronisation of the contributing system, with
+        default: the values are withdrawn at the next synchronisation of the contributing system, Delta or Full, with
         surviving lower-priority contributors re-elected. Use -KeepContributedValues to leave the values in
         place instead; their provenance is severed before the mapping is deleted, so nothing can ever recall
         them. Export mappings contribute nothing to the Metaverse, so the choice does not apply to them.
@@ -35,7 +35,7 @@ function Remove-JIMSyncRuleMapping {
 
     .PARAMETER KeepContributedValues
         Keeps the Metaverse attribute values the mapping contributed, instead of leaving them to be recalled at the
-        next Full Synchronisation of the contributing Connected System. The kept values have no provenance, so
+        next synchronisation of the contributing Connected System, Delta or Full. The kept values have no provenance, so
         nothing can ever recall them, and the other contributors to those attributes are not re-elected.
 
     .PARAMETER Force
@@ -43,7 +43,7 @@ function Remove-JIMSyncRuleMapping {
 
     .OUTPUTS
         None. Derived Attribute Flows the deletion left with a missing input are written to the warning stream. When the
-        mapping was on an import rule, a line saying that its Connected System's next synchronisation, Delta or Full,
+        mapping was on an import rule, a warning saying that its Connected System's next synchronisation, Delta or Full,
         processes every object of the rule's Connected System Object Type, with how many objects that is and about how
         long it takes, is written to the warning stream.
 
@@ -52,20 +52,20 @@ function Remove-JIMSyncRuleMapping {
 
         Removes the mapping with ID 5 from Synchronisation Rule 1 after confirmation. When the mapping still
         contributes Metaverse attribute values, the confirmation states how many attributes and Metaverse
-        Objects the recall at the next Full Synchronisation will affect.
+        Objects the recall at the next synchronisation will affect.
 
     .EXAMPLE
         Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -Force
 
         Removes the mapping without confirmation. Any Metaverse attribute values it contributed are recalled
-        at the next Full Synchronisation of the contributing system.
+        at the next synchronisation of the contributing system, Delta or Full.
 
     .EXAMPLE
         Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -KeepContributedValues -Force
 
         Removes the mapping, KEEPING the Metaverse attribute values it contributed. The kept values lose
         their provenance: nothing records that this mapping contributed them, so no future recall (including
-        the next Full Synchronisation) can ever withdraw them. Only choose this when the values should
+        the next synchronisation) can ever withdraw them. Only choose this when the values should
         outlive the mapping.
 
     .EXAMPLE
@@ -111,8 +111,8 @@ function Remove-JIMSyncRuleMapping {
         }
 
         # Quantify the contributed values so the confirmation states the impact of the recall-or-keep
-        # choice (#1537). A mapping's recall is deferred: it happens at the next Full Synchronisation of the
-        # contributing system. -Force suppresses the confirmation, so the lookup would be wasted there.
+        # choice (#1537). A mapping's recall is deferred: it happens at the next synchronisation of the
+        # contributing system, Delta or Full. -Force suppresses the confirmation, so the lookup would be wasted there.
         $confirmAction = 'Remove Synchronisation Rule Mapping'
         if (-not $Force) {
             $contributedSummary = $null

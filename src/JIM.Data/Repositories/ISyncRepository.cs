@@ -2087,7 +2087,7 @@ public interface ISyncRepository
     /// How many Metaverse Objects of <paramref name="metaverseObjectTypeId"/>, joined to a Connected System
     /// Object of <paramref name="connectedSystemId"/>, currently hold no value for <paramref name="metaverseAttributeId"/>
     /// (Unique Value Generation, #242, Phase 3): the count behind a generated import mapping's "N existing
-    /// objects would receive a value on the next full synchronisation" preview line. Works against a mapping
+    /// objects would receive a value at the next synchronisation" preview line. Works against a mapping
     /// that has not yet been saved (the ids are supplied directly, not resolved from a persisted mapping), so
     /// the portal can show this while an administrator is still composing the mapping.
     /// </summary>

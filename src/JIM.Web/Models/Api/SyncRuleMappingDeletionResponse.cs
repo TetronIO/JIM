@@ -25,8 +25,8 @@ public class SyncRuleMappingDeletionResponse
 
     /// <summary>
     /// True when <c>keepContributedValues</c> was chosen and values were present, so they were kept with no
-    /// Synchronisation Rule provenance; false when they are left to be recalled at the next Full Synchronisation of
-    /// the contributing system, or there was nothing to keep.
+    /// Synchronisation Rule provenance; false when they are left to be recalled at the next synchronisation of
+    /// the contributing system, Delta or Full, or there was nothing to keep.
     /// </summary>
     public bool ContributedValuesKept { get; set; }
 

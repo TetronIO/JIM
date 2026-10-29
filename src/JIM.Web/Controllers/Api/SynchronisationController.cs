@@ -5299,8 +5299,8 @@ public class SynchronisationController(
     /// Delete an Attribute Flow Mapping
     /// </summary>
     /// <remarks>
-    /// By default, the Metaverse attribute values an import mapping contributed are recalled at the next Full
-    /// Synchronisation of the contributing system (surviving lower-priority contributors are re-elected). Pass
+    /// By default, the Metaverse attribute values an import mapping contributed are recalled at the next
+    /// synchronisation of the contributing system, Delta or Full (surviving lower-priority contributors are re-elected). Pass
     /// <c>keepContributedValues=true</c> to leave them in place instead: their provenance is severed before the
     /// mapping is deleted, permanently exempting them from recall. Use the mapping's
     /// contributed-values-summary endpoint first to understand the impact. Export mappings contribute nothing,
@@ -5310,7 +5310,7 @@ public class SynchronisationController(
     /// <param name="mappingId">The unique identifier of the mapping to delete.</param>
     /// <param name="keepContributedValues">True to keep the Metaverse attribute values the mapping contributed
     /// (their provenance is severed, so nothing ever recalls them); false (the default) to leave them to be
-    /// recalled at the next Full Synchronisation of the contributing system.</param>
+    /// recalled at the next synchronisation of the contributing system, Delta or Full.</param>
     /// <returns>What the deletion affected.</returns>
     /// <response code="200">Mapping deleted. The body states the contributed values affected and, in
     /// <c>dependentDerivedFlows</c>, any Attribute Flow deriving a Metaverse attribute that the deletion left with a

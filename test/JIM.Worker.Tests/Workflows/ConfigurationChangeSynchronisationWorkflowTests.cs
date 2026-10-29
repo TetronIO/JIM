@@ -129,6 +129,34 @@ public class ConfigurationChangeSynchronisationWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task DeltaSync_MappingDeletedAndRecorded_RecallsTheValuesItContributedWithoutAFullSynchronisationAsync()
+    {
+        // Deleting an import mapping records the rule's Object Type as awaiting synchronisation, and the Delta that then
+        // processes every object of the type recalls what the mapping contributed, as a Full Synchronisation does. The
+        // wording that says where a removed mapping's values are recalled depends on this.
+        var personType = _userRule.MetaverseObjectType!;
+        var displayName = personType.Attributes.First(a => a.Name == "DisplayName");
+        int PeopleHoldingDisplayName() => SyncRepo.MetaverseObjects.Values
+            .Where(m => m.Type?.Id == personType.Id)
+            .Count(m => m.AttributeValues.Any(av => av.AttributeId == displayName.Id && !av.NullValue && av.StringValue != null));
+        Assert.That(PeopleHoldingDisplayName(), Is.EqualTo(ObjectsPerType), "precondition: the first Full Synchronisation flowed the values");
+
+        var mapping = _userRule.AttributeFlowRules.Single(m => m.TargetMetaverseAttributeId == displayName.Id);
+        foreach (var source in mapping.Sources)
+            DbContext.Entry(source).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        DbContext.Entry(mapping).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        _userRule.AttributeFlowRules.Remove(mapping);
+
+        await RunAsync(ConnectedSystemRunType.DeltaSynchronisation);
+        Assert.That(PeopleHoldingDisplayName(), Is.EqualTo(ObjectsPerType), "control: with nothing awaiting synchronisation a Delta reaches nothing, so nothing is recalled");
+
+        RecordChange(_userType, "User Import: Attribute Flow removed");
+        await RunAsync(ConnectedSystemRunType.DeltaSynchronisation);
+
+        Assert.That(PeopleHoldingDisplayName(), Is.Zero, "the Delta that processed the whole type recalled what the deleted mapping contributed");
+    }
+
+    [Test]
     public async Task DeltaSync_ChangeSavedAfterTheRunClaimed_IsNotAppliedByThatRunAndIsClaimedByTheNextAsync()
     {
         var first = RecordChange(_userType);

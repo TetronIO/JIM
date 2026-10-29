@@ -22,10 +22,10 @@ public class SyncRuleMappingRemovalChoice
     public int MappingId { get; set; }
 
     /// <summary>
-    /// True to keep the values the mapping contributed: their provenance is severed so the next Full
-    /// Synchronisation does not recall them, and the choice is recorded on the save's Activity. False (the
-    /// default everywhere) leaves provenance intact, so the shipped orphan recall withdraws the values at the
-    /// next Full Synchronisation of the contributing system.
+    /// True to keep the values the mapping contributed: their provenance is severed so the next synchronisation
+    /// does not recall them, and the choice is recorded on the save's Activity. False (the default everywhere)
+    /// leaves provenance intact, so the shipped orphan recall withdraws the values at the next synchronisation
+    /// of the contributing system, Delta or Full.
     /// </summary>
     public bool KeepContributedValues { get; set; }
 

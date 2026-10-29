@@ -8191,7 +8191,7 @@ public partial class ConnectedSystemServer
     /// <param name="parentActivityId">An optional parent Activity when the deletion is part of a larger decision.</param>
     /// <param name="keepContributedValues">True to keep the values the mapping contributed (their provenance is
     /// severed before the row deletion, permanently exempting them from the orphan recall); false (the default
-    /// on every surface) to leave them to be recalled at the next Full Synchronisation of the contributing system.</param>
+    /// on every surface) to leave them to be recalled at the next synchronisation of the contributing system, Delta or Full.</param>
     public Task<SyncRuleMappingDeletionResult> DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy, Guid? parentActivityId = null, bool keepContributedValues = false)
         => DeleteSyncRuleMappingCoreAsync(mapping, initiatedBy, initiatedByApiKey: null, parentActivityId, keepContributedValues);
 
@@ -8209,8 +8209,8 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// The shared heart of an Attribute Flow mapping deletion (#1537). The default (recall) is exactly the
     /// long-shipped behaviour: nothing queues, the deletion stamps the configuration watermark, and the orphan
-    /// recall withdraws the mapping's contributed values at the next Full Synchronisation of the contributing
-    /// system. Choosing keep severs the values' Synchronisation Rule provenance BEFORE the row is deleted
+    /// recall withdraws the mapping's contributed values at the next synchronisation of the contributing
+    /// system, Delta or Full (the deletion records the rule's Object Type as awaiting synchronisation). Choosing keep severs the values' Synchronisation Rule provenance BEFORE the row is deleted
     /// (null-provenance values are never recalled, so the exemption is permanent) and records the choice on
     /// the deletion Activity. Only meaningful for import mappings: an export mapping, or one with no target
     /// Metaverse attribute, has contributed nothing and there is nothing to sever.
@@ -10466,7 +10466,7 @@ public partial class ConnectedSystemServer
     /// pair contributed values, their Synchronisation Rule provenance is severed FIRST (permanently exempting
     /// them from the orphan recall) and the choice is recorded on the save's Activity; then the mapping row and
     /// its sources are deleted properly. Without a keep, provenance stays intact and the shipped orphan recall
-    /// withdraws the values at the next Full Synchronisation of the contributing system.
+    /// withdraws the values at the next synchronisation of the contributing system, Delta or Full.
     /// <para>
     /// A staged removal NOT named in the choices still deletes its row: the mapping's Synchronisation Rule
     /// foreign key is required (#1550), so severing the relationship deletes the orphaned row at save. What the
@@ -10501,7 +10501,8 @@ public partial class ConnectedSystemServer
 
         // The rows themselves are NOT deleted here: the required foreign key guarantees the save's own flush
         // deletes every severed row (and cascades its sources), and the rule save advances the configuration
-        // watermark, so the #1536 orphan recall re-evaluates every object at the next Full Synchronisation.
+        // watermark, so the #1536 orphan recall re-evaluates every object at the next synchronisation (the save records the
+        // rule's Object Type as awaiting synchronisation, so a Delta processes the whole type).
         var keepMessages = new List<string>();
         foreach (var (choice, removedMapping) in removedMappings)
         {
