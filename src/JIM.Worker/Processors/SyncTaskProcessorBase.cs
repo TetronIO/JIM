@@ -286,6 +286,21 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected TypeOrderedCsoPager? _csoPager;
 
+    /// <summary>
+    /// The configuration changes awaiting synchronisation that this run claimed as it started (#2615): saved changes to
+    /// an import Synchronisation Rule or an Object Matching Rule that this run must apply by processing every object of
+    /// the Object Type each names. Empty until <see cref="ClaimConfigurationChangesAwaitingSynchronisationAsync"/> runs,
+    /// and when nothing was awaiting synchronisation.
+    /// </summary>
+    private IReadOnlyList<ClaimedConfigurationChangeSynchronisation> _claimedConfigurationChanges = [];
+
+    /// <summary>
+    /// The Object Types whose every object this run processes because configuration changes awaiting synchronisation
+    /// were claimed for them (#2615). A Full Synchronisation processes everything anyway; a Delta Synchronisation uses
+    /// this to page these types in full and the others by modification.
+    /// </summary>
+    protected IReadOnlySet<int> _objectTypeIdsToProcessInFull = new HashSet<int>();
+
     // Summary stats are accumulated incrementally during each FlushRpeisAsync call via
     // Worker.AccumulateActivitySummaryStats, so RPEIs can be released immediately without
     // keeping them in memory for a final calculation.
@@ -1078,6 +1093,65 @@ public abstract class SyncTaskProcessorBase
         _mvoIdToRpei.Clear();
         _mvoIdsChangedByExportEvaluation.Clear();
         _deferredMvoRpeiMappings.Clear();
+    }
+
+    /// <summary>
+    /// Claims every configuration change awaiting synchronisation for this Connected System (#2615), and records which
+    /// Object Types this run must therefore process in full. Call it first, as the run starts: before the progress count
+    /// and before any Synchronisation Rule is loaded. That order is what makes the claim race-free (see
+    /// <see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>): a change claimed is already saved,
+    /// so the rules this run loads next contain it, and a change saved after the claim waits for the next run.
+    /// <para>
+    /// Known limit: the worker loads the Connected System and its Object Types, with the Simple Mode Object Matching
+    /// Rules held on them, before it constructs the processor, so a Simple Mode Object Matching Rule change saved in
+    /// the moments between that load and this claim is claimed yet absent from the Object Types the run uses.
+    /// Synchronisation Rules, which the run loads after the claim, are not affected.
+    /// </para>
+    /// </summary>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected async Task ClaimConfigurationChangesAwaitingSynchronisationAsync(string runKind)
+    {
+        _claimedConfigurationChanges = await _syncRepo.ClaimConfigurationChangeSynchronisationsAsync(_connectedSystem.Id, _activity.Id);
+        _objectTypeIdsToProcessInFull = _claimedConfigurationChanges.Select(c => c.ConnectedSystemObjectTypeId).ToHashSet();
+
+        if (_claimedConfigurationChanges.Count == 0)
+            return;
+
+        // Which types, and how many changes are behind each, so the run's log explains why it processed a type in full.
+        var summary = string.Join(", ", _claimedConfigurationChanges
+            .GroupBy(c => c.ConnectedSystemObjectTypeId)
+            .OrderBy(g => g.Key)
+            .Select(g => $"{LogSanitiser.Sanitise(_connectedSystem.ObjectTypes?.FirstOrDefault(t => t.Id == g.Key)?.Name ?? g.Key.ToString(CultureInfo.InvariantCulture))} ({g.Count()})"));
+        Log.Information("{RunKind}: {Count} configuration change(s) awaiting synchronisation claimed; processing every object of {ObjectTypeCount} Object Type(s) in full, with the changes behind each in brackets: {ObjectTypes}",
+            runKind, _claimedConfigurationChanges.Count, _objectTypeIdsToProcessInFull.Count, summary);
+    }
+
+    /// <summary>
+    /// Marks the configuration changes this run claimed as applied (#2615). Call it only where the run has completed and
+    /// advanced the Delta Synchronisation watermark: a cancelled run, or one that failed, never gets here and so applies
+    /// nothing, leaving the changes for the next run to claim again.
+    /// <para>
+    /// A run that completes with errors on individual objects still applies them, consistently with the watermark
+    /// advancing: both record that the run completed, and the errors are reported on the objects' own execution items.
+    /// </para>
+    /// </summary>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected async Task ApplyClaimedConfigurationChangesAsync(string runKind)
+    {
+        if (_claimedConfigurationChanges.Count == 0)
+            return;
+
+        var applied = await _syncRepo.ApplyClaimedConfigurationChangeSynchronisationsAsync(_activity.Id);
+        if (applied == _claimedConfigurationChanges.Count)
+        {
+            Log.Information("{RunKind}: applied {Count} configuration change(s) that were awaiting synchronisation", runKind, applied);
+            return;
+        }
+
+        // Only reachable when another synchronisation of this Connected System claimed some of them after this run did,
+        // which overwrote this run's claim. That run applies them. Safe, since this run processed the types in full too.
+        Log.Warning("{RunKind}: applied {Applied} of the {Claimed} configuration change(s) it claimed; a synchronisation of the same Connected System that overlapped this one holds the claim on the rest and applies them",
+            runKind, applied, _claimedConfigurationChanges.Count);
     }
 
     /// <summary>

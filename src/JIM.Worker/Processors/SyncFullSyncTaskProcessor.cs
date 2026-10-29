@@ -71,6 +71,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
         Log.Verbose("PerformFullSyncAsync: Starting");
 
+        // Claim the configuration changes awaiting synchronisation before anything else: before the count and before any
+        // Synchronisation Rule is loaded, which is what makes the claim race-free (#2615). A Full Synchronisation
+        // processes every object of every type anyway, so there is nothing further to select; the claim is what lets it
+        // mark the changes applied on completion. A change saved after this point is not claimed and waits for the next
+        // run.
+        await ClaimConfigurationChangesAwaitingSynchronisationAsync("Full Synchronisation");
+        syncSpan.SetTag("typesWithConfigurationChangesClaimed", _objectTypeIdsToProcessInFull.Count);
+
         // what needs to happen:
         // - confirm Pending Exports
         // - establish new joins to existing Metaverse Objects
@@ -437,6 +445,11 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
             // Update the delta sync watermark to establish baseline for future delta syncs
             await UpdateDeltaSyncWatermarkAsync();
+
+            // The configuration changes this run claimed are applied: every object of every type has been processed.
+            // Reached only on completion, never on cancellation or failure, so those leave the changes awaiting
+            // synchronisation for the next run to claim again.
+            await ApplyClaimedConfigurationChangesAsync("Full Synchronisation");
 
             // Update activity message with throughput summary
             var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +
