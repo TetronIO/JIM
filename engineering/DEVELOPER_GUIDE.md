@@ -192,6 +192,20 @@ An import Attribute Flow whose expression reads `mv["..."]` of the object being 
 - **A new `AttributePriorityContext` construction site**: build the graph through the factory and attach it, or contributor re-election there will re-flow derived mappings as ordinary ones with no Metaverse view.
 - **Reference inputs** ([#1861](https://github.com/TetronIO/JIM/issues/1861)): references resolve after the per-object tail, so a derived flow would read the previous reference; lifting the save-time refusal needs the level loop moved after reference resolution, not just a validator change.
 
+### 3f. SCIM 2.0 Service Provider (#124)
+
+Identity providers push Users and Groups to JIM over SCIM 2.0, each into a Connected System using the **JIM SCIM 2.0 Service Provider Connector** (Preview, behind `Features.ScimServiceProvider`; see Feature Flags below). The design and its decisions (D1 to D19) are in [`plans/doing/SCIM_SERVER_DESIGN.md`](plans/doing/SCIM_SERVER_DESIGN.md); public documentation: [JIM SCIM 2.0 Service Provider Connector](../docs/connectors/jim-scim-service-provider-connector.md).
+
+**One boundary.** At request time, JIM.Web authenticates and validates each request and applies it to a JIM-owned **SCIM store** in PostgreSQL, answering from the store at once; nothing at request time touches a Connector Space, the Metaverse or the Worker. Scheduled Full Import and Delta Import Run Profiles then import the store through the Service Provider Connector, and Delta Synchronisation and Export carry the changes on, as for any other source. The Worker therefore stays the only writer of every Connector Space, and inbound latency is the Schedule's interval.
+
+- **Request pipeline** (`src/JIM.Web/Scim/`): `/scim/v2/{connectedSystemId}` sits outside the `/api` pipeline, so each `/api` stage has a `/scim` counterpart. In `Program.cs`, `ScimExceptionMiddleware` (SCIM-shaped errors), `ScimFeatureGateMiddleware` (404 while the flag is off, as though the route did not exist) and `ScimSecureTransportMiddleware` (403 over a connection JIM cannot confirm is encrypted, outside Development) all run before authentication reads a key. Rate limiting partitions SCIM requests per Connected System rather than per key (`RateLimitPartitionResolver`), so the two keys of a rotation share one budget. An unknown `/scim` path is a SCIM 404, never the portal's page.
+- **Scoped API keys** (`SecurityServer`): the only credential `/scim` accepts is an API key scoped to that one Connected System, sent as `Authorization: Bearer jim_ak_...`. A scoped key carries no role claims, `ApiKeyAuthenticationHandler` refuses it on any other path, and `ScimConnectedSystemScopeHandler` refuses an unscoped key on `/scim` however privileged. At most two are active per Connected System (`MaximumActiveScopedApiKeys`), for overlap rotation, and expiry is mandatory: 365 days by default, 730 at most.
+- **The store and its writes** (`ScimServer` in JIM.Application, `ScimStoreRepository` in JIM.PostgresData): every write goes through `ScimServer`, which applies the Connected System's stored resource type and schema definitions (D18), so User, Group and any custom resource type are served by the same code. PATCH, filtering, ETags and the discovery documents come from `JIM.Scim`'s server primitives, the inverse of what the Client Connector builds. A pushed `password` is refused with `400` before anything touches the store, and the store has no password column (D5).
+- **The journal** (D17): every accepted write records, in the same transaction, one row per resource: change sequence, operation, the changed and ignored attributes by name (never values), the key and the client address. It is change history, so `History.RetentionPeriod` governs it. `ScimRequestTallyBuffer` and `ScimRequestTallyFlusher` add a summary Activity per Connected System, key and 15-minute window, counting creates, updates, deletes and refusals, and a Connected System Object's change history lists the requests behind each imported change, found from the import's recorded read range.
+- **The Connector** (`JIM.Connectors/SCIM/ServiceProvider/ScimServiceProviderConnector`): implements `IConnectorScimResourceStoreAware`, so JIM hands it the Connected System's store before it opens an import or reads the schema; it calls nothing out and has no connection settings. A Delta Import reads the store's change feed from its watermark (`IConnectorImportWatermarkDescription` describes it on the Activity), and a Full Import can rebuild a cleared Connector Space from the store with nothing re-sent.
+
+**How to extend it**: a change to what a request may do belongs in `ScimServer` (the one write path) and its tests; a change to the wire format belongs in `JIM.Scim`, where the client and the server share it. Integration Scenario 029 (`Scenario-029-ScimRoundTrip`) is the acceptance test: one JIM provisions its own endpoint through the SCIM 2.0 Client Connector over HTTPS and imports what arrives. Run it for any change on this path.
+
 ### 4. Architecture Diagrams
 
 JIM's architecture is documented with C4 model diagrams (System Context, Container, Component levels) on the [architecture docs page](developer/architecture.md).
@@ -244,6 +258,7 @@ Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisatio
 - **OpenID Connect (OIDC)**: SSO authentication (required)
 - **PKCE**: Enhanced auth flow security
 - **Cookie Authentication**: Session management
+- **Bearer tokens on the API**: SSO access tokens (JWT, validated against the identity provider's published keys) and JIM API keys (`jim_ak_...`) are both sent as `Authorization: Bearer`; `X-API-Key` is not accepted (#2088)
 - **Claims-based Authorisation**: Role-based access control from metaverse
 
 **Rule**: No local authentication. SSO/OIDC required for all deployments.
@@ -467,10 +482,16 @@ public class MetaverseController : ControllerBase
 
 The Worker separates pure domain logic from I/O via two core interfaces:
 
-- **`ISyncEngine`**: stateless domain engine (22 methods: projection, Attribute Flow and contribution recall, out-of-scope and Metaverse Object deletion decisions, outbound staging and Pending Export merging, export matching rule selection, Pending Export confirmation, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks. Sync Preview (#288) evaluates through the same engine, which is what keeps a preview faithful to a real run.
-- **`ISyncRepository`**: ~155-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
+- **`ISyncEngine`**: stateless domain engine (28 methods: projection, Attribute Flow and contribution recall, out-of-scope and Metaverse Object deletion decisions, outbound staging and Pending Export merging, export matching rule selection, Pending Export confirmation, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks. Sync Preview (#288) evaluates through the same engine, which is what keeps a preview faithful to a real run.
+- **`ISyncRepository`**: ~230-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
-**Dependency Injection**: The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` for per-task context isolation. Each dispatched task gets its own DI scope with independent `DbContext` and connector instances.
+**Dependency Injection**: The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` for per-task context isolation. Each dispatched task gets its own DI scope with independent `DbContext` and connector instances. `JimApplicationFactory.Create()` resolves every instance from a DI scope of its own and disposing the instance disposes that scope (#2115): the factory is a singleton, and resolving from the root provider kept every `JimApplication`, repository and `DbContext` it ever created alive until the process exited, in JIM.Web as much as the Worker. Always dispose what `Create()` returns (`using var jim = ...`).
+
+**Synchronisation paging order** (#2492): a Full or Delta Synchronisation hands out Connected System Object pages one Object Type at a time, in dependency order (`SyncObjectTypeOrdering.Compute` from the active Synchronisation Rules' mapped reference attributes, paged by `TypeOrderedCsoPager` with a keyset cursor per type over the `(ConnectedSystemId, TypeId, Id)` index), then sweeps every type once more for objects created while the run was in flight. Referenced types come first, so a group's members are already projected or joined when its page arrives and resolve in the page loop; the cross-page reference step is left with references within one type (managers, nested groups), which Scenario 032 exercises end to end. The order is logged at run start.
+
+**Task batching** (#2556): the Worker takes the first queued task on its own, or, where it belongs to a parallel Schedule step, every queued task of that same step (`TaskingRepository.GetNextWorkerTasksToProcessAsync`). Nothing queued behind the step joins its batch, so a hand-queued run never runs alongside a Schedule's run of the same Connected System. The Operations page's Activity tab describes the queue by the same rule (`QueueRunSlot`); change both together.
+
+**Memory guard** (#2487): every service's heartbeat records its process memory and the memory it can draw on (`HostMemoryProbe`: the cgroup limit where one is set, otherwise `/proc/meminfo`), and Service Health reports `MemoryLow` (Degraded) at 85% in use. While tasks run, the Worker reads memory every second (`Worker.GuardMemoryAsync`, deciding through `WorkerMemoryGuard` on the thresholds in `MemoryPressure`): it notes a warning for each running task's Activity at 85%; at 92%, when the Worker holds most of what is in use, it cancels the running tasks and fails their Activities with the figures and the remedy; if they have not stopped 30 seconds later, or memory reaches 97%, it records why on each Activity and ends the process for the container to restart. Startup recovery logs at Error, and says the Worker most likely ran out of memory when its last heartbeat showed memory low. How the stop interacts with in-flight work is in [`CANCELLATION_SAFETY.md`](CANCELLATION_SAFETY.md).
 
 **Bulk Write Performance**:
 - **`ParallelBatchWriter`**: splits bulk writes across N concurrent PostgreSQL connections
@@ -574,6 +595,10 @@ See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Asp
 - **OIDC/SSO**: Required for all deployments
 - **No local accounts**: Users authenticated via external identity provider
 - **Claims mapping**: Map OIDC claims to Metaverse Objects for role assignment
+- **API credentials**: SSO access tokens and API keys are both bearer tokens (`Authorization: Bearer`); a key is recognised by its `jim_ak_` prefix. A key scoped to one Connected System (for the SCIM 2.0 Service Provider, 3f above) opens nothing outside `/scim`, and no unscoped key opens `/scim`
+- **Signing keys**: IdentityModel's "last known good" configuration is off (`IdentityProviderSigningKeys`), so a token signed by a key the identity provider has retired is refused at once rather than for up to an hour; a token naming a key JIM has not seen triggers one key set refresh and a second validation, at most once per refresh interval, so an unannounced rollover does not fail the first request (#2442)
+- **Identity provider trust**: sign-in reaches the identity provider through one back-channel that accepts a chain the operating system trusts, or one a Trusted Certificate marked for sign-in vouches for (`CertificateStoreTrust`, shared with the Connectors); a name mismatch is never waived (#2363)
+- **Attribution**: a REST write whose principal carries neither an API key id nor a Metaverse Object id is refused with 401 before it changes anything (`ApiControllerBase.TryGetInitiatorInfo`, #2096)
 
 ### 2. Authorisation
 - **Role-based**: Use claims-based authorisation in controllers/pages
@@ -1039,7 +1064,7 @@ JIM's feature-flag mechanism (#1781) is homegrown on the existing Service Settin
 
 **Tests run with flags on.** Unit tests exercise the feature as if it had shipped, not as a flag-off default; construct the flag server (or a `JimApplication`) against a settings store where the flags under test read enabled. `JIM.TestSupport.InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()` is the shorthand: `repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled())` before constructing the `JimApplication`. See `test/CLAUDE.md` > "Tests run with flags on".
 
-**The catalogue can be empty, and usually is.** Once every flagged feature has shipped, `FeatureFlagCatalogue` declares no flag (as it did between Unique Value Generation and Metaverse-Derived Attribute Flows shipping, #1803 and #1878, and the SCIM 2.0 Service Provider's flag arriving, #2372); the mechanism stays, ready for the next one. Its own tests (seeding, `FeatureFlagServer`, the REST controller, the Service Settings page, the classifier) therefore run against synthetic definitions: `JIM.TestSupport.FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag)` substitutes the catalogue for the calling test's asynchronous flow until disposed (through `FeatureFlagCatalogue`'s internal `SubstituteForTesting`, visible to `JIM.TestSupport` only). Product code never substitutes the catalogue.
+**The catalogue can be empty, and usually is.** Once every flagged feature has shipped, `FeatureFlagCatalogue` declares no flag (as it did between Unique Value Generation and Metaverse-Derived Attribute Flows shipping, #1803 and #1878, and the SCIM 2.0 Service Provider's flag arriving, #2372); the mechanism stays, ready for the next one. Today it declares one: `Features.ScimServiceProvider`, at the Preview tier since the JIM-to-JIM acceptance scenario passed, to be removed once a release has shipped it in Preview without changes being needed (#2372). Its own tests (seeding, `FeatureFlagServer`, the REST controller, the Service Settings page, the classifier) therefore run against synthetic definitions: `JIM.TestSupport.FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag)` substitutes the catalogue for the calling test's asynchronous flow until disposed (through `FeatureFlagCatalogue`'s internal `SubstituteForTesting`, visible to `JIM.TestSupport` only). Product code never substitutes the catalogue.
 
 **Deleting the flag.** Once the feature ships (the flag has been on in every environment for a while and nobody needs the off switch), delete its `FeatureFlagCatalogue` entry and every gate that reads it, in the PR that closes the flag's tracking issue. The next seeding pass removes the row on its own (`SeedingServerFeatureFlagsTests` proves it for the retired keys); the rest is the flag's footprint outside the gates: tests that only proved the flag-off behaviour go, tests that asserted "refused when off" become "allowed with no flag set", the integration setup's `Enable-JIMFeature` steps go, and the public docs' "in development" notes go. #1803 and #1878 are the worked example.
 
@@ -1177,8 +1202,8 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 ## Docker & Deployment
 
 ### Service Architecture
-- **jim.web**: Blazor Server UI with integrated REST API at `/api/`. Serves HTTPS on port 8443 in-container in production (`deploy/docker-compose.production.yml` publishes it on host port 443, changed with `JIM_WEB_PORT`; on Podman, `PublishPort` in the `jim.kube` Quadlet unit), keeping plain HTTP on 8080 for the container health check; reached at `http://localhost:5200` in the development Docker stack. Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment.
-- **jim.worker**: Background task processor built on `ISyncEngine` / `ISyncRepository` separation (see [Background Processing](#7-background-processing)). Per-task DI isolation, `ParallelBatchWriter` for concurrent writes, and COPY binary protocol for bulk inserts. Supports parallel schedule step execution and configurable LDAP pipelining. Also hosts the Password Delivery Service (see [Password Synchronisation](#3c-password-synchronisation-1119)) as a second hosted service alongside the task loop.
+- **jim.web**: Blazor Server UI with integrated REST API at `/api/`. Serves HTTPS on port 8443 in-container in production (`deploy/docker-compose.production.yml` publishes it on host port 443, changed with `JIM_WEB_PORT`; on Podman, `PublishPort` in the `jim.kube` Quadlet unit), keeping plain HTTP on 8080 for the container health check; reached at `http://localhost:5200` in the development Docker stack. Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment. Also serves the SCIM 2.0 Service Provider endpoints at `/scim/v2/{connectedSystemId}` (see [SCIM 2.0 Service Provider](#3f-scim-20-service-provider-124)).
+- **jim.worker**: Background task processor built on `ISyncEngine` / `ISyncRepository` separation (see [Background Processing](#7-background-processing)). Per-task DI isolation, `ParallelBatchWriter` for concurrent writes, and COPY binary protocol for bulk inserts. Supports parallel schedule step execution and configurable LDAP pipelining, and stops its running work before memory is exhausted (the memory guard). Also hosts the Password Delivery Service (see [Password Synchronisation](#3c-password-synchronisation-1119)) as a second hosted service alongside the task loop.
 - **jim.scheduler**: Schedule management service with a 30-second polling cycle, woken early by Worker Task change notifications. Detects parallel step groups (steps sharing the same `StepIndex`) and queues them with `ExecutionMode = Parallel` for concurrent worker dispatch.
 - **jim.database**: PostgreSQL 18
 - **jim.keycloak**: Bundled Keycloak IdP for development SSO (port 8181). Pre-configured with a `jim` realm and client. Not included in production deployments.
@@ -1732,10 +1757,11 @@ Invoke-JIMApi -Method DELETE -Endpoint "/api/v1/connected-systems/$id"
 - Check worker service is running: `docker compose logs jim.worker`
 - Verify tasks in database: Check `WorkerTasks` table
 - Review worker logs for errors
+- An Activity that failed with "The Worker stopped this run because its memory was nearly exhausted", or one abandoned by a restart with memory low on the last heartbeat, means the Worker ran short of memory: check the Memory row under Service Health and see [Troubleshooting Worker Restarts and Memory](../docs/administration/troubleshooting-worker.md)
 
 **Codespaces Issues**:
 - **Port Forwarding**: Ensure ports are set to public if accessing from external browser
-- **PostgreSQL Memory**: If database crashes (OOM), check that `shm_size` and `shared_buffers` are tuned for your host - see [PostgreSQL Tuning](#postgresql-tuning-important) above
+- **PostgreSQL Memory**: If database crashes (OOM), check that `shm_size` and `shared_buffers` are tuned for your host - see [PostgreSQL Tuning](#postgresql-tuning) above
 - **Docker Issues**: Restart Codespace or rebuild container if Docker daemon issues occur
 - **Missing Aliases**: Run `source ~/.zshrc` or restart terminal if shell aliases not available
 
@@ -1775,6 +1801,6 @@ Invoke-JIMApi -Method DELETE -Endpoint "/api/v1/connected-systems/$id"
 
 ---
 
-**Last Updated**: 2026-09-29
-**Version**: 1.6
-**Applies to**: JIM v0.16.x (NET 10.0)
+**Last Updated**: 2026-10-29
+**Version**: 1.7
+**Applies to**: JIM v0.17.x (NET 10.0)

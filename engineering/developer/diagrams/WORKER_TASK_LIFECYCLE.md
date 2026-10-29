@@ -1,8 +1,8 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-10-22, JIM v0.16.0
+> Last updated: 2026-10-29, JIM v0.17.0
 
-This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
+This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, the memory guard, and housekeeping.
 
 ## Worker Main Loop
 
@@ -13,10 +13,11 @@ flowchart TD
     WaitDb -.->|Not reachable within 5 minutes,<br/>or credentials rejected| ExitFail([Worker exits non-zero])
     WaitDb --> InitDb[Initialise database<br/>Migrate and seed]
     InitDb --> CancelOrphans[Process orphaned cancellation requests<br/>from previous crash]
-    CancelOrphans --> RecoverStale[Recover ALL stale tasks<br/>TimeSpan.Zero = recover immediately<br/>All Processing tasks are orphaned at startup]
+    CancelOrphans --> RecoverStale[Recover ALL stale tasks<br/>TimeSpan.Zero = recover immediately<br/>All Processing tasks are orphaned at startup<br/>Their failed Activities say the Worker most<br/>likely ran out of memory when its last<br/>heartbeat showed memory low, #2487]
     RecoverStale --> RecoverExports[Recover Pending Exports stranded<br/>in Executing by a crash mid-export<br/>Back to Exported if any change was sent,<br/>otherwise back to Pending]
 
-    RecoverExports --> MainLoop{Shutdown<br/>requested?}
+    RecoverExports --> StartGuard[Start the memory guard<br/>on a loop of its own, #2487<br/>See Memory Guard below]
+    StartGuard --> MainLoop{Shutdown<br/>requested?}
     MainLoop -->|Yes| ShutdownCancel[Cancel all current tasks<br/>via CancellationTokenSource]
     ShutdownCancel --> End([Worker Stopped])
 
@@ -36,7 +37,7 @@ flowchart TD
     BusySleep --> MainLoop
 
     %% --- No active tasks: poll for new work ---
-    HasTasks -->|No| PollQueue[GetNextWorkerTasksToProcessAsync<br/>Returns batch of parallel or single sequential task]
+    HasTasks -->|No| PollQueue[GetNextWorkerTasksToProcessAsync<br/>Returns the first queued task alone, or<br/>every queued task of its parallel Schedule<br/>step: same execution and step index, #2556]
     PollQueue --> HasNew{New tasks<br/>found?}
     HasNew -->|No| Housekeeping[Idle tick: perform housekeeping<br/>on a JimApplication of its own, #1689<br/>See Housekeeping section below]
     Housekeeping --> ClearTracker[Clear the main loop context's<br/>change tracker, #1690]
@@ -119,7 +120,7 @@ flowchart TD
     %% --- Temporal Scope Reconciliation task ---
     TaskType -->|TemporalScopeReconciliation<br/>WorkerTask| Temporal[ScopeReconciliation.ReconcileAsync<br/>Failure-safe watermark from last<br/>completed sweep<br/>Flags objects for scope review]
     Temporal --> TemporalResult{Success?}
-    TemporalResult -->|Yes| TemporalComplete[CompleteActivityAsync]
+    TemporalResult -->|Yes| TemporalComplete[CompleteActivityAsync, with a<br/>warning when an object's scope<br/>could not be decided, #2054]
     TemporalResult -->|No| TemporalFail[FailActivityWithErrorAsync]
     TemporalComplete --> CompleteTask
     TemporalFail --> CompleteTask
@@ -145,12 +146,14 @@ flowchart TD
 
     %% --- Activity completion for sync tasks ---
     CompleteActivity[CompleteActivityBasedOnExecutionResultsAsync<br/>Calculate summary stats from RPEIs<br/>skipped if the task was cancelled]
-    CompleteActivity --> DetermineStatus{RPEI<br/>error analysis}
-    DetermineStatus -->|All RPEIs have errors| FailActivity[FailActivityWithErrorAsync]
-    DetermineStatus -->|Some RPEIs have errors| WarnActivity[CompleteActivityWithWarningAsync]
+    CompleteActivity --> DetermineStatus{ActivityOutcomeEvaluator:<br/>RPEI error counts<br/>from the database}
+    DetermineStatus -->|Every RPEI errored, refused<br/>Object Type changes aside, #2049,<br/>and an import read no more<br/>objects than it errored, #2066| FailActivity[FailActivityWithErrorAsync]
+    DetermineStatus -->|Any UnhandledError| ErrorActivity[CompleteActivityWithErrorAsync]
+    DetermineStatus -->|Other RPEI errors, or a<br/>warning on the Activity| WarnActivity[CompleteActivityWithWarningAsync]
     DetermineStatus -->|No errors| SuccessActivity[CompleteActivityAsync]
 
     FailActivity --> FullImportGate
+    ErrorActivity --> FullImportGate
     WarnActivity --> FullImportGate
     SuccessActivity --> FullImportGate
     FullImportGate{Genuinely successful<br/>Full Import?}
@@ -164,15 +167,43 @@ flowchart TD
     SafeFail --> CompleteTask
 
     %% --- Task completion ---
-    CompleteTask{Cancelled by<br/>the main loop?}
-    CompleteTask -->|Yes: CancelWorkerTaskAsync<br/>already deleted the task| RemoveFromList
-    CompleteTask -->|No| DoComplete[CompleteWorkerTaskAsync<br/>Complete the Activity only if still InProgress<br/>a failed run stays failed, #1874<br/>Delete WorkerTask from database<br/>If scheduled: TryAdvanceScheduleExecution]
-    DoComplete --> RemoveFromList
+    CompleteTask{Stopped by the<br/>memory guard?}
+    CompleteTask -->|Yes, Activity still InProgress| MemoryFail[SafeFailActivityAsync with<br/>the guard's reason, #2487<br/>then complete the task as below]
+    MemoryFail --> DoComplete
+    CompleteTask -->|No| Cancelled{Cancelled by<br/>the main loop?}
+    Cancelled -->|Yes: CancelWorkerTaskAsync<br/>already deleted the task| RemoveFromList
+    Cancelled -->|No| DoComplete[CompleteWorkerTaskAsync<br/>Complete the Activity only if still InProgress<br/>a failed run stays failed, #1874<br/>Delete WorkerTask from database<br/>If scheduled: TryAdvanceScheduleExecution]
+    DoComplete --> MemoryWarning[Memory was low while it ran,<br/>and it was not stopped: add the<br/>guard's warning to its Activity, #2487]
     DoComplete -.->|Throws, e.g. a poisoned DbContext| RetryFresh[Retry the completion on a<br/>fresh JimApplication, #1586<br/>If that fails too: log, and leave<br/>the row for stale-task recovery]
-    RetryFresh --> RemoveFromList
+    RetryFresh --> MemoryWarning
+    MemoryWarning --> RemoveFromList
     RemoveFromList[Remove from CurrentTasks<br/>thread-safe lock] --> TrimHeap[Trim the heap after<br/>memory-heavy tasks, #917]
     TrimHeap --> Disposed([JimApplication disposed<br/>Database connection released])
 ```
+
+## Memory Guard (#2487)
+
+The operating system stops a process that runs its host or container out of memory without a word, part-way through whatever it was doing. The Worker's memory guard (`GuardMemoryAsync`, deciding through `WorkerMemoryGuard`) acts first, so the reason reaches the Activity and the logs. It runs on a loop of its own, started once startup recovery is done, rather than on the main loop: under memory pressure the main loop's database round trips slow down just when the guard most needs to act. Its thresholds are `MemoryPressure`'s, shared with the Operations page's **Memory low** condition and `Get-JIMServiceHealth`: a warning at 85% of the memory available, a stop at 92% and an abort at 97%, where "the Worker holds most of it" means more than half of the memory in use.
+
+```mermaid
+flowchart TD
+    Tick([Every second]) --> Running{Any tasks<br/>running?}
+    Running -->|No| Reset([Reset the guard's state])
+    Running -->|Yes| Read[Read host or container memory<br/>and the Worker's own use]
+    Read --> Stopped{Already stopped<br/>the running work?}
+    Stopped -->|Yes| StopTook{Memory at the abort share,<br/>or still at the stop share after<br/>30 seconds, with the Worker<br/>holding most of it?}
+    StopTook -->|No| Tick
+    StopTook -->|Yes| Abort[Abort: write the reading to the heartbeat<br/>Fail each running task's Activity<br/>with the reason, then end the process<br/>The container restarts the Worker]
+    Stopped -->|No| AtStop{At the stop share, and<br/>the Worker holds most<br/>of what is in use?}
+    AtStop -->|Yes| Stop[Stop: write the reading to the heartbeat<br/>Note the reason on each running task<br/>and cancel it; the task fails its<br/>Activity with the reason when it ends]
+    AtStop -->|No| AtWarn{At the warning share,<br/>not yet warned?}
+    AtWarn -->|Yes| Warn[Warn: note it on each running task<br/>Added to its Activity as a warning<br/>once the task completes]
+    AtWarn -->|No| Tick
+    Stop --> Tick
+    Warn --> Tick
+```
+
+A stop needs the Worker to hold most of the memory in use: when something else is filling memory, stopping a synchronisation frees nothing, and the operating system would not pick the Worker. A warning goes out whoever holds it, since the run is at risk either way. A task blocked inside one call cannot see its cancellation, which is what the abort is for; the reading written to the heartbeat first is what lets startup recovery say the Worker most likely ran out of memory, with the figures, if the process is killed anyway.
 
 ## Housekeeping (idle time)
 
@@ -232,7 +263,7 @@ Alongside the file, each service writes a heartbeat row to the database (`Servic
 
 - **Both loop branches are paced (#1005)**<br /> The active-task branch sleeps for 2 seconds after its heartbeat update and cancellation check, matching the idle branch. It previously looped straight back, so for the whole duration of any long-running task the loop spun as fast as its two round trips allowed (measured at 500k scale: ~200 iterations/s, 6.7M heartbeat updates and 16.4M connection-pool resets over one run). Stale-task recovery tolerates far coarser heartbeats, and up to 2 seconds of cancellation latency is acceptable.
 
-- **Startup recovery**<br /> On startup, ALL `Processing` tasks are immediately recovered, since the worker just started and nothing can genuinely be processing: each one's Activity is failed with a crash-recovery message and the task row is deleted to free the queue. A Schedule Execution left waiting on a recovered task is then settled by the Scheduler's stuck-execution safety net, which sees the failed Activity and advances or fails the execution according to the step's effective failure behaviour (`ScheduleFailureHandling`, #1787). Pending Exports left in `Executing` by an export the crash interrupted are recovered at the same point: at startup nothing can genuinely be exporting, so each goes back to `Exported` if any of its changes had already been sent, or to `Pending` otherwise.
+- **Startup recovery**<br /> On startup, ALL `Processing` tasks are immediately recovered, since the worker just started and nothing can genuinely be processing: each one's Activity is failed with a crash-recovery message and the task row is deleted to free the queue. When the Worker's last heartbeat showed memory low, the message says the Worker most likely ran out of memory, with the figures (#2487); an Activity the memory guard's abort already failed is no longer in progress and is left alone. A Schedule Execution left waiting on a recovered task is then settled by the Scheduler's stuck-execution safety net, which sees the failed Activity and advances or fails the execution according to the step's effective failure behaviour (`ScheduleFailureHandling`, #1787). Pending Exports left in `Executing` by an export the crash interrupted are recovered at the same point: at startup nothing can genuinely be exporting, so each goes back to `Exported` if any of its changes had already been sent, or to `Pending` otherwise.
 
 - **Task deletion on completion**<br /> Worker tasks are deleted from the database upon completion (not kept). The Activity record serves as the permanent audit trail.
 
@@ -242,4 +273,4 @@ Alongside the file, each service writes a heartbeat row to the database (`Servic
 
 - **SafeFailActivityAsync**<br /> Three-level fallback ensures activities are never left stuck in `InProgress` status, even if EF tracking is corrupted or the DbContext is disposed.
 
-- **Parallel dispatch**<br /> When `GetNextWorkerTasksToProcessAsync` returns multiple tasks (parallel step group from a schedule), they are all spawned via `Task.Run` simultaneously, each with their own DbContext.
+- **Parallel dispatch**<br /> When `GetNextWorkerTasksToProcessAsync` returns multiple tasks, they are all spawned via `Task.Run` simultaneously, each with their own DbContext. A batch is the first queued task alone, or every queued parallel task of the same Schedule Execution and step index as it (#2556). A task queued by hand behind a parallel step used to join that step's batch and run alongside it, so a hand-queued Full Import could run at the same time as the Schedule's Full Import of the same Connected System, and two Schedules' parallel steps at the same index merged into one batch.

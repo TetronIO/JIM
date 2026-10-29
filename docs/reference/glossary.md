@@ -90,6 +90,9 @@ Expression { #expression }
 Full Synchronisation { #full-synchronisation }
 :   The Run Profile type that processes every Connected System Object in the Connector Space, applying Object Matching Rules, Projection, Join and Attribute Flow, whether or not the object has changed. Re-applies configuration changes and corrects anything a Delta Synchronisation does not pick up.
 
+Generated Value { #generated-value }
+:   An Attribute Flow Source Type for a value with no source to copy, such as an account name or employee number. JIM generates the value, checks that no other object holds it, in JIM or in the Connected Systems it is exported to, and assigns it once; a value JIM stops holding is retired and never issued again by default. See [Generated Values](../configuration/generated-values.md).
+
 Grace Period { #grace-period }
 :   The configurable time window before a scheduled deletion is executed. Grace periods provide a safety net, allowing administrators to recover objects that were marked for deletion before they are permanently removed.
 
