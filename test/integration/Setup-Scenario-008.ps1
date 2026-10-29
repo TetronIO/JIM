@@ -776,6 +776,19 @@ if (-not $targetUserExportRule) {
         -OutboundDeprovisionAction Delete `
         -PassThru
     Write-Host "  ✓ Created: $targetUserExportRuleName" -ForegroundColor Green
+
+    # Scoped to the people the source projected, all of whom carry the matching attribute (Employee ID for the
+    # RFC directories, Account Name for Samba AD). Unscoped, the rule also covers the initial administrator: an
+    # internal Metaverse Object created by a portal sign-in, with no Account Name, whose export then fails on
+    # 'uid=,ou=People,...'. A sign-in before this rule exists gets the administrator flagged for export scope
+    # review when the rule is created, so the run's outcome otherwise depends on when someone opened the portal.
+    $userExportScopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $targetUserExportRule.id -Type All -PassThru
+    New-JIMScopingCriterion `
+        -SyncRuleId $targetUserExportRule.id `
+        -GroupId $userExportScopeGroup.id `
+        -MetaverseAttributeName $userMatchingMvAttr `
+        -ComparisonType HasValue | Out-Null
+    Write-Host "  ✓ Scoped '$targetUserExportRuleName' to '$userMatchingMvAttr' has a value" -ForegroundColor Green
 }
 else {
     Write-Host "  Sync rule '$targetUserExportRuleName' already exists" -ForegroundColor Gray

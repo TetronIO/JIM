@@ -839,6 +839,15 @@ try {
                 -OutboundDeprovisionAction Delete `
                 -PassThru
             Write-Host "  ✓ Created export sync rule: $exportRuleName" -ForegroundColor Green
+
+            # Scoped to the people HR projected, all of whom carry Employee ID (the matching attribute; HR leaving
+            # schedules deletion and never withdraws it). Unscoped, the rule also covers the initial administrator,
+            # an internal Metaverse Object a portal sign-in creates, with no Account Name or Department for the DN.
+            # Unscoped provisioning stays covered by the Group export rules of Scenarios 008, 028 and 029.
+            $exportScopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $exportRule.id -Type All -PassThru
+            New-JIMScopingCriterion -SyncRuleId $exportRule.id -GroupId $exportScopeGroup.id `
+                -MetaverseAttributeName 'Employee ID' -ComparisonType HasValue | Out-Null
+            Write-Host "  ✓ Scoped '$exportRuleName' to 'Employee ID' has a value" -ForegroundColor Green
         }
         else {
             Write-Host "  Export sync rule '$exportRuleName' already exists" -ForegroundColor Gray
@@ -920,6 +929,13 @@ try {
                     -OutboundDeprovisionAction Delete `
                     -PassThru
                 Write-Host "  ✓ Created Cross-Domain export sync rule: $crossDomainExportRuleName" -ForegroundColor Green
+
+                # Scoped as the directory export rule above, for the same reason: unscoped, a portal sign-in's
+                # initial administrator would be written to the Cross-Domain file as an extra row.
+                $crossDomainScopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $crossDomainExportRule.id -Type All -PassThru
+                New-JIMScopingCriterion -SyncRuleId $crossDomainExportRule.id -GroupId $crossDomainScopeGroup.id `
+                    -MetaverseAttributeName 'Employee ID' -ComparisonType HasValue | Out-Null
+                Write-Host "  ✓ Scoped '$crossDomainExportRuleName' to 'Employee ID' has a value" -ForegroundColor Green
             }
             else {
                 Write-Host "  Cross-Domain export sync rule '$crossDomainExportRuleName' already exists" -ForegroundColor Gray

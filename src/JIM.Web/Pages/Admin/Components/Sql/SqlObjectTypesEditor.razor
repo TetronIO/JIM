@@ -140,6 +140,12 @@
 
     private IReadOnlyList<ConnectorCatalogueObject> _catalogueObjects = [];
     private bool _catalogueLoading;
+
+    /// <summary>
+    /// The read of the table list in progress, or last made, so the Add Object Type dialog can wait for it when
+    /// opened before it has finished, rather than finding no catalogue.
+    /// </summary>
+    private Task _catalogueLoad = Task.CompletedTask;
     private string? _catalogueFailure;
     private bool _catalogueRequested;
 
@@ -211,10 +217,44 @@
         _catalogueFailure = null;
         StateHasChanged();
 
-        var read = await Catalogue.GetObjectsAsync();
+        _catalogueLoad = ReadCatalogueObjectsAsync(Catalogue);
+        await _catalogueLoad;
+    }
+
+    private async Task ReadCatalogueObjectsAsync(IConnectedSystemCatalogueSource catalogue)
+    {
+        var read = await catalogue.GetObjectsAsync();
         _catalogueObjects = read.Value ?? [];
         _catalogueFailure = read.Failure;
         _catalogueLoading = false;
+    }
+
+    /// <summary>The table list for the Add Object Type dialog, once any read in progress has finished.</summary>
+    private async Task<IReadOnlyList<ConnectorCatalogueObject>> CatalogueObjectsWhenReadAsync()
+    {
+        await _catalogueLoad;
+        return _catalogueObjects;
+    }
+
+    /// <summary>
+    /// A table's columns for the Add Object Type dialog, once any read of the table list has finished. Where that
+    /// read failed, its reason is the answer: reading the table would wait out the same failure.
+    /// </summary>
+    private async Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>> TableWhenReadAsync(string? schema, string table)
+    {
+        await _catalogueLoad;
+        return _catalogueFailure != null
+            ? new ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>(null, _catalogueFailure)
+            : await LoadTableAsync(schema, table);
+    }
+
+    /// <summary>A statement's columns for the Add Object Type dialog; see <see cref="TableWhenReadAsync"/>.</summary>
+    private async Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>> StatementWhenReadAsync(string statement)
+    {
+        await _catalogueLoad;
+        return _catalogueFailure != null
+            ? new ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>(null, _catalogueFailure)
+            : await DescribeStatementAsync(statement);
     }
 
     private async Task RetryCatalogueAsync()
@@ -262,26 +302,39 @@
             _expanded.Remove(objectType);
     }
 
-    private async Task AddObjectTypeAsync()
-    {
-        if (_model == null)
-            return;
-
-        var index = _model.AddObjectType();
-        _expanded.Add(_model.ObjectTypes[index]);
-        await WriteBackAsync();
-    }
+    private Task AddObjectTypeAsync() => AddObjectTypeFromAsync(null, null);
 
     /// <summary>
-    /// Adds an Object Type for a table a foreign key points at, reading from that table and anchored on the
-    /// column the key points at. It still needs a name, which its card asks for.
+    /// Offers an Object Type for a table a foreign key points at: the Add Object Type dialog, with that table chosen.
     /// </summary>
-    private async Task AddSuggestedObjectTypeAsync(SqlObjectTypeSuggestion suggestion)
+    private Task AddSuggestedObjectTypeAsync(SqlObjectTypeSuggestion suggestion) =>
+        AddObjectTypeFromAsync(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName);
+
+    /// <summary>
+    /// Opens the Add Object Type dialog and adds what it builds as an expanded card, where the Delta Import
+    /// fields and any problems are waiting.
+    /// </summary>
+    private async Task AddObjectTypeFromAsync(string? schema, string? table)
     {
         if (_model == null)
             return;
 
-        var index = _model.AddObjectType(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName, [suggestion.ReferencedColumnName]);
+        var objectType = await SqlAddObjectTypeDialog.ShowAsync(
+            DialogService,
+            _model.ObjectTypes,
+            schema,
+            table,
+            Catalogue == null ? null : CatalogueObjectsWhenReadAsync,
+            Catalogue == null ? null : TableWhenReadAsync,
+            Catalogue == null ? null : StatementWhenReadAsync,
+            DeltaImportMode);
+
+        if (objectType == null)
+            return;
+
+        // Only the new card is left open, so it is where the administrator's eye lands rather than a scroll away.
+        var index = _model.AddObjectType(objectType);
+        _expanded.Clear();
         _expanded.Add(_model.ObjectTypes[index]);
         await WriteBackAsync();
     }

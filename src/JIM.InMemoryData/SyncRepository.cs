@@ -1938,13 +1938,10 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    // Virtual so tests can spy on the single-entity update path (the grace-deletion-marker page-flush
-    // regression coverage), matching the batch-update spy precedent above: production code must never
-    // reach this method mid-page for a grace-period deletion (see SyncTaskProcessorBase.MarkMvoForDeletionAsync).
-    public virtual Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
+    public Task SetMetaverseObjectLastConnectorDisconnectedDateAsync(Guid metaverseObjectId, DateTime lastConnectorDisconnectedDate)
     {
-        FixupMvoAttributeValues(metaverseObject);
-        _mvos[metaverseObject.Id] = metaverseObject;
+        if (_mvos.TryGetValue(metaverseObjectId, out var mvo))
+            mvo.LastConnectorDisconnectedDate = lastConnectorDisconnectedDate;
         return Task.CompletedTask;
     }
 

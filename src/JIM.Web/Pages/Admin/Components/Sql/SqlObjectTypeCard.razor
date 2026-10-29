@@ -1,7 +1,6 @@
 @using JIM.Connectors.Sql
 @using JIM.Models.Staging
 @using JIM.Web.Models
-@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -109,21 +108,13 @@
             @* ─── Anchor ─── *@
             <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">Anchor</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">The column or columns whose values identify a row, in key order.</MudText>
-            <div class="d-flex flex-wrap align-center gap-2">
-                @foreach (var anchorColumn in AnchorColumns)
-                {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Class="my-0"
-                             OnClose="@(() => RemoveAnchorColumnAsync(anchorColumn))">@anchorColumn</MudChip>
-                }
-                <SqlCatalogueNameField @key="_addAnchorKey" Label="Add column" Options="@UnusedColumns(AnchorColumns)"
-                                       ValueChanged="AddAnchorColumnAsync" Class="jim-sql-inline-picker" TestId="jim-sql-anchor-add" />
-            </div>
+            <SqlAnchorColumnsField ObjectType="@ObjectType" ColumnOptions="@ColumnOptions" OnChanged="NotifyAsync" />
             @if (PrimaryKeyAnchor.Count > 0)
             {
                 <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-inline-alert mt-3" data-testid="jim-sql-anchor-suggestion">
                     <div class="jim-sql-inline-alert-body">
                         <span class="jim-sql-inline-alert-text">
-                            The table's primary key is @ColumnList(PrimaryKeyAnchor), which identifies each row.
+                            The table's primary key is <SqlColumnList Columns="@PrimaryKeyAnchor" />, which identifies each row.
                         </span>
                         <span class="jim-sql-inline-alert-actions">
                             <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="UsePrimaryKeyAsync">Use the primary key</AlertButton>
@@ -135,85 +126,16 @@
             @* ─── References ─── *@
             <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">References to other Object Types</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Columns whose values hold another object's anchor, such as a manager.</MudText>
-            @if (ObjectType.Columns != null)
-            {
-                @for (var i = 0; i < ObjectType.Columns.Count; i++)
-                {
-                    var column = ObjectType.Columns[i];
-                    <div class="d-flex align-center gap-2 mb-2" @key="column" data-testid="jim-sql-reference-row">
-                        <SqlCatalogueNameField Label="Column" Value="@column.Name" Options="@ColumnOptions"
-                                               ValueChanged="@(v => SetAndNotifyAsync(() => column.Name = v))" Class="flex-grow-1" />
-                        <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Class="mud-text-secondary" />
-                        <MudSelect T="string" Label="Object Type" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
-                                   Value="@(column.ReferencesObjectType ?? string.Empty)"
-                                   ValueChanged="@(v => SetAndNotifyAsync(() => column.ReferencesObjectType = string.IsNullOrEmpty(v) ? null : v))">
-                            @foreach (var name in ObjectTypeNames)
-                            {
-                                <MudSelectItem T="string" Value="@name">@name</MudSelectItem>
-                            }
-                        </MudSelect>
-                        <MudTooltip Text="Remove this reference" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" aria-label="Remove this reference"
-                                           OnClick="@(() => RemoveColumnAsync(column))" />
-                        </MudTooltip>
-                    </div>
-                }
-            }
-            @foreach (var suggestion in Suggestions)
-            {
-                <MudAlert Severity="Severity.Info" Dense="true" Class="jim-sql-inline-alert mb-2" data-testid="jim-sql-reference-suggestion">
-                    <div class="jim-sql-inline-alert-body">
-                        @if (suggestion.Kind == SqlObjectTypeSuggestionKind.Reference)
-                        {
-                            <span class="jim-sql-inline-alert-text">
-                                <code class="jim-code-inline">@suggestion.ColumnName</code> has a foreign key to
-                                @suggestion.ReferencedObjectTypeName's anchor, so it looks like a reference to @suggestion.ReferencedObjectTypeName.
-                            </span>
-                            <span class="jim-sql-inline-alert-actions">
-                                <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="@(() => AcceptAsync(suggestion))"
-                                             data-testid="jim-sql-reference-suggestion-accept">Add reference</AlertButton>
-                                <AlertButton Severity="Severity.Info" Secondary="true" Size="Size.Small" OnClick="@(() => DismissAsync(suggestion))">Dismiss</AlertButton>
-                            </span>
-                        }
-                        else
-                        {
-                            <span class="jim-sql-inline-alert-text">
-                                <code class="jim-code-inline">@suggestion.ColumnName</code> has a foreign key to
-                                <code class="jim-code-inline">@Qualified(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName)</code>, which no Object Type reads from yet.
-                            </span>
-                            <span class="jim-sql-inline-alert-actions">
-                                <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="@(() => OnAddObjectType.InvokeAsync(suggestion))">Add an Object Type for it</AlertButton>
-                                <AlertButton Severity="Severity.Info" Secondary="true" Size="Size.Small" OnClick="@(() => DismissAsync(suggestion))">Dismiss</AlertButton>
-                            </span>
-                        }
-                    </div>
-                </MudAlert>
-            }
-            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="AddColumnAsync">Add reference</MudButton>
+            <SqlObjectTypeReferences ObjectType="@ObjectType" ObjectTypeNames="@ObjectTypeNames" ColumnOptions="@ColumnOptions"
+                                     Suggestions="@Suggestions" OnAccept="AcceptAsync" OnDismiss="DismissAsync"
+                                     OnAddObjectType="OnAddObjectType" OnChanged="NotifyAsync" />
 
             @* ─── Multi-valued attributes ─── *@
             <MudText Typo="Typo.subtitle1" Class="jim-sql-section-title mt-5">Multi-valued attributes</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Child tables holding one row per value, such as phone numbers or group members.</MudText>
-            @if (ObjectType.RelatedTables != null)
-            {
-                @foreach (var relatedTable in ObjectType.RelatedTables)
-                {
-                    <div class="d-flex align-center gap-2 mb-2" @key="relatedTable" data-testid="jim-sql-related-table-row">
-                        <div class="flex-grow-1">
-                            <MudText>@DescribeRelatedTable(relatedTable)</MudText>
-                        </div>
-                        <MudTooltip Text="Edit this multi-valued attribute" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit" aria-label="Edit this multi-valued attribute"
-                                           OnClick="@(() => EditRelatedTableAsync(relatedTable))" />
-                        </MudTooltip>
-                        <MudTooltip Text="Remove this multi-valued attribute" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" aria-label="Remove this multi-valued attribute"
-                                           OnClick="@(() => RemoveRelatedTableAsync(relatedTable))" />
-                        </MudTooltip>
-                    </div>
-                }
-            }
-            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditRelatedTableAsync(null))">Add multi-valued attribute</MudButton>
+            <SqlObjectTypeRelatedTables ObjectType="@ObjectType" ObjectTypeNames="@ObjectTypeNames" CatalogueObjects="@CatalogueObjects"
+                                        LoadTable="@LoadTable" ShowWatermark="@(DeltaImportMode == SqlConnectorConstants.DeltaImportModeWatermarkColumn)"
+                                        OnChanged="NotifyAsync" />
 
             @* ─── Delta Import ─── *@
             @if (DeltaImportMode == SqlConnectorConstants.DeltaImportModeWatermarkColumn)
@@ -349,7 +271,6 @@
     private string? _loadedSourceKey;
     private ConnectorCatalogueObjectDetail? _changeLogTable;
     private string? _loadedChangeLogKey;
-    private int _addAnchorKey;
 
     private SqlObjectTypeDocument ObjectType => Model.ObjectTypes[Index];
 
@@ -377,9 +298,6 @@
         .Where(o => string.IsNullOrWhiteSpace(schema) || string.Equals(o.SchemaName, schema, StringComparison.OrdinalIgnoreCase))
         .Select(o => o.Name)
         .Distinct(StringComparer.OrdinalIgnoreCase);
-
-    private IEnumerable<string> UnusedColumns(IReadOnlyCollection<string> used) =>
-        ColumnOptions.Where(c => !used.Contains(c, StringComparer.OrdinalIgnoreCase));
 
     protected override async Task OnParametersSetAsync()
     {
@@ -520,43 +438,9 @@
         await LoadSourceAsync();
     }
 
-    private async Task AddAnchorColumnAsync(string? column)
-    {
-        if (string.IsNullOrWhiteSpace(column))
-            return;
-
-        var anchor = ObjectType.AnchorColumns ??= [];
-        if (!anchor.Contains(column, StringComparer.OrdinalIgnoreCase))
-            anchor.Add(column);
-
-        _addAnchorKey++;
-        await NotifyAsync();
-    }
-
-    private async Task RemoveAnchorColumnAsync(string column)
-    {
-        ObjectType.AnchorColumns?.RemoveAll(c => string.Equals(c, column, StringComparison.Ordinal));
-        await NotifyAsync();
-    }
-
     private async Task UsePrimaryKeyAsync()
     {
         ObjectType.AnchorColumns = [.. PrimaryKeyAnchor];
-        await NotifyAsync();
-    }
-
-    private async Task AddColumnAsync()
-    {
-        (ObjectType.Columns ??= []).Add(new SqlColumnDocument());
-        await NotifyAsync();
-    }
-
-    private async Task RemoveColumnAsync(SqlColumnDocument column)
-    {
-        ObjectType.Columns?.Remove(column);
-        if (ObjectType.Columns is { Count: 0 })
-            ObjectType.Columns = null;
-
         await NotifyAsync();
     }
 
@@ -570,41 +454,6 @@
     {
         Model.Dismiss(Index, suggestion);
         return Task.CompletedTask;
-    }
-
-    private async Task EditRelatedTableAsync(SqlRelatedTableDocument? relatedTable)
-    {
-        var edited = await SqlRelatedTableDialog.ShowAsync(
-            DialogService,
-            relatedTable ?? new SqlRelatedTableDocument(),
-            relatedTable == null,
-            string.IsNullOrWhiteSpace(ObjectType.Name) ? "parent" : ObjectType.Name,
-            AnchorColumns,
-            [.. ObjectTypeNames],
-            CatalogueObjects,
-            LoadTable,
-            DeltaImportMode == SqlConnectorConstants.DeltaImportModeWatermarkColumn);
-
-        if (edited == null)
-            return;
-
-        var relatedTables = ObjectType.RelatedTables ??= [];
-        var position = relatedTable == null ? -1 : relatedTables.IndexOf(relatedTable);
-        if (position >= 0)
-            relatedTables[position] = edited;
-        else
-            relatedTables.Add(edited);
-
-        await NotifyAsync();
-    }
-
-    private async Task RemoveRelatedTableAsync(SqlRelatedTableDocument relatedTable)
-    {
-        ObjectType.RelatedTables?.Remove(relatedTable);
-        if (ObjectType.RelatedTables is { Count: 0 })
-            ObjectType.RelatedTables = null;
-
-        await NotifyAsync();
     }
 
     private async Task AddChangeLogAsync()
@@ -646,45 +495,6 @@
         var values = (text ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return values.Length == 0 ? null : [.. values];
     }
-
-    private static string Qualified(string? schema, string name) => string.IsNullOrWhiteSpace(schema) ? name : $"{schema}.{name}";
-
-    /// <summary>Column names as inline code, comma separated.</summary>
-    private static RenderFragment ColumnList(IEnumerable<string?> columns) => __builder =>
-    {
-        var first = true;
-        foreach (var column in columns.OfType<string>())
-        {
-            if (!first)
-            {
-                <text>, </text>
-            }
-            <code class="jim-code-inline">@column</code>
-            first = false;
-        }
-    };
-
-    /// <summary>
-    /// A multi-valued attribute in one line: the attribute, where its values come from, how they join to the
-    /// parent, and what they reference. Names of attributes, tables and columns are inline code.
-    /// </summary>
-    private static RenderFragment DescribeRelatedTable(SqlRelatedTableDocument relatedTable) => __builder =>
-    {
-        <code class="jim-code-inline">@(relatedTable.AttributeName ?? "unnamed")</code>
-        <text> from </text>
-        <code class="jim-code-inline">@($"{Qualified(relatedTable.Schema, relatedTable.Table ?? "?")}.{relatedTable.ValueColumn ?? "?"}")</code>
-        <text>, joined on </text>
-        @ColumnList(relatedTable.JoinColumns ?? [])
-        @if (!string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType))
-        {
-            <text>, referencing @relatedTable.ReferencesObjectType</text>
-        }
-        @if (!string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
-        {
-            <text>, watermark </text>
-            <code class="jim-code-inline">@relatedTable.WatermarkColumn</code>
-        }
-    };
 
     private static Color ChipColour(SqlObjectTypeSummaryChipKind kind) => kind switch
     {

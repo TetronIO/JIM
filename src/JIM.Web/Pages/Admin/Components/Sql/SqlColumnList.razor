@@ -1,0 +1,21 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Column names as inline code, comma separated: how the SQL Object Types editor names columns in running text. *@
+@for (var i = 0; i < _columns.Count; i++)
+{
+    @if (i > 0)
+    {
+        <text>, </text>
+    }
+    <code class="jim-code-inline">@_columns[i]</code>
+}
+
+@code {
+    [Parameter]
+    public IEnumerable<string?> Columns { get; set; } = [];
+
+    private List<string> _columns = [];
+
+    protected override void OnParametersSet() => _columns = [.. Columns.OfType<string>().Where(c => c.Length > 0)];
+}

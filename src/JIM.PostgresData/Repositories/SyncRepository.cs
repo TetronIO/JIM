@@ -277,8 +277,12 @@ public partial class SyncRepository : ISyncRepository
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => UpdateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 
-    public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
-        => _repo.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
+    public async Task SetMetaverseObjectLastConnectorDisconnectedDateAsync(Guid metaverseObjectId, DateTime lastConnectorDisconnectedDate)
+    {
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects"" SET ""LastConnectorDisconnectedDate"" = {0} WHERE ""Id"" = {1}",
+            lastConnectorDisconnectedDate, metaverseObjectId);
+    }
 
     // The set-based path with one object: its semantics per object are identical (issue #993), and it is the path
     // that retires the object's generated values in the same transaction and reports them back (#242, Phase 6).
