@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Data.Common;
+using JIM.Application.Servers.Preview;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Exceptions;
@@ -51,10 +52,8 @@ public partial class ConnectedSystemServer
     private async Task RecordConfigurationChangeAwaitingSynchronisationAsync(
         Activity activity, SyncRule rule, ConfigurationChangeCaptureOutcome outcome, bool isNew)
     {
-        if (rule.Direction != SyncRuleDirection.Import)
-            return;
-
-        if (!ConfigurationChangeSynchronisationPolicy.RequiresSynchronisation(outcome, isInForce: rule.Enabled))
+        // The policy decides, and the acknowledgement before the save asks the same function with the same inputs.
+        if (!ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation(rule, outcome))
             return;
 
         await RecordConfigurationChangeAwaitingSynchronisationAsync(
@@ -79,14 +78,15 @@ public partial class ConnectedSystemServer
     private async Task RecordSimpleModeMatchingRuleChangeAwaitingSynchronisationAsync(
         Activity activity, int connectedSystemId, int objectTypeId, ConfigurationChangeCaptureOutcome outcome)
     {
-        // The Connected System capture compares the whole system, so a Created outcome (no earlier version) says nothing
-        // about whether the rule is new; the matching rule save itself is what is being recorded, and it is in force.
-        if (!ConfigurationChangeSynchronisationPolicy.RequiresSynchronisation(outcome, isInForce: true))
+        // Nothing to look up for a change that alters nothing an import produces; the coverage the policy asks about is
+        // then read, and the decision is the policy's with both answers in hand.
+        if (!ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisationForSimpleModeType(outcome, enabledImportRuleCoversType: true))
             return;
 
         var importRule = (await GetEnabledImportRuleHeadersAsync(connectedSystemId))
             .FirstOrDefault(header => header.ConnectedSystemObjectTypeId == objectTypeId);
-        if (importRule == null)
+        if (!ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisationForSimpleModeType(outcome, enabledImportRuleCoversType: importRule != null)
+            || importRule == null)
             return;
 
         var verb = activity.TargetOperationType switch
@@ -113,13 +113,18 @@ public partial class ConnectedSystemServer
     private async Task RecordMatchingModeSwitchAwaitingSynchronisationAsync(
         Activity activity, ConnectedSystem connectedSystem, ObjectMatchingRuleMode newMode, ConfigurationChangeCaptureOutcome outcome)
     {
-        if (!ConfigurationChangeSynchronisationPolicy.RequiresSynchronisation(outcome, isInForce: true))
+        // The same question a Simple Mode rule save asks, with the same short cut: nothing is looked up for a change that
+        // alters nothing an import produces.
+        if (!ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisationForSimpleModeType(outcome, enabledImportRuleCoversType: true))
             return;
 
         var modeName = newMode == ObjectMatchingRuleMode.SyncRule ? "Advanced Mode" : "Simple Mode";
         var importRulePerType = (await GetEnabledImportRuleHeadersAsync(connectedSystem.Id))
             .GroupBy(header => header.ConnectedSystemObjectTypeId)
-            .Select(group => group.First());
+            .Select(group => group.First())
+            .ToList();
+        if (!ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisationForSimpleModeType(outcome, enabledImportRuleCoversType: importRulePerType.Count > 0))
+            return;
 
         foreach (var importRule in importRulePerType)
         {
@@ -262,10 +267,73 @@ public partial class ConnectedSystemServer
             throw failure;
         }
 
+        _recordedAwaitingSynchronisation.Add((connectedSystemId, connectedSystemName, objectTypeId, objectTypeName));
         Log.Information(
             "RecordConfigurationChangeAwaitingSynchronisationAsync: Object Type {ObjectTypeId} of Connected System {ConnectedSystemId} is awaiting " +
             "synchronisation: {Reason}",
             objectTypeId, connectedSystemId, LogSanitiser.Sanitise(reason));
+    }
+
+    // What this unit of work has recorded as awaiting synchronisation, until a caller takes it (#2615). A REST request
+    // is one unit of work, so a save's response can say what that save recorded without every save path having to hand
+    // the answer back; the portal's long-lived edit session simply never takes it, and the few entries a save adds are
+    // overwritten by nothing and read by nothing.
+    private readonly List<(int ConnectedSystemId, string? ConnectedSystemName, int ObjectTypeId, string? ObjectTypeName)> _recordedAwaitingSynchronisation = [];
+
+    /// <summary>
+    /// What the saves made through this application have recorded as awaiting synchronisation since the last call,
+    /// each Connected System Object Type once, with what processing it in full costs (#2615). Empty when no save
+    /// recorded anything. Clears what it returns, so a response reports only its own save.
+    /// </summary>
+    public async Task<List<AwaitingSynchronisationEstimate>> TakeRecordedAwaitingSynchronisationAsync()
+    {
+        var recorded = _recordedAwaitingSynchronisation
+            .GroupBy(entry => (entry.ConnectedSystemId, entry.ObjectTypeId))
+            .Select(group => group.First())
+            .ToList();
+        _recordedAwaitingSynchronisation.Clear();
+
+        var estimates = new List<AwaitingSynchronisationEstimate>();
+        foreach (var entry in recorded)
+            estimates.Add(await EstimateProcessingInFullAsync(entry.ConnectedSystemId, entry.ConnectedSystemName, entry.ObjectTypeId, entry.ObjectTypeName));
+
+        return estimates;
+    }
+
+    /// <summary>
+    /// What the next synchronisation of a Connected System costs to process every object of one of its Object Types
+    /// (#2615): the type's object count, and about how long that takes at the speed of the system's last completed Full
+    /// Synchronisation. The speed is the system's population over that run's time, because a run's own counters describe
+    /// whichever step counted last rather than the objects it went through. No estimate when it has never completed one.
+    /// Names the caller does not have are read.
+    /// </summary>
+    internal async Task<AwaitingSynchronisationEstimate> EstimateProcessingInFullAsync(
+        int connectedSystemId, string? connectedSystemName, int objectTypeId, string? objectTypeName)
+    {
+        if (string.IsNullOrEmpty(connectedSystemName))
+            connectedSystemName = (await Application.Repository.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId))?.Name;
+        if (string.IsNullOrEmpty(objectTypeName))
+            objectTypeName = (await Application.Repository.ConnectedSystems.GetObjectTypeAsync(objectTypeId))?.Name;
+
+        var objectCount = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId, objectTypeId, null);
+
+        TimeSpan? estimatedDuration = null;
+        var lastRun = await Application.Activities.GetLatestCompletedFullSynchronisationAsync(connectedSystemId);
+        if (lastRun != null)
+        {
+            var population = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId, partitionId: null);
+            estimatedDuration = ConfigurationChangeProcessingEstimate.For(objectCount, population, lastRun.ExecutionTime);
+        }
+
+        return new AwaitingSynchronisationEstimate
+        {
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemName = connectedSystemName ?? $"Connected System {connectedSystemId}",
+            ConnectedSystemObjectTypeId = objectTypeId,
+            ObjectTypeName = objectTypeName ?? $"Object Type {objectTypeId}",
+            ObjectCount = objectCount,
+            EstimatedDuration = estimatedDuration
+        };
     }
 
     /// <summary>

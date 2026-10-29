@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 
 namespace JIM.Application.Services;
 
@@ -44,15 +45,91 @@ public class ConfigurationChangePreflightService
     {
         ArgumentNullException.ThrowIfNull(proposed);
 
+        // A create has no prior state, so nothing existing is at risk and nothing is asked of the administrator. What the
+        // save will do is still worked out: a new import rule that is switched on makes its type await synchronisation,
+        // and a new export rule flags its Metaverse Objects for review.
         if (proposed.Id == 0)
-            return ConfigurationChangePreflight.None;
+        {
+            var outcome = await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync()
+                ? ConfigurationChangeCaptureOutcome.Created
+                : ConfigurationChangeCaptureOutcome.NotTracked;
+            return ConfigurationChangePreflight.None.WithEffect(await EffectOfSyncRuleSaveAsync(proposed, outcome, diff: null));
+        }
 
         // The captured state records the rule's saved test cases (#2055 Phase 4), which a save of the rule does not
         // edit, so the proposed state carries them as stored; without them every case would read as removed.
         var testCases = await Application.Repository.ConfigurationTests.GetTestCasesForSyncRuleAsync(proposed.Id);
-        return await EvaluateAsync(
+        var evaluation = await EvaluateCoreAsync(
             () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, proposed.Id),
-            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey, testCases));
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey, testCases),
+            $"Synchronisation Rule {proposed.Id}");
+        return evaluation.Preflight.WithEffect(await EffectOfSyncRuleSaveAsync(proposed, evaluation.Outcome, evaluation.Diff));
+    }
+
+    /// <summary>
+    /// When a Synchronisation Rule change reaches the objects that already exist (#2615), worked out from the decisions the
+    /// save acts on: whether it records the rule's Object Type as awaiting synchronisation (an import rule), whether it
+    /// flags the Metaverse Objects of the rule's type for export review (an export rule), and, of what is left, what still
+    /// reaches existing objects only at a Full Synchronisation. Both decisions are
+    /// <see cref="ConfigurationChangeSynchronisationPolicy"/>'s, which the save asks with the same inputs, and the outcome
+    /// is the capture's own reading of the same comparison, so this cannot promise what the save then does not do.
+    /// </summary>
+    private async Task<ConfigurationChangeEffect> EffectOfSyncRuleSaveAsync(SyncRule proposed, ConfigurationChangeCaptureOutcome outcome, ConfigurationDiff? diff)
+    {
+        var connectedSystemId = proposed.ConnectedSystemId > 0 ? proposed.ConnectedSystemId : proposed.ConnectedSystem?.Id ?? 0;
+        var objectTypeId = proposed.ConnectedSystemObjectTypeId > 0 ? proposed.ConnectedSystemObjectTypeId : proposed.ConnectedSystemObjectType?.Id ?? 0;
+
+        var processedInFull = new List<AwaitingSynchronisationEstimate>();
+        if (ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation(proposed, outcome))
+            processedInFull.Add(await Application.ConnectedSystems.EstimateProcessingInFullAsync(
+                connectedSystemId, proposed.ConnectedSystem?.Name, objectTypeId, proposed.ConnectedSystemObjectType?.Name));
+
+        // The stored scope is read before the save, as the save reads it, from the database rather than from the rule
+        // being edited: the editor mutates the entity it loaded.
+        var isNewRule = proposed.Id == 0;
+        var storedState = proposed.Direction == SyncRuleDirection.Export && !isNewRule
+            ? await Application.Repository.ConnectedSystems.GetSyncRuleScopeStateAsync(proposed.Id)
+            : null;
+        var flagsExportReview = ConfigurationChangeSynchronisationPolicy.FlagsExportReview(proposed, isNewRule, storedState);
+        var exportReviewTypeName = flagsExportReview ? await MetaverseObjectTypeNameOfAsync(proposed) : null;
+
+        // Processing a whole type applies everything in the rule, so nothing is left for a Full Synchronisation after it.
+        // Otherwise, what is left is whichever changed section is consequential and not what the export review carries.
+        var fullSynchronisationSections = processedInFull.Count > 0 || diff == null
+            ? []
+            : SectionsLeftForFullSynchronisation(diff, flagsExportReview);
+
+        return new ConfigurationChangeEffect
+        {
+            ObjectTypesProcessedInFull = processedInFull,
+            ExportReviewMetaverseObjectTypeName = exportReviewTypeName,
+            FullSynchronisationSections = fullSynchronisationSections,
+            FullSynchronisationConnectedSystemName = fullSynchronisationSections.Count == 0
+                ? null
+                : proposed.ConnectedSystem?.Name ?? (await Application.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId))?.Name
+            ?? $"Connected System {connectedSystemId}"
+        };
+    }
+
+    // The changed top-level sections that are consequential (Sync-affecting or Destructive) and that the export review
+    // does not carry: the ones the drift indicator goes on counting until a Full Synchronisation applies them.
+    private static List<string> SectionsLeftForFullSynchronisation(ConfigurationDiff diff, bool exportReviewCarriesScope)
+    {
+        return (diff.Root?.Children ?? [])
+            .Where(section => section.ChangeType != ConfigurationDiffChangeType.Unchanged)
+            .Where(section => !(exportReviewCarriesScope && ConfigurationChangeSynchronisationPolicy.ExportReviewSectionKeys.Contains(section.Key)))
+            .Where(section => ConfigurationChangeClassifier.ClassifyNode(diff.ObjectType, section) >= ConfigurationChangeClass.SyncAffecting)
+            .Select(section => section.Label ?? section.Key)
+            .ToList();
+    }
+
+    private async Task<string?> MetaverseObjectTypeNameOfAsync(SyncRule rule)
+    {
+        if (!string.IsNullOrEmpty(rule.MetaverseObjectType?.Name))
+            return rule.MetaverseObjectType.Name;
+
+        var metaverseObjectTypeId = rule.ResolveMetaverseObjectTypeId();
+        return (await Application.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, false))?.Name ?? $"Metaverse Object Type {metaverseObjectTypeId}";
     }
 
     /// <summary>
@@ -136,35 +213,45 @@ public class ConfigurationChangePreflightService
     /// </summary>
     private async Task<ConfigurationChangePreflight> EvaluateAsync(
         Func<Task<string?>> getBaselineSnapshotAsync,
-        Func<byte[], ConfigurationSnapshot> buildProposedSnapshot)
+        Func<byte[], ConfigurationSnapshot> buildProposedSnapshot) =>
+        (await EvaluateCoreAsync(getBaselineSnapshotAsync, buildProposedSnapshot, "configuration")).Preflight;
+
+    /// <summary>
+    /// What an evaluation found: the preflight the acknowledgement is composed from, and the capture's own reading of the
+    /// same comparison, which is what the save's decisions are made from (#2615).
+    /// </summary>
+    private sealed record Evaluation(ConfigurationChangePreflight Preflight, ConfigurationChangeCaptureOutcome Outcome, ConfigurationDiff? Diff);
+
+    private async Task<Evaluation> EvaluateCoreAsync(
+        Func<Task<string?>> getBaselineSnapshotAsync,
+        Func<byte[], ConfigurationSnapshot> buildProposedSnapshot,
+        string targetDescription)
     {
         // Only consults the store when change tracking is on. With tracking off no new baselines are written, so
         // whatever is stored has gone stale: diffing against it would present changes made days ago as though they
         // were part of this save. "Unknown" is the honest answer, and it is the same answer the changed-since
-        // indicator gives.
+        // indicator gives. The save's capture reads the same situation as "not tracked".
         if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-            return ConfigurationChangePreflight.Unknown;
+            return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.NotTracked, null);
 
         var baselineJson = await getBaselineSnapshotAsync();
-        if (baselineJson == null)
-            return ConfigurationChangePreflight.Unknown;
+        var baseline = baselineJson == null ? null : ConfigurationSnapshotService.Deserialise(baselineJson);
+        if (baseline == null)
+            return new Evaluation(ConfigurationChangePreflight.Unknown, ConfigurationChangeCaptureOutcome.Created, null);
 
         var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-        return Evaluate(ConfigurationSnapshotService.Deserialise(baselineJson), buildProposedSnapshot(hashKey));
+        return Evaluate(baseline, buildProposedSnapshot(hashKey), targetDescription);
     }
 
     /// <summary>
     /// The shared comparison, kept separate from the per-surface entry points so every surface produces an identically
     /// shaped answer from an identically computed diff.
     /// </summary>
-    private ConfigurationChangePreflight Evaluate(ConfigurationSnapshot? baseline, ConfigurationSnapshot proposed)
+    private Evaluation Evaluate(ConfigurationSnapshot baseline, ConfigurationSnapshot proposed, string targetDescription)
     {
-        if (baseline == null)
-            return ConfigurationChangePreflight.Unknown;
-
         var diff = Application.ConfigurationDiffs.Diff(baseline, proposed);
         if (!diff.HasChanges)
-            return ConfigurationChangePreflight.None;
+            return new Evaluation(ConfigurationChangePreflight.None, ConfigurationChangeCaptureOutcome.NoChange, diff);
 
         // Started from the root's children rather than the root itself: the root's label names the object, not a
         // section within it, so it belongs to no property's path.
@@ -172,7 +259,7 @@ public class ConfigurationChangePreflightService
         foreach (var child in diff.Root.Children ?? [])
             CollectItems(child, [], parentKey: null, proposed.ObjectType, proposed.ObjectKey, items);
 
-        return new ConfigurationChangePreflight
+        var preflight = new ConfigurationChangePreflight
         {
             // The classifier's verdict over the whole diff, never the maximum over the items below. The two are not
             // the same reduction: the items are the changed *scalars*, whereas the classifier also weighs the
@@ -190,6 +277,10 @@ public class ConfigurationChangePreflightService
                 .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
                 .ToList()
         };
+
+        // The capture's reading of the same diff, from the one place that makes it, so what a save then does about the
+        // change (#2615) is decided from what this acknowledgement saw.
+        return new Evaluation(preflight, ConfigurationChangeCaptureService.OutcomeOf(diff, proposed.ObjectKey, targetDescription), diff);
     }
 
     /// <summary>

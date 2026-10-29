@@ -163,13 +163,8 @@ public partial class ConnectedSystemServer
     // reaches existing objects through the target's drift detection instead.
     private async Task FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
     {
-        if (syncRule.Direction != SyncRuleDirection.Export || !syncRule.Enabled)
-            return;
-
-        // A stored state that cannot be read (the rule vanished between the read and the save) is treated as a
-        // change: a needless review costs time, a missed one leaves objects wrongly provisioned.
-        if (!isNewRule && storedState != null && !storedState.ExportScopeMovedBy(syncRule) &&
-            !storedState.DeprovisioningActionChangedBy(syncRule))
+        // The decision is the policy's, which the acknowledgement before the save asks too, so the two cannot disagree.
+        if (!ConfigurationChangeSynchronisationPolicy.FlagsExportReview(syncRule, isNewRule, storedState))
             return;
 
         var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();

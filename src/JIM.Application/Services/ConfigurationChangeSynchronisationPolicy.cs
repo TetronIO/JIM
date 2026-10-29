@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Logic;
 
 namespace JIM.Application.Services;
 
@@ -59,6 +60,73 @@ internal static class ConfigurationChangeSynchronisationPolicy
             // A kind added later and not yet considered here: do the safe thing.
             _ => true
         };
+    }
+
+    /// <summary>
+    /// Whether saving a Synchronisation Rule records its Connected System Object Type as awaiting synchronisation. The one
+    /// question the rule saves ask, and the one the acknowledgement before them asks, from the same inputs: the rule's
+    /// direction, whether it is enabled after the save, and what capture found. Only an import rule records: an export
+    /// rule's change reaches existing objects through export evaluation, which runs on every Metaverse Object the import
+    /// types' synchronisation reprocesses (plan decision 5), so a second mechanism would be redundant.
+    /// </summary>
+    /// <param name="rule">The rule as saved (or, before the save, as it is about to be).</param>
+    /// <param name="outcome">What configuration change capture found for the save.</param>
+    internal static bool RecordsAwaitingSynchronisation(SyncRule rule, ConfigurationChangeCaptureOutcome outcome)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        return rule.Direction == SyncRuleDirection.Import && RequiresSynchronisation(outcome, isInForce: rule.Enabled);
+    }
+
+    /// <summary>
+    /// Whether saving a Simple Mode Object Matching Rule, or switching the matching mode, records a Connected System Object
+    /// Type as awaiting synchronisation: the change must be one that alters what an import produces, and an enabled import
+    /// rule must cover the type. Nothing synchronises the objects of any other type, so there is nothing to process, and
+    /// enabling an import rule for it later is a change of its own.
+    /// </summary>
+    /// <param name="outcome">What configuration change capture found for the save.</param>
+    /// <param name="enabledImportRuleCoversType">Whether an enabled import rule is on the Object Type.</param>
+    internal static bool RecordsAwaitingSynchronisationForSimpleModeType(ConfigurationChangeCaptureOutcome outcome, bool enabledImportRuleCoversType)
+    {
+        // The Connected System capture compares the whole system, so a Created outcome says nothing about whether the
+        // rule is new; the matching rule save itself is what is being recorded, and it is in force.
+        return enabledImportRuleCoversType && RequiresSynchronisation(outcome, isInForce: true);
+    }
+
+    /// <summary>
+    /// The top-level sections of an export rule's snapshot that <see cref="FlagsExportReview"/> reads, through
+    /// <see cref="SyncRuleScopeState"/>: whether it is enabled, whether it provisions, its Scoping Criteria and its
+    /// Deprovisioning Action. A change to any other section (an Attribute Flow, Enforce state) flags nothing, and so is left
+    /// to a Full Synchronisation; the acknowledgement uses this to say which of the sections it names the review carries.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> ExportReviewSectionKeys = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "enabled",
+        "provisionToConnectedSystem",
+        "objectScopingCriteriaGroups",
+        "outboundDeprovisionAction"
+    };
+
+    /// <summary>
+    /// Whether saving an export Synchronisation Rule flags the Metaverse Objects of its type for review against every
+    /// export rule, which the next synchronisation of any Connected System carries out (#1925, #1970). It does when the
+    /// save can have moved objects into or out of the rule's scope, or changed what happens to those that leave it.
+    /// Disabling a rule or switching provisioning off flags nothing: neither destroys what already exists. A save that
+    /// leaves scope and the Deprovisioning Action alone (a rename, an Attribute Flow edit) flags nothing either.
+    /// </summary>
+    /// <param name="rule">The rule as saved (or, before the save, as it is about to be).</param>
+    /// <param name="isNewRule">Whether the save creates the rule.</param>
+    /// <param name="storedState">The rule's scope settings as stored before the save. A state that cannot be read (the rule
+    /// vanished between the read and the save) is treated as a change: a needless review costs time, a missed one leaves
+    /// objects wrongly provisioned.</param>
+    internal static bool FlagsExportReview(SyncRule rule, bool isNewRule, SyncRuleScopeState? storedState)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        if (rule.Direction != SyncRuleDirection.Export || !rule.Enabled)
+            return false;
+
+        return isNewRule || storedState == null || storedState.ExportScopeMovedBy(rule) || storedState.DeprovisioningActionChangedBy(rule);
     }
 
     /// <summary>

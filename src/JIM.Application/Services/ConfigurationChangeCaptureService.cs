@@ -160,20 +160,16 @@ public class ConfigurationChangeCaptureService
             if (latest != null)
             {
                 var diff = Application.ConfigurationDiffs.Diff(latest, snapshot);
-                if (!diff.HasChanges)
+                outcome = OutcomeOf(diff, snapshot.ObjectKey, targetDescription);
+                if (outcome.Kind == ConfigurationChangeCaptureKind.NoChange)
                 {
                     Log.Debug("CaptureChangeAsync: configuration of {Target} is unchanged from its latest snapshot; no new version recorded.", targetDescription);
-                    return ConfigurationChangeCaptureOutcome.NoChange;
+                    return outcome;
                 }
 
-                // Classified from the diff that was computed anyway. A create (latest == null) has no prior state to
-                // diff, so nothing is at risk and the class stays NotClassified.
-                var changeClass = ClassifyOrDefault(diff, snapshot.ObjectKey, targetDescription);
-                activity.ConfigurationChangeClass = changeClass;
-                var changedSections = ChangedTopLevelSections(diff);
-                outcome = ConfigurationChangeCaptureOutcome.Changed(changeClass,
-                    changedSections.Select(section => section.Label ?? section.Key).ToList(),
-                    changedSections.Select(section => section.Key).ToList());
+                // A create (latest == null) has no prior state to diff, so nothing is at risk and the class stays
+                // NotClassified.
+                activity.ConfigurationChangeClass = outcome.Class;
             }
 
             activity.ConfigurationChangeVersion = await getNextVersionAsync();
@@ -190,6 +186,30 @@ public class ConfigurationChangeCaptureService
             Log.Warning(ex, "CaptureChangeAsync: failed to capture configuration snapshot for {Target}; the change was saved but its history snapshot was not recorded.", targetDescription);
             return ConfigurationChangeCaptureOutcome.Failed;
         }
+    }
+
+    /// <summary>
+    /// What a comparison of the latest snapshot with the one about to be recorded found: nothing, or a change with its
+    /// class and the top-level sections it touched. The one place that is worked out, so the capture that follows a save
+    /// and the acknowledgement that precedes it (<c>ConfigurationChangePreflightService</c>, which compares the same two
+    /// snapshots) cannot read the same change differently; what a save then does about the outcome is the
+    /// <c>ConfigurationChangeSynchronisationPolicy</c>'s, which both ask.
+    /// </summary>
+    /// <param name="diff">The difference between the latest snapshot and the proposed or saved one.</param>
+    /// <param name="objectKey">The Service Setting's key, for classifying a Service Setting; ignored otherwise.</param>
+    /// <param name="targetDescription">What was compared, for the log line if it cannot be classified.</param>
+    internal static ConfigurationChangeCaptureOutcome OutcomeOf(ConfigurationDiff diff, string? objectKey, string targetDescription)
+    {
+        ArgumentNullException.ThrowIfNull(diff);
+
+        if (!diff.HasChanges)
+            return ConfigurationChangeCaptureOutcome.NoChange;
+
+        var changedSections = ChangedTopLevelSections(diff);
+        return ConfigurationChangeCaptureOutcome.Changed(
+            ClassifyOrDefault(diff, objectKey, targetDescription),
+            changedSections.Select(section => section.Label ?? section.Key).ToList(),
+            changedSections.Select(section => section.Key).ToList());
     }
 
     /// <summary>
