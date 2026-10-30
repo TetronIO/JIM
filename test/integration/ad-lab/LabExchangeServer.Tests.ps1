@@ -445,3 +445,27 @@ Describe 'Test-LabKerberosChallenge' {
         Test-LabKerberosChallenge -StatusCode 401 -WwwAuthenticate @() | Should -BeFalse
     }
 }
+
+Describe 'Get-LabExchangeUserRemoval' {
+    It 'purges the mailbox of a mailbox user, so no disconnected mailbox is left behind' {
+        Get-LabExchangeUserRemoval -RecipientTypeDetails 'UserMailbox' | Should -Be 'Mailbox'
+    }
+
+    It 'deletes the account of a user that is not a recipient' {
+        Get-LabExchangeUserRemoval -RecipientTypeDetails $null | Should -Be 'User'
+    }
+
+    It 'deletes the account of a recipient without a mailbox' {
+        Get-LabExchangeUserRemoval -RecipientTypeDetails 'MailUser' | Should -Be 'User'
+    }
+}
+
+Describe 'ConvertTo-LabDispatchWaitNanosecond' {
+    It 'reads the counter''s cooked value, which carries the display-as-percent flag, as hundredths of a nanosecond' {
+        ConvertTo-LabDispatchWaitNanosecond -CookedValue 15580 | Should -Be 155.8
+    }
+
+    It 'gives no wait as zero' {
+        ConvertTo-LabDispatchWaitNanosecond -CookedValue 0 | Should -Be 0
+    }
+}

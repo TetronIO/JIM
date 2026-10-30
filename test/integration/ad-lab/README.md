@@ -101,7 +101,8 @@ The hypervisor host needs, once:
 6. **Exchange Server media** for the Exchange organisation: the Exchange Server SE ISO (`ExchangeServerSE-x64.iso`,
    a free download from the Microsoft Download Center). The domain controllers' builds run Setup's preparation steps from
    it, and the Exchange servers install from the same media. No product key is used (an Exchange server runs
-   unlicensed, as a trial, and the monthly rebuild reinstalls it well inside the trial period), but Setup's licence
+   unlicensed, as a 180-day trial; once the monthly rebuild rebuilds the Exchange servers (#2412), it reinstalls them
+   well inside that period, and until then each must be rebuilt by hand within 180 days of its build), but Setup's licence
    terms are accepted. The schema version the forests
    get is read from the media (`Setup\Data\SchemaVersion.ldf`), so newer media needs no code change. Microsoft requires
    a Windows Server 2025 schema master to have the November 2025 update (build 26100.7171) or later before Exchange

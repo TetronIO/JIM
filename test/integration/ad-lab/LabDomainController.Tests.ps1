@@ -984,8 +984,8 @@ Describe 'Get-LabReadinessPort' {
         Get-LabReadinessPort -Role FederationServer | Should -Be 443
     }
 
-    It 'waits for HTTPS on an Exchange server, where Remote PowerShell answers' {
-        Get-LabReadinessPort -Role ExchangeServer | Should -Be 443
+    It 'refuses an Exchange server, whose port answers minutes before Exchange does' {
+        { Get-LabReadinessPort -Role ExchangeServer } | Should -Throw '*#2412*'
     }
 
     It 'refuses a role it does not know' {

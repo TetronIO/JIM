@@ -502,10 +502,45 @@ function Test-LabKerberosChallenge {
     return ($StatusCode -eq 401) -and (@($schemes | Where-Object { $_ -in 'Kerberos', 'Negotiate' }).Count -gt 0)
 }
 
+function Get-LabExchangeUserRemoval {
+    <#
+    .SYNOPSIS
+        How to remove a throwaway user: 'Mailbox' purges a mailbox user with Remove-Mailbox -Permanent, since deleting
+        the account alone would leave its mailbox disconnected in the database; 'User' deletes any other account.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$RecipientTypeDetails
+    )
+
+    if ($RecipientTypeDetails -eq 'UserMailbox') { return 'Mailbox' }
+    return 'User'
+}
+
+function ConvertTo-LabDispatchWaitNanosecond {
+    <#
+    .SYNOPSIS
+        Nanoseconds from the cooked value of Hyper-V's CPU Wait Time Per Dispatch counter. The counter counts in
+        nanoseconds, but its type carries PERF_DISPLAY_PERCENT, so the cooked value is 100 times that.
+    #>
+    [CmdletBinding()]
+    [OutputType([double])]
+    param(
+        [Parameter(Mandatory)]
+        [double]$CookedValue
+    )
+
+    return ($CookedValue / 100)
+}
+
 Export-ModuleMember -Function @(
     'Get-LabExchangeServerInfo', 'Get-LabExchangeDatabasePath', 'ConvertFrom-LabExchangeSetting', 'Get-LabExchangePhaseArgument',
     'Get-LabExchangeWindowsFeature', 'Get-LabExchangePrerequisite', 'Test-LabExchangePrerequisiteInstalled',
     'Test-LabMicrosoftSignature', 'Get-LabExchangePageFileSize', 'Get-LabExchangeSetupInstallArgument',
     'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Test-LabExchangeDatabaseLayout',
-    'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge'
+    'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge', 'Get-LabExchangeUserRemoval',
+    'ConvertTo-LabDispatchWaitNanosecond'
 )

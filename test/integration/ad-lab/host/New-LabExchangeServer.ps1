@@ -242,8 +242,7 @@ function Read-HostCpu {
         $runPeak = ($run | Measure-Object -Maximum).Maximum
         $text = 'host CPU {0:N0}% on average, {1:N0}% at peak' -f $runAverage, $runPeak
         if ($wait.Count -gt 0) {
-            # Reported in 100-nanosecond units.
-            $text += '; vCPU wait {0:N1} us per dispatch on average' -f ((($wait | Measure-Object -Average).Average) / 10)
+            $text += '; vCPU wait {0:N0} ns per dispatch on average' -f (ConvertTo-LabDispatchWaitNanosecond -CookedValue ($wait | Measure-Object -Average).Average)
         }
         return $text
     }

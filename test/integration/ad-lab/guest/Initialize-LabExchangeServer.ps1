@@ -111,7 +111,7 @@ $script:ExchangeCommands = @(
     'Get-ExchangeServer', 'Get-OrganizationConfig', 'Test-ServiceHealth', 'Get-MailboxDatabase', 'New-MailboxDatabase',
     'Mount-Database', 'Set-MailboxDatabase', 'Get-RoleGroupMember', 'Add-RoleGroupMember',
     'Enable-Mailbox', 'Get-Mailbox', 'Remove-Mailbox', 'Get-MailboxStatistics', 'Enable-MailContact', 'Get-MailContact',
-    'Remove-MailContact'
+    'Remove-MailContact', 'Get-Recipient'
 )
 
 function Write-Step {
@@ -210,6 +210,8 @@ function Connect-Exchange {
         }
         catch {
             $lastError = $_.Exception.Message
+            # A session left open counts against Exchange's per-user shell limit, which a long wait would exhaust.
+            if ($session) { Remove-PSSession -Session $session -ErrorAction SilentlyContinue; $session = $null }
             Start-Sleep -Seconds 15
         }
     }
@@ -218,16 +220,43 @@ function Connect-Exchange {
 
 function Wait-ExchangeService {
     # Test-ServiceHealth until every role's required services run, which some reach minutes after the endpoint answers.
+    # An error while services are still starting counts as not healthy yet.
     param([int]$TimeoutSeconds = 1200)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ($true) {
-        $problems = @(Get-LabExchangeServiceHealthProblem -Health @(Test-ServiceHealth))
+        try {
+            $problems = @(Get-LabExchangeServiceHealthProblem -Health @(Test-ServiceHealth))
+        }
+        catch {
+            $problems = @("Test-ServiceHealth failed: $($_.Exception.Message)")
+        }
         if ($problems.Count -eq 0) {
             $boot = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
             return [int]((Get-Date) - $boot).TotalSeconds
         }
-        if ((Get-Date) -gt $deadline) { return $null }
+        if ((Get-Date) -gt $deadline) {
+            Write-Step "Exchange's services were not healthy within $TimeoutSeconds seconds: $($problems -join '; ')"
+            return $null
+        }
         Start-Sleep -Seconds 15
+    }
+}
+
+function Remove-VerifyUser {
+    # Purges a mailbox user's mailbox with the account, so no disconnected mailbox stays in the database for Verify
+    # to find on every later run; any other account is just deleted.
+    param([string]$SamAccountName)
+    $user = Get-ADUser -Filter "SamAccountName -eq '$SamAccountName'" -ErrorAction SilentlyContinue
+    if (-not $user) { return }
+    $recipient = $null
+    try { $recipient = Get-Recipient -Identity $SamAccountName -ErrorAction Stop } catch { $recipient = $null }
+    $details = $null
+    if ($recipient) { $details = [string]$recipient.RecipientTypeDetails }
+    if ((Get-LabExchangeUserRemoval -RecipientTypeDetails $details) -eq 'Mailbox') {
+        Remove-Mailbox -Identity $SamAccountName -Permanent $true -Confirm:$false
+    }
+    else {
+        Remove-ADUser -Identity $user -Confirm:$false
     }
 }
 
@@ -431,7 +460,9 @@ function Assert-ForestPrepared {
     Import-Module ActiveDirectory -ErrorAction Stop -WarningAction SilentlyContinue
     $rootDse = Get-ADRootDSE
     $target = Get-LabExchangeSchemaTarget -LdfText (Get-Content -LiteralPath "$Media\Setup\Data\SchemaVersion.ldf" -Raw)
-    $schema = Get-ADObject -Identity "CN=ms-Exch-Schema-Version-Pt,$($rootDse.schemaNamingContext)" -Properties rangeUpper -ErrorAction SilentlyContinue
+    # Searches from containers every forest has, because -Identity and a missing -SearchBase throw on an unprepared
+    # forest before the refusals below can explain it.
+    $schema = Get-ADObject -SearchBase $rootDse.schemaNamingContext -SearchScope OneLevel -LDAPFilter '(cn=ms-Exch-Schema-Version-Pt)' -Properties rangeUpper
     $rangeUpper = $null
     if ($null -ne $schema) { $rangeUpper = $schema.rangeUpper }
     if ($rangeUpper -ne $target) {
@@ -439,7 +470,7 @@ function Assert-ForestPrepared {
     }
 
     $expected = Get-LabExchangeOrganizationName -NetBiosName $NetBiosName
-    $organizations = @(Get-ADObject -SearchBase "CN=Microsoft Exchange,CN=Services,$($rootDse.configurationNamingContext)" -SearchScope OneLevel -LDAPFilter '(objectClass=msExchOrganizationContainer)' -ErrorAction SilentlyContinue)
+    $organizations = @(Get-ADObject -SearchBase "CN=Services,$($rootDse.configurationNamingContext)" -SearchScope Subtree -LDAPFilter '(objectClass=msExchOrganizationContainer)')
     if (($organizations.Count -ne 1) -or ($organizations[0].Name -ne $expected)) {
         throw ("The forest should hold the one Exchange organisation '$expected' that its domain controller's build prepared; it holds: " + $(if ($organizations.Count) { ($organizations | ForEach-Object { $_.Name }) -join ', ' } else { 'none' }))
     }
@@ -604,8 +635,7 @@ function Test-MailboxRoundTrip {
     param([object]$Info)
 
     $sam = 'lab-verify-mbx'
-    $existing = Get-ADUser -Filter "SamAccountName -eq '$sam'" -ErrorAction SilentlyContinue
-    if ($existing) { Remove-ADUser -Identity $existing -Confirm:$false }
+    Remove-VerifyUser -SamAccountName $sam
     try {
         New-ADUser -Name 'Lab Verify Mailbox' -SamAccountName $sam -Path "CN=Users,$($Info.DomainDn)" -Enabled $false
         $null = Enable-Mailbox -Identity $sam
@@ -619,8 +649,7 @@ function Test-MailboxRoundTrip {
         }
     }
     finally {
-        $left = Get-ADUser -Filter "SamAccountName -eq '$sam'" -ErrorAction SilentlyContinue
-        if ($left) { Remove-ADUser -Identity $left -Confirm:$false }
+        Remove-VerifyUser -SamAccountName $sam
     }
 }
 
