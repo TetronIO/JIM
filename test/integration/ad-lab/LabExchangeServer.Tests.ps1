@@ -423,3 +423,25 @@ Describe 'Test-LabExchangeIisCertificate' {
         Test-LabExchangeIisCertificate -Certificate (Get-TestCertificate -Name 'ex1') -Fqdn $script:Info.Fqdn | Should -BeFalse
     }
 }
+
+Describe 'Test-LabKerberosChallenge' {
+    It 'accepts a 401 offering Kerberos, as Exchange''s /PowerShell answers' {
+        Test-LabKerberosChallenge -StatusCode 401 -WwwAuthenticate @('Kerberos') | Should -BeTrue
+    }
+
+    It 'accepts Negotiate, which carries Kerberos' {
+        Test-LabKerberosChallenge -StatusCode 401 -WwwAuthenticate @('Negotiate', 'NTLM') | Should -BeTrue
+    }
+
+    It 'refuses a 401 offering only Basic or NTLM' {
+        Test-LabKerberosChallenge -StatusCode 401 -WwwAuthenticate @('Basic realm="ex1"', 'NTLM') | Should -BeFalse
+    }
+
+    It 'refuses any status but 401' {
+        Test-LabKerberosChallenge -StatusCode 403 -WwwAuthenticate @('Kerberos') | Should -BeFalse
+    }
+
+    It 'refuses a 401 without a challenge' {
+        Test-LabKerberosChallenge -StatusCode 401 -WwwAuthenticate @() | Should -BeFalse
+    }
+}

@@ -481,10 +481,31 @@ function Test-LabExchangeIisCertificate {
     return ([string]$Certificate.Subject -eq [string]$Certificate.Issuer) -and ($names -contains $Fqdn)
 }
 
+function Test-LabKerberosChallenge {
+    <#
+    .SYNOPSIS
+        Says whether an HTTP response is a challenge a Kerberos client can answer: a 401 offering Kerberos, or
+        Negotiate, which carries it.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [int]$StatusCode,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [string[]]$WwwAuthenticate
+    )
+
+    $schemes = @($WwwAuthenticate | ForEach-Object { ($_ -split '\s+', 2)[0] })
+    return ($StatusCode -eq 401) -and (@($schemes | Where-Object { $_ -in 'Kerberos', 'Negotiate' }).Count -gt 0)
+}
+
 Export-ModuleMember -Function @(
     'Get-LabExchangeServerInfo', 'Get-LabExchangeDatabasePath', 'ConvertFrom-LabExchangeSetting', 'Get-LabExchangePhaseArgument',
     'Get-LabExchangeWindowsFeature', 'Get-LabExchangePrerequisite', 'Test-LabExchangePrerequisiteInstalled',
     'Test-LabMicrosoftSignature', 'Get-LabExchangePageFileSize', 'Get-LabExchangeSetupInstallArgument',
     'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Test-LabExchangeDatabaseLayout',
-    'Test-LabExchangeIisCertificate'
+    'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge'
 )

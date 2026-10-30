@@ -23,8 +23,9 @@
                      svc-jim in Recipient Management; the GAL sync contacts OU; and the export and local trust of
                      Exchange's own certificate.
       Verify         Read it all back, then prove the recipient cmdlets JIM will drive: a mailbox enabled and removed on
-                     a throwaway user, a mail contact enabled and removed in the GAL sync OU, and Remote PowerShell over
-                     HTTPS with Kerberos, as JIM connects. Throws if any required check fails.
+                     a throwaway user, a mail contact enabled and removed in the GAL sync OU, a new Remote PowerShell
+                     session over HTTP with Kerberos, and a Kerberos challenge from /PowerShell over HTTPS with a
+                     trusted certificate. Throws if any required check fails.
 
     Every phase is idempotent, so the host can re-run the whole sequence after a failed step. Each phase ends by
     emitting one result object, { Phase, Changed, RebootRequired, Detail }, which the host reads.
@@ -759,16 +760,40 @@ function Invoke-VerifyPhase {
         [pscustomobject]@{ Passed = ($left.Count -eq 0); Detail = "$($left.Count) disconnected" }
     }
 
-    Add-Check "Remote PowerShell answers over HTTPS with Kerberos at $($info.PowerShellUri), as JIM connects" {
-        # Bounded: without timeouts an HTTPS connection that never completes held Verify for hours.
+    Add-Check "A new Remote PowerShell session over HTTP with Kerberos answers at $($info.ManagementUri), as Microsoft documents" {
+        # HTTP, not HTTPS: Kerberos encrypts the payload. The default Default Web Site/PowerShell (sslFlags
+        # SslNegotiateCert, which Microsoft says not to change) left the Windows WinRM client looping on 401 and 200
+        # over HTTPS for hours. Which transport JIM uses is #2021's question.
         $options = New-PSSessionOption -OpenTimeout 120000 -OperationTimeout 300000 -CancelTimeout 60000
-        $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $info.PowerShellUri -Authentication Kerberos -Credential (Get-DomainCredential) -SessionOption $options -ErrorAction Stop
+        $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $info.ManagementUri -Authentication Kerberos -Credential (Get-DomainCredential) -SessionOption $options -ErrorAction Stop
         try {
             $server = Invoke-Command -Session $session -ScriptBlock { Get-ExchangeServer } | Select-Object -First 1
             [pscustomobject]@{ Passed = ([string]$server.Name -ieq $info.ComputerName); Detail = "Get-ExchangeServer answered $($server.Name)" }
         }
         finally {
             Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+        }
+    }
+
+    Add-Check "$($info.PowerShellUri) answers over HTTPS with a trusted certificate and a Kerberos challenge" {
+        # A plain request, not a WinRM session: it proves the endpoint, its certificate and its authentication.
+        $request = [System.Net.HttpWebRequest]::Create($info.PowerShellUri)
+        $request.Timeout = 30000
+        $request.AllowAutoRedirect = $false
+        try { $response = $request.GetResponse() }
+        catch [System.Net.WebException] {
+            if ($null -eq $_.Exception.Response) { throw }
+            $response = $_.Exception.Response
+        }
+        try {
+            $challenge = @($response.Headers.GetValues('WWW-Authenticate') | Where-Object { $_ })
+            [pscustomobject]@{
+                Passed = (Test-LabKerberosChallenge -StatusCode ([int]$response.StatusCode) -WwwAuthenticate $challenge)
+                Detail = "HTTP $([int]$response.StatusCode), WWW-Authenticate: $($challenge -join ', ')"
+            }
+        }
+        finally {
+            $response.Close()
         }
     }
 
