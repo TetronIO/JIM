@@ -1,8 +1,8 @@
 # Synchronisation Hot Path Off EF Core's Change Tracker
 
-- **Status:** Doing (Phases 0 and 1 complete; Phase 1 awaiting scale measurement)
+- **Status:** Doing (Phases 0 to 2 complete; Phases 1 and 2 awaiting scale measurement)
 - **Issue:** [#2598](https://github.com/TetronIO/JIM/issues/2598)
-- **Last Updated:** 2026-10-29
+- **Last Updated:** 2026-10-30
 
 ## Overview
 
@@ -91,6 +91,13 @@ The target side was the unknown, and it is not the join: the target's objects we
 - Tests: `RequiresPostgres` round trip asserting every field and navigation the engine reads from a loaded Metaverse Object, on a `NoTracking` context.
 - Target: the target side's two slowest pages lose 154 s and 103 s.
 
+**As delivered (2026-10-30):** a page's Metaverse Objects are read by raw SQL into untracked objects (`MetaverseObjectRawReader`), with their type, attribute values and connector navigations assigned explicitly. The bulk update already wrote by raw SQL and needed nothing; the round-trip test asserts every column the reader fills against EF's reading of the same row, and that a no-op update leaves every column unchanged. An untracked object hanging off a tracked Connected System Object is safe only while nothing runs EF's change detection, which would attach it as Modified and fail the next save on its row version (a test documents this), so:
+
+- **Change detection is off for the whole page**, the cross-page reference pass, and Synchronised Deprovisioning's per-object pass, rather than just their flushes, and restored after the tracker clear.
+- **Loads later in a page no longer make tracked copies of its objects.** The join match now reads through the same raw reader (brought forward from Phase 4), and contributor re-election and import scoping hydrate a survivor with `GetConnectedSystemObjectWithAttributeValuesAsync`, which leaves its Metaverse Object out. Either tracked copy let relationship fix-up repoint the page's objects at a partial instance, whose missing values the bulk update would then delete; two `RequiresPostgres` tests reproduce both.
+- **Last-connector detection counts the database**, not the object's in-memory connectors, which hold only the connectors the page happened to load.
+- **The Full Synchronisation and Synchronised Deprovisioning previews walk on their own context** (`ISyncRepository.OpenIsolatedScope`, guarded like the rest of the preview path). Their caller saves progress on the shared context during the walk with change detection on, and the page's untracked objects would otherwise ride along. The isolated context also keeps the preview's rollback-only transaction off the caller's own writes.
+
 ### Phase 3: The Pending Export snapshot's referenced objects
 
 - `SnapshotPendingExportChangesAsync` loads the target system's object for every referenced member through `GetConnectedSystemObjectsByMetaverseObjectIdsAsync` (14.8 s for one group). The snapshot needs only each object's identifiers for display, so replace the load with a raw SQL Summary-tier read of those identifiers.
@@ -98,7 +105,7 @@ The target side was the unknown, and it is not the join: the target's objects we
 
 ### Phase 4: Remaining per-page EF reads
 
-- The page's own load (`GetConnectedSystemObjectsAsync`), the join match load, the other export-side reads and the cross-page reference reload, in order of measured cost; any that measure as negligible are left on EF and recorded as such. At the 2026-10-28 run none registered: the page load took 5 to 220 ms and no join ran.
+- The page's own load (`GetConnectedSystemObjectsAsync`), the other export-side reads and the cross-page reference reload, in order of measured cost; any that measure as negligible are left on EF and recorded as such. At the 2026-10-28 run none registered: the page load took 5 to 220 ms and no join ran. The join match load moved to Phase 2, where it was needed for correctness.
 
 ### Phase 5: Scale verification
 

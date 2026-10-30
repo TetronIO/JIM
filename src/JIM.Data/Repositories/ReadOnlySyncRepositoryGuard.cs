@@ -367,6 +367,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => _inner.BeginRollbackOnlyTransactionAsync();
 
+    /// <summary>
+    /// The isolated repository is guarded too, so a walk moved onto it keeps the guard's guarantee.
+    /// </summary>
+    public ISyncRepositoryScope OpenIsolatedScope()
+    {
+        var isolated = _inner.OpenIsolatedScope();
+        return new SyncRepositoryScope(new ReadOnlySyncRepositoryGuard(isolated.Repository), isolated);
+    }
+
     public Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync()
         => _inner.GetMetaverseAttributeNamesAsync();
 

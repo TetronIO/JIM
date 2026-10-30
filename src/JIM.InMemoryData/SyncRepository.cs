@@ -3571,6 +3571,11 @@ public class SyncRepository : ISyncRepository
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);
 
+    /// <inheritdoc />
+    /// <remarks>The store has no change tracker or transaction to keep a walk away from, so the scope is over this
+    /// repository and owns nothing.</remarks>
+    public ISyncRepositoryScope OpenIsolatedScope() => new SyncRepositoryScope(this);
+
     #region Password Synchronisation queue (#1119)
 
     public Task<List<PendingPasswordChange>> QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)

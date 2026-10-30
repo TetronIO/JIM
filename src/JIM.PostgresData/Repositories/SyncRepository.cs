@@ -10,6 +10,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Serilog;
 
 namespace JIM.PostgresData.Repositories;
@@ -762,6 +763,18 @@ public partial class SyncRepository : ISyncRepository
 
         var transaction = await _context.Database.BeginTransactionAsync();
         return new RollbackOnlyTransactionScope(transaction);
+    }
+
+    /// <inheritdoc />
+    public ISyncRepositoryScope OpenIsolatedScope()
+    {
+        // The context's own options, so the isolated context reaches the same database (or in-memory store) with the
+        // same tracking behaviour and configuration.
+        if (_context.GetService<IDbContextOptions>() is not DbContextOptions<JimDbContext> options)
+            throw new InvalidOperationException("OpenIsolatedScope: the context's own options are needed to open a context over the same database.");
+
+        var repository = new PostgresDataRepository(new JimDbContext(options));
+        return new SyncRepositoryScope(repository.Sync, repository);
     }
 
     /// <inheritdoc />

@@ -1801,6 +1801,16 @@ public interface ISyncRepository
     Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
 
     /// <summary>
+    /// Opens a repository on its own database context over the same database, for a read-only walk that must leave
+    /// this repository's change tracker and transaction untouched (#2598): a preview evaluating a whole system page by
+    /// page while its caller saves progress on this repository. A synchronisation page holds its Metaverse Objects
+    /// untracked under tracked Connected System Objects, which is safe only while nothing saves on that context with
+    /// change detection on; a walk on its own context never meets its caller's saves. Disposing the scope disposes
+    /// the context. Repositories with no context of their own (in memory) return a scope over themselves.
+    /// </summary>
+    ISyncRepositoryScope OpenIsolatedScope();
+
+    /// <summary>
     /// Begins a database transaction that the writes made through this repository join until it is committed or
     /// disposed, so a set of them lands together or not at all (#2197): an export's recorded result and the External ID
     /// it assigned, say. Returns null when a transaction is already open, whose writes these then join and whose owner

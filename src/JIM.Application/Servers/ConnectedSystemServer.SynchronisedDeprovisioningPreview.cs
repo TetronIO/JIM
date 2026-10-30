@@ -90,8 +90,11 @@ public partial class ConnectedSystemServer
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId)
             ?? throw new InvalidDataException($"PreviewSynchronisedDeprovisioningAsync: Connected System {connectedSystemId} does not exist.");
 
-        // Every read goes through the guard, including the ones made before a page's rollback scope opens.
-        var guard = new ReadOnlySyncRepositoryGuard(Application.SyncRepo);
+        // Every read goes through the guard, including the ones made before a page's rollback scope opens, and on its
+        // own context (#2598): the walk's pages hold their Metaverse Objects untracked under tracked Connected System
+        // Objects, and the caller persisting deltas between pages on the shared context would have EF attach them.
+        using var isolated = Application.SyncRepo.OpenIsolatedScope();
+        var guard = new ReadOnlySyncRepositoryGuard(isolated.Repository);
 
         // The run's support set, exactly as ExecuteSynchronisedDeprovisioningAsync builds it.
         var allSyncRules = await guard.GetAllSyncRulesAsync();
