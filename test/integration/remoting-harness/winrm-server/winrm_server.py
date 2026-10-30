@@ -126,7 +126,9 @@ def pipeline_state_in(base64_fragments: str) -> bool:
 class PowerShellProcess:
     """One `pwsh -s` per shell, speaking PowerShell's out-of-process transport on stdin and stdout."""
 
-    PACKET = re.compile(r"<(?P<kind>Data|DataAck|CommandAck|CloseAck|SignalAck)(?P<attrs>[^>]*?)(?:/>|>(?P<body>[^<]*)</Data>)")
+    # The longer names come first, and a name must end at whitespace, "/" or ">", so <DataAck/> is never read as <Data>.
+    PACKET = re.compile(
+        r"<(?P<kind>DataAck|CommandAck|CloseAck|SignalAck|Data)(?=[\s/>])(?P<attrs>[^>]*?)(?:/>|>(?P<body>[^<]*)</Data>)")
 
     def __init__(self):
         self.process = subprocess.Popen(["pwsh", "-NoLogo", "-NoProfile", "-s"], stdin=subprocess.PIPE,
@@ -373,6 +375,15 @@ class WinRMHandler(http.server.BaseHTTPRequestHandler):
             self._reply(200, headers=headers)
             return
 
+        if self.server.tls:
+            # Over HTTPS, TLS protects the messages and WinRM does not encrypt them again.
+            if "multipart/encrypted" in self.headers.get("Content-Type", "").lower():
+                LOG.warning("refused request: message encryption over HTTPS")
+                self._reply(400, headers=headers)
+                return
+            self._reply(200, handle(body), "application/soap+xml;charset=UTF-8", headers)
+            return
+
         try:
             plaintext = decrypt_message(self.context, body, self.headers.get("Content-Type", ""))
         except (ValueError, spnego.exceptions.SpnegoError) as error:
@@ -388,6 +399,7 @@ class WinRMHandler(http.server.BaseHTTPRequestHandler):
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
+    tls = False
 
 
 def main():
@@ -401,6 +413,7 @@ def main():
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(certificate, os.environ["WINRM_TLS_KEY"])
         tls.socket = context.wrap_socket(tls.socket, server_side=True)
+        tls.tls = True
         servers.append(tls)
     for server in servers[1:]:
         threading.Thread(target=server.serve_forever, daemon=True).start()
