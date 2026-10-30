@@ -1631,7 +1631,8 @@ function Get-LabRebuildGenerationName {
 function Get-LabRebuildRoleEntry {
     # Internal: one lab VM's names, what it is, what it depends on, and the parameters of its candidate build when
     # there are any. A domain controller (dc-primary) is role Primary and JIM_AD_LAB_PRIMARY_VM; an AD FS server
-    # (adfs-primary) is role AdfsPrimary and JIM_AD_LAB_ADFS_PRIMARY_VM.
+    # (adfs-primary) is role AdfsPrimary and JIM_AD_LAB_ADFS_PRIMARY_VM; an Exchange server (exchange-primary) is role
+    # ExchangePrimary and JIM_AD_LAB_EXCHANGE_PRIMARY_VM.
     param(
         [Parameter(Mandatory)]
         [string]$LiveName,
@@ -1639,7 +1640,7 @@ function Get-LabRebuildRoleEntry {
         [AllowNull()]
         [hashtable]$BuildParameters,
 
-        [ValidateSet('DomainController', 'FederationServer')]
+        [ValidateSet('DomainController', 'FederationServer', 'ExchangeServer')]
         [string]$Kind = 'DomainController',
 
         [AllowNull()]
@@ -1670,6 +1671,59 @@ function Get-LabRebuildRoleEntry {
     }
 }
 
+function ConvertFrom-LabRebuildMemberSetting {
+    # Internal: one member server's entry (an AD FS or Exchange server), validated: the domain controller it joins,
+    # its address, prefix length and gateway. Its address is recorded in -Address, so no two lab VMs share one.
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [AllowNull()]
+        [object]$Server,
+
+        [Parameter(Mandatory)]
+        [string]$Label,
+
+        [Parameter(Mandatory)]
+        [string[]]$DomainController,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Address
+    )
+
+    $ipv4 = '^\d{1,3}(\.\d{1,3}){3}$'
+    $null = Get-LabRebuildVmName -LiveName $Name -Kind Candidate
+
+    $dependsOn = [string](Get-LabSettingValue -Object $Server -Name 'domainController')
+    if ($DomainController -notcontains $dependsOn) {
+        throw "settings.json $Label $Name joins '$dependsOn'; it must be one of $($DomainController -join ', ')."
+    }
+    $ipAddress = [string](Get-LabSettingValue -Object $Server -Name 'ipAddress')
+    $gateway = [string](Get-LabSettingValue -Object $Server -Name 'gateway')
+    $prefixText = [string](Get-LabSettingValue -Object $Server -Name 'prefixLength')
+    foreach ($pair in @(@('ipAddress', $ipAddress), @('gateway', $gateway))) {
+        $parsed = $null
+        if (($pair[1] -notmatch $ipv4) -or (-not [System.Net.IPAddress]::TryParse($pair[1], [ref]$parsed))) {
+            throw "settings.json $Name '$($pair[0])' is '$($pair[1])', which is not an IPv4 address."
+        }
+    }
+    $prefix = 0
+    if ((-not [int]::TryParse($prefixText, [ref]$prefix)) -or ($prefix -lt 8) -or ($prefix -gt 30)) {
+        throw "settings.json $Name 'prefixLength' is '$prefixText'; it must be a number from 8 to 30."
+    }
+    if ($Address.ContainsKey($ipAddress)) {
+        throw "settings.json gives $Name the address $ipAddress, which $($Address[$ipAddress]) already has."
+    }
+    $Address[$ipAddress] = $Name
+
+    return [pscustomobject]@{
+        DependsOn    = $dependsOn
+        IPAddress    = $ipAddress
+        PrefixLength = $prefix
+        Gateway      = $gateway
+    }
+}
+
 function ConvertFrom-LabRebuildSetting {
     <#
     .SYNOPSIS
@@ -1689,9 +1743,13 @@ function ConvertFrom-LabRebuildSetting {
         checkpoints carry it, so it cannot be changed later); the live VM is therefore off while the candidate
         is built.
 
-        Returns Roles (ordered Primary, Source, Target), each with LiveName, CandidateName, PrevName, Role,
-        EnvironmentVariable (the JIM_AD_LAB_<ROLE>_VM variable that points the runner at a candidate) and
-        BuildParameters (a hashtable for New-LabDomainController.ps1).
+        Member servers follow, each joined to one of the three: federationServers (built by New-LabFederationServer.ps1)
+        and then exchangeServers (New-LabExchangeServer.ps1, from the directoryExtensions Exchange media and
+        exchangePrerequisiteDirectory), each kind sorted by name.
+
+        Returns Roles (ordered Primary, Source, Target, then the member servers), each with LiveName, CandidateName,
+        PrevName, Role, Kind, DependsOn, EnvironmentVariable (the JIM_AD_LAB_<ROLE>_VM variable that points the runner
+        at a candidate) and BuildParameters (a hashtable for the role's build script).
 
         With -NamesOnly nothing is validated and the roles carry no BuildParameters. Every phase except Build only
         needs the names, and a rollback must never be blocked by a settings file that is wrong for building.
@@ -1723,10 +1781,13 @@ function ConvertFrom-LabRebuildSetting {
 
     $liveNames = @('dc-primary', 'dc-source', 'dc-target')
 
-    # AD FS servers (federationServers), each a member of one of the three forests, are rebuilt after the domain
-    # controllers, against their domain controller's candidate. Sorted by name, so the order is the same every time.
+    # AD FS servers (federationServers), then Exchange servers (exchangeServers), each a member of one of the three
+    # forests, are rebuilt after the domain controllers, against their domain controller's candidate. Each kind is
+    # sorted by name, so the order is the same every time.
     $federation = Get-LabSettingValue -Object $Settings -Name 'federationServers'
     $federationNames = @(Get-LabSettingName -Object $federation | Sort-Object)
+    $exchange = Get-LabSettingValue -Object $Settings -Name 'exchangeServers'
+    $exchangeNames = @(Get-LabSettingName -Object $exchange | Sort-Object)
 
     if ($NamesOnly) {
         $vhdDirectory = $null
@@ -1738,6 +1799,10 @@ function ConvertFrom-LabRebuildSetting {
         foreach ($name in $federationNames) {
             $dependsOn = [string](Get-LabSettingValue -Object (Get-LabSettingValue -Object $federation -Name $name) -Name 'domainController')
             $nameRoles += Get-LabRebuildRoleEntry -LiveName $name -BuildParameters $null -Kind FederationServer -DependsOn $dependsOn
+        }
+        foreach ($name in $exchangeNames) {
+            $dependsOn = [string](Get-LabSettingValue -Object (Get-LabSettingValue -Object $exchange -Name $name) -Name 'domainController')
+            $nameRoles += Get-LabRebuildRoleEntry -LiveName $name -BuildParameters $null -Kind ExchangeServer -DependsOn $dependsOn
         }
         return [pscustomobject][ordered]@{
             VhdDirectory = $vhdDirectory
@@ -1859,29 +1924,11 @@ function ConvertFrom-LabRebuildSetting {
         if ($liveNames -contains $name) {
             throw "settings.json federationServers holds '$name', which is a domain controller's name."
         }
-        $null = Get-LabRebuildVmName -LiveName $name -Kind Candidate
-
-        $dependsOn = [string](Get-LabSettingValue -Object $server -Name 'domainController')
-        if ($liveNames -notcontains $dependsOn) {
-            throw "settings.json federation server $name joins '$dependsOn'; it must be one of $($liveNames -join ', ')."
-        }
-        $address = [string](Get-LabSettingValue -Object $server -Name 'ipAddress')
-        $gateway = [string](Get-LabSettingValue -Object $server -Name 'gateway')
-        $prefixText = [string](Get-LabSettingValue -Object $server -Name 'prefixLength')
-        foreach ($pair in @(@('ipAddress', $address), @('gateway', $gateway))) {
-            $parsed = $null
-            if (($pair[1] -notmatch $ipv4) -or (-not [System.Net.IPAddress]::TryParse($pair[1], [ref]$parsed))) {
-                throw "settings.json $name '$($pair[0])' is '$($pair[1])', which is not an IPv4 address."
-            }
-        }
-        $prefix = 0
-        if ((-not [int]::TryParse($prefixText, [ref]$prefix)) -or ($prefix -lt 8) -or ($prefix -gt 30)) {
-            throw "settings.json $name 'prefixLength' is '$prefixText'; it must be a number from 8 to 30."
-        }
-        if ($addresses.ContainsKey($address)) {
-            throw "settings.json gives $name the address $address, which $($addresses[$address]) already has."
-        }
-        $addresses[$address] = $name
+        $member = ConvertFrom-LabRebuildMemberSetting -Name $name -Server $server -Label 'federation server' -DomainController $liveNames -Address $addresses
+        $dependsOn = $member.DependsOn
+        $address = $member.IPAddress
+        $gateway = $member.Gateway
+        $prefix = $member.PrefixLength
 
         $computerName = 'adfs1'
         $serviceName = 'adfs'
@@ -1908,6 +1955,47 @@ function ConvertFrom-LabRebuildSetting {
             $parameters['CumulativeUpdatePath'] = $CumulativeUpdatePath
         }
         $roles.Add((Get-LabRebuildRoleEntry -LiveName $name -BuildParameters $parameters -Kind FederationServer -DependsOn $dependsOn))
+    }
+
+    foreach ($name in $exchangeNames) {
+        $server = Get-LabSettingValue -Object $exchange -Name $name
+        if (($liveNames -contains $name) -or ($federationNames -contains $name)) {
+            throw "settings.json exchangeServers holds '$name', which is already another lab VM's name."
+        }
+        $member = ConvertFrom-LabRebuildMemberSetting -Name $name -Server $server -Label 'Exchange server' -DomainController $liveNames -Address $addresses
+
+        # The server installs from the media its forest was prepared with: Setup refuses media older than the
+        # organisation, and newer media would need the forest prepared again.
+        $exchangeMedia = @($extensions | Where-Object { $_.Product -eq 'Exchange' } | ForEach-Object { $_.IsoPath })
+        if ($exchangeMedia.Count -eq 0) {
+            throw "settings.json Exchange server $name installs from the forests' Exchange media, but directoryExtensions has no Exchange entry."
+        }
+        $prerequisites = [string](Get-LabSettingValue -Object $Settings -Name 'exchangePrerequisiteDirectory')
+        if ([string]::IsNullOrWhiteSpace($prerequisites)) {
+            throw "settings.json has no 'exchangePrerequisiteDirectory', the folder of the Exchange prerequisites that are not on its media, which $name needs."
+        }
+        $computerName = 'ex1'
+        $configuredComputer = [string](Get-LabSettingValue -Object $server -Name 'computerName')
+        if (-not [string]::IsNullOrWhiteSpace($configuredComputer)) { $computerName = $configuredComputer.Trim() }
+
+        # New-LabExchangeServer.ps1 reads the domain from the domain controller's notes, as the AD FS build does.
+        $parameters = @{
+            Name                  = (Get-LabRebuildVmName -LiveName $name -Kind Candidate)
+            DomainControllerName  = (Get-LabRebuildVmName -LiveName $member.DependsOn -Kind Candidate)
+            IsoPath               = $shared['isoPath']
+            ExchangeIsoPath       = $exchangeMedia[0]
+            PrerequisiteDirectory = $prerequisites.Trim()
+            VhdDirectory          = (Join-LabPathText -Root $shared['vhdDirectory'] -Child $GenerationName)
+            SwitchName            = $shared['switchName']
+            IPAddress             = $member.IPAddress
+            PrefixLength          = $member.PrefixLength
+            Gateway               = $member.Gateway
+            ComputerName          = $computerName
+        }
+        if (-not [string]::IsNullOrEmpty($CumulativeUpdatePath)) {
+            $parameters['CumulativeUpdatePath'] = $CumulativeUpdatePath
+        }
+        $roles.Add((Get-LabRebuildRoleEntry -LiveName $name -BuildParameters $parameters -Kind ExchangeServer -DependsOn $member.DependsOn))
     }
 
     return [pscustomobject][ordered]@{
@@ -1964,6 +2052,13 @@ function Get-LabRebuildBuildAction {
           created before its dependency              Replace (that directory never held its accounts)
           no baseline checkpoint yet                 Replace (a part-built server and a directory checkpoint that may
                                                               not match cannot be resumed safely)
+
+        With -DirectoryHoldsServer (an Exchange server, whose Setup writes its server object into the organisation),
+        a finished candidate built after its dependency has that object in the dependency's baseline, which its build
+        took again. A new server of the same name cannot be installed against that baseline, so:
+
+          finished, built after its dependency,      Refuse  (build the dependency again first; the dependent is then
+          and would be replaced                               older than it and is replaced)
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -1983,23 +2078,24 @@ function Get-LabRebuildBuildAction {
         [ValidateRange(1, 720)]
         [int]$MaxAgeHours = 24,
 
-        [switch]$Fresh
+        [switch]$Fresh,
+
+        [switch]$DirectoryHoldsServer
     )
 
     if (-not $CandidateExists) {
         return 'Build'
     }
-    if ($Fresh) {
-        return 'Replace'
-    }
+    $builtAfterDependency = ($null -ne $DependencyCreatedUtc) -and ($CandidateCreatedUtc.ToUniversalTime() -ge ([datetime]$DependencyCreatedUtc).ToUniversalTime())
     $age = $NowUtc.ToUniversalTime() - $CandidateCreatedUtc.ToUniversalTime()
-    if ($age.TotalHours -gt $MaxAgeHours) {
+    if ($Fresh -or ($age.TotalHours -gt $MaxAgeHours)) {
+        if ($DirectoryHoldsServer -and $CandidateHasBaseline -and $builtAfterDependency) {
+            return 'Refuse'
+        }
         return 'Replace'
     }
-    if ($null -ne $DependencyCreatedUtc) {
-        if ((-not $CandidateHasBaseline) -or ($CandidateCreatedUtc.ToUniversalTime() -lt ([datetime]$DependencyCreatedUtc).ToUniversalTime())) {
-            return 'Replace'
-        }
+    if (($null -ne $DependencyCreatedUtc) -and ((-not $CandidateHasBaseline) -or (-not $builtAfterDependency))) {
+        return 'Replace'
     }
     if ($CandidateHasBaseline) {
         return 'Reuse'
@@ -2591,7 +2687,11 @@ function Invoke-LabRebuildRole {
             }
 
             $action = Get-LabRebuildBuildAction -CandidateExists ($null -ne $candidate) -CandidateCreatedUtc $createdUtc `
-                -CandidateHasBaseline $hasBaseline -DependencyCreatedUtc $dependencyCreatedUtc -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh
+                -CandidateHasBaseline $hasBaseline -DependencyCreatedUtc $dependencyCreatedUtc -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh `
+                -DirectoryHoldsServer:($Role.Kind -eq 'ExchangeServer')
+            if ($action -eq 'Refuse') {
+                throw "'$($Role.CandidateName)' is finished, and '$dependencyName''s baseline holds its Exchange server, so a new one cannot be installed against it. Build $($Role.DependsOn) again first (-Fresh), then $($Role.LiveName)."
+            }
 
             # The candidate is built with the live VM's address, so the live one must be off first.
             if (($null -ne $live) -and ($live.State -ne 'Off')) {
@@ -2630,6 +2730,12 @@ function Invoke-LabRebuildRole {
             if (($null -ne $live) -and ($live.State -ne 'Off')) {
                 & $Adapter.Log "Stopping $($Role.LiveName)."
                 & $Adapter.StopVm $Role.LiveName
+            }
+            if ($Role.Kind -eq 'ExchangeServer') {
+                # Off at rest, as the live one is: the runner starts it only for the scenarios that use Exchange.
+                & $Adapter.Log "Reverting $($Role.CandidateName) to its baseline checkpoint and leaving it off."
+                & $Adapter.ResetVm $Role.CandidateName 'baseline'
+                return (ConvertTo-LabRebuildResult -Role $Role -Action 'Staged' -Detail "$($Role.LiveName) is off and $($Role.CandidateName) is at its baseline, off until a scenario that uses Exchange starts it.")
             }
             & $Adapter.Log "Starting $($Role.CandidateName) from its baseline checkpoint."
             & $Adapter.RestoreVm $Role.CandidateName 'baseline'
@@ -2690,9 +2796,18 @@ function Invoke-LabRebuildRole {
                     & $Adapter.RenameVm $Role.PrevName $Role.LiveName
                 }
                 elseif ($step -eq 'StartLive') {
-                    & $Adapter.Log "Starting $($Role.LiveName) from its baseline checkpoint."
-                    & $Adapter.RestoreVm $Role.LiveName 'baseline'
+                    if ($Role.Kind -eq 'ExchangeServer') {
+                        & $Adapter.Log "Reverting $($Role.LiveName) to its baseline checkpoint and leaving it off."
+                        & $Adapter.ResetVm $Role.LiveName 'baseline'
+                    }
+                    else {
+                        & $Adapter.Log "Starting $($Role.LiveName) from its baseline checkpoint."
+                        & $Adapter.RestoreVm $Role.LiveName 'baseline'
+                    }
                 }
+            }
+            if ($Role.Kind -eq 'ExchangeServer') {
+                return (ConvertTo-LabRebuildResult -Role $Role -Action 'RolledBack' -Detail "$($Role.LiveName) is back at its baseline, off until a scenario that uses Exchange starts it; $($Role.CandidateName) is stopped and left for diagnosis.")
             }
             return (ConvertTo-LabRebuildResult -Role $Role -Action 'RolledBack' -Detail "$($Role.LiveName) is running again; $($Role.CandidateName) is stopped and left for diagnosis." -GuestBuild (Get-LabRebuildGuestBuild -Adapter $Adapter -Name $Role.LiveName))
         }
@@ -2797,7 +2912,7 @@ function Invoke-LabRebuildPhase {
         [int]$PrevRetentionDays = 7
     )
 
-    foreach ($operation in @('GetVm', 'StopVm', 'RestoreVm', 'RenameVm', 'SetNotes', 'RemoveVm', 'BuildVm', 'GetGuestBuild', 'NowUtc', 'Log')) {
+    foreach ($operation in @('GetVm', 'StopVm', 'RestoreVm', 'ResetVm', 'RenameVm', 'SetNotes', 'RemoveVm', 'BuildVm', 'GetGuestBuild', 'NowUtc', 'Log')) {
         if (-not $Adapter.ContainsKey($operation)) {
             throw "The rebuild adapter has no '$operation' operation."
         }

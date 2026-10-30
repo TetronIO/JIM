@@ -36,6 +36,11 @@
     candidate is rebuilt whenever it is older than that domain controller candidate, and never resumed part way. Stage,
     Promote and Rollback handle it after the domain controller it joins.
 
+    An Exchange server in settings.json exchangeServers (exchange-primary) is rebuilt last, the same way, by
+    New-LabExchangeServer.ps1 from the forests' Exchange media. It is off at rest, so Stage and Rollback revert it to
+    its baseline and leave it off. A finished Exchange candidate is never rebuilt on its own: its domain controller
+    candidate's baseline holds its server object, so that domain controller is built again first.
+
     Each domain controller is built with the live one's own address (its checkpoints carry the address, so it cannot be
     changed afterwards). The live VM is therefore OFF from the start of Build until Promote or Rollback; the workflow
     shares the nightly's concurrency group so nothing else runs in that time. If a run is cancelled or the runner dies
@@ -58,9 +63,10 @@
     Prune, Build, Stage, Promote, Rollback or Status.
 
 .PARAMETER Role
-    Limit the phase to these live VM names (dc-primary, dc-source, dc-target, and each AD FS server in settings.json
-    federationServers, such as adfs-primary; comma-separated is accepted). Default: all of them. The workflow builds
-    one at a time so each is its own control-plane call, an AD FS server after the domain controller it joins.
+    Limit the phase to these live VM names (dc-primary, dc-source, dc-target, each AD FS server in settings.json
+    federationServers, such as adfs-primary, and each Exchange server in exchangeServers, such as exchange-primary;
+    comma-separated is accepted). Default: all of them. The workflow builds one at a time so each is its own
+    control-plane call, a member server after the domain controller it joins.
 
 .PARAMETER SettingsPath
     The settings file. Default: settings.json beside this script (C:\jim-ad-lab\settings.json). Only Build reads more
@@ -272,6 +278,25 @@ function Get-RebuildAdapter {
             }
         }
 
+        ResetVm       = {
+            param($Name, $Checkpoint)
+            # Reverts a VM to a checkpoint and leaves it off, for a VM that is off at rest (an Exchange server, which
+            # the runner starts only for the scenarios that use Exchange). Applying a production checkpoint leaves the
+            # VM off; it is turned off before and after in any case, since reverting discards its state.
+            $snapshot = @(Get-VMSnapshot -VMName $Name -Name $Checkpoint -ErrorAction SilentlyContinue) | Sort-Object -Property CreationTime -Descending | Select-Object -First 1
+            if ($null -eq $snapshot) {
+                throw "'$Name' has no checkpoint called '$Checkpoint'."
+            }
+            if ((Get-VM -Name $Name).State -ne 'Off') {
+                Stop-VM -Name $Name -TurnOff -Force
+            }
+            Restore-VMSnapshot -VMSnapshot $snapshot -Confirm:$false
+            if ((Get-VM -Name $Name).State -ne 'Off') {
+                Stop-VM -Name $Name -TurnOff -Force
+            }
+            Write-RebuildLog "Applied '$Checkpoint' to $Name; it is off."
+        }
+
         RenameVm      = {
             param($Name, $NewName)
             Get-VM -Name $Name | Rename-VM -NewName $NewName
@@ -305,9 +330,13 @@ function Get-RebuildAdapter {
 
         BuildVm       = {
             param($Parameters, $Kind)
-            # Each kind of lab VM has its own build script; both read the Administrator password from this process's
+            # Each kind of lab VM has its own build script; each reads the Administrator password from this process's
             # environment.
-            $builder = if ($Kind -eq 'FederationServer') { 'New-LabFederationServer.ps1' } else { 'New-LabDomainController.ps1' }
+            $builder = switch ($Kind) {
+                'FederationServer' { 'New-LabFederationServer.ps1' }
+                'ExchangeServer' { 'New-LabExchangeServer.ps1' }
+                default { 'New-LabDomainController.ps1' }
+            }
             $result = Invoke-LabScript -Name $builder -Arguments (ConvertTo-LabChildArgument -Parameter $Parameters)
             if ($result.ExitCode -ne 0) {
                 throw "$builder failed for $($Parameters.Name) (exit code $($result.ExitCode)): $(Get-LastLine -Line $result.Output)"
@@ -409,7 +438,7 @@ try {
             Write-Host ('{0,-8} {1,-16} {2}  ({3})' -f $result.role, $result.action, $result.detail, $build) -ForegroundColor Green
         }
         Write-Host ''
-        Write-Host "$Phase finished for $($results.Count) domain controller(s)." -ForegroundColor Green
+        Write-Host "$Phase finished for $($results.Count) lab VM(s)." -ForegroundColor Green
     }
 }
 catch {

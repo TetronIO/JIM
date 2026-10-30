@@ -1343,6 +1343,91 @@ Describe 'ConvertFrom-LabRebuildSetting' {
         $plan.Roles[3].BuildParameters | Should -BeNullOrEmpty
     }
 
+    Context 'Exchange servers' {
+        BeforeAll {
+            function Get-ExchangeRebuildSetting {
+                $settings = Get-RebuildSetting
+                $settings.directoryExtensions = @(@{ product = 'Exchange'; isoPath = 'D:\media\ExchangeServerSE-x64.iso' })
+                $settings.federationServers = @{ 'adfs-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1' } }
+                $settings.exchangeServers = @{ 'exchange-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.31'; prefixLength = 24; gateway = '10.99.0.1' } }
+                $settings.exchangePrerequisiteDirectory = 'D:\media\exchange-prerequisites'
+                return $settings
+            }
+        }
+
+        It 'adds the Exchange server last, built against its domain controller''s candidate from the forests'' Exchange media' {
+            $plan = ConvertFrom-LabRebuildSetting -Settings (Get-ExchangeRebuildSetting) -GenerationName 'rebuild-20261111' -CumulativeUpdatePath 'D:\media\updates\kb1.msu'
+
+            @($plan.Roles | ForEach-Object { $_.LiveName }) | Should -Be @('dc-primary', 'dc-source', 'dc-target', 'adfs-primary', 'exchange-primary')
+            $exchange = $plan.Roles[4]
+            $exchange.Kind | Should -Be 'ExchangeServer'
+            $exchange.DependsOn | Should -Be 'dc-primary'
+            $exchange.Role | Should -Be 'ExchangePrimary'
+            $exchange.EnvironmentVariable | Should -Be 'JIM_AD_LAB_EXCHANGE_PRIMARY_VM'
+            $exchange.CandidateName | Should -Be 'exchange-primary-candidate'
+            $exchange.PrevName | Should -Be 'exchange-primary-prev'
+
+            $parameters = $exchange.BuildParameters
+            $parameters.Name | Should -Be 'exchange-primary-candidate'
+            $parameters.DomainControllerName | Should -Be 'dc-primary-candidate'
+            $parameters.IsoPath | Should -Be 'D:\media\WindowsServer2025.iso'
+            $parameters.ExchangeIsoPath | Should -Be 'D:\media\ExchangeServerSE-x64.iso'
+            $parameters.PrerequisiteDirectory | Should -Be 'D:\media\exchange-prerequisites'
+            $parameters.VhdDirectory | Should -Be 'D:\Hyper-V\Virtual Hard Disks\rebuild-20261111'
+            $parameters.SwitchName | Should -Be 'Lab'
+            $parameters.IPAddress | Should -Be '10.99.0.31'
+            $parameters.PrefixLength | Should -Be 24
+            $parameters.Gateway | Should -Be '10.99.0.1'
+            $parameters.ComputerName | Should -Be 'ex1'
+            $parameters.CumulativeUpdatePath | Should -Be 'D:\media\updates\kb1.msu'
+            foreach ($key in 'Domain', 'NtpServer', 'DnsForwarder', 'ServiceName') { $parameters.ContainsKey($key) | Should -BeFalse }
+        }
+
+        It 'takes the Exchange server''s computer name from the settings when given' {
+            $settings = Get-ExchangeRebuildSetting
+            $settings.exchangeServers.'exchange-primary'.computerName = 'mbx1'
+            (ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1').Roles[4].BuildParameters.ComputerName | Should -Be 'mbx1'
+        }
+
+        It 'refuses an Exchange server when the forests are not prepared for Exchange, since it installs from that media' {
+            $settings = Get-ExchangeRebuildSetting
+            $settings.directoryExtensions = @()
+            { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*exchange-primary*directoryExtensions*'
+        }
+
+        It 'refuses an Exchange server without the folder of prerequisites missing from its media' {
+            $settings = Get-ExchangeRebuildSetting
+            $settings.Remove('exchangePrerequisiteDirectory')
+            { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*exchangePrerequisiteDirectory*'
+        }
+
+        It 'refuses an Exchange server whose domain controller the lab does not have' {
+            $settings = Get-ExchangeRebuildSetting
+            $settings.exchangeServers.'exchange-primary'.domainController = 'dc-nowhere'
+            { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw "*exchange-primary*'dc-nowhere'*"
+        }
+
+        It 'refuses an Exchange server on the AD FS server''s address' {
+            $settings = Get-ExchangeRebuildSetting
+            $settings.exchangeServers.'exchange-primary'.ipAddress = '10.99.0.21'
+            { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*10.99.0.21*adfs-primary*'
+        }
+
+        It 'refuses an Exchange server named like another lab VM' {
+            $settings = Get-ExchangeRebuildSetting
+            $settings.exchangeServers = @{ 'adfs-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.31'; prefixLength = 24; gateway = '10.99.0.1' } }
+            { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw "*'adfs-primary'*"
+        }
+
+        It 'lists the Exchange server by name only with -NamesOnly, so a rollback is never blocked by its settings' {
+            $plan = ConvertFrom-LabRebuildSetting -Settings @{ exchangeServers = @{ 'exchange-primary' = @{ domainController = 'dc-primary' } } } -NamesOnly
+            @($plan.Roles | ForEach-Object { $_.LiveName }) | Should -Be @('dc-primary', 'dc-source', 'dc-target', 'exchange-primary')
+            $plan.Roles[3].Kind | Should -Be 'ExchangeServer'
+            $plan.Roles[3].DependsOn | Should -Be 'dc-primary'
+            $plan.Roles[3].BuildParameters | Should -BeNullOrEmpty
+        }
+    }
+
     It 'builds each candidate beneath a fresh folder of the generation, never over an existing disk' {
         $plan = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'rebuild-20260930'
         $plan.Generation | Should -Be 'rebuild-20260930'
@@ -1568,6 +1653,30 @@ Describe 'Get-LabRebuildBuildAction' {
 
     It 'replaces a recent candidate when asked for a fresh one' {
         Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-1) -CandidateHasBaseline $true -NowUtc $script:BuildNow -Fresh | Should -Be 'Replace'
+    }
+
+    It 'refuses to replace a finished Exchange candidate while the directory that holds its server is kept: <Case>' -TestCases @(
+        @{ Case = 'asked for a fresh one'; AgeHours = 1; Fresh = $true }
+        @{ Case = 'older than the limit'; AgeHours = 30; Fresh = $false }
+    ) {
+        param($AgeHours, $Fresh)
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-$AgeHours) -CandidateHasBaseline $true `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-40) -NowUtc $script:BuildNow -Fresh:$Fresh -DirectoryHoldsServer | Should -Be 'Refuse'
+    }
+
+    It 'replaces an Exchange candidate once the candidate it depends on is newer, whose directory never held its server' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-3) -CandidateHasBaseline $true `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-1) -NowUtc $script:BuildNow -Fresh -DirectoryHoldsServer | Should -Be 'Replace'
+    }
+
+    It 'replaces an Exchange candidate whose build stopped part way, since its build never kept the directory''s state' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-1) -CandidateHasBaseline $false `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow -DirectoryHoldsServer | Should -Be 'Replace'
+    }
+
+    It 'reuses a finished Exchange candidate on a retry' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-1) -CandidateHasBaseline $true `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow -DirectoryHoldsServer | Should -Be 'Reuse'
     }
 
     It 'does not mind a candidate stamped slightly in the future (clock skew)' {
@@ -1882,7 +1991,7 @@ Describe 'Invoke-LabRebuildPhase' {
         }
 
         function Get-FakePlan {
-            param([switch]$WithFederation)
+            param([switch]$WithFederation, [switch]$WithExchange)
             $settings = @{
                 isoPath = 'D:\iso.iso'; vhdDirectory = 'D:\vm'; switchName = 'Lab'; ntpServer = 'ntp'; dnsForwarder = '10.0.0.1'
                 domainControllers = @{
@@ -1893,6 +2002,11 @@ Describe 'Invoke-LabRebuildPhase' {
             }
             if ($WithFederation) {
                 $settings.federationServers = @{ 'adfs-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1' } }
+            }
+            if ($WithExchange) {
+                $settings.directoryExtensions = @(@{ product = 'Exchange'; isoPath = 'D:\exchange.iso' })
+                $settings.exchangeServers = @{ 'exchange-primary' = @{ domainController = 'dc-primary'; ipAddress = '10.99.0.31'; prefixLength = 24; gateway = '10.99.0.1' } }
+                $settings.exchangePrerequisiteDirectory = 'D:\prerequisites'
             }
             return (ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'rebuild-20260930')
         }
@@ -1925,6 +2039,12 @@ Describe 'Invoke-LabRebuildPhase' {
                     }
                     $lab.Vms[$Name].State = 'Running'
                 }.GetNewClosure()
+                ResetVm       = {
+                    param($Name, $Checkpoint)
+                    [void]$lab.Calls.Add("ResetVm $Name $Checkpoint")
+                    if (-not $lab.Vms[$Name].HasBaseline) { throw "no checkpoint $Checkpoint on $Name" }
+                    $lab.Vms[$Name].State = 'Off'
+                }.GetNewClosure()
                 RenameVm      = {
                     param($Name, $NewName)
                     [void]$lab.Calls.Add("RenameVm $Name $NewName")
@@ -1943,18 +2063,22 @@ Describe 'Invoke-LabRebuildPhase' {
                         if (($other.State -eq 'Running') -and ((Get-LabVmNoteValue -Notes $other.Notes -Key 'ip') -eq $Parameters.IPAddress)) { throw "address $($Parameters.IPAddress) is in use by $($other.Name)" }
                     }
                     $lab.BuildIndex++
-                    if ($Kind -eq 'FederationServer') {
-                        # New-LabFederationServer.ps1 joins the domain controller's candidate, which must be there.
+                    $state = 'Running'
+                    if ($Kind -in 'FederationServer', 'ExchangeServer') {
+                        # New-LabFederationServer.ps1 and New-LabExchangeServer.ps1 join the domain controller's
+                        # candidate, which must be there.
                         $dc = $Parameters.DomainControllerName
                         if (-not $lab.Vms.ContainsKey($dc) -or -not $lab.Vms[$dc].HasBaseline) { throw "no domain controller $dc to join" }
-                        $notes = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName $Parameters.ComputerName -NetBiosName 'PANOPLY' -IPAddress $Parameters.IPAddress -Role FederationServer
+                        $notes = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName $Parameters.ComputerName -NetBiosName 'PANOPLY' -IPAddress $Parameters.IPAddress -Role $Kind
+                        # New-LabExchangeServer.ps1 shuts the server down once its baseline is taken.
+                        if ($Kind -eq 'ExchangeServer') { $state = 'Off' }
                     }
                     else {
                         $notes = ConvertTo-LabVmNote -Domain $Parameters.Domain -ShortName 'dc1' -NetBiosName ($Parameters.Domain.Split('.')[0]) -IPAddress $Parameters.IPAddress
                     }
                     $lab.Vms[$Parameters.Name] = @{
                         Name        = $Parameters.Name
-                        State       = 'Running'
+                        State       = $state
                         Notes       = $notes
                         CreatedUtc  = $lab.Now
                         HasBaseline = $true
@@ -1974,7 +2098,18 @@ Describe 'Invoke-LabRebuildPhase' {
 
         # A lab as it stands before a rebuild: the three live VMs, running, with a baseline, on build 26100.1000.
         function Add-FakeLiveSet {
-            param($Lab, [switch]$WithFederation)
+            param($Lab, [switch]$WithFederation, [switch]$WithExchange)
+            if ($WithExchange) {
+                # Off at rest: the runner starts it only for the scenarios that use Exchange.
+                $Lab.Vms['exchange-primary'] = @{
+                    Name        = 'exchange-primary'
+                    State       = 'Off'
+                    Notes       = (ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'ex1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.31' -Role ExchangeServer)
+                    CreatedUtc  = (Get-Utc -Day 1)
+                    HasBaseline = $true
+                    Build       = '26100.1000'
+                }
+            }
             foreach ($entry in @(@('dc-primary', 'PANOPLY.LOCAL', '10.99.0.11'), @('dc-source', 'RESURGAM.LOCAL', '10.99.0.12'), @('dc-target', 'GENTIAN.LOCAL', '10.99.0.13'))) {
                 $Lab.Vms[$entry[0]] = @{
                     Name        = $entry[0]
@@ -2081,6 +2216,90 @@ Describe 'Invoke-LabRebuildPhase' {
             $results[3].action | Should -Be 'Promoted'
             $lab.Vms.ContainsKey('adfs-primary-prev') | Should -BeTrue
             (ConvertFrom-LabVmNote -Notes $lab.Vms['adfs-primary'].Notes).Role | Should -Be 'FederationServer'
+        }
+    }
+
+    Context 'The Exchange server' {
+        It 'builds its candidate after the AD FS server, against the domain controller candidate' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithFederation -WithExchange
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan -WithFederation -WithExchange) -Adapter $lab.Adapter)
+
+            @($results | ForEach-Object { $_.live }) | Should -Be @('dc-primary', 'dc-source', 'dc-target', 'adfs-primary', 'exchange-primary')
+            $results[4].action | Should -Be 'Build'
+            (Get-CallIndex $lab 'BuildVm adfs-primary-candidate') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm exchange-primary-candidate')
+            $lab.Vms['exchange-primary-candidate'].HasBaseline | Should -BeTrue
+            $lab.Vms['exchange-primary'].State | Should -Be 'Off'
+        }
+
+        It 'refuses to build a finished candidate again on its own, because its domain controller candidate''s baseline holds its server, and changes nothing' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Now = $lab.Now.AddHours(1)
+            $lab.Calls.Clear()
+
+            { Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter -Role 'exchange-primary' -Fresh } | Should -Throw '*dc-primary*'
+            @($lab.Calls | Where-Object { $_ -like 'BuildVm*' -or $_ -like 'RemoveVm*' -or $_ -like 'StopVm*' }).Count | Should -Be 0
+            $lab.Vms['exchange-primary-candidate'].HasBaseline | Should -BeTrue
+        }
+
+        It 'builds it again when the domain controller candidate was built again after it' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Now = $lab.Now.AddHours(2)
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter -Role 'dc-primary' -Fresh)
+            $lab.Now = $lab.Now.AddHours(1)
+            $lab.Calls.Clear()
+
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter -Role 'exchange-primary' -Fresh)
+            $results[0].action | Should -Be 'Replace'
+            (Get-CallIndex $lab 'RemoveVm exchange-primary-candidate') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm exchange-primary-candidate')
+        }
+
+        It 'stages it at its baseline but off, and rolls the live server back to its baseline, also off' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Calls.Clear()
+
+            $staged = @(Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter)
+            (Get-CallIndex $lab 'RestoreVm dc-primary-candidate baseline') | Should -BeLessThan (Get-CallIndex $lab 'ResetVm exchange-primary-candidate baseline')
+            (Get-CallIndex $lab 'RestoreVm exchange-primary-candidate baseline') | Should -Be -1
+            $lab.Vms['exchange-primary-candidate'].State | Should -Be 'Off'
+            $staged[3].action | Should -Be 'Staged'
+            $staged[3].detail | Should -BeLike '*off*'
+
+            $lab.Calls.Clear()
+            $rolled = @(Invoke-LabRebuildPhase -Phase Rollback -Plan $plan -Adapter $lab.Adapter)
+            (Get-CallIndex $lab 'RestoreVm dc-primary baseline') | Should -BeLessThan (Get-CallIndex $lab 'ResetVm exchange-primary baseline')
+            (Get-CallIndex $lab 'RestoreVm exchange-primary baseline') | Should -Be -1
+            $lab.Vms['exchange-primary'].State | Should -Be 'Off'
+            $lab.Vms['exchange-primary-candidate'].State | Should -Be 'Off'
+            $rolled[3].detail | Should -BeLike '*off*'
+        }
+
+        It 'promotes it with the domain controllers, keeping its role in its notes' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter)
+            $results = @(Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter)
+
+            $results[3].action | Should -Be 'Promoted'
+            $lab.Vms.ContainsKey('exchange-primary-prev') | Should -BeTrue
+            (ConvertFrom-LabVmNote -Notes $lab.Vms['exchange-primary'].Notes).Role | Should -Be 'ExchangeServer'
+        }
+
+        It 'refuses an adapter that cannot revert a VM and leave it off' {
+            $lab = Get-FakeLab
+            $lab.Adapter.Remove('ResetVm')
+            { Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw "*no 'ResetVm' operation*"
         }
     }
 

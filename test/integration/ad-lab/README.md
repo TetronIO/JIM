@@ -101,8 +101,8 @@ The hypervisor host needs, once:
 6. **Exchange Server media** for the Exchange organisation: the Exchange Server SE ISO (`ExchangeServerSE-x64.iso`,
    a free download from the Microsoft Download Center). The domain controllers' builds run Setup's preparation steps from
    it, and the Exchange servers install from the same media. No product key is used (an Exchange server runs
-   unlicensed, as a 180-day trial; once the monthly rebuild rebuilds the Exchange servers (#2412), it reinstalls them
-   well inside that period, and until then each must be rebuilt by hand within 180 days of its build), but Setup's licence
+   unlicensed, as a 180-day trial, which each successful monthly rebuild starts again; a server that no rebuild has
+   replaced for 180 days must be rebuilt by hand), but Setup's licence
    terms are accepted. The schema version the forests
    get is read from the media (`Setup\Data\SchemaVersion.ldf`), so newer media needs no code change. Microsoft requires
    a Windows Server 2025 schema master to have the November 2025 update (build 26100.7171) or later before Exchange
@@ -477,11 +477,10 @@ VMs already have twice as many vCPUs as the host has logical processors, so the 
 and the host's CPU use during `Install` and `Verify`, and longer run times are accepted until the host's CPU is
 upgraded.
 
+The [monthly rebuild](#monthly-rebuild) rebuilds it with its domain controller.
+
 **Not yet wired in** (#2412): the runner does not yet start the Exchange servers for Exchange scenarios, revert them
-with their domain controllers, or refuse to start them when the host's memory is short; and the
-[monthly rebuild](#monthly-rebuild) does not yet rebuild them. Until it does, a rebuild of `dc-primary` leaves
-`exchange-primary` joined to the forest it replaced, and the server has to be rebuilt by hand afterwards
-(`Remove-LabDomainController.ps1 -Name exchange-primary -Force`, then the build above).
+with their domain controllers, or refuse to start them when the host's memory is short.
 
 ## Checkpoint lifecycle
 
@@ -577,6 +576,21 @@ three domain controllers in every phase:
   controller candidate, and never resumes a part-built one.
 - **Stage, Promote and Rollback** handle it after `dc-primary`, so its domain controller is always up first.
 - The workflow reads the list of VMs from `Status`, so it builds whatever the host's settings define.
+
+**The Exchange server is rebuilt with them too** when `settings.json` lists it under `exchangeServers`. It comes last,
+after the AD FS server:
+- **Build** builds `exchange-primary-candidate` with `New-LabExchangeServer.ps1`, joined to `dc-primary-candidate`, from
+  the Exchange media in `directoryExtensions` (the media that candidate's forest was prepared with) and the
+  prerequisites in `exchangePrerequisiteDirectory`. That build retakes `dc-primary-candidate`'s baseline, so the server
+  and its recipients are in it. It takes about 65 minutes.
+- The same rules as the AD FS server apply: Build refuses to start before `dc-primary-candidate` exists, rebuilds an
+  Exchange candidate older than it, and never resumes a part-built one.
+- **A finished Exchange candidate is never rebuilt on its own** (`-Fresh`, or a leftover older than a day). The domain
+  controller candidate's baseline now holds its Exchange server object, and a new server of the same name cannot be
+  installed against it. Build refuses, and says to build `dc-primary` again first; the Exchange candidate is then older
+  than it, and is replaced.
+- **Stage and Rollback revert it to `baseline` and leave it off**, as the live server is at rest; the runner starts it
+  only for the scenarios that use Exchange. Promote renames it like the others.
 
 **The live domain controllers are off from `Build` until `Promote` or `Rollback`.** A candidate is built with the live
 one's own address, because the checkpoints carry it and it cannot be changed afterwards, and two running domain
