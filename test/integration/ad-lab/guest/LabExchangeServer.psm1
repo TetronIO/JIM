@@ -502,6 +502,52 @@ function Test-LabKerberosChallenge {
     return ($StatusCode -eq 401) -and (@($schemes | Where-Object { $_ -in 'Kerberos', 'Negotiate' }).Count -gt 0)
 }
 
+function Get-LabExchangeServerObjectQuery {
+    <#
+    .SYNOPSIS
+        Where to look in a forest for an Exchange server object of a given name: its configuration partition's
+        CN=Services, which holds the Exchange organisation and its servers.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ServerName,
+
+        [Parameter(Mandatory)]
+        [string]$ConfigurationNamingContext
+    )
+
+    if ($ServerName -notmatch '^[A-Za-z0-9][A-Za-z0-9-]{0,14}$') {
+        throw "'$ServerName' is not a computer name: letters, digits and hyphens, at most 15 characters."
+    }
+    return [pscustomobject]@{
+        SearchBase = "CN=Services,$ConfigurationNamingContext"
+        LDAPFilter = "(&(objectClass=msExchExchangeServer)(cn=$ServerName))"
+    }
+}
+
+function Get-LabExchangeFeatureGap {
+    <#
+    .SYNOPSIS
+        From one Get-WindowsFeature result, the wanted features Windows knows but has not installed (Missing), and
+        those it does not know at all (Unknown).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Wanted,
+
+        [AllowEmptyCollection()]
+        [object[]]$Feature = @()
+    )
+
+    $known = @($Feature | ForEach-Object { [string]$_.Name })
+    return [pscustomobject]@{
+        Missing = @($Feature | Where-Object { -not $_.Installed } | ForEach-Object { [string]$_.Name })
+        Unknown = @($Wanted | Where-Object { $_ -notin $known })
+    }
+}
+
 function Get-LabExchangeUserRemoval {
     <#
     .SYNOPSIS
@@ -541,6 +587,7 @@ Export-ModuleMember -Function @(
     'Get-LabExchangeWindowsFeature', 'Get-LabExchangePrerequisite', 'Test-LabExchangePrerequisiteInstalled',
     'Test-LabMicrosoftSignature', 'Get-LabExchangePageFileSize', 'Get-LabExchangeSetupInstallArgument',
     'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Test-LabExchangeDatabaseLayout',
-    'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge', 'Get-LabExchangeUserRemoval',
+    'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge', 'Get-LabExchangeServerObjectQuery',
+    'Get-LabExchangeFeatureGap', 'Get-LabExchangeUserRemoval',
     'ConvertTo-LabDispatchWaitNanosecond'
 )

@@ -412,19 +412,19 @@ function Install-Prerequisite {
 
 function Invoke-PrerequisitesPhase {
     $features = @(Get-LabExchangeWindowsFeature)
-    $missing = @(Get-WindowsFeature -Name $features | Where-Object { -not $_.Installed })
-    $unknown = @($features | Where-Object { $_ -notin @(Get-WindowsFeature -Name $features | ForEach-Object { $_.Name }) })
-    if ($unknown.Count -gt 0) {
-        throw ('Windows does not know these features Exchange needs: ' + ($unknown -join ', '))
+    $gap = Get-LabExchangeFeatureGap -Wanted $features -Feature @(Get-WindowsFeature -Name $features)
+    $missing = @($gap.Missing)
+    if (@($gap.Unknown).Count -gt 0) {
+        throw ('Windows does not know these features Exchange needs: ' + ($gap.Unknown -join ', '))
     }
     if ($missing.Count -gt 0) {
         Write-Step ("Installing {0} Windows features (several minutes)" -f $missing.Count)
-        $install = Install-WindowsFeature -Name ($missing | ForEach-Object { $_.Name })
+        $install = Install-WindowsFeature -Name $missing
         if (-not $install.Success) {
             throw 'Installing the Windows features Exchange needs did not succeed.'
         }
         if ([string]$install.RestartNeeded -eq 'Yes') { $script:RebootRequired = $true }
-        Set-Changed ('Installed {0} Windows features: {1}' -f $missing.Count, (($missing | ForEach-Object { $_.Name }) -join ', '))
+        Set-Changed ('Installed {0} Windows features: {1}' -f $missing.Count, ($missing -join ', '))
     }
 
     $media = $null

@@ -11,7 +11,8 @@
 # details, the recovery from a killed run, and why the live domain controllers are off while a candidate is built):
 #
 #   Prune     remove any previous set demoted a week or more ago (frees the disk first)
-#   Build     for each of dc-primary, dc-source, dc-target: build dc-<role>-candidate at the live one's address
+#   Build     for each of dc-primary, dc-source, dc-target, then each AD FS and Exchange server in the host's
+#             settings: build <name>-candidate at the live one's address
 #   Stage     stop the live set, start the candidates from their baseline checkpoints
 #   (suite)   the full integration suite and the connector probes, with JIM_AD_LAB_<ROLE>_VM pointed at the
 #             candidates for this run only; the nightly's configuration never changes
@@ -224,9 +225,11 @@ jobs:
           Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-stage.json') -Value $json
           (ConvertFrom-Json $json).roles | ForEach-Object { Write-Host ('{0,-8} {1,-8} {2}  [guest build {3}]' -f $_.role, $_.action, $_.detail, $_.guestBuild) }
 
-      # The suite, once, against the candidates: the same command as the nightly, with the four VM variables
-      # pointing at the candidates for this step only. The candidates have the live addresses, so JIM_AD_LAB_*_ADDRESS,
-      # the /etc/hosts entries on the runner and the domain controller and AD FS names in every certificate are unchanged.
+      # The suite, once, against the candidates: the same command as the nightly, with the VM variables pointing at
+      # the candidates for this step only. The candidates have the live addresses, so JIM_AD_LAB_*_ADDRESS, the
+      # /etc/hosts entries on the runner and the domain controller and AD FS names in every certificate are unchanged.
+      # JIM_AD_LAB_EXCHANGE_PRIMARY_VM is set ahead of the runner starting the Exchange server for its scenarios
+      # (#2412), so that it never starts the live server against a candidate domain controller.
       - name: Run the integration suite against the candidates
         id: suite
         env:
@@ -234,6 +237,7 @@ jobs:
           JIM_AD_LAB_SOURCE_VM: dc-source-candidate
           JIM_AD_LAB_TARGET_VM: dc-target-candidate
           JIM_AD_LAB_ADFS_PRIMARY_VM: adfs-primary-candidate
+          JIM_AD_LAB_EXCHANGE_PRIMARY_VM: exchange-primary-candidate
           JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
           JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
