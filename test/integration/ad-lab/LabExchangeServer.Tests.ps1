@@ -460,6 +460,18 @@ Describe 'Get-LabExchangeUserRemoval' {
     }
 }
 
+Describe 'Get-LabExchangeServerObjectQuery' {
+    It 'searches the configuration partition''s services for an Exchange server object of that name' {
+        $query = Get-LabExchangeServerObjectQuery -ServerName 'ex1' -ConfigurationNamingContext 'CN=Configuration,DC=panoply,DC=local'
+        $query.SearchBase | Should -Be 'CN=Services,CN=Configuration,DC=panoply,DC=local'
+        $query.LDAPFilter | Should -Be '(&(objectClass=msExchExchangeServer)(cn=ex1))'
+    }
+
+    It 'refuses a name that is not a computer name, so nothing can be added to the filter' {
+        { Get-LabExchangeServerObjectQuery -ServerName 'ex1)(cn=*' -ConfigurationNamingContext 'CN=Configuration,DC=panoply,DC=local' } | Should -Throw '*computer name*'
+    }
+}
+
 Describe 'Get-LabExchangeFeatureGap' {
     BeforeAll {
         function Get-TestFeature {

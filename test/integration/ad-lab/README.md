@@ -440,10 +440,14 @@ Nothing about JIM is configured here, beyond `svc-jim`'s role group: #2021 sets 
 and every recipient in the directory, and the mailboxes on the server, so reverting one without the other would leave
 mailboxes whose users no longer exist:
 
-- Building a new Exchange server first reverts its domain controller to `baseline`. When the server is built, the script
-  shuts it down and takes `baseline` of both, the server first, so nothing Exchange writes to the directory after its
-  own checkpoint is in the domain controller's. It then removes the domain controller's `populated-*` checkpoints (the
-  runner takes them again).
+- Building a new Exchange server first reverts its domain controller to `baseline`. If that baseline already holds an
+  Exchange server object of the same name, from an earlier build, it stops there: Setup cannot install a new server
+  over it, so the domain controller is rebuilt first.
+- When the server is built, the script shuts it down (turning it off if the guest has not stopped within 10 minutes)
+  and takes `baseline` of both, the server first, so nothing Exchange writes to the directory after its own checkpoint
+  is in the domain controller's. If the domain controller's checkpoint fails, the server's new one is removed, so no
+  half-matched pair is left. It then removes the domain controller's `populated-*` checkpoints (the runner takes them
+  again).
 - The two are reverted together, each to its own baseline, before any scenario that creates or changes recipients in
   that forest. LDAP scenarios that never touch Exchange leave the Exchange server off and are unaffected by it.
 - It never changes its machine account password (`DisablePasswordChange=1`), for the same reason as the AD FS server.
@@ -593,6 +597,9 @@ after the AD FS server:
   than it, and is replaced.
 - **Stage and Rollback revert it to `baseline` and leave it off**, as the live server is at rest; the runner starts it
   only for the scenarios that use Exchange. Promote renames it like the others.
+- **Stage and Promote refuse a mismatched pair** before touching anything: an AD FS or Exchange candidate built before
+  its domain controller candidate (when that domain controller was built again but the server was not) is reported,
+  and has to be built again first.
 
 **The live domain controllers are off from `Build` until `Promote` or `Rollback`.** A candidate is built with the live
 one's own address, because the checkpoints carry it and it cannot be changed afterwards, and two running domain

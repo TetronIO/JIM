@@ -254,19 +254,8 @@ function Get-RebuildAdapter {
                 return
             }
             Write-RebuildLog "Shutting down $Name."
-            try {
-                Stop-VM -Name $Name -Force -ErrorAction Stop
-            }
-            catch {
-                Write-RebuildLog "A graceful shutdown of $Name failed: $($_.Exception.Message)"
-            }
-            $deadline = (Get-Date).AddSeconds(300)
-            while (((Get-VM -Name $Name).State -ne 'Off') -and ((Get-Date) -lt $deadline)) {
-                Start-Sleep -Seconds 3
-            }
-            if ((Get-VM -Name $Name).State -ne 'Off') {
-                Write-RebuildLog "$Name did not shut down in 5 minutes; turning it off."
-                Stop-VM -Name $Name -TurnOff -Force
+            if ((Stop-LabVm -Name $Name -TimeoutSeconds 300) -eq 'TurnedOff') {
+                Write-RebuildLog "$Name did not shut down in 5 minutes, or its shutdown failed; turned it off."
             }
         }
 

@@ -401,8 +401,21 @@ try {
         $snapshot = Get-VMSnapshot -VMName $DomainControllerName -Name (Get-LabCheckpointName -Baseline) | Sort-Object -Property CreationTime -Descending | Select-Object -First 1
         Restore-VMSnapshot -VMSnapshot $snapshot -Confirm:$false
         if ((Get-VM -Name $DomainControllerName).State -ne 'Running') { Start-VM -Name $DomainControllerName }
-        $null = Wait-DomainController
+        $dcCredential = Wait-DomainController
         Write-Ok "$DomainControllerName is back at its baseline and its directory answers"
+
+        # A baseline taken after an earlier server of this name was built holds its Exchange server object, and Setup
+        # cannot install a new one over it. Found now, that costs a minute, not the hour before Setup would fail.
+        # Each lab forest has one domain, so its configuration partition is named after that domain.
+        $query = Get-LabExchangeServerObjectQuery -ServerName $info.ComputerName -ConfigurationNamingContext "CN=Configuration,$($info.DomainDn)"
+        $existing = @(Invoke-Command -VMName $DomainControllerName -Credential $dcCredential -ArgumentList $query.SearchBase, $query.LDAPFilter -ScriptBlock {
+                param($SearchBase, $LdapFilter)
+                Import-Module ActiveDirectory -ErrorAction Stop -WarningAction SilentlyContinue
+                Get-ADObject -SearchBase $SearchBase -SearchScope Subtree -LDAPFilter $LdapFilter | ForEach-Object { [string]$_.DistinguishedName }
+            })
+        if ($existing.Count -gt 0) {
+            throw "$DomainControllerName's baseline already holds the Exchange server object $($existing[0]), from an earlier build of $($info.ComputerName). Setup cannot install a new server of that name over it: rebuild $DomainControllerName first, then $Name."
+        }
     }
     elseif ((Get-VM -Name $DomainControllerName).State -ne 'Running') {
         Start-VM -Name $DomainControllerName
@@ -512,10 +525,23 @@ try {
         Write-Heading "Taking the baseline checkpoints of $Name and $DomainControllerName"
         # Exchange writes to the directory while it runs, so it is shut down before either checkpoint: nothing it
         # writes after its own checkpoint can then reach the domain controller's, and the two stay a matching pair.
-        Stop-VM -Name $Name -Force
-        Write-Ok "Shut $Name down, so the pair of checkpoints matches"
+        $stopped = Stop-LabVm -Name $Name -TimeoutSeconds 600
+        if ($stopped -eq 'TurnedOff') {
+            Write-Host "  $Name did not shut down in 10 minutes; turned it off (its checkpoint is crash-consistent)" -ForegroundColor Yellow
+        }
+        else {
+            Write-Ok "Shut $Name down, so the pair of checkpoints matches"
+        }
         Invoke-Checkpoint -VmName $Name
-        Invoke-Checkpoint -VmName $DomainControllerName
+        # All or nothing: an Exchange baseline whose domain controller baseline lacks it would be reused as a pair on a
+        # retry, so if the second checkpoint fails the first is removed and the retry builds the server again.
+        try {
+            Invoke-Checkpoint -VmName $DomainControllerName
+        }
+        catch {
+            Get-VMSnapshot -VMName $Name -Name (Get-LabCheckpointName -Baseline) -ErrorAction SilentlyContinue | Remove-VMSnapshot -Confirm:$false
+            throw "The baseline of $DomainControllerName failed, so $Name's new baseline was removed and no mismatched pair is left: $($_.Exception.Message)"
+        }
 
         # Taken from the old baseline, so they lack the server's objects. The runner takes them again on its next run.
         foreach ($stale in @(Get-VMSnapshot -VMName $DomainControllerName | Where-Object { $_.Name -like 'populated-*' })) {
@@ -530,8 +556,8 @@ try {
             Write-Ok "Started $Name again, as -LeaveRunning asks"
         }
     }
-    elseif ((Get-VM -Name $Name).State -ne 'Off') {
-        Stop-VM -Name $Name -Force
+    else {
+        $null = Stop-LabVm -Name $Name -TimeoutSeconds 600
     }
     if (-not $LeaveRunning) {
         Write-Ok "$Name is off; the lab starts it only for the scenarios that use Exchange"

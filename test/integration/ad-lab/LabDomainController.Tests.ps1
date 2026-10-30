@@ -952,6 +952,58 @@ Describe 'VM notes' {
     }
 }
 
+Describe 'Stop-LabVm' {
+    BeforeAll {
+        # Hyper-V is only on Windows; stand-ins with the same parameters let the calls be mocked anywhere.
+        if (-not (Get-Command Get-VM -ErrorAction SilentlyContinue)) {
+            function global:Get-VM {
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'A stand-in for the Hyper-V cmdlet, to be mocked.')]
+                param([string]$Name)
+            }
+        }
+        if (-not (Get-Command Stop-VM -ErrorAction SilentlyContinue)) {
+            function global:Stop-VM {
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'A stand-in for the Hyper-V cmdlet, to be mocked.')]
+                param([string]$Name, [switch]$Force, [switch]$TurnOff, [switch]$AsJob)
+            }
+        }
+        Mock -ModuleName LabDomainController Start-Sleep {}
+    }
+
+    It 'leaves a VM that is already off alone' {
+        Mock -ModuleName LabDomainController Get-VM { [pscustomobject]@{ State = 'Off' } }
+        Mock -ModuleName LabDomainController Stop-VM {}
+        Stop-LabVm -Name 'exchange-primary' | Should -Be 'AlreadyOff'
+        Should -Invoke -ModuleName LabDomainController Stop-VM -Times 0 -Exactly
+    }
+
+    It 'shuts the VM down through its guest when it stops in time' {
+        $script:polls = 0
+        Mock -ModuleName LabDomainController Get-VM { $script:polls++; [pscustomobject]@{ State = $(if ($script:polls -ge 3) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { } }
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 60 | Should -Be 'ShutDown'
+        Should -Invoke -ModuleName LabDomainController Stop-VM -Times 0 -Exactly -ParameterFilter { $TurnOff }
+    }
+
+    It 'turns the VM off when its guest has not shut down in time, so a hung shutdown cannot hold the caller' {
+        $script:turnedOff = $false
+        Mock -ModuleName LabDomainController Get-VM { [pscustomobject]@{ State = $(if ($script:turnedOff) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { $script:turnedOff = $true } -ParameterFilter { $TurnOff }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { Start-Sleep -Seconds 30 } } -ParameterFilter { $AsJob }
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 30 | Should -Be 'TurnedOff'
+        Should -Invoke -ModuleName LabDomainController Stop-VM -Times 1 -Exactly -ParameterFilter { $TurnOff }
+    }
+
+    It 'turns the VM off without waiting out the timeout when the shutdown itself fails' {
+        $script:turnedOff = $false
+        Mock -ModuleName LabDomainController Get-VM { [pscustomobject]@{ State = $(if ($script:turnedOff) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { $script:turnedOff = $true } -ParameterFilter { $TurnOff }
+        Mock -ModuleName LabDomainController Stop-VM { $job = Start-Job -ScriptBlock { throw 'The shutdown integration service did not answer.' }; $null = Wait-Job -Job $job; $job } -ParameterFilter { $AsJob }
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 3600 | Should -Be 'TurnedOff'
+        Should -Invoke -ModuleName LabDomainController Start-Sleep -Times 0 -Exactly -Scope It
+    }
+}
+
 Describe 'Invoke-LabGuestPhase' {
     BeforeAll {
         Mock -ModuleName LabDomainController Assert-LabWindows {}
@@ -2205,6 +2257,19 @@ Describe 'Invoke-LabRebuildPhase' {
             $lab.Vms['adfs-primary-candidate'].State | Should -Be 'Off'
         }
 
+        It 'refuses to stage an AD FS candidate older than its domain controller candidate, whose directory lacks its accounts' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithFederation
+            $plan = Get-FakePlan -WithFederation
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Now = $lab.Now.AddHours(2)
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter -Role 'dc-primary' -Fresh)
+            $lab.Calls.Clear()
+
+            { Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*adfs-primary-candidate*dc-primary-candidate*'
+            @($lab.Calls | Where-Object { $_ -like 'RestoreVm*' }).Count | Should -Be 0
+        }
+
         It 'promotes it with the domain controllers, keeping its role in its notes' {
             $lab = Get-FakeLab
             Add-FakeLiveSet $lab -WithFederation
@@ -2294,6 +2359,23 @@ Describe 'Invoke-LabRebuildPhase' {
             $results[3].action | Should -Be 'Promoted'
             $lab.Vms.ContainsKey('exchange-primary-prev') | Should -BeTrue
             (ConvertFrom-LabVmNote -Notes $lab.Vms['exchange-primary'].Notes).Role | Should -Be 'ExchangeServer'
+        }
+
+        It 'refuses to stage or promote an Exchange candidate older than its domain controller candidate, touching nothing' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            # As the Refuse message advises, dc-primary is built again; the Exchange step is then skipped.
+            $lab.Now = $lab.Now.AddHours(2)
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter -Role 'dc-primary' -Fresh)
+            $lab.Calls.Clear()
+
+            { Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*exchange-primary-candidate*dc-primary-candidate*'
+            @($lab.Calls | Where-Object { $_ -like 'RestoreVm*' -or $_ -like 'ResetVm*' -or $_ -like 'StopVm*' }).Count | Should -Be 0
+
+            { Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*exchange-primary-candidate*dc-primary-candidate*'
+            @($lab.Calls | Where-Object { $_ -like 'RenameVm*' -or $_ -like 'RemoveVm*' }).Count | Should -Be 0
         }
 
         It 'refuses an adapter that cannot revert a VM and leave it off' {

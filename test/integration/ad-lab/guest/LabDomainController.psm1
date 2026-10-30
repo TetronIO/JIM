@@ -2031,6 +2031,56 @@ function Get-LabNewestCumulativeUpdate {
             Select-Object -First 1)
 }
 
+function Test-LabRebuildBuiltAfter {
+    # Internal: whether a dependent candidate (an AD FS or Exchange server) was built after the domain controller
+    # candidate it joins. Only then does that domain controller's directory hold its accounts and objects.
+    param(
+        [Parameter(Mandatory)]
+        [datetime]$CreatedUtc,
+
+        [Parameter(Mandatory)]
+        [datetime]$DependencyCreatedUtc
+    )
+
+    return ($CreatedUtc.ToUniversalTime() -ge $DependencyCreatedUtc.ToUniversalTime())
+}
+
+function Assert-LabRebuildPairCurrent {
+    # Internal: before Stage or Promote touches anything, refuse a dependent candidate built before its domain
+    # controller candidate. That domain controller's directory lacks its accounts and objects, so the pair would not
+    # match. Promote also accepts the domain controller already renamed to its live name by an interrupted promotion.
+    param(
+        [Parameter(Mandatory)]
+        [object]$Role,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Adapter,
+
+        [Parameter(Mandatory)]
+        [string]$Phase
+    )
+
+    if ([string]::IsNullOrEmpty($Role.DependsOn)) {
+        return
+    }
+    $candidate = & $Adapter.GetVm $Role.CandidateName
+    if ($null -eq $candidate) {
+        return
+    }
+    $dependencyName = Get-LabRebuildVmName -LiveName $Role.DependsOn -Kind Candidate
+    $dependency = & $Adapter.GetVm $dependencyName
+    if (($null -eq $dependency) -and ($Phase -eq 'Promote')) {
+        $dependencyName = $Role.DependsOn
+        $dependency = & $Adapter.GetVm $dependencyName
+    }
+    if ($null -eq $dependency) {
+        throw "'$($Role.CandidateName)' joins '$dependencyName', which does not exist; build $($Role.DependsOn) and then $($Role.LiveName) first."
+    }
+    if (-not (Test-LabRebuildBuiltAfter -CreatedUtc ([datetime]$candidate.CreatedUtc) -DependencyCreatedUtc ([datetime]$dependency.CreatedUtc))) {
+        throw "'$($Role.CandidateName)' was built before '$dependencyName', whose directory therefore does not hold its accounts and objects; build $($Role.LiveName) again (Build -Role $($Role.LiveName)) before $($Phase.ToLowerInvariant())."
+    }
+}
+
 function Get-LabRebuildBuildAction {
     <#
     .SYNOPSIS
@@ -2086,7 +2136,7 @@ function Get-LabRebuildBuildAction {
     if (-not $CandidateExists) {
         return 'Build'
     }
-    $builtAfterDependency = ($null -ne $DependencyCreatedUtc) -and ($CandidateCreatedUtc.ToUniversalTime() -ge ([datetime]$DependencyCreatedUtc).ToUniversalTime())
+    $builtAfterDependency = ($null -ne $DependencyCreatedUtc) -and (Test-LabRebuildBuiltAfter -CreatedUtc $CandidateCreatedUtc -DependencyCreatedUtc ([datetime]$DependencyCreatedUtc))
     $age = $NowUtc.ToUniversalTime() - $CandidateCreatedUtc.ToUniversalTime()
     if ($Fresh -or ($age.TotalHours -gt $MaxAgeHours)) {
         if ($DirectoryHoldsServer -and $CandidateHasBaseline -and $builtAfterDependency) {
@@ -2929,6 +2979,19 @@ function Invoke-LabRebuildPhase {
         $roles = @($roles | Where-Object { $wanted -contains $_.LiveName })
     }
 
+    if ($Phase -in 'Stage', 'Promote') {
+        # A member server staged or promoted with a domain controller built after it would be a mismatched pair, so
+        # every pair is checked before anything is stopped, started or renamed.
+        foreach ($item in $roles) {
+            try {
+                Assert-LabRebuildPairCurrent -Role $item -Adapter $Adapter -Phase $Phase
+            }
+            catch {
+                throw "$Phase failed for $($item.LiveName) before anything was changed: $($_.Exception.Message)"
+            }
+        }
+    }
+
     if ($Phase -eq 'Promote') {
         # Check every domain controller before renaming any of them: a promotion that stopped after the first would
         # leave the three forests on different builds.
@@ -3250,6 +3313,55 @@ function Complete-LabUnattendedInstall {
 # ---------------------------------------------------------------------------------------------
 # Windows only: talking to a guest through PowerShell Direct (host)
 # ---------------------------------------------------------------------------------------------
+
+function Stop-LabVm {
+    <#
+    .SYNOPSIS
+        Shuts a VM down through its guest, and turns it off if it has not stopped within -TimeoutSeconds or the
+        shutdown fails. Returns AlreadyOff, ShutDown or TurnedOff.
+
+    .DESCRIPTION
+        The guest shutdown runs as a job, so a guest that never answers cannot hold the caller. A VM turned off
+        still gives a crash-consistent production checkpoint, which is enough for a lab baseline.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [ValidateRange(3, 3600)]
+        [int]$TimeoutSeconds = 300
+    )
+
+    if ([string](Get-VM -Name $Name).State -eq 'Off') {
+        return 'AlreadyOff'
+    }
+    if (-not $PSCmdlet.ShouldProcess($Name, 'Shut down, turning off if it does not stop in time')) {
+        return $null
+    }
+    $job = Stop-VM -Name $Name -Force -AsJob
+    try {
+        $intervalSeconds = 3
+        for ($waited = 0; $waited -lt $TimeoutSeconds; $waited += $intervalSeconds) {
+            if ([string](Get-VM -Name $Name).State -eq 'Off') {
+                return 'ShutDown'
+            }
+            if ([string]$job.State -eq 'Failed') {
+                break
+            }
+            Start-Sleep -Seconds $intervalSeconds
+        }
+        if ([string](Get-VM -Name $Name).State -eq 'Off') {
+            return 'ShutDown'
+        }
+        Stop-VM -Name $Name -TurnOff -Force
+        return 'TurnedOff'
+    }
+    finally {
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+    }
+}
 
 function Wait-LabGuestReady {
     <#
@@ -4073,7 +4185,7 @@ Export-ModuleMember -Function @(
     'Get-LabExchangeSchemaTarget', 'Get-LabExchangePreparationStep', 'Test-LabExchangeSchemaMasterBuild', 'Get-LabExchangeSetupArgument', 'Resolve-LabInstallImage',
     'Get-LabGuestPhaseArgument', 'ConvertTo-LabArgumentString', 'ConvertTo-LabOsBuild',
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
-    'New-LabIsoImage', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
+    'New-LabIsoImage', 'Stop-LabVm', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
     'Get-LabGuestOsBuild', 'Wait-LabTcpPort', 'Send-LabKeyPress',
     'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
