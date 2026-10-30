@@ -948,8 +948,9 @@ jobs:
   # The release's screenshots on junctional.io and tetron.io (#582). pre-release.yml's jim-screenshots job captured them
   # and opened a pull request on each site; merging them here means the sites change the moment the release is
   # published, and never before. That job may still be capturing: a site with no pull request yet is left to it, since
-  # it merges its own pull requests when it finds the release already out. Non-fatal, like notify-site: the release
-  # is published by now, so a pull request that cannot be merged is a warning naming why, not a failed release.
+  # it merges its own pull requests when it finds the release already out. A pull request that cannot be merged fails
+  # this job, naming why: the release is published by now, so a red job holds nothing back, and a green one with a
+  # warning is how v0.17.0's screenshots went unnoticed.
   publish-screenshots:
     name: Publish screenshots
     runs-on: self-hosted
@@ -980,7 +981,6 @@ jobs:
             tetron.io
 
       - name: Merge the screenshot pull requests
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION_TAG: ${{ github.ref_name }}

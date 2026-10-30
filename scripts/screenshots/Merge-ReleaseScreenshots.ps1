@@ -14,8 +14,9 @@
     That job can still be capturing when the release is published. A site with no pull request yet is reported as a
     notice, not a failure: the job merges the pull request itself when it opens it and finds the release out.
 
-    A pull request that cannot be merged is reported as a warning naming the reason, and the script exits 1; the
-    workflow step carries on regardless, since the release is already published.
+    A pull request that cannot be merged is reported as an error naming the reason, after every site has been tried,
+    and the script exits 1, so the job fails. The release is already published by then; the red job is what says a
+    site did not change.
 
     The token comes from the GH_TOKEN environment variable, never a parameter, so it cannot reach a log. It needs
     Contents and Pull requests write access to every repository named.
@@ -63,7 +64,7 @@ $summary = foreach ($result in $results) {
         }
         default {
             $text = "$($result.Message) JIM $Version is published regardless; merge the pull request once it can be, or re-run this job."
-            Write-Host "::warning title=Screenshots not published to $($result.Repository)::$(ConvertTo-AnnotationText $text)"
+            Write-Host "::error title=Screenshots not published to $($result.Repository)::$(ConvertTo-AnnotationText $text)"
             "- **$($result.Repository):** not merged. $text"
         }
     }

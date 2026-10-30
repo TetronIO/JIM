@@ -65,6 +65,15 @@ Describe 'publishing the screenshots in release.yml' {
     # v0.17.0's step ran the script with pwsh -File, which hands each argument over as a string, so the two sites never
     # became a list and the script stopped before merging either pull request (#582). The step's own run block is run
     # here as Actions runs it, against a stand-in script that records what it was given.
+    # A merge that failed was a green job with an annotation, which is how v0.17.0's went unnoticed. The release is
+    # published by then, so a red job holds nothing back and says the sites did not change.
+    It 'fails the job when the screenshots are not published' {
+        $step = [regex]::Match((Get-WorkflowJob 'publish-screenshots'),
+            '(?ms)^      - name: Merge the screenshot pull requests\s*$.*?(?=^      - name:|\z)').Value
+        $step | Should -Not -BeNullOrEmpty
+        $step | Should -Not -Match 'continue-on-error'
+    }
+
     It 'hands the merge script both sites and the release tag' {
         $step = [regex]::Match((Get-WorkflowJob 'publish-screenshots'),
             '(?ms)^      - name: Merge the screenshot pull requests\s*$.*?^        run: \|\s*$\n(?<run>(?:^          .*\n?)+)').Groups['run'].Value
