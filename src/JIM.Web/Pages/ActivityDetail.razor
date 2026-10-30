@@ -750,8 +750,8 @@
                     }
 
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-warning); min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary" title="Connected System Objects Disconnected">CSOs Disconnected</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnections.ToString("N0")</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary" title="@GetDisconnectedTileTitle(_activityRunProfileExecutionStats)">CSOs Disconnected</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnectionsIncludingOutOfScope.ToString("N0")</MudText>
                     </MudPaper>
 
                     @* CSOs Deleted - CSOs finalised as deleted during sync *@
@@ -1680,6 +1680,18 @@
     }
 
     /// <summary>
+    /// The hover text for the "CSOs Disconnected" tile. The tile counts disconnections caused by an object leaving an
+    /// import Synchronisation Rule's scope as well as those caused by its removal from the source system, so when
+    /// scope exits contribute, the text says how many.
+    /// </summary>
+    private static string GetDisconnectedTileTitle(ActivityRunProfileExecutionStats stats)
+    {
+        return stats.TotalDisconnectedOutOfScope > 0
+            ? $"Connected System Objects Disconnected, including {stats.TotalDisconnectedOutOfScope:N0} that left an import Synchronisation Rule's scope"
+            : "Connected System Objects Disconnected";
+    }
+
+    /// <summary>
     /// Returns the outcome types that have at least one occurrence in this activity, with their counts.
     /// Derived from the stats model. Ordered logically: Import → Sync → Export.
     /// </summary>
@@ -1708,7 +1720,7 @@
         // Generated Value Forms (#2023): values held back for an input a value built from them needs, so the run's
         // warning has a chip listing the objects it means.
         if (s.TotalGeneratedValuesWaiting > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, s.TotalGeneratedValuesWaiting);
-        if (s.TotalDisconnections > 0 || s.TotalDisconnectedOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnections + s.TotalDisconnectedOutOfScope);
+        if (s.TotalDisconnectionsIncludingOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnectionsIncludingOutOfScope);
         // Retained joins (#1649): counted from the items' change type, which the filter also matches, so the chip
         // finds items recorded before the outcome type existed as well as those recorded since.
         if (s.TotalOutOfScopeRetainJoin > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, s.TotalOutOfScopeRetainJoin);
@@ -1786,7 +1798,7 @@
                 (_activityRunProfileExecutionStats.TotalProjections > 0 ||
                  _activityRunProfileExecutionStats.TotalJoins > 0 ||
                  _activityRunProfileExecutionStats.TotalAttributeFlows > 0 ||
-                 _activityRunProfileExecutionStats.TotalDisconnections > 0 ||
+                 _activityRunProfileExecutionStats.TotalDisconnectionsIncludingOutOfScope > 0 ||
                  _activityRunProfileExecutionStats.TotalGeneratedValues > 0))
                 return true;
         }
