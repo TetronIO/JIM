@@ -497,6 +497,11 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
+    /// <inheritdoc />
+    /// <remarks>The store holds one instance per object, so this is <see cref="GetConnectedSystemObjectAsync"/>.</remarks>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId)
+        => GetConnectedSystemObjectAsync(connectedSystemId, csoId);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
         int connectedSystemId, int attributeId, int attributeValue)
     {
@@ -2753,6 +2758,11 @@ public class SyncRepository : ISyncRepository
         // No-op — no EF change tracker in memory
     }
 
+    public void ClearChangeTrackerRetaining(params object[] retained)
+    {
+        // No-op: no EF change tracker in memory
+    }
+
     public int GetChangeTrackerEntityCount() => 0; // No EF change tracker in memory
 
     public void DetachSchemaEntitiesFromTracker()
@@ -3594,6 +3604,11 @@ public class SyncRepository : ISyncRepository
 
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);
+
+    /// <inheritdoc />
+    /// <remarks>The store has no change tracker or transaction to keep a walk away from, so the scope is over this
+    /// repository and owns nothing.</remarks>
+    public ISyncRepositoryScope OpenIsolatedScope() => new SyncRepositoryScope(this);
 
     #region Password Synchronisation queue (#1119)
 

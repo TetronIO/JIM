@@ -187,14 +187,17 @@ public partial class SyncEngine
 
     /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
-    /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
-    /// CSO from the object's collection: no connectors remaining is the collection being empty. Only a Projected
-    /// object whose Type's Deletion Rule is WhenLastConnectorDisconnected qualifies; an Internal object, or one
-    /// with no Type loaded, is never marked.
+    /// LastConnectorDisconnectedDate, starting the deletion grace period. Only a Projected object whose Type's
+    /// Deletion Rule is WhenLastConnectorDisconnected qualifies; an Internal object, or one with no Type loaded, is
+    /// never marked. The caller supplies how many connectors remain, counted from what is joined to the object, never
+    /// from its in-memory <c>ConnectedSystemObjects</c>, which holds only the connectors the run happened to load
+    /// alongside it (#2598).
     /// </summary>
     /// <param name="mvo">The Metaverse Object the CSO was just disconnected from.</param>
-    public bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo) =>
-        mvo.ConnectedSystemObjects.Count == 0 &&
+    /// <param name="remainingConnectorCount">How many Connected System Objects are still joined to it once the
+    /// disconnect is written.</param>
+    public bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo, int remainingConnectorCount) =>
+        remainingConnectorCount == 0 &&
         mvo.Origin == MetaverseObjectOrigin.Projected &&
         mvo.Type?.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
 }

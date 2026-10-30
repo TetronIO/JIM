@@ -108,7 +108,7 @@ public class ContributorReElectionSurvivorIsolationTests
 
         var syncRepository = new Mock<ISyncRepository>();
         syncRepository.Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvoId)).ReturnsAsync([leaver, survivor]);
-        syncRepository.Setup(r => r.GetConnectedSystemObjectAsync(HrSystemId, survivor.Id)).ReturnsAsync(hydrated);
+        syncRepository.Setup(r => r.GetConnectedSystemObjectWithAttributeValuesAsync(HrSystemId, survivor.Id)).ReturnsAsync(hydrated);
 
         return new Scenario(storedMvo, workingMvo, recalled, leaver, survivor, [hr, ad], syncRepository);
     }

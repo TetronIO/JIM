@@ -34,6 +34,24 @@ public class ReadOnlySyncRepositoryGuardTests
     }
 
     [Test]
+    public void OpenIsolatedScope_RepositoryOfTheScope_RefusesWritesAndDisposesTheInnerScope()
+    {
+        // A preview walk moves onto the isolated scope (#2598); the guarantee must move with it.
+        var isolatedInner = new Mock<ISyncRepository>();
+        var innerScope = new Mock<ISyncRepositoryScope>();
+        innerScope.Setup(s => s.Repository).Returns(isolatedInner.Object);
+        _inner.Setup(r => r.OpenIsolatedScope()).Returns(innerScope.Object);
+
+        using (var scope = _guard.OpenIsolatedScope())
+        {
+            Assert.That(() => scope.Repository.CreatePendingExportAsync(new PendingExport()),
+                Throws.InstanceOf<PreviewWriteAttemptedException>());
+        }
+
+        innerScope.Verify(s => s.Dispose(), Times.Once);
+    }
+
+    [Test]
     public void CreatePendingExportAsync_IsAWrite_Throws()
     {
         Assert.That(() => _guard.CreatePendingExportAsync(new PendingExport()),

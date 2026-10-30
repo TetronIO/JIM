@@ -10,6 +10,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Serilog;
 
 namespace JIM.PostgresData.Repositories;
@@ -84,6 +85,24 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
+
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId)
+    {
+        // AsTracking required: the Include path CSO -> AttributeValues -> ReferenceValue(CSO) is a self-referencing
+        // cycle EF Core forbids in a no-tracking query. The Metaverse Object is deliberately not included (#2598): a
+        // tracked copy of a page's untracked Metaverse Object would let EF's fix-up repoint the page's Connected
+        // System Objects at it.
+        return _context.ConnectedSystemObjects
+            .AsTracking()
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(cso => cso!.Type)
+            .SingleOrDefaultAsync(x => x.ConnectedSystemId == connectedSystemId && x.Id == csoId);
+    }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, int attributeValue)
         => _repo.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
@@ -213,8 +232,14 @@ public partial class SyncRepository : ISyncRepository
         int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive)
         => _repo.Metaverse.CountMetaverseObjectsByMatchValuesAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive);
 
-    public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
-        => _repo.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
+    public async Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
+    {
+        // Untracked, through the page load's own reader (#2598): a tracked load would create second instances of any
+        // page Metaverse Object the match references, and EF's fix-up could repoint the page's Connected System
+        // Objects at those partial copies.
+        var loaded = await MetaverseObjectRawReader.ReadAsync(_context, [metaverseObjectId]);
+        return loaded.GetValueOrDefault(metaverseObjectId);
+    }
 
     public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
         int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)
@@ -529,6 +554,16 @@ public partial class SyncRepository : ISyncRepository
     public void ClearChangeTracker()
         => _repo.ClearChangeTracker();
 
+    public void ClearChangeTrackerRetaining(params object[] retained)
+    {
+        _repo.ClearChangeTracker();
+
+        // Entry().State attaches the one entity and traverses nothing, so none of a retained entity's navigations comes
+        // back with it.
+        foreach (var entity in retained)
+            _context.Entry(entity).State = EntityState.Unchanged;
+    }
+
     public int GetChangeTrackerEntityCount()
     {
         // Use AutoDetectChangesEnabled=false to prevent Entries() from triggering DetectChanges(),
@@ -741,6 +776,18 @@ public partial class SyncRepository : ISyncRepository
 
         var transaction = await _context.Database.BeginTransactionAsync();
         return new RollbackOnlyTransactionScope(transaction);
+    }
+
+    /// <inheritdoc />
+    public ISyncRepositoryScope OpenIsolatedScope()
+    {
+        // The context's own options, so the isolated context reaches the same database (or in-memory store) with the
+        // same tracking behaviour and configuration.
+        if (_context.GetService<IDbContextOptions>() is not DbContextOptions<JimDbContext> options)
+            throw new InvalidOperationException("OpenIsolatedScope: the context's own options are needed to open a context over the same database.");
+
+        var repository = new PostgresDataRepository(new JimDbContext(options));
+        return new SyncRepositoryScope(repository.Sync, repository);
     }
 
     /// <inheritdoc />

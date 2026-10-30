@@ -132,6 +132,13 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId);
 
     /// <summary>
+    /// Gets a single CSO by ID with its type and full attribute values, without its Metaverse Object (#2598).
+    /// For synchronisation-path hydration during a page: the page holds its Metaverse Objects untracked, and a load
+    /// that brought a tracked copy of one would let relationship fix-up repoint the page's objects at it.
+    /// </summary>
+    Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId);
+
+    /// <summary>
     /// Gets a CSO by its external ID attribute value (int type).
     /// Used during import to match incoming objects to existing CSOs.
     /// </summary>
@@ -1443,6 +1450,14 @@ public interface ISyncRepository
     void ClearChangeTracker();
 
     /// <summary>
+    /// Clears the change tracker, then tracks <paramref name="retained"/> again as unchanged, each on its own, without
+    /// the graphs hanging off them (#2598). For a run that must drop what a pass loaded but keeps saving its own task
+    /// and Activity: cleared with everything else, a later load that reached either would track a second instance of it,
+    /// and saving the run's own instance would then collide. In the in-memory test implementation, this is a no-op.
+    /// </summary>
+    void ClearChangeTrackerRetaining(params object[] retained);
+
+    /// <summary>
     /// Returns the number of entities currently tracked by the change tracker.
     /// Used for diagnostics to detect entity accumulation across pages.
     /// </summary>
@@ -1831,6 +1846,16 @@ public interface ISyncRepository
     /// still apply there.
     /// </summary>
     Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
+
+    /// <summary>
+    /// Opens a repository on its own database context over the same database, for a read-only walk that must leave
+    /// this repository's change tracker and transaction untouched (#2598): a preview evaluating a whole system page by
+    /// page while its caller saves progress on this repository. A synchronisation page holds its Metaverse Objects
+    /// untracked under tracked Connected System Objects, which is safe only while nothing saves on that context with
+    /// change detection on; a walk on its own context never meets its caller's saves. Disposing the scope disposes
+    /// the context. Repositories with no context of their own (in memory) return a scope over themselves.
+    /// </summary>
+    ISyncRepositoryScope OpenIsolatedScope();
 
     /// <summary>
     /// Begins a database transaction that the writes made through this repository join until it is committed or

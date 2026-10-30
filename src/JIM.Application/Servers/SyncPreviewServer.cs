@@ -444,7 +444,8 @@ public class SyncPreviewServer
     /// <param name="connectedSystemId">The Connected System to preview.</param>
     /// <param name="options">Optional bounds; by default none, and the whole population is evaluated.</param>
     /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
-    /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    /// <see cref="PreviewSyncForMvoAsync"/>. When omitted, the walk opens an isolated scope over the ambient repository
+    /// rather than using it directly.</param>
     /// <param name="cancellationToken">Stops the walk between objects.</param>
     public async IAsyncEnumerable<FullSyncPreviewItem> StreamFullSyncPreviewAsync(
         int connectedSystemId,
@@ -455,8 +456,11 @@ public class SyncPreviewServer
         options ??= new FullSyncPreviewStreamOptions();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        using var scope = repositoryFactory?.Invoke();
-        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
+        // On its own context unless the caller supplies one (#2598): the walk's pages hold their Metaverse Objects untracked
+        // under tracked Connected System Objects, and a caller saving progress on the shared context between the items
+        // it is handed would have EF attach them and write them back.
+        using var scope = repositoryFactory?.Invoke() ?? SyncRepo.OpenIsolatedScope();
+        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope.Repository);
         var previewServer = new ExportEvaluationServer(Application, guardedRepository);
         await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
 
