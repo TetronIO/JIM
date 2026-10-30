@@ -1,0 +1,4 @@
+# The stand-in WinRM server's PyPI packages (test-only, approved 2026-10-30 for #2021). Hash-pinned.
+# gssapi and cryptography come from Ubuntu (see the Dockerfile); krb5 is built from source in the Dockerfile.
+pyspnego==0.12.4 \
+    --hash=sha256:a29a34de1abe9e9b30d9aa1d363f8e49fc159eb7355b1f2ee86ccb3a2ce3bba9

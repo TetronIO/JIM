@@ -48,11 +48,11 @@ function Get-KdcAddress {
     return (docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $container).Trim()
 }
 
-function Test-KdcPort {
-    param([string]$Address)
+function Test-TcpPort {
+    param([string]$Address, [int]$Port)
     $client = [Net.Sockets.TcpClient]::new()
     try {
-        return $client.ConnectAsync($Address, 88).Wait(2000) -and $client.Connected
+        return $client.ConnectAsync($Address, $Port).Wait(2000) -and $client.Connected
     }
     catch [AggregateException] {
         return $false
@@ -85,7 +85,7 @@ if (($binding -join '') -match 'eth0@if') {
 }
 
 $deadline = (Get-Date).AddMinutes(5)
-while (-not (Test-KdcPort (Get-KdcAddress))) {
+while (-not (Test-TcpPort -Address (Get-KdcAddress) -Port 88)) {
     if ((Get-Date) -gt $deadline) { throw 'The KDC did not start listening on port 88 within 5 minutes.' }
     Start-Sleep -Seconds 3
 }
@@ -113,9 +113,59 @@ Invoke-Samba 'rm -f /tmp/winrm-harness.keytab && samba-tool domain exportkeytab 
 docker cp -q "${container}:/tmp/winrm-harness.keytab" $keytab
 if (-not $IsWindows) { chmod 600 $keytab }
 
+# The stand-in WinRM server reads its Kerberos configuration, keytab and TLS certificate from -OutputDirectory.
+Set-Content -NoNewline -Path (Join-Path $OutputDirectory 'krb5.conf') -Value @"
+[libdefaults]
+    default_realm = HARNESS.TEST
+    dns_lookup_kdc = false
+    dns_lookup_realm = false
+    dns_canonicalize_hostname = false
+    rdns = false
+    permitted_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
+
+[realms]
+    HARNESS.TEST = {
+        kdc = dc1.harness.test
+    }
+
+[domain_realm]
+    .harness.test = HARNESS.TEST
+    harness.test = HARNESS.TEST
+
+"@
+
+$caKey = Join-Path $OutputDirectory 'harness-ca.key'
+$caCertificate = Join-Path $OutputDirectory 'harness-ca.crt'
+$tlsKey = Join-Path $OutputDirectory 'winrm-tls.key'
+$tlsCertificate = Join-Path $OutputDirectory 'winrm-tls.crt'
+if (-not (Test-Path $tlsCertificate)) {
+    Write-Host 'Creating the harness test CA and the WinRM server TLS certificate...'
+    $request = Join-Path $OutputDirectory 'winrm-tls.csr'
+    $extensions = Join-Path $OutputDirectory 'winrm-tls.ext'
+    Set-Content -Path $extensions -Value "subjectAltName=DNS:winrm-harness.harness.test,DNS:winrm-harness`nextendedKeyUsage=serverAuth"
+    openssl req -x509 -newkey rsa:3072 -nodes -days 30 -subj '/CN=JIM Remoting Harness Test CA' -keyout $caKey -out $caCertificate 2>$null
+    openssl req -newkey rsa:3072 -nodes -subj '/CN=winrm-harness.harness.test' -keyout $tlsKey -out $request 2>$null
+    openssl x509 -req -in $request -CA $caCertificate -CAkey $caKey -CAcreateserial -days 30 -extfile $extensions -out $tlsCertificate 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not create the WinRM server TLS certificate.' }
+    Remove-Item $request, $extensions
+}
+
+$env:JIM_REMOTING_HARNESS_DIR = $OutputDirectory
+docker compose -f $composeFile up -d --build winrm-server
+if ($LASTEXITCODE -ne 0) { throw 'Could not build or start the stand-in WinRM server.' }
+
+$winrmAddress = (docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' remoting-harness-winrm).Trim()
+$deadline = (Get-Date).AddMinutes(2)
+while (-not (Test-TcpPort -Address $winrmAddress -Port 5985)) {
+    if ((Get-Date) -gt $deadline) { throw 'The stand-in WinRM server did not start listening on port 5985 within 2 minutes.' }
+    Start-Sleep -Seconds 2
+}
+
 $address = Get-KdcAddress
 Write-Host ''
 Write-Host 'Remoting harness ready. Export these before running Tetron.PowerShellRemoting.Tests:'
 Write-Host "  JIM_REMOTING_HARNESS_KDC=$address"
 Write-Host "  JIM_REMOTING_HARNESS_KEYTAB=$keytab"
-[pscustomobject]@{ Kdc = $address; Keytab = $keytab }
+Write-Host "  JIM_REMOTING_HARNESS_WINRM=$winrmAddress"
+Write-Host "  JIM_REMOTING_HARNESS_CA=$caCertificate"
+[pscustomobject]@{ Kdc = $address; Keytab = $keytab; WinRM = $winrmAddress; CaCertificate = $caCertificate }

@@ -31,6 +31,30 @@ services:
         aliases:
           - dc1.harness.test
 
+  winrm-server:
+    # The stand-in WinRM server: Kerberos through pyspnego, WinRM message encryption, WS-Management shell
+    # operations, and PowerShell remoting itself through pwsh -s. Start-RemotingHarness.ps1 writes its krb5.conf
+    # and the service keytab into JIM_REMOTING_HARNESS_DIR before starting it.
+    build:
+      context: ./winrm-server
+      args:
+        EXTRA_CA_CERTS_BASE64: ${JIM_BUILD_EXTRA_CA_BASE64:-}
+    image: jim-remoting-harness-winrm:local
+    container_name: remoting-harness-winrm
+    hostname: winrm-harness
+    environment:
+      - WINRM_SERVICE_HOST=winrm-harness.harness.test
+      - WINRM_TLS_CERTIFICATE=/etc/harness/winrm-tls.crt
+      - WINRM_TLS_KEY=/etc/harness/winrm-tls.key
+    volumes:
+      - ${JIM_REMOTING_HARNESS_DIR:?Run Start-RemotingHarness.ps1}:/etc/harness:ro
+    depends_on:
+      - kdc
+    networks:
+      harness:
+        aliases:
+          - winrm-harness.harness.test
+
 volumes:
   kdc-var:
   kdc-private:

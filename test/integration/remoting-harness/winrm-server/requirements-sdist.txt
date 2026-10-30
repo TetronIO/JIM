@@ -1,0 +1,3 @@
+# krb5 0.10.0 publishes no Linux wheels, so its source is fetched (hash-pinned) and compiled in the build stage.
+krb5==0.10.0 \
+    --hash=sha256:8f4711a0ab11ee43fda567371ef6d9487afdbd4f156ca093e8fb306f4cc685ae

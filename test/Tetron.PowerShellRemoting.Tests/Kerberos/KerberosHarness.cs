@@ -25,6 +25,12 @@ internal static partial class KerberosHarness
 
     internal static string? Keytab => Environment.GetEnvironmentVariable("JIM_REMOTING_HARNESS_KEYTAB");
 
+    /// <summary>The stand-in WinRM server's address, from <c>JIM_REMOTING_HARNESS_WINRM</c>.</summary>
+    internal static string? WinRM => Environment.GetEnvironmentVariable("JIM_REMOTING_HARNESS_WINRM");
+
+    /// <summary>The harness test CA that signed the stand-in server's TLS certificate, from <c>JIM_REMOTING_HARNESS_CA</c>.</summary>
+    internal static string? CaCertificate => Environment.GetEnvironmentVariable("JIM_REMOTING_HARNESS_CA");
+
     /// <summary>Skips the calling test unless the harness is configured; otherwise points Kerberos at it.</summary>
     internal static void RequireHarness()
     {
